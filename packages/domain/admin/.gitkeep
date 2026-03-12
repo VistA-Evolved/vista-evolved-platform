@@ -1,0 +1,3 @@
+# Domain: admin
+
+Shared types and rules for admin/tenant-admin. No app or infra dependencies.

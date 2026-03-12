@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capability-pack",
+  "title": "CapabilityPack",
+  "description": "Bundle of capabilities/modules offered as a pack. Config only.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "moduleIds": { "type": "array", "items": { "type": "string" } },
+    "version": { "type": "string" }
+  },
+  "required": ["id", "name"]
+}

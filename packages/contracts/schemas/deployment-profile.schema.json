@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deployment-profile",
+  "title": "DeploymentProfile",
+  "description": "Deployment profile (SKU/profile). Config only.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "capabilityPackId": { "type": "string" },
+    "overrides": { "type": "object" }
+  },
+  "required": ["id", "name"]
+}

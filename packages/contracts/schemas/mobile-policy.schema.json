@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mobile-policy",
+  "title": "MobilePolicy",
+  "description": "Policy for mobile clients (security, sync, features). Config only.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "tenantId": { "type": "string" },
+    "allowOffline": { "type": "boolean" },
+    "allowedFeatures": { "type": "array", "items": { "type": "string" } }
+  }
+}

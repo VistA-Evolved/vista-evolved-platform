@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "offline-policy",
+  "title": "OfflinePolicy",
+  "description": "Policy for offline-capable data and sync. Config only.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "tenantId": { "type": "string" },
+    "allowedEntities": { "type": "array", "items": { "type": "string" } },
+    "syncStrategy": { "type": "string" }
+  }
+}

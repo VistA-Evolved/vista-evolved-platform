@@ -1,0 +1,19 @@
+# ADR-0001: Three-repo architecture
+
+## Status
+
+Accepted.
+
+## Context
+
+The original VistA-Evolved monorepo mixed control plane, admin UI, VistA distro tooling, and product features in one repository. We need a clear separation for rebuild: platform (control plane, contracts, config), VistA distro (upstream/overlay, build, verify), and archive (frozen reference).
+
+## Decision
+
+- **vista-evolved-archive** — Frozen prototype/salvage/reference. No new canonical product work. Reusable process assets may be copied out.
+- **vista-evolved-platform** — Control plane, admin console, contracts (OpenAPI, AsyncAPI, schemas), config (ports, modules, tenants), domain, UI design system. No VistA runtime or distro build.
+- **vista-evolved-vista-distro** — VistA upstream fetch/pin, overlay (routines, install, patches), docker (e.g. local-vista), build/verify scripts. No platform app code.
+
+## Consequences
+
+- Clear ownership and boundaries. Platform and distro can evolve independently. Archive remains stable reference.

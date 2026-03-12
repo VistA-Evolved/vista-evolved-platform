@@ -1,0 +1,3 @@
+# Tenants config
+
+Tenant configuration. Schema-driven; see packages/contracts/schemas.

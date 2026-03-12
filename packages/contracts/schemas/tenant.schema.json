@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tenant",
+  "title": "Tenant",
+  "description": "Platform tenant reference. Source of truth: platform DB.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "description": "Unique tenant ID" },
+    "name": { "type": "string" },
+    "status": { "type": "string", "enum": ["active", "suspended", "provisioning"] }
+  },
+  "required": ["id", "name"]
+}

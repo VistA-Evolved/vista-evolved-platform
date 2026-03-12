@@ -1,0 +1,3 @@
+# Domain: tenancy
+
+Shared types and rules for tenancy. No app or infra dependencies.

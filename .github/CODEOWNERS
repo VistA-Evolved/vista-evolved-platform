@@ -1,0 +1,11 @@
+# Code owners by bounded context
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+/apps/control-plane/     @vista-evolved/platform
+/apps/admin-console/     @vista-evolved/platform
+/packages/contracts/     @vista-evolved/platform
+/packages/config/        @vista-evolved/platform
+/packages/domain/        @vista-evolved/platform
+/packages/ui/            @vista-evolved/platform
+/docs/                   @vista-evolved/platform
+/prompts/                @vista-evolved/platform

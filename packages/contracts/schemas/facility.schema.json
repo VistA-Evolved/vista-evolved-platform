@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "facility",
+  "title": "Facility",
+  "description": "Facility reference. Source of truth: VistA where clinical; platform for linkage only.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "facilityTypeId": { "type": "string" },
+    "tenantId": { "type": "string" },
+    "vistaSiteId": { "type": "string", "description": "Optional VistA site/link" }
+  },
+  "required": ["id", "name", "tenantId"]
+}

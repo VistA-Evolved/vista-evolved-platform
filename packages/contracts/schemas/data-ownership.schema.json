@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "data-ownership",
+  "title": "DataOwnership",
+  "description": "Reference: who owns which data. See docs/reference/data-ownership-matrix.md.",
+  "type": "object",
+  "properties": {
+    "entity": { "type": "string" },
+    "sourceOfTruth": { "type": "string", "enum": ["platform", "vista", "idp"] }
+  },
+  "required": ["entity", "sourceOfTruth"]
+}

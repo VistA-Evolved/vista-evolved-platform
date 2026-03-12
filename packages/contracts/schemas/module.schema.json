@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "module",
+  "title": "Module",
+  "description": "Platform module (feature/capability unit). Config only.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "dependencies": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["id", "name"]
+}
