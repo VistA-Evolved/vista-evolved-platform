@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VistA Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #000; color: #ccc; height: 100vh; overflow: hidden; }
+    #terminal-container { width: 100%; height: calc(100vh - 22px); }
+    #status-bar {
+      height: 22px; display: flex; align-items: center; gap: 8px;
+      padding: 0 10px; background: #0a0a0a; border-top: 1px solid #1a1a1a;
+      font: 11px/22px 'Consolas', 'Courier New', monospace; color: #555;
+    }
+    #status-dot { width: 7px; height: 7px; border-radius: 50%; background: #555; }
+    #status-dot.connected { background: #22c55e; }
+    #status-dot.connecting { background: #a16207; }
+    #status-dot.error { background: #dc2626; }
+    #reconnect-btn {
+      display: none; padding: 1px 8px; font: 11px 'Consolas', monospace;
+      background: #1a1a1a; color: #888; border: 1px solid #333; cursor: pointer;
+    }
+    #reconnect-btn:hover { background: #222; color: #ccc; }
+    .show-reconnect #reconnect-btn { display: inline; }
+  </style>
+</head>
+<body>
+  <div id="terminal-container"></div>
+  <div id="status-bar">
+    <div id="status-dot"></div>
+    <span id="status-text">connecting</span>
+    <button id="reconnect-btn">reconnect</button>
+  </div>
+
+  <script type="module">
+    import { Terminal } from 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/+esm';
+    import { FitAddon } from 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/+esm';
+
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const statusBar = document.getElementById('status-bar');
+    const reconnectBtn = document.getElementById('reconnect-btn');
+
+    const terminal = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'block',
+      fontSize: 15,
+      fontFamily: "'Consolas', 'Courier New', 'Liberation Mono', monospace",
+      scrollback: 5000,
+      theme: {
+        background: '#000000',
+        foreground: '#e0e0e0',
+        cursor: '#22c55e',
+        cursorAccent: '#000000',
+        selectionBackground: '#2a2a2a',
+        black: '#000000',
+        white: '#e0e0e0',
+        brightWhite: '#ffffff',
+        green: '#22c55e',
+        brightGreen: '#4ade80',
+      },
+    });
+
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(document.getElementById('terminal-container'));
+    const terminalContainer = document.getElementById('terminal-container');
+    fitAddon.fit();
+
+    let ws = null;
+    let dataListener = null;
+
+    function hasOpenSocket() {
+      return ws && ws.readyState === WebSocket.OPEN;
+    }
+
+    function writeToSocket(data) {
+      if (!hasOpenSocket()) return false;
+      ws.send(data);
+      return true;
+    }
+
+    function normalizeClipboardText(text) {
+      return text.replace(/\r\n/g, '\r').replace(/\n/g, '\r');
+    }
+
+    async function copySelection() {
+      const selection = terminal.getSelection();
+      if (!selection) return false;
+      await navigator.clipboard.writeText(selection);
+      return true;
+    }
+
+    async function pasteClipboard() {
+      const text = await navigator.clipboard.readText();
+      if (!text) return false;
+      terminal.focus();
+      return writeToSocket(normalizeClipboardText(text));
+    }
+
+    async function handleContextAction(event) {
+      event.preventDefault();
+      try {
+        if (terminal.hasSelection()) {
+          await copySelection();
+          terminal.focus();
+          return;
+        }
+        await pasteClipboard();
+      } catch {
+        // Leave the terminal unchanged if clipboard access is denied.
+      } finally {
+        terminal.focus();
+      }
+    }
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true;
+
+      const key = event.key.toLowerCase();
+      const isPasteCombo = (event.ctrlKey || event.metaKey) && !event.shiftKey && key === 'v';
+      const isPasteAltCombo = (event.ctrlKey || event.metaKey) && event.shiftKey && key === 'v';
+      const isShiftInsert = event.shiftKey && key === 'insert';
+      const isCopyCombo = (event.ctrlKey || event.metaKey) && key === 'c';
+
+      if (isPasteCombo || isPasteAltCombo || isShiftInsert) {
+        event.preventDefault();
+        pasteClipboard().catch(() => {});
+        return false;
+      }
+
+      if (isCopyCombo && terminal.hasSelection()) {
+        event.preventDefault();
+        copySelection().catch(() => {});
+        return false;
+      }
+
+      return true;
+    });
+
+    terminalContainer.addEventListener('contextmenu', (event) => {
+      handleContextAction(event).catch(() => {});
+    });
+
+    document.addEventListener('copy', (event) => {
+      if (!terminal.hasSelection()) return;
+      event.preventDefault();
+      const selection = terminal.getSelection();
+      if (event.clipboardData) {
+        event.clipboardData.setData('text/plain', selection);
+        return;
+      }
+      navigator.clipboard.writeText(selection).catch(() => {});
+    });
+
+    document.addEventListener('paste', (event) => {
+      const text = event.clipboardData?.getData('text/plain');
+      if (!text) return;
+      event.preventDefault();
+      terminal.focus();
+      writeToSocket(normalizeClipboardText(text));
+    });
+
+    window.__terminalProof = {
+      terminal,
+      getStatus: () => statusText.textContent,
+      connect: () => connect(),
+    };
+
+    function setStatus(status) {
+      statusDot.className = status;
+      statusText.textContent = status;
+      if (status === 'connected') {
+        statusBar.classList.remove('show-reconnect');
+      } else if (status === 'disconnected' || status === 'error') {
+        statusBar.classList.add('show-reconnect');
+      }
+    }
+
+    function sendResize() {
+      const dims = fitAddon.proposeDimensions();
+      if (dims && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+      }
+    }
+
+    function connect() {
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close();
+      }
+      terminal.clear();
+      setStatus('connecting');
+
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${proto}//${location.host}/ws/terminal`);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          terminal.write(new Uint8Array(event.data));
+        } else {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'connected') {
+              setStatus('connected');
+              sendResize();
+            } else if (msg.type === 'disconnected') {
+              setStatus('disconnected');
+            } else if (msg.type === 'error') {
+              setStatus('error');
+            }
+          } catch {
+            terminal.write(event.data);
+          }
+        }
+      };
+
+      ws.onclose = () => setStatus('disconnected');
+      ws.onerror = () => setStatus('error');
+
+      if (!dataListener) {
+        dataListener = terminal.onData((data) => {
+          writeToSocket(data);
+        });
+      }
+    }
+
+    window.addEventListener('resize', () => { fitAddon.fit(); sendResize(); });
+    new ResizeObserver(() => { fitAddon.fit(); sendResize(); })
+      .observe(document.getElementById('terminal-container'));
+
+    reconnectBtn.addEventListener('click', connect);
+    terminal.focus();
+    connect();
+  </script>
+</body>
+</html>
