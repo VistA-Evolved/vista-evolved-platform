@@ -1,0 +1,28 @@
+---
+description: Core governance rules for all AI work in this repo
+globs: **/*
+alwaysApply: true
+---
+
+# Core Governance
+
+The canonical rules for this repo live in `/AGENTS.md`. Read it before any task.
+
+## Non-negotiable
+
+- One slice at a time. Verify before moving on.
+- No claiming done without proof (files changed, commands run, outputs, pass/fail).
+- No silent mocks or stubs. Return `integration-pending` if infrastructure is unavailable.
+- Terminal-first. No broad GUI features unless explicitly instructed.
+- Task responses must include: Objective, Files inspected, Files changed, Commands run, Results, Verified truth, Unverified areas, Risks, Next step.
+
+## Docs model
+
+Only these doc roots: tutorials, how-to, reference, explanation, adrs, runbooks.
+Evidence in `/artifacts`. No `/reports`, no random doc folders.
+See `docs/reference/doc-governance.md`.
+
+## Contracts
+
+OpenAPI in `packages/contracts/openapi/`. AsyncAPI in `packages/contracts/asyncapi/`.
+Generated SDKs preferred. See `docs/reference/contract-system.md`.

@@ -1,5 +1,7 @@
 # ADR-0001: Three-repo architecture
 
+> **Enterprise ID:** VE-PLAT-ADR-0001
+
 ## Status
 
 Accepted.

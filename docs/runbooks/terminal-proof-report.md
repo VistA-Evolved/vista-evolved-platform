@@ -1,7 +1,18 @@
 # Terminal Proof Report — Browser Roll-and-Scroll against local-vista
 
-> **Date:** 2026-03-12
+> **Date:** 2026-03-12 (original proof); updated 2026-03-15 (lane alignment)
 > **Scope:** Prove an authentic browser-based roll-and-scroll terminal against the local-vista distro runtime. Minimum viable path only — no control-plane, no tenant admin, no broad UI migration.
+
+!!! note "Lane alignment (VE-DISTRO-ADR-0003)"
+    The original proof below was performed against the **M-mode lane** (`local-vista`, port 2225).
+    Per VE-DISTRO-ADR-0003, the **UTF-8 lane** (`local-vista-utf8`, port 2226) is now the
+    **primary planned operator lane**. M-mode is retained as rollback/reference/safety.
+    The terminal-proof `.env` has been updated to target port 2226 (UTF-8 lane).
+    The CHSET mismatch noted in Section 6 below is resolved by using the UTF-8 lane,
+    which compiles and runs under `ydb_chset=UTF-8` natively.
+    Terminal sign-off under the UTF-8 lane is still pending (direct sign-on, browser terminal
+    behavior, and multilingual input proof have not been rerun).
+    Canonical lane truth: `vista-evolved-vista-distro/docs/reference/runtime-truth.md`.
 
 ---
 
@@ -212,8 +223,8 @@ Per the governed build protocol, the following were intentionally excluded:
 
 ## 9. Next steps
 
-1. **Fix CHSET mismatch** in `vista-evolved-vista-distro` — set `ydb_chset=M` in entrypoint or recompile `.o` files
-2. **Test `D ^ZU`** — VistA roll-and-scroll sign-on menu after CHSET fix
+1. **Verify terminal proof under UTF-8 lane** — Rerun browser terminal proof against `local-vista-utf8` (port 2226). The CHSET mismatch from M-mode is resolved in the UTF-8 lane, but terminal sign-off (sign-on, browser behavior, multilingual input) is still pending. See `vista-evolved-vista-distro/docs/reference/runtime-truth.md`.
+2. **Test `D ^ZU`** — VistA roll-and-scroll sign-on menu under UTF-8 lane
 3. **Add session auth** — port the session middleware pattern when control-plane is ready
 4. **Migrate to React/xterm** — when `apps/admin-console` is scaffolded, port the proven pattern into a proper component
 5. **Add audit logging** — every terminal session should be logged (who, when, duration)

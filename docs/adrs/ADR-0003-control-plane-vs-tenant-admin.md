@@ -1,5 +1,7 @@
 # ADR-0003: Control plane vs tenant admin
 
+> **Enterprise ID:** VE-PLAT-ADR-0003
+
 ## Status
 
 Accepted.

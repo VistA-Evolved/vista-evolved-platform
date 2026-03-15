@@ -1,11 +1,25 @@
 # Code owners by bounded context
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
+# Governance (root-level instruction files)
+/AGENTS.md               @vista-evolved/platform
+/CLAUDE.md               @vista-evolved/platform
+/.github/                @vista-evolved/platform
+/.cursor/                @vista-evolved/platform
+/mkdocs.yml              @vista-evolved/platform
+
+# Apps
 /apps/control-plane/     @vista-evolved/platform
 /apps/admin-console/     @vista-evolved/platform
+/apps/terminal-proof/    @vista-evolved/platform
+
+# Packages
 /packages/contracts/     @vista-evolved/platform
 /packages/config/        @vista-evolved/platform
 /packages/domain/        @vista-evolved/platform
 /packages/ui/            @vista-evolved/platform
+
+# Documentation and scripts
 /docs/                   @vista-evolved/platform
+/scripts/                @vista-evolved/platform
 /prompts/                @vista-evolved/platform

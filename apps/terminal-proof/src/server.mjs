@@ -6,7 +6,9 @@
  *   2. Provides /ws/terminal WebSocket-to-SSH bridge
  *   3. Provides /terminal/health SSH probe
  *
- * Target: local-vista distro container (SSH on port 2225)
+ * Target: local-vista-utf8 distro container (SSH on port 2226, UTF-8 lane)
+ * Lane truth: VE-DISTRO-ADR-0003 designates UTF-8 as primary planned operator lane.
+ * Default fallback port 2225 retained for M-mode rollback lane.
  */
 
 import Fastify from 'fastify';

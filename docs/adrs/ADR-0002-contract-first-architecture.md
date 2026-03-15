@@ -1,5 +1,7 @@
 # ADR-0002: Contract-first architecture
 
+> **Enterprise ID:** VE-PLAT-ADR-0002
+
 ## Status
 
 Accepted.

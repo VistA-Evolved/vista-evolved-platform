@@ -1,0 +1,61 @@
+site_name: VistA Evolved Platform
+site_description: Governance, contracts, and architecture documentation for VistA Evolved Platform
+repo_url: https://github.com/vista-evolved/vista-evolved-platform
+
+theme:
+  name: material
+  palette:
+    scheme: default
+    primary: indigo
+    accent: blue
+  features:
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Reference:
+    - reference/index.md
+    - Source of Truth Index: reference/source-of-truth-index.md
+    - Doc Governance: reference/doc-governance.md
+    - Docs Policy: reference/docs-policy.md
+    - Contract System: reference/contract-system.md
+    - Contract Policy: reference/contract-policy.md
+    - Boundary Policy: reference/boundary-policy.md
+    - Persistence Policy: reference/persistence-policy.md
+    - Data Ownership Matrix: reference/data-ownership-matrix.md
+    - Port Registry: reference/port-registry.md
+    - Nx Adoption Plan: reference/nx-adoption-plan.md
+    - Decision Index: reference/decision-index.yaml
+    - Notion Sync Policy: reference/notion-sync-policy.md
+  - Explanation:
+    - explanation/index.md
+    - Global System Architecture: explanation/global-system-architecture-spec.md
+    - Organization Facility Network Service Model: explanation/organization-facility-network-service-model.md
+    - Governed Build Protocol: explanation/governed-build-protocol.md
+    - AI Coding Governance: explanation/ai-coding-governance-and-sdlc.md
+  - ADRs:
+    - adrs/index.md
+    - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/ADR-0001-three-repo-architecture.md
+    - "VE-PLAT-ADR-0002: Contract-First Architecture": adrs/ADR-0002-contract-first-architecture.md
+    - "VE-PLAT-ADR-0003: Control Plane vs Tenant Admin": adrs/ADR-0003-control-plane-vs-tenant-admin.md
+  - Runbooks:
+    - runbooks/index.md
+    - Bootstrap Report: runbooks/bootstrap-report.md
+    - Terminal Proof Report: runbooks/terminal-proof-report.md
+  - How-To:
+    - how-to/index.md
+  - Tutorials:
+    - tutorials/index.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables

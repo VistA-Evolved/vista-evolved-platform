@@ -1,0 +1,28 @@
+{
+  "_comment": "Copy this file to notion-sync-config.json and fill in real values. Do NOT commit the real config.",
+  "notionToken": "REPLACE_WITH_NOTION_INTEGRATION_TOKEN",
+  "databases": {
+    "sourceOfTruthIndex": "REPLACE_WITH_NOTION_DATABASE_ID",
+    "decisionIndex": "REPLACE_WITH_NOTION_DATABASE_ID",
+    "roadmap": "REPLACE_WITH_NOTION_DATABASE_ID",
+    "releases": "REPLACE_WITH_NOTION_DATABASE_ID",
+    "ownership": "REPLACE_WITH_NOTION_DATABASE_ID"
+  },
+  "syncTargets": [
+    {
+      "name": "Source of Truth Index",
+      "repoFile": "docs/reference/source-of-truth-index.md",
+      "database": "sourceOfTruthIndex"
+    },
+    {
+      "name": "Decision Index",
+      "repoFile": "docs/reference/decision-index.yaml",
+      "database": "decisionIndex"
+    },
+    {
+      "name": "Ownership Catalog",
+      "repoFile": ".github/CODEOWNERS",
+      "database": "ownership"
+    }
+  ]
+}

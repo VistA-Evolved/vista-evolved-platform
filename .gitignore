@@ -6,6 +6,12 @@ artifacts/
 dist/
 *.tsbuildinfo
 
+# MkDocs build output
+site/
+
+# Notion sync credentials
+scripts/notion/notion-sync-config.json
+
 # Environment
 .env
 .env.local
