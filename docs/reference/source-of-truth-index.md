@@ -48,6 +48,7 @@
 | HTTP API contracts | `packages/contracts/openapi/` | OpenAPI 3.x specs |
 | Event/WebSocket contracts | `packages/contracts/asyncapi/` | AsyncAPI specs |
 | Config schemas | `packages/contracts/schemas/` | JSON Schema |
+| Screen contract schema | `packages/contracts/schemas/screen-contract.schema.json` | Workspace placement, boundary enforcement, claim/analytics surface governance (artifact #7) |
 | Capability manifests | `packages/contracts/capability-manifests/` | Module/capability config |
 | Contract policy | `docs/reference/contract-policy.md` | Rules for contract usage |
 | Contract system | `docs/reference/contract-system.md` | Contract layer architecture |

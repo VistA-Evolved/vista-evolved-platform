@@ -10,6 +10,7 @@
 | **API contract** | HTTP request/response shapes | OpenAPI 3.x | `packages/contracts/openapi/` |
 | **Event/Async contract** | Events, WebSocket messages | AsyncAPI | `packages/contracts/asyncapi/` |
 | **Config/Runtime contract** | Ports, env vars, module config | JSON Schema | `packages/contracts/schemas/`, `packages/config/` |
+| **Screen contract** | Workspace placement, boundary enforcement, surface governance | JSON Schema | `packages/contracts/schemas/screen-contract.schema.json` |
 
 ## Rules
 

@@ -1,0 +1,546 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "screen-contract",
+  "title": "ScreenContract",
+  "description": "Machine-readable surface contract for workspace composition. Artifact #7 per global-system-architecture-spec.md §20. Operationalizes information-architecture-workspace-map.md §19.",
+  "type": "object",
+  "properties": {
+    "surfaceId": {
+      "type": "string",
+      "description": "Unique identifier for the surface governed by this contract."
+    },
+    "version": {
+      "type": "string",
+      "description": "Contract version (semver recommended)."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable surface name."
+    },
+    "status": {
+      "$ref": "#/$defs/statusEnum",
+      "description": "Lifecycle status of this contract."
+    },
+    "description": {
+      "type": "string",
+      "description": "Purpose and scope of this surface."
+    },
+
+    "workspaceFamily": {
+      "$ref": "#/$defs/workspaceFamilyEnum",
+      "description": "Which of the 7 workspace families this surface belongs to. Per workspace-map §7."
+    },
+    "workspaceName": {
+      "type": "string",
+      "description": "Specific workspace within the family, for families with sub-workspaces. Per workspace-map §7, §13.4."
+    },
+    "navigationLevel": {
+      "$ref": "#/$defs/navigationLevelEnum",
+      "description": "Whether this surface is a primary navigation target or local navigation within a functional area. Per workspace-map §9."
+    },
+
+    "surfaceType": {
+      "$ref": "#/$defs/surfaceTypeEnum",
+      "description": "Classification of this surface's primary function."
+    },
+
+    "accessRequirements": {
+      "type": "object",
+      "description": "Role and scope requirements for accessing this surface. Per workspace-map §8, org-facility §17.",
+      "properties": {
+        "allowedRoles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/roleCategoryEnum" },
+          "minItems": 1,
+          "description": "Role categories permitted to access this surface."
+        },
+        "scopePosture": {
+          "$ref": "#/$defs/scopePostureEnum",
+          "description": "Entity-context scoping for this surface."
+        },
+        "entityContextRequired": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Entity context identifiers that must be present (e.g., tenantId, facilityId, patientDfn)."
+        }
+      },
+      "required": ["allowedRoles", "scopePosture"]
+    },
+
+    "readWritePosture": {
+      "$ref": "#/$defs/readWritePostureEnum",
+      "description": "Whether this surface is read-only, controlled-write, or mixed."
+    },
+    "directWriteAllowed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the surface may issue write operations to source systems. Defaults to false (conservative). Write paths must go through governed API routes."
+    },
+
+    "dataSources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dataSourceDeclaration" },
+      "description": "Data sources this surface consumes. Per contract-first (VE-PLAT-ADR-0002)."
+    },
+    "dataClassification": {
+      "$ref": "#/$defs/dataClassificationEnum",
+      "description": "Data classification level for this surface. Per specialty-content-analytics §12, workspace-map §15.3."
+    },
+    "phiGovernance": {
+      "$ref": "#/$defs/phiGovernanceDeclaration",
+      "description": "Required when dataClassification is 'phi'. Per workspace-map §19.2 rule 3."
+    },
+
+    "claimSurface": {
+      "oneOf": [
+        { "$ref": "#/$defs/claimSurfaceDeclaration" },
+        { "type": "null" }
+      ],
+      "description": "Claim surface declaration. Null if this surface does not present capability/readiness claims. Per capability-truth §10, workspace-map §17."
+    },
+
+    "analyticsSurface": {
+      "oneOf": [
+        { "$ref": "#/$defs/analyticsSurfaceDeclaration" },
+        { "type": "null" }
+      ],
+      "description": "Analytics surface declaration. Null if this is not an analytics/BI surface. Per specialty-content-analytics §11, workspace-map §15/§18."
+    },
+
+    "crossWorkspaceTransitions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/crossWorkspaceTransition" },
+      "default": [],
+      "description": "Declared cross-workspace transitions from or to this surface. Per workspace-map §10, §19.2 rule 6."
+    },
+
+    "readinessDependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/readinessDependency" },
+      "default": [],
+      "description": "Readiness/eligibility dependencies that must be satisfied for this surface to be active."
+    },
+
+    "refreshBehavior": {
+      "$ref": "#/$defs/refreshBehaviorEnum",
+      "description": "How data on this surface is refreshed."
+    }
+  },
+
+  "required": [
+    "surfaceId",
+    "version",
+    "title",
+    "status",
+    "workspaceFamily",
+    "navigationLevel",
+    "surfaceType",
+    "accessRequirements",
+    "readWritePosture",
+    "dataClassification",
+    "refreshBehavior"
+  ],
+
+  "if": {
+    "properties": {
+      "dataClassification": { "const": "phi" }
+    },
+    "required": ["dataClassification"]
+  },
+  "then": {
+    "required": ["phiGovernance"],
+    "properties": {
+      "accessRequirements": {
+        "properties": {
+          "allowedRoles": {
+            "minItems": 1,
+            "not": {
+              "contains": { "const": "any-authenticated" }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "workspaceFamily": { "const": "analytics-bi" }
+        },
+        "required": ["workspaceFamily"]
+      },
+      "then": {
+        "required": ["analyticsSurface"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "claimSurface": {
+            "type": "object"
+          }
+        },
+        "required": ["claimSurface"]
+      },
+      "then": {
+        "properties": {
+          "claimSurface": {
+            "required": ["gatingRuleRef"]
+          }
+        }
+      }
+    }
+  ],
+
+  "$defs": {
+    "workspaceFamilyEnum": {
+      "type": "string",
+      "enum": [
+        "control-plane",
+        "tenant-admin",
+        "clinical",
+        "ancillary-ops",
+        "revenue-cycle",
+        "analytics-bi",
+        "it-integration"
+      ],
+      "description": "The 7 workspace families from global-system-architecture-spec.md §12 and workspace-map §7."
+    },
+
+    "navigationLevelEnum": {
+      "type": "string",
+      "enum": ["primary", "local"],
+      "description": "Navigation hierarchy level per workspace-map §9."
+    },
+
+    "surfaceTypeEnum": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "clinical",
+        "analytics",
+        "content-admin",
+        "claim",
+        "operational",
+        "infrastructure"
+      ],
+      "description": "Primary function classification of the surface."
+    },
+
+    "roleCategoryEnum": {
+      "type": "string",
+      "enum": [
+        "platform-operator",
+        "tenant-admin",
+        "clinician",
+        "ancillary-staff",
+        "revenue-cycle-staff",
+        "analyst",
+        "it-integration"
+      ],
+      "description": "Role categories from workspace-map §8."
+    },
+
+    "scopePostureEnum": {
+      "type": "string",
+      "enum": [
+        "platform-wide",
+        "tenant-scoped",
+        "facility-scoped",
+        "patient-scoped"
+      ],
+      "description": "Entity-context scoping level."
+    },
+
+    "dataClassificationEnum": {
+      "type": "string",
+      "enum": [
+        "phi",
+        "de-identified",
+        "aggregate",
+        "operational",
+        "configuration"
+      ],
+      "description": "Data classification levels per specialty-content-analytics §12 and workspace-map §19.1."
+    },
+
+    "sourceDomainClassEnum": {
+      "type": "string",
+      "enum": [
+        "vista-operational-truth",
+        "platform-governance",
+        "derived-analytics",
+        "claim-readiness-registry",
+        "external-integration"
+      ],
+      "description": "Source domain classes reflecting data ownership. VistA is source of truth for clinical/operational data. Platform governs config/governance. Analytics consumes derived read-models."
+    },
+
+    "readWritePostureEnum": {
+      "type": "string",
+      "enum": ["read-only", "controlled-write", "mixed"],
+      "description": "Read/write posture of the surface."
+    },
+
+    "claimSurfaceTypeEnum": {
+      "type": "string",
+      "enum": [
+        "public-website",
+        "sales-partnership",
+        "onboarding-signup",
+        "control-plane-provisioning",
+        "tenant-admin-enablement",
+        "internal-roadmap",
+        "support-documentation",
+        "notion-mirror"
+      ],
+      "description": "The 8 claim surface types from capability-truth-and-claim-gating-spec.md §10."
+    },
+
+    "claimDomainEnum": {
+      "type": "string",
+      "enum": [
+        "capability",
+        "market",
+        "payer",
+        "specialty",
+        "pack-eligibility",
+        "language"
+      ],
+      "description": "Domains in which claims may be presented."
+    },
+
+    "readinessStateEnum": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "specified",
+        "implemented",
+        "validated",
+        "verified",
+        "claimable",
+        "production-eligible",
+        "deprecated",
+        "retired"
+      ],
+      "description": "Readiness states from capability-truth-and-claim-gating-spec.md §7.1."
+    },
+
+    "readinessDependencyTypeEnum": {
+      "type": "string",
+      "enum": [
+        "capability-truth",
+        "market-readiness",
+        "payer-readiness",
+        "specialty-readiness",
+        "pack-eligibility"
+      ],
+      "description": "Types of readiness dependencies."
+    },
+
+    "refreshBehaviorEnum": {
+      "type": "string",
+      "enum": [
+        "real-time",
+        "polling",
+        "on-demand",
+        "event-driven",
+        "static"
+      ],
+      "description": "How data on this surface is refreshed. Per workspace-map §19.1."
+    },
+
+    "analyticsTypeEnum": {
+      "type": "string",
+      "enum": [
+        "dashboard",
+        "report",
+        "summary",
+        "detail",
+        "inline-metric"
+      ],
+      "description": "Analytics surface subtypes. Per workspace-map §18.1."
+    },
+
+    "phiDisclosureEnum": {
+      "type": "string",
+      "enum": [
+        "none",
+        "de-identified",
+        "governed-phi"
+      ],
+      "description": "PHI disclosure level for analytics surfaces."
+    },
+
+    "statusEnum": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "proposed",
+        "accepted",
+        "deprecated",
+        "retired"
+      ],
+      "description": "Lifecycle status of the screen contract."
+    },
+
+    "transitionDirectionEnum": {
+      "type": "string",
+      "enum": ["outgoing", "incoming"],
+      "description": "Direction of a cross-workspace transition relative to this surface."
+    },
+
+    "dataSourceDeclaration": {
+      "type": "object",
+      "description": "A data source consumed by this surface.",
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "description": "Identifier for the data source (e.g., RPC name, API route, read-model name)."
+        },
+        "sourceDomainClass": {
+          "$ref": "#/$defs/sourceDomainClassEnum",
+          "description": "Which truth domain this source belongs to."
+        },
+        "description": {
+          "type": "string",
+          "description": "What data this source provides to the surface."
+        }
+      },
+      "required": ["sourceId", "sourceDomainClass"]
+    },
+
+    "phiGovernanceDeclaration": {
+      "type": "object",
+      "description": "PHI governance details. Required when dataClassification is 'phi'. Per workspace-map §19.2 rule 3, specialty-content-analytics §12.",
+      "properties": {
+        "justification": {
+          "type": "string",
+          "description": "Why PHI access is necessary for this surface."
+        },
+        "minimumNecessary": {
+          "type": "boolean",
+          "description": "Whether only minimum-necessary PHI fields are included."
+        },
+        "auditRequired": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether access to this surface must be auditable."
+        }
+      },
+      "required": ["justification", "minimumNecessary", "auditRequired"]
+    },
+
+    "claimSurfaceDeclaration": {
+      "type": "object",
+      "description": "Claim surface details. Per capability-truth §10, workspace-map §17.",
+      "properties": {
+        "claimSurfaceType": {
+          "$ref": "#/$defs/claimSurfaceTypeEnum",
+          "description": "Which of the 8 claim surface types this surface is."
+        },
+        "claimDomains": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/claimDomainEnum" },
+          "minItems": 1,
+          "description": "What claim domains this surface may present."
+        },
+        "informationalOnly": {
+          "type": "boolean",
+          "description": "Whether claim content is informational-only (no eligible actions) or tied to actions."
+        },
+        "gatingRuleRef": {
+          "type": "string",
+          "description": "Reference to the claim-gating rule from capability-truth §11 that governs this surface. Per workspace-map §19.2 rule 5."
+        },
+        "minimumReadinessState": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "Minimum readiness state required for claims presented on this surface."
+        }
+      },
+      "required": ["claimSurfaceType", "claimDomains", "informationalOnly", "gatingRuleRef"]
+    },
+
+    "analyticsSurfaceDeclaration": {
+      "type": "object",
+      "description": "Analytics/BI surface details. Per specialty-content-analytics §11, workspace-map §15/§18.",
+      "properties": {
+        "analyticsType": {
+          "$ref": "#/$defs/analyticsTypeEnum",
+          "description": "What kind of analytics surface this is."
+        },
+        "derivedDataOnly": {
+          "type": "boolean",
+          "description": "Whether this surface consumes only derived/aggregated data (not direct operational data)."
+        },
+        "writeProhibited": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether write operations are prohibited on this surface. Must be true for analytics workspace surfaces per specialty-content-analytics §11 rule 3."
+        },
+        "refreshCadence": {
+          "type": "string",
+          "enum": ["real-time", "polling", "hourly", "daily", "on-demand", "static"],
+          "description": "How frequently the analytics data is refreshed."
+        },
+        "phiDisclosure": {
+          "$ref": "#/$defs/phiDisclosureEnum",
+          "description": "PHI disclosure level. 'none' for de-identified by default per workspace-map §15.4."
+        }
+      },
+      "required": ["analyticsType", "derivedDataOnly", "writeProhibited", "refreshCadence", "phiDisclosure"]
+    },
+
+    "crossWorkspaceTransition": {
+      "type": "object",
+      "description": "A declared cross-workspace transition. Per workspace-map §10, §19.1, §19.2 rule 6.",
+      "properties": {
+        "direction": {
+          "$ref": "#/$defs/transitionDirectionEnum",
+          "description": "Whether this is an outgoing transition from this surface or an incoming transition to this surface."
+        },
+        "targetWorkspaceFamily": {
+          "$ref": "#/$defs/workspaceFamilyEnum",
+          "description": "The workspace family of the transition target (outgoing) or source (incoming)."
+        },
+        "targetSurfaceId": {
+          "type": "string",
+          "description": "Optional: specific surface ID in the target workspace."
+        },
+        "contextParameters": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Context parameters passed during the transition (e.g., tenantId, patientDfn, encounterRef). Per workspace-map §10 rule T2."
+        },
+        "accessReEvaluation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the user's access must be re-evaluated when entering the target workspace. Per workspace-map §10 rule T3."
+        }
+      },
+      "required": ["direction", "targetWorkspaceFamily", "contextParameters"]
+    },
+
+    "readinessDependency": {
+      "type": "object",
+      "description": "A readiness/eligibility dependency for this surface.",
+      "properties": {
+        "dependencyType": {
+          "$ref": "#/$defs/readinessDependencyTypeEnum",
+          "description": "What kind of readiness this surface depends on."
+        },
+        "referenceId": {
+          "type": "string",
+          "description": "Identifier for the readiness subject (capability ID, market ID, payer ID, etc.)."
+        },
+        "minimumState": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "Minimum readiness state required."
+        }
+      },
+      "required": ["dependencyType", "referenceId", "minimumState"]
+    }
+  }
+}
