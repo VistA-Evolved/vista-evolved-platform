@@ -656,7 +656,7 @@ The following documents are the planned next artifacts, in priority order. Each 
 | 2 | Pack and adapter architecture governance | Pack lifecycle, adapter contracts, versioning, eligibility, activation, validation | `docs/explanation/` |
 | 3 | Capability truth and claim gating spec | Link manifests to public surfaces, signup, provisioning, readiness gates | `docs/explanation/` |
 | 4 | Country and payer readiness registry spec | Per-country readiness dimensions, payer integration status, launch tiers | `docs/explanation/` or `docs/reference/` |
-| 5 | Specialty content and analytics architecture | Content pack rendering engines, analytics ETL boundary, BI surface governance | `docs/explanation/` |
+| 5 | Specialty content and analytics architecture | Content taxonomy and lifecycle governance, analytics read-model boundary, BI surface governance constraints | `docs/explanation/` |
 | 6 | Information architecture workspace map | Navigation structures, workspace boundaries, role-to-workspace mapping | `docs/explanation/` |
 | 7 | Screen contract schema | Machine-readable screen/surface contracts for workspace composition | `packages/contracts/schemas/` |
 | 8 | AI assist safety spec | Full safety model: inputs, outputs, review gates, storage, failure, audit, consent | `docs/explanation/` |
