@@ -1,6 +1,6 @@
-# ADR-0001: Three-repo architecture
+# VE-PLAT-ADR-0001: Three-repo architecture
 
-> **Enterprise ID:** VE-PLAT-ADR-0001
+> **Legacy ID:** ADR-0001 (compatibility reference only)
 
 ## Status
 

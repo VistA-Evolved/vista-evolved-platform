@@ -1,6 +1,6 @@
-# ADR-0002: Contract-first architecture
+# VE-PLAT-ADR-0002: Contract-first architecture
 
-> **Enterprise ID:** VE-PLAT-ADR-0002
+> **Legacy ID:** ADR-0002 (compatibility reference only)
 
 ## Status
 

@@ -8,6 +8,9 @@ alwaysApply: true
 
 The canonical rules for this repo live in `/AGENTS.md`. Read it before any task.
 
+> **Multi-root workspace:** `/AGENTS.md` means this repo's AGENTS.md, not a sibling repo's.
+> The archive repo's AGENTS.md is reference material only — it does not govern this repo.
+
 ## Non-negotiable
 
 - One slice at a time. Verify before moving on.

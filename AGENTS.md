@@ -9,6 +9,7 @@
 > In a multi-root workspace, each repo has its own AGENTS.md. When you see `/AGENTS.md`
 > references in this repo's files, they mean **this file**, not a sibling repo's AGENTS.md.
 > The sibling repos (`VistA-Evolved` archive and `vista-evolved-vista-distro`) are self-governing.
+> The archive repo's AGENTS.md is **reference material only** — it does not govern this repo.
 
 ---
 

@@ -1,6 +1,6 @@
-# ADR-0003: Control plane vs tenant admin
+# VE-PLAT-ADR-0003: Control plane vs tenant admin
 
-> **Enterprise ID:** VE-PLAT-ADR-0003
+> **Legacy ID:** ADR-0003 (compatibility reference only)
 
 ## Status
 

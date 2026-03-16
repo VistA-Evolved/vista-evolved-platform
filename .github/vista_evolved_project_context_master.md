@@ -365,7 +365,7 @@ These are historical proof points from the extraction work and may need to be re
 
 A canonical local-vista runtime lane was proven with:
 - RPC port `9433`
-- SSH port `2224`
+- SSH port `2224` (historical; current distro M-mode uses `2225`)
 
 A health check reportedly passed all 5 readiness levels:
 - `CONTAINER_STARTED: PASS`
@@ -805,9 +805,10 @@ Suggested higher-range pattern discussed:
 - `43110` API gateway/BFF
 - `43120` telehealth signaling
 - `9433` VistA broker
-- `2224` VistA SSH
+- `2225` VistA SSH (was `2224` in early discussion; distro now uses `2225` M-mode, `2226` UTF-8)
 
 The exact numbers can be adjusted, but the principle must remain.
+See `docs/reference/port-registry.md` for current canonical port assignments.
 
 ---
 
