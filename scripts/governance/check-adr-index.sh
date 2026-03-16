@@ -17,7 +17,7 @@ if [ ! -d "$ADR_DIR" ]; then
   exit 0
 fi
 
-for adr_file in "$ADR_DIR"/ADR-*.md; do
+for adr_file in "$ADR_DIR"/*ADR-*.md; do
   [ -f "$adr_file" ] || continue
   basename_file=$(basename "$adr_file")
   if ! grep -q "$basename_file" "$INDEX"; then

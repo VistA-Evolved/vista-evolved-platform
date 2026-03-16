@@ -4,6 +4,8 @@
 
 Read `/AGENTS.md` before any task. It is the canonical cross-tool governance file.
 
+> **Multi-root workspace:** `/AGENTS.md` means this repo's AGENTS.md, not a sibling repo's.
+
 ## Key rules
 
 1. **Terminal-first.** VistA Evolved starts from VistA truth, not broad GUI surfaces.

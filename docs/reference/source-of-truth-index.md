@@ -2,6 +2,10 @@
 
 > Canonical reference for where authoritative definitions live in this repo.
 > If information exists in multiple places, the location listed here is the source of truth.
+>
+> **Multi-root workspace:** When this file references `/AGENTS.md`, it means this repo's
+> AGENTS.md. Each repo in the workspace is self-governing. Sibling repos
+> (`VistA-Evolved` archive, `vista-evolved-vista-distro`) have their own governance files.
 
 ## Governance and instructions
 

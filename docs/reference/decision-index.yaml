@@ -18,7 +18,7 @@ decisions:
   - id: VE-PLAT-ADR-0001
     title: Three-repo architecture
     status: accepted
-    file: docs/adrs/ADR-0001-three-repo-architecture.md
+    file: docs/adrs/VE-PLAT-ADR-0001-three-repo-architecture.md
     repo: vista-evolved-platform
     date: 2026-03-12
     legacy_id: ADR-0001
@@ -26,7 +26,7 @@ decisions:
   - id: VE-PLAT-ADR-0002
     title: Contract-first architecture
     status: accepted
-    file: docs/adrs/ADR-0002-contract-first-architecture.md
+    file: docs/adrs/VE-PLAT-ADR-0002-contract-first-architecture.md
     repo: vista-evolved-platform
     date: 2026-03-12
     legacy_id: ADR-0002
@@ -34,7 +34,7 @@ decisions:
   - id: VE-PLAT-ADR-0003
     title: Control plane vs tenant admin
     status: accepted
-    file: docs/adrs/ADR-0003-control-plane-vs-tenant-admin.md
+    file: docs/adrs/VE-PLAT-ADR-0003-control-plane-vs-tenant-admin.md
     repo: vista-evolved-platform
     date: 2026-03-12
     legacy_id: ADR-0003

@@ -94,9 +94,9 @@ migrated-process-assets/docs/
 | `docs/reference/docs-policy.md` | Allowed doc categories only. |
 | `docs/reference/persistence-policy.md` | No SQLite/in-memory for persistent state; VistA SoT; platform DB scope. |
 | `docs/reference/nx-adoption-plan.md` | Nx adoption steps when ready. |
-| `docs/adrs/ADR-0001-three-repo-architecture.md` | Archive, platform, distro. |
-| `docs/adrs/ADR-0002-contract-first-architecture.md` | Specs first, generated clients. |
-| `docs/adrs/ADR-0003-control-plane-vs-tenant-admin.md` | Control plane vs tenant admin. |
+| `docs/adrs/VE-PLAT-ADR-0001-three-repo-architecture.md` | Archive, platform, distro. |
+| `docs/adrs/VE-PLAT-ADR-0002-contract-first-architecture.md` | Specs first, generated clients. |
+| `docs/adrs/VE-PLAT-ADR-0003-control-plane-vs-tenant-admin.md` | Control plane vs tenant admin. |
 | `apps/control-plane/README.md` | Placeholder. |
 | `apps/admin-console/README.md` | Placeholder. |
 | `packages/contracts/capability-manifests/.gitkeep` | Placeholder. |

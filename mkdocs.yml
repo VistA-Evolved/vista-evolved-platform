@@ -38,9 +38,9 @@ nav:
     - AI Coding Governance: explanation/ai-coding-governance-and-sdlc.md
   - ADRs:
     - adrs/index.md
-    - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/ADR-0001-three-repo-architecture.md
-    - "VE-PLAT-ADR-0002: Contract-First Architecture": adrs/ADR-0002-contract-first-architecture.md
-    - "VE-PLAT-ADR-0003: Control Plane vs Tenant Admin": adrs/ADR-0003-control-plane-vs-tenant-admin.md
+    - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md
+    - "VE-PLAT-ADR-0002: Contract-First Architecture": adrs/VE-PLAT-ADR-0002-contract-first-architecture.md
+    - "VE-PLAT-ADR-0003: Control Plane vs Tenant Admin": adrs/VE-PLAT-ADR-0003-control-plane-vs-tenant-admin.md
   - Runbooks:
     - runbooks/index.md
     - Bootstrap Report: runbooks/bootstrap-report.md

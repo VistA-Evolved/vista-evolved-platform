@@ -5,6 +5,11 @@
 > Tool-specific instruction files (CLAUDE.md, .cursor/rules/, .github/copilot-instructions.md)
 > are thin shims that point back here. If they conflict with this file, this file wins.
 
+> **Multi-root workspace note:** This AGENTS.md governs the `vista-evolved-platform` repo only.
+> In a multi-root workspace, each repo has its own AGENTS.md. When you see `/AGENTS.md`
+> references in this repo's files, they mean **this file**, not a sibling repo's AGENTS.md.
+> The sibling repos (`VistA-Evolved` archive and `vista-evolved-vista-distro`) are self-governing.
+
 ---
 
 ## 0. NON-NEGOTIABLE RULES

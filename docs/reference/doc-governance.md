@@ -40,7 +40,7 @@ All documentation lives under `/docs` in exactly these categories:
 - Enterprise-namespaced IDs: `VE-PLAT-ADR-NNNN` for this repo.
 - Cross-repo namespaces: `VE-GOV-` (governance), `VE-ARCH-` (architecture), `VE-PLAT-` (platform), `VE-DISTRO-` (distro).
 - Every ADR must be registered in `docs/reference/decision-index.yaml`.
-- ADR files in `/docs/adrs/` retain their original filename but include the enterprise ID in the document header.
+- ADR filenames in `/docs/adrs/` use the enterprise namespace prefix (e.g., `VE-PLAT-ADR-0001-*.md`). The enterprise ID also appears in the document header.
 
 ## Evidence and proof
 

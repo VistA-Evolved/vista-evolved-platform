@@ -2,6 +2,7 @@
 
 > **This file is a thin shim.** The canonical rules live in `/AGENTS.md`.
 > If anything here conflicts with AGENTS.md, AGENTS.md wins.
+> **Multi-root workspace:** `/AGENTS.md` means this repo's AGENTS.md, not a sibling repo's.
 
 Read and follow `/AGENTS.md` in full before any task.
 

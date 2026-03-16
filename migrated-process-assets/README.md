@@ -1,4 +1,4 @@
-# Process assets copied from archive (vista-evolved-archive)
+# Process assets copied from archive (VistA-Evolved)
 
 Index of archive paths that were copied or referenced. Normalize into platform docs/reference and runbooks as needed.
 

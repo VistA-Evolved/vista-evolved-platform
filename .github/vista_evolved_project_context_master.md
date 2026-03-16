@@ -6,6 +6,14 @@ Its purpose is to prevent drift, memory loss, shallow assumptions, and uncontrol
 
 If a future AI tool or future chat has limited context, this document should be treated as the stable background memory for the project.
 
+> **Superseded assumptions (updated 2025-07-14):**
+>
+> - The archive repo is named `VistA-Evolved` on GitHub (not `vista-evolved-archive`). Its canonical label in project docs is **VistA-Evolved (archive)**.
+> - VistA distro build lanes are now operational. UTF-8 is the **primary planned operator lane** (VE-DISTRO-ADR-0003); M-mode is rollback/reference/safety. English baseline; Korean and Spanish are bounded product languages.
+> - The platform repo now contains accepted architecture specs: `docs/explanation/global-system-architecture-spec.md` (architecture backbone) and `docs/explanation/organization-facility-network-service-model.md` (entity model). These elaborate the positions described in this context file but do not override it.
+> - Runtime proof details in Sections 10–11 below (ports 9433/2224, M-mode health checks) reflect the **legacy M-mode lane** from the distro's early bootstrap. Current lane truth is in the distro repo at `docs/reference/runtime-truth.md`.
+> - ADR filenames in the platform repo now use enterprise namespace prefixes (`VE-PLAT-ADR-0001-*.md`).
+
 ---
 
 ## 1. Project identity and mission
@@ -120,7 +128,7 @@ This is a reset of product surface and repo structure, not a reset of method.
 
 The current best recommendation is:
 
-1. `vista-evolved-archive`
+1. `VistA-Evolved` (archive)
    - frozen old repo
    - salvage/reference only
 
@@ -349,6 +357,12 @@ These were reported during the old repo proof sequence:
 These are historical proof points from the extraction work and may need to be re-pinned in the new distro repo.
 
 ### Runtime proof details from the old repo proof work
+
+> **Historical note:** These details describe the **legacy M-mode lane** from the original
+> repo's proof work. The current VistA distro has two build lanes: UTF-8 (primary, port 9434
+> RPC / 2226 SSH) and M-mode (rollback, port 9433 RPC / 2225 SSH). Current runtime truth
+> is in `vista-evolved-vista-distro/docs/reference/runtime-truth.md`.
+
 A canonical local-vista runtime lane was proven with:
 - RPC port `9433`
 - SSH port `2224`
@@ -405,7 +419,7 @@ This change was made intentionally and should be preserved in memory.
 
 ## 12. The new intended repo architecture
 
-### 12.1 `vista-evolved-archive`
+### 12.1 `VistA-Evolved` (archive)
 Frozen original repo.
 
 Purpose:
