@@ -137,8 +137,8 @@ migrated-process-assets/docs/
 | `docs/reference/upstream-source-strategy.md` | Fetch/pin, overlay, no fetch in bootstrap. |
 | `docs/reference/runtime-truth.md` | Local VistA runtime as reference. |
 | `docs/reference/customization-policy.md` | All customizations in overlay. |
-| `docs/adrs/ADR-0001-upstream-overlay-policy.md` | Upstream read-only, overlay for customizations. |
-| `docs/adrs/ADR-0002-local-source-first-builds.md` | Build from local upstream + overlay. |
+| `docs/adrs/VE-DISTRO-ADR-0001-upstream-overlay-policy.md` | Upstream read-only, overlay for customizations. |
+| `docs/adrs/VE-DISTRO-ADR-0002-local-source-first-builds.md` | Build from local upstream + overlay. |
 | `upstream/.gitkeep` | Placeholder. |
 | `overlay/routines/.gitkeep` | Placeholder. |
 | `overlay/install/.gitkeep` | Placeholder. |

@@ -43,7 +43,7 @@ decisions:
   - id: VE-DISTRO-ADR-0001
     title: Upstream overlay policy
     status: accepted
-    file: docs/adrs/ADR-0001-upstream-overlay-policy.md
+    file: docs/adrs/VE-DISTRO-ADR-0001-upstream-overlay-policy.md
     repo: vista-evolved-vista-distro
     date: 2026-03-12
     note: Tracked here for cross-repo visibility; canonical file in distro repo.
@@ -51,7 +51,7 @@ decisions:
   - id: VE-DISTRO-ADR-0002
     title: Local-source-first builds
     status: accepted
-    file: docs/adrs/ADR-0002-local-source-first-builds.md
+    file: docs/adrs/VE-DISTRO-ADR-0002-local-source-first-builds.md
     repo: vista-evolved-vista-distro
     date: 2026-03-12
     note: Tracked here for cross-repo visibility; canonical file in distro repo.
@@ -59,7 +59,7 @@ decisions:
   - id: VE-DISTRO-ADR-0003
     title: UTF-8 lane is the primary planned operator lane
     status: accepted
-    file: docs/adrs/ADR-0003-utf8-primary-lane.md
+    file: docs/adrs/VE-DISTRO-ADR-0003-utf8-primary-lane.md
     repo: vista-evolved-vista-distro
     date: 2025-07-13
     note: >
