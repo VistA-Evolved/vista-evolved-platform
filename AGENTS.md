@@ -10,6 +10,10 @@
 > references in this repo's files, they mean **this file**, not a sibling repo's AGENTS.md.
 > The sibling repos (`VistA-Evolved` archive and `vista-evolved-vista-distro`) are self-governing.
 > The archive repo's AGENTS.md is **reference material only** — it does not govern this repo.
+>
+> **Path disambiguation:** In task reports and all operator-facing outputs, use repo-prefixed
+> paths (e.g., `vista-evolved-platform/AGENTS.md`) instead of bare paths (e.g., `/AGENTS.md`)
+> to eliminate ambiguity when multiple repos are open in the same workspace.
 
 ---
 
@@ -100,6 +104,10 @@ Every AI task response MUST include:
 - **Risks:** known risks
 - **Next step:** what comes next
 ```
+
+> **Multi-root path rule:** All file paths in task reports must be repo-prefixed
+> (e.g., `vista-evolved-platform/docs/adrs/VE-PLAT-ADR-0001-three-repo-architecture.md`)
+> to avoid ambiguity when multiple repos are open in the same workspace.
 
 ---
 
