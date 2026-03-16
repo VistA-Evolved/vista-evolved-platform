@@ -36,6 +36,7 @@ nav:
     - Organization Facility Network Service Model: explanation/organization-facility-network-service-model.md
     - Pack and Adapter Architecture Governance: explanation/pack-and-adapter-architecture-governance.md
     - Capability Truth and Claim-Gating: explanation/capability-truth-and-claim-gating-spec.md
+    - Country and Payer Readiness Registry: explanation/country-and-payer-readiness-registry-spec.md
     - Governed Build Protocol: explanation/governed-build-protocol.md
     - AI Coding Governance: explanation/ai-coding-governance-and-sdlc.md
   - ADRs:
