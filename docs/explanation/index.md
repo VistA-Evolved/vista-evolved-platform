@@ -9,5 +9,6 @@ Architecture rationale, governance protocols, and design philosophy.
 - [Country and Payer Readiness Registry Spec](country-and-payer-readiness-registry-spec.md)
 - [Specialty, Content, and Analytics Architecture](specialty-content-and-analytics-architecture-spec.md)
 - [Information Architecture and Workspace Map](information-architecture-workspace-map.md)
+- [AI Assist Safety Spec](ai-assist-safety-spec.md)
 - [Governed Build Protocol](governed-build-protocol.md)
 - [AI Coding Governance and SDLC](ai-coding-governance-and-sdlc.md)

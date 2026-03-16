@@ -35,6 +35,7 @@
 | Country and payer readiness registry | `docs/explanation/country-and-payer-readiness-registry-spec.md` | Market-readiness dimensions, payer readiness model, launch tiers, claim gating for markets/payers |
 | Specialty, content, and analytics architecture | `docs/explanation/specialty-content-and-analytics-architecture-spec.md` | Specialty variation model, content taxonomy/lifecycle, analytics boundary, readiness interaction |
 | Information architecture and workspace map | `docs/explanation/information-architecture-workspace-map.md` | Workspace families, boundaries, role-to-workspace mapping, navigation model, claim-surface placement, screen-contract implications |
+| AI assist safety | `docs/explanation/ai-assist-safety-spec.md` | Assist taxonomy, input/output governance, review model, write-back rules, PHI handling, provider posture, audit, claim boundaries |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
 | Boundaries | `docs/reference/boundary-policy.md` | Bounded contexts, cross-boundary rules |
