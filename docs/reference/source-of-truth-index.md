@@ -37,6 +37,7 @@
 | Information architecture and workspace map | `docs/explanation/information-architecture-workspace-map.md` | Workspace families, boundaries, role-to-workspace mapping, navigation model, claim-surface placement, screen-contract implications |
 | Screen inventory | `docs/reference/screen-inventory.md` | Planning inventory of surfaces by workspace, bridging workspace map and screen contract schema to permissions, pack visibility, and screen-contract instances |
 | Permissions matrix | `docs/reference/permissions-matrix.md` | Role × surface × action × entity-context permissions matrix. Planning-stage reference consuming screen inventory and workspace map §8 |
+| Pack visibility rules | `docs/reference/pack-visibility-rules.md` | Planning-stage rules for how pack variation affects surface visibility. Consumes screen inventory, permissions matrix, pack-and-adapter governance. Produces visibility postures for downstream screen-contract instances. |
 | AI assist safety | `docs/explanation/ai-assist-safety-spec.md` | Assist taxonomy, input/output governance, review model, write-back rules, PHI handling, provider posture, audit, claim boundaries |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
