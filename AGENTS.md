@@ -22,7 +22,7 @@
 1. **No uncontrolled feature generation.** Work one slice at a time. Complete verification and human review before the next slice.
 2. **No claiming done without proof.** Proof = exact files changed + exact commands run + exact outputs + pass/fail. See `docs/reference/doc-governance.md` and `migrated-process-assets/verification-standard.md`.
 3. **No silent mocks or stubs.** If real infrastructure is unavailable, return explicit `integration-pending` state. Never silently fake success.
-4. **No next stage without stop-and-report.** After each slice, produce a completion report and stop. Do not proceed until explicitly instructed.
+4. **Commit, push, and report for passing bounded slices.** After each slice, produce the required proof package. If the slice is bounded, passes all validation, has no unresolved stop rules, and does not cross into ADR / major governance / architecture territory, the default is to commit and push in the same task, then report. Stop for explicit human approval only when: the user explicitly asked for a pause, a stop rule (§7 in the mutation protocol) remains unresolved, the change is materially risky or exceeds the approved bounded slice, or the change crosses into ADR / major governance / architecture territory. Do not proceed to the *next* slice until explicitly instructed.
 5. **Terminal-first.** VistA Evolved is terminal-first. Do not build broad control-plane GUI or speculative product UI unless explicitly instructed.
 6. **Repo files are the source of truth, not model memory.** Force alignment through files, contracts, CI, and merge gates.
 7. **No documentation sprawl.** Only approved doc categories. See rule 2 below.

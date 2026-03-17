@@ -246,18 +246,20 @@ Every governed change follows this order:
 5. Write implementation code that aligns to the updated artifacts.
 6. Do not introduce scope beyond what the artifacts declare.
 
-### Phase C — Proof
+### Phase C — Self-audit and proof
 
-7. Run validation (schema checks, lint, type checks).
-8. Run relevant existing verification scripts.
-9. Produce runtime proof where applicable (live tests, browser proof, terminal proof).
-10. Produce the task report (§10).
+7. **Self-audit.** Re-read all changed files. Check for alignment drift against governing artifacts (planning chain, contracts, policies). Fix any discovered inconsistencies immediately if they are within the current slice’s scope. If out of scope, document in the task report and flag for a separate slice.
+8. **UI hygiene check.** If the slice touches user-visible surfaces, bring the surface up in a browser or terminal when feasible. Inspect it for user-visible developer leakage: TODO/FIXME markers, placeholder text, raw RPC names, raw internal IDs, stack traces, developer comments rendered in UI, or obviously broken states. Fix before proceeding.
+9. Run validation (schema checks, lint, type checks).
+10. Run relevant existing verification scripts.
+11. Produce runtime proof where applicable (live tests, browser proof, terminal proof).
+12. Produce the task report (§10).
 
-### Phase D — Review
+### Phase D — Commit, push, and review
 
-11. Submit for human review.
-12. Do not merge or push without explicit approval.
-13. Do not start the next slice until the current slice is approved.
+13. If the slice is bounded, passes all validation and self-audit, has no unresolved stop rules (§7), and does not cross into ADR / major governance / architecture territory, commit and push in the same task.
+14. Stop for explicit human approval only when: the user explicitly asked for a pause, a stop rule remains unresolved, the change is materially risky or exceeds the approved bounded slice, or the change crosses into ADR / major governance / architecture territory.
+15. Do not start the next slice until the human explicitly instructs.
 
 ---
 
@@ -277,6 +279,10 @@ A slice is **done** when ALL of the following are true:
 | D8 | Task report is produced with all required sections (per AGENTS.md §5). | Reviewer checks report completeness. |
 | D9 | Human review is complete and approval is explicit. | Approval in review comments or conversation. |
 | D10 | No unresolved contract drift (implementation matches contracts). | Reviewer spot-checks. |
+| D11 | No user-visible developer leakage: no TODO/FIXME/placeholder text, no raw RPC names, no raw internal IDs or debug labels, no stack traces in any user-facing surface. | Self-audit + browser/terminal proof where applicable (A13, A15, A16). |
+| D12 | Self-audit completed: all changed files re-read, alignment checked against governing artifacts, inconsistencies fixed within scope. | Coder/agent confirms in task report. |
+| D13 | For slices that touch user-visible UI: browser or terminal proof captured showing no developer leakage, broken states, or placeholder text. | Screenshot, terminal output, or explicit confirmation in task report. |
+| D14 | No ad-hoc verifier scripts created when existing checks sufficed. Any new script is justified as a durable anti-drift control. | Reviewer checks for unnecessary new scripts (A14). |
 
 A slice is **NOT done** if:
 
@@ -286,6 +292,10 @@ A slice is **NOT done** if:
 - Proof was required but not produced.
 - A stop rule fired and was not resolved.
 - The slice was expanded beyond its approved scope.
+- User-visible surfaces contain developer leakage (TODO/FIXME, raw RPC names, internal IDs, stack traces, placeholder text).
+- Self-audit was not performed (changed files not re-read, alignment not checked).
+- Browser/terminal proof was required (UI-touched slice) but not captured.
+- An ad-hoc verifier script was created when existing checks sufficed.
 
 ---
 
@@ -328,7 +338,7 @@ A change **must not be merged or pushed** to `main` if any of the following cond
 | M3 | A planning-artifact contradiction was introduced or left unresolved. |
 | M4 | A breaking change has no accepted ADR. |
 | M5 | The task report is missing or incomplete. |
-| M6 | Human review has not been completed and approval has not been given. |
+| M6 | Human review has not been completed for slices that require explicit approval (ADR territory, materially risky changes, user-requested pause, unresolved stop rules). |
 | M7 | A stop rule (§7) fired and was not resolved. |
 | M8 | Evidence of proof (runtime, validation, cross-check) is absent. |
 | M9 | The change introduces documentation outside approved categories (doc-governance.md). |
@@ -354,6 +364,10 @@ These anti-patterns are explicitly prohibited. Each corresponds to real failure 
 | A10 | **Artifact updated but downstream not re-checked.** Fixing a planning artifact but not verifying that all artifacts consuming it are still consistent. | Partial fix leaves the chain inconsistent. The next developer inherits a contradiction. | C13 requires re-checking all downstream artifacts after any upstream correction. |
 | A11 | **AI agent acting on stale memory.** An AI agent using training data or prior conversation context instead of reading current repo files. | Model memory diverges from repo truth. Generates code that contradicts current governance. | P1 (repo files are SoT) + S9 (stop and re-read). |
 | A12 | **Claiming done without proof.** Marking a task complete without producing the proof package (§10). | Unverified claims accumulate. Problems surface late. | D7 (runtime proof), D8 (task report), M8 (merge-blocking). |
+| A13 | **User-visible developer leakage.** Shipping or demoing a user-visible surface that contains TODO, FIXME, `implementation pending`, placeholder scaffolding text, developer comments accidentally rendered in UI, raw RPC names, raw internal IDs or debug labels, raw stack traces or internal exception text, or any obviously unfinished-marker language visible to the user. | Users see developer internals. Erodes trust. Signals unfinished work. Leaks system architecture. | Self-audit step (Phase C-2). Browser/terminal proof for UI-touched slices. Surface must present only governed, user-appropriate content. |
+| A14 | **Ad-hoc verifier-script sprawl.** Creating a one-off per-task verification script when existing checks, direct self-review, schema validation, linting, browser proof, or existing governance scripts are sufficient. | Repo accumulates disposable scripts. Maintenance burden grows. Governance model fragments. | A new persistent verifier script is allowed only when it is reusable, canonical, belongs in the repo’s governance/checking model, and is justified as a durable anti-drift control rather than a task-local convenience artifact. |
+| A15 | **Placeholder or TODO text in product surfaces.** Leaving `TODO`, `FIXME`, `implementation pending`, `not yet implemented`, or similar unfinished markers in user-facing UI text, labels, messages, or dialogs. | Users encounter developer-facing language. Signals the product is unfinished. Masks missing design work. | Every user-visible string must be final or the surface must not ship. If the feature is incomplete, return explicit `integration-pending` state through the governed API—do not render it as UI text. |
+| A16 | **Raw internal identifiers in user-visible UI.** Displaying raw RPC names (e.g., `ORWPS ACTIVE`), raw VistA file references (e.g., `File 200`), internal route paths, debug log labels, MUMPS error codes, or stack traces in any surface visible to end users. | Leaks system internals. Confuses users. Potential security concern. | Internal identifiers may appear in developer/admin consoles, logs, and audit trails. They must never appear in clinical, patient-facing, or general user-facing surfaces. |
 
 ---
 
