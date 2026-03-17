@@ -1,0 +1,35 @@
+{
+  "surfaceId": "tenant-admin.users.list",
+  "version": "0.1.0",
+  "title": "User List and Status",
+  "status": "draft",
+  "description": "Tenant-scoped user list showing user identity and VistA user status. User management spans platform identity and VistA File 200 (NEW PERSON). Initial posture is read-only mirror of VistA user data. Write operations for user provisioning require governed API contracts (future). Platform does not own VistA File 200; it mirrors read-only.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 200 (NEW PERSON)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA user records — read-only mirror for display."
+    },
+    {
+      "sourceId": "platform-identity-bridge",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform identity and user governance data."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

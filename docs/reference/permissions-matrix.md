@@ -276,16 +276,16 @@ Tenant-admin is primarily for tenant administrators with limited access for IT/i
 | `tenant-admin.facilities.list` | tenantId | — | A | — | — | — | — | — |
 | `tenant-admin.clinics.list` | tenantId | — | A | — | — | — | — | — |
 | `tenant-admin.wards.list` | tenantId | — | A | — | — | — | — | — |
-| `tenant-admin.devices.list` | tenantId | — | A | — | — | — | — | C |
-| `tenant-admin.site-params.overview` | tenantId | — | A | — | — | — | — | C |
+| `tenant-admin.devices.list` | tenantId | — | R | — | — | — | — | R |
+| `tenant-admin.site-params.overview` | tenantId | — | R | — | — | — | — | R |
 | `tenant-admin.modules.enablement` | tenantId | — | A | — | — | — | — | — |
 | `tenant-admin.content.catalog` | tenantId | — | A | — | — | — | — | — |
 
 **PO configure note:** Platform operators do NOT configure individual tenant settings directly. They operate at control-plane level. Tenant-specific config changes require the tenant admin role.
 
 **IT conditions:**
-- `devices.list`: IT may configure device/printer settings (infrastructure concern).
-- `site-params.overview`: IT may configure infrastructure-related site parameters (per workspace map §8 "Tenant IT config").
+- `devices.list`: Research required — screen inventory declares this surface `read-only` (VistA File 3.5 write posture is unresearched). Whether IT can configure device/printer settings through the platform depends on resolving the VistA write path. See screen inventory §7.7 notes.
+- `site-params.overview`: Research required — screen inventory declares this surface `read-only` (VistA File 8989.3/8989.5 write posture is unresearched). Whether IT can configure infrastructure-related site parameters through the platform depends on resolving the VistA write path. See screen inventory §7.8 notes.
 - `roles-keys`: Research required — whether IT should have any role in VistA key management is an open question (see §10 research gaps).
 
 #### 7B.3 Create / update
@@ -298,16 +298,16 @@ Tenant-admin is primarily for tenant administrators with limited access for IT/i
 | `tenant-admin.facilities.list` | tenantId | — | R | — | — | — | — | — |
 | `tenant-admin.clinics.list` | tenantId | — | R | — | — | — | — | — |
 | `tenant-admin.wards.list` | tenantId | — | R | — | — | — | — | — |
-| `tenant-admin.devices.list` | tenantId | — | A | — | — | — | — | C |
-| `tenant-admin.site-params.overview` | tenantId | — | A | — | — | — | — | — |
+| `tenant-admin.devices.list` | tenantId | — | R | — | — | — | — | R |
+| `tenant-admin.site-params.overview` | tenantId | — | R | — | — | — | — | — |
 | `tenant-admin.modules.enablement` | tenantId | — | A | — | — | — | — | — |
 | `tenant-admin.content.catalog` | tenantId | — | A | — | — | — | — | — |
 
 **Research-required notes:**
 - `facilities.list` create/update: Whether the platform supports creating new facilities or only displays VistA-sourced facility data is a research gap. VistA owns File 4 (INSTITUTION). See screen inventory §9.1 evidence posture `inferred-from-architecture`.
 - `clinics.list` and `wards.list` create/update: Same VistA-ownership question — VistA owns File 44 (HOSPITAL LOCATION). Platform may only read and display.
-
-**IT devices condition:** IT may create/update device records (infrastructure provisioning concern).
+- `devices.list` create/update: Research required — screen inventory declares this surface `read-only` with `directWriteAllowed: false`. VistA File 3.5 write posture is unresearched. Upgrading to Allowed requires resolving the VistA write path first. See screen inventory §7.7.
+- `site-params.overview` create/update: Research required — same pattern. VistA File 8989.3/8989.5 write posture is unresearched. See screen inventory §7.8.
 
 #### 7B.4 Approve / publish / activate
 

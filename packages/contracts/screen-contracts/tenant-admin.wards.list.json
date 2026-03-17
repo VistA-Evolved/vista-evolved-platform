@@ -1,0 +1,35 @@
+{
+  "surfaceId": "tenant-admin.wards.list",
+  "version": "0.1.0",
+  "title": "Ward, Room, and Bed Configuration",
+  "status": "draft",
+  "description": "Ward, room, and bed configuration surface. VistA File 42 (WARD LOCATION) and File 42.4 (ROOM-BED) are the canonical source of truth. Read-only mirror is the appropriate initial posture.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "facility-scoped",
+    "entityContextRequired": ["tenantId", "facilityId"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 42 (WARD LOCATION)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA ward location records."
+    },
+    {
+      "sourceId": "VistA File 42.4 (ROOM-BED)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA room and bed configuration records."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

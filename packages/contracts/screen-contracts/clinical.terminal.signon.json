@@ -1,0 +1,36 @@
+{
+  "surfaceId": "clinical.terminal.signon",
+  "version": "0.1.0",
+  "title": "VistA Sign-On",
+  "status": "draft",
+  "description": "VistA Kernel sign-on flow within the browser terminal. This contract governs the platform surface and access posture only. Access/verify code authentication is VistA-native; the platform does not restate VistA sign-on authorization. Sign-on RPCs (XUS SIGNON SETUP, XUS AV CODE) are well-documented in the XWB protocol. Browser terminal sign-on under UTF-8 is not yet verified per distro runtime truth.",
+  "workspaceFamily": "clinical",
+  "workspaceName": "terminal",
+  "navigationLevel": "primary",
+  "surfaceType": "clinical",
+  "accessRequirements": {
+    "allowedRoles": ["clinician", "ancillary-staff", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": true,
+  "dataSources": [
+    {
+      "sourceId": "XUS SIGNON SETUP",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA sign-on setup RPC."
+    },
+    {
+      "sourceId": "XUS AV CODE",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA access/verify code authentication RPC."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

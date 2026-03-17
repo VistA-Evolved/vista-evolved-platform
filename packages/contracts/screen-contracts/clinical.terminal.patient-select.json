@@ -1,0 +1,41 @@
+{
+  "surfaceId": "clinical.terminal.patient-select",
+  "version": "0.1.0",
+  "title": "Patient Selection (Terminal)",
+  "status": "draft",
+  "description": "Patient selection surface within the browser terminal. Transitions the terminal session into a patient context. Patient lookup RPCs are well-established CPRS patterns. Specific terminal-mode patient selection menus require VistA menu-option research. This contract governs the platform surface and access posture only; inside-terminal VistA authorization (menu options, security keys) is not restated here.",
+  "workspaceFamily": "clinical",
+  "workspaceName": "terminal",
+  "navigationLevel": "primary",
+  "surfaceType": "clinical",
+  "accessRequirements": {
+    "allowedRoles": ["clinician", "ancillary-staff"],
+    "scopePosture": "patient-scoped",
+    "entityContextRequired": ["tenantId", "patientDfn"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "ORQPT DEFAULT PATIENT LIST",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA default patient list RPC."
+    },
+    {
+      "sourceId": "ORWPT LIST ALL",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA patient search RPC."
+    }
+  ],
+  "dataClassification": "phi",
+  "phiGovernance": {
+    "justification": "Patient selection requires accessing patient identifiers (name, DFN, SSN last-4) to locate the correct patient record.",
+    "minimumNecessary": true,
+    "auditRequired": true
+  },
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

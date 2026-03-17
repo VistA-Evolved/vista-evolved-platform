@@ -1,0 +1,31 @@
+{
+  "surfaceId": "clinical.terminal.disconnect",
+  "version": "0.1.0",
+  "title": "Session Disconnect / Timeout",
+  "status": "draft",
+  "description": "VistA session disconnect and timeout handling within the browser terminal. Session cleanup and timeout are infrastructure concerns at the terminal-wrap layer. VistA handles its own session expiry via the XWB disconnect protocol (#BYE# message).",
+  "workspaceFamily": "clinical",
+  "workspaceName": "terminal",
+  "navigationLevel": "local",
+  "surfaceType": "clinical",
+  "accessRequirements": {
+    "allowedRoles": ["clinician", "ancillary-staff", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": true,
+  "dataSources": [
+    {
+      "sourceId": "#BYE# (XWB disconnect protocol)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "XWB broker disconnect message for session teardown."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

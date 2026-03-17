@@ -1,0 +1,43 @@
+{
+  "surfaceId": "clinical.terminal.shell",
+  "version": "0.1.0",
+  "title": "Browser Terminal Shell",
+  "status": "draft",
+  "description": "Browser-hosted VistA terminal shell. This contract governs the platform surface and access posture only. VistA authorization (menu options, security keys, person class) governs what the user can do inside the terminal session. The platform does not restate or enforce inside-terminal VistA authorization. UTF-8 lane is the primary planned operator lane (VE-DISTRO-ADR-0003). Browser terminal sign-on and terminal behavior are not yet verified per distro runtime truth.",
+  "workspaceFamily": "clinical",
+  "workspaceName": "terminal",
+  "navigationLevel": "primary",
+  "surfaceType": "clinical",
+  "accessRequirements": {
+    "allowedRoles": ["clinician", "ancillary-staff", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": true,
+  "dataSources": [
+    {
+      "sourceId": "XWB RPC Broker (TCP session)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA RPC broker connection providing the terminal session."
+    }
+  ],
+  "dataClassification": "phi",
+  "phiGovernance": {
+    "justification": "Terminal session provides direct access to VistA clinical data including patient records, notes, orders, and medications.",
+    "minimumNecessary": false,
+    "auditRequired": true
+  },
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "incoming",
+      "targetWorkspaceFamily": "tenant-admin",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": true
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "real-time"
+}

@@ -185,7 +185,7 @@ These surfaces represent the terminal-first product strategy. The browser-hosted
 | **workspaceName** | terminal |
 | **navigationLevel** | `primary` |
 | **surfaceType** | `clinical` |
-| **primaryAudience** | `clinician`, `ancillary-staff`, `tenant-admin` |
+| **primaryAudience** | `clinician`, `ancillary-staff` |
 | **scopePosture** | `tenant-scoped` |
 | **entityContextRequired** | `tenantId` |
 | **readWritePosture** | `mixed` |
@@ -194,7 +194,7 @@ These surfaces represent the terminal-first product strategy. The browser-hosted
 | **dataClassification** | `phi` |
 | **claimSurface** | null |
 | **analyticsSurface** | null |
-| **crossWorkspaceTransitions** | Outgoing: launch from tenant-admin workspace (context: `tenantId`) |
+| **crossWorkspaceTransitions** | Incoming: IT/integration may launch terminal from tenant-admin workspace for infrastructure administration (context: `tenantId`). Tenant-admin role itself is prohibited (see permissions matrix §7C). |
 | **vistaAnchorType** | `package` |
 | **vistaAnchor** | XWB RPC Broker (TCP session), Kernel sign-on |
 | **presentationMode** | `terminal-native` |

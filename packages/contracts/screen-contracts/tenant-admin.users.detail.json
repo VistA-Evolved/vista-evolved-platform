@@ -1,0 +1,35 @@
+{
+  "surfaceId": "tenant-admin.users.detail",
+  "version": "0.1.0",
+  "title": "User Detail and Setup",
+  "status": "draft",
+  "description": "Detail view for a single user within a tenant. Displays platform identity data and VistA File 200 attributes (keys, menu options, person class, security keys). VistA user attributes are read-only from platform perspective. Role/key assignment posture requires research into which VistA RPCs support programmatic key assignment.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId", "userId"]
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 200 (NEW PERSON)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA user record detail — keys, menu options, person class. Read-only mirror."
+    },
+    {
+      "sourceId": "platform-identity-bridge",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform identity attributes and role assignments."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

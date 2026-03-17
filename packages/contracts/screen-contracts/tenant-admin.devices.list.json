@@ -1,0 +1,30 @@
+{
+  "surfaceId": "tenant-admin.devices.list",
+  "version": "0.1.0",
+  "title": "Printer and Device Defaults",
+  "status": "draft",
+  "description": "Printer and device defaults management surface. VistA File 3.5 (DEVICE) is the canonical source of truth. Reading device records is straightforward; write posture requires research. Terminal environments use devices for output routing.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "facility-scoped",
+    "entityContextRequired": ["tenantId", "facilityId"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 3.5 (DEVICE)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA device/printer records."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

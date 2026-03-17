@@ -1,0 +1,30 @@
+{
+  "surfaceId": "tenant-admin.clinics.list",
+  "version": "0.1.0",
+  "title": "Clinic List and Configuration",
+  "status": "draft",
+  "description": "Clinic list and configuration surface. VistA File 44 (HOSPITAL LOCATION) is the canonical source of truth. Read-only mirror is the safe initial posture. Clinic creation and modification require FileMan or approved M entry points — write posture requires research.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "facility-scoped",
+    "entityContextRequired": ["tenantId", "facilityId"]
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 44 (HOSPITAL LOCATION)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA clinic/location records — read-only mirror."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

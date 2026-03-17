@@ -1,0 +1,40 @@
+{
+  "surfaceId": "tenant-admin.facilities.list",
+  "version": "0.1.0",
+  "title": "Facility List and Configuration",
+  "status": "draft",
+  "description": "Facility list bridging VistA institutional files and platform tenant configuration. VistA File 4 (INSTITUTION) and File 40.8 (MEDICAL CENTER DIVISION) are the source of truth for facility data. Platform holds the tenant-to-facility mapping. Initial posture is read-only mirror; facility creation requires research into VistA File 4 write authority.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 4 (INSTITUTION)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA institution records — read-only mirror."
+    },
+    {
+      "sourceId": "VistA File 40.8 (MEDICAL CENTER DIVISION)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA medical center division records — read-only mirror."
+    },
+    {
+      "sourceId": "platform-tenant-facility-mapping",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform tenant-to-facility association governance."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}
