@@ -1,0 +1,35 @@
+{
+  "surfaceId": "tenant-admin.modules.enablement",
+  "version": "0.1.0",
+  "title": "Module Enablement and Configuration",
+  "status": "draft",
+  "description": "Tenant-scoped module enablement surface showing eligible capabilities and allowing activation. Platform-native concern with no VistA counterpart. Claim surface: shows only eligible and activated capabilities; displays integration-pending where appropriate. Pack sensitivity is multi-dimensional because eligibility depends on market, payer, and specialty context.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-module-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform module catalog, entitlements, and activation state."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "tenant-admin-enablement",
+    "claimDomains": ["capability", "pack-eligibility"],
+    "informationalOnly": false,
+    "gatingRuleRef": "capability-truth-§11-no-activation-without-supported-scope"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

@@ -1,0 +1,34 @@
+{
+  "surfaceId": "control-plane.markets.management",
+  "version": "0.1.0",
+  "title": "Legal Market and Launch Tier Management",
+  "status": "draft",
+  "description": "Platform-wide surface for managing legal markets, launch tiers, and market readiness dimensions. Source of truth is the claim-readiness-registry. Claim surface: shows full readiness detail including internal-only states. Deferred until country-payer readiness registry infrastructure exists. Pack sensitivity is country-regulatory.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "claim-readiness-registry",
+      "sourceDomainClass": "claim-readiness-registry",
+      "description": "Market readiness dimensions, launch tiers, and country-payer readiness state."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["market", "capability"],
+    "informationalOnly": false,
+    "gatingRuleRef": "capability-truth-§11-no-provisioning-without-eligibility"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

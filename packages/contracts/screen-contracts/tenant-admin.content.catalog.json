@@ -1,0 +1,30 @@
+{
+  "surfaceId": "tenant-admin.content.catalog",
+  "version": "0.1.0",
+  "title": "Content Pack Catalog",
+  "status": "draft",
+  "description": "Tenant-scoped content pack catalog for browsing, activating, and managing content packs. Platform-native concern; content packs are platform-managed. Deferred until content pack lifecycle infrastructure is built. Surfaces include: catalog view, activation, version management, audit trail. Pack sensitivity is multi-dimensional.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "content-admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-content-pack-catalog",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform content pack catalog, versions, and activation state."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

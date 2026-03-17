@@ -1,0 +1,36 @@
+{
+  "surfaceId": "control-plane.tenants.list",
+  "version": "0.1.0",
+  "title": "Tenant Registry",
+  "status": "draft",
+  "description": "Platform-wide tenant registry for tenant creation, configuration, suspension, and archival. Platform-only surface with no VistA equivalent. Platform operators manage the full tenant lifecycle. Outgoing transition to tenant-admin workspace for drill-into tenant detail.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-tenant-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform tenant records — creation, status, configuration."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "tenant-admin",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": true
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

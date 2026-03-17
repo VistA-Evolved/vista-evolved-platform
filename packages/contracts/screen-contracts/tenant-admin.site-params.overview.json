@@ -1,0 +1,35 @@
+{
+  "surfaceId": "tenant-admin.site-params.overview",
+  "version": "0.1.0",
+  "title": "Site Parameters Overview",
+  "status": "draft",
+  "description": "Facility-scoped read-only overview of key VistA site parameters. VistA File 8989.3 (PARAMETER DEFINITION) and File 8989.5 (PARAMETER) are the source of truth. The breadth of site parameters is large; which parameters surface in tenant-admin vs remain VistA-internal requires research. Initial posture is read-only overview of key operational parameters.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "facility-scoped",
+    "entityContextRequired": ["tenantId", "facilityId"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 8989.3 (PARAMETER DEFINITION)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA parameter definitions — read-only mirror."
+    },
+    {
+      "sourceId": "VistA File 8989.5 (PARAMETER)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA parameter values — read-only mirror."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

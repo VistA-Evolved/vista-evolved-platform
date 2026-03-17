@@ -1,0 +1,35 @@
+{
+  "surfaceId": "tenant-admin.users.roles-keys",
+  "version": "0.1.0",
+  "title": "Roles and Keys Posture",
+  "status": "draft",
+  "description": "Read-only view of VistA security keys and role assignments for a single user within a tenant. VistA keys (File 200 KEYS field) and security key definitions (File 19.1) are the source of truth. RPCs for reading key assignments exist but need verification. Write-back for programmatic key assignment is research-required. Platform does not own VistA key data; it mirrors read-only.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId", "userId"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "VistA File 200 (NEW PERSON — KEYS field)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA user key assignments — read-only mirror."
+    },
+    {
+      "sourceId": "VistA File 19.1 (SECURITY KEY)",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA security key definitions — read-only reference."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

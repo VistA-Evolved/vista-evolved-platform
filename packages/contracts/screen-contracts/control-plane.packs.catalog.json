@@ -1,0 +1,34 @@
+{
+  "surfaceId": "control-plane.packs.catalog",
+  "version": "0.1.0",
+  "title": "Pack Catalog and Eligibility",
+  "status": "draft",
+  "description": "Platform-wide pack catalog for managing pack definitions, eligibility rules, and pack-to-capability mapping. Platform operators manage the pack catalog and set eligibility rules. Deferred until pack infrastructure is built. Pack sensitivity is multi-dimensional. Distinct from tenant-admin.content.catalog which manages pack enablement within a single tenant.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-pack-catalog",
+      "sourceDomainClass": "platform-governance",
+      "description": "Pack definitions, eligibility rules, and capability mapping."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["pack-eligibility", "capability"],
+    "informationalOnly": false,
+    "gatingRuleRef": "capability-truth-§11-no-provisioning-without-eligibility"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}
