@@ -28,6 +28,14 @@ jobs:
         run: bash scripts/governance/check-ports.sh
         continue-on-error: true
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check screen contracts (G1)
+        run: bash scripts/governance/check-screen-contracts.sh
+
       - name: MkDocs build
         run: |
           pip install mkdocs-material
