@@ -277,7 +277,7 @@ A slice is **done** when ALL of the following are true:
 | D6 | No stop rules (§7) are unresolved. | Task report explicitly lists stop rules checked. |
 | D7 | Runtime proof is produced where applicable (live test, browser test, terminal test). | Proof artifacts in `/artifacts` or shown in task report. |
 | D8 | Task report is produced with all required sections (per AGENTS.md §5). | Reviewer checks report completeness. |
-| D9 | Human review is complete and approval is explicit. | Approval in review comments or conversation. |
+| D9 | Human review is complete where required by Phase D and M6 (ADR territory, materially risky changes, user-requested pause, unresolved stop rules). Bounded passing slices that do not trigger these conditions are committed and pushed without waiting for explicit approval. | Reviewer checks that special-approval slices have recorded approval; bounded slices have commit evidence. |
 | D10 | No unresolved contract drift (implementation matches contracts). | Reviewer spot-checks. |
 | D11 | No user-visible developer leakage: no TODO/FIXME/placeholder text, no raw RPC names, no raw internal IDs or debug labels, no stack traces in any user-facing surface. | Self-audit + browser/terminal proof where applicable (A13, A15, A16). |
 | D12 | Self-audit completed: all changed files re-read, alignment checked against governing artifacts, inconsistencies fixed within scope. | Coder/agent confirms in task report. |
