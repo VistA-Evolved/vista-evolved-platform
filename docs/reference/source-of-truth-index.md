@@ -22,6 +22,7 @@
 | AI coding SDLC | `docs/explanation/ai-coding-governance-and-sdlc.md` | Operating rules for AI agents |
 | Build protocol | `docs/explanation/governed-build-protocol.md` | Contract-first, proof-first |
 | Verification standard | `migrated-process-assets/verification-standard.md` | Evidence bar |
+| Mutation & implementation governance | `docs/reference/contract-mutation-and-implementation-governance-protocol.md` | Change classification, stop rules, definition of done, merge-blocking conditions |
 | Notion sync policy | `docs/reference/notion-sync-policy.md` | Repo canonical, Notion is mirror |
 
 ## Architecture and decisions
