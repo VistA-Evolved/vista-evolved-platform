@@ -23,7 +23,7 @@ This is a planning artifact. Its outputs feed downstream artifacts (pack visibil
 
 | Input | Location | What this matrix uses from it |
 |-------|----------|-------------------------------|
-| Screen inventory | `docs/reference/screen-inventory.md` | Surface IDs (25 concrete + 33 deferred families), role audiences, scope postures, read/write postures |
+| Screen inventory | `docs/reference/screen-inventory.md` | Surface IDs (29 concrete + 33 deferred families), role audiences, scope postures, read/write postures |
 | Workspace map §8 | `docs/explanation/information-architecture-workspace-map.md` §8 | Role-to-workspace alignment table — workspace-level entitlements per role category |
 | Screen contract schema | `packages/contracts/schemas/screen-contract.schema.json` | `roleCategoryEnum` (7 roles), `scopePostureEnum` (4 scopes), `workspaceFamilyEnum` (7 families) |
 | Organization/facility model §5/§17 | `docs/explanation/organization-facility-network-service-model.md` | Entity hierarchy, tenant-scoping model, facility/department/clinic structures |
@@ -180,8 +180,12 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 | Surface | Scope | PO | TA | CL | AS | RC | AN | IT |
 |---------|-------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `control-plane.tenants.list` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.detail` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.bootstrap` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.markets.management` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.markets.detail` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.packs.catalog` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.provisioning.runs` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.system.config` | platform-wide | A | — | — | — | — | — | — |
 
 #### 7A.2 Configure / administer
@@ -189,8 +193,12 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 | Surface | Scope | PO | TA | CL | AS | RC | AN | IT |
 |---------|-------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `control-plane.tenants.list` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.detail` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.bootstrap` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.markets.management` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.markets.detail` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.packs.catalog` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.provisioning.runs` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.system.config` | platform-wide | A | — | — | — | — | — | — |
 
 #### 7A.3 Create / update
@@ -198,8 +206,12 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 | Surface | Scope | PO | TA | CL | AS | RC | AN | IT |
 |---------|-------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `control-plane.tenants.list` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.detail` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.bootstrap` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.markets.management` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.markets.detail` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.packs.catalog` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.provisioning.runs` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.system.config` | platform-wide | A | — | — | — | — | — | — |
 
 #### 7A.4 Approve / publish / activate
@@ -207,8 +219,12 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 | Surface | Scope | PO | TA | CL | AS | RC | AN | IT |
 |---------|-------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `control-plane.tenants.list` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.detail` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.bootstrap` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.markets.management` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.markets.detail` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.packs.catalog` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.provisioning.runs` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.system.config` | platform-wide | A | — | — | — | — | — | — |
 
 #### 7A.5 Export
@@ -216,8 +232,12 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 | Surface | Scope | PO | TA | CL | AS | RC | AN | IT |
 |---------|-------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `control-plane.tenants.list` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.detail` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.tenants.bootstrap` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.markets.management` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.markets.detail` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.packs.catalog` | platform-wide | A | — | — | — | — | — | — |
+| `control-plane.provisioning.runs` | platform-wide | A | — | — | — | — | — | — |
 | `control-plane.system.config` | platform-wide | A | — | — | — | — | — | — |
 
 #### 7A.6 AI action classes
@@ -225,8 +245,12 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 | Surface | Scope | ai-review | ai-approve-insert | Notes |
 |---------|-------|:---------:|:------------------:|-------|
 | `control-plane.tenants.list` | platform-wide | — | — | Platform governance data; no AI assist surface. |
+| `control-plane.tenants.detail` | platform-wide | — | — | Single-tenant summary; no AI assist surface. |
+| `control-plane.tenants.bootstrap` | platform-wide | — | — | Bootstrap orchestration; no AI assist surface. |
 | `control-plane.markets.management` | platform-wide | — | — | Market configuration; no AI assist surface. |
+| `control-plane.markets.detail` | platform-wide | — | — | Market readiness detail; no AI assist surface. |
 | `control-plane.packs.catalog` | platform-wide | — | — | Pack catalog; no AI assist surface. |
+| `control-plane.provisioning.runs` | platform-wide | — | — | Provisioning lifecycle; no AI assist surface. |
 | `control-plane.system.config` | platform-wide | — | — | System config; no AI assist surface. |
 
 #### 7A.7 Control-plane notes
@@ -234,6 +258,10 @@ Control-plane surfaces are exclusively for platform operators. No tenant-scoped 
 - All control-plane surfaces are `platform-wide` scope — not tenant-scoped.
 - Platform operator is the sole role with any access. The workspace map §8 gives all other roles a dash for control plane.
 - `control-plane.tenants.list` is the tenant lifecycle surface — provisioning, suspension, decommissioning. Write operations here affect the entire tenant's existence.
+- `control-plane.tenants.detail` is a drill-target from `tenants.list`. It shows a single-tenant summary with action-launch affordances for bootstrap and provisioning. It does not duplicate fields already visible in the list; it provides depth context.
+- `control-plane.tenants.bootstrap` manages bootstrap request submission, plan review, and queue launch. Three OpenAPI operations and two AsyncAPI events bind to this surface. The `country-regulatory` packVariation means that bootstrap plans vary by legal-market (e.g., PhilHealth payer seed for PH tenants) but the surface itself is always visible.
+- `control-plane.markets.detail` is read-only. It displays a single legal-market readiness profile including regulatory requirements, payer readiness, and pack eligibility. `country-regulatory` packVariation means content varies by market but the surface is always visible.
+- `control-plane.provisioning.runs` tracks provisioning run lifecycle: queued → in-progress → completed/failed/rolled-back. Two OpenAPI operations and five AsyncAPI events bind to this surface. The operator can retry failed runs and inspect blockers.
 - `control-plane.packs.catalog` manages pack eligibility across markets. This is distinct from `tenant-admin.content.catalog` which manages pack enablement within a single tenant.
 - AI action classes are all prohibited because control-plane surfaces manage platform governance, not clinical or content data.
 
@@ -775,7 +803,7 @@ The recommended next bounded prompt targets (unchanged from screen inventory §1
 
 | Category | Surfaces | Decisions made | Deferred | Research-required |
 |----------|----------|:---:|:---:|:---:|
-| Control-plane (§7A) | 4 concrete | 140 | 0 | 0 |
+| Control-plane (§7A) | 8 concrete | 280 | 0 | 0 |
 | Tenant-admin (§7B) | 10 concrete | 308 | 0 | 14 |
 | Clinical/terminal (§7C) | 4 concrete | 124 | 0 | 0 |
 | IT/integration (§7D) | 7 concrete | 200 | 0 | 14 |
@@ -784,7 +812,7 @@ The recommended next bounded prompt targets (unchanged from screen inventory §1
 | Deferred revenue-cycle (§8.3) | 4 families | 40 | 0 | 0 |
 | Deferred analytics (§8.4) | 4 families | 48 | 0 | 0 |
 | Deferred additional (§8.5) | 8 families | 0 | 40 | 0 |
-| **Totals** | **25 concrete + 33 families** | **1122** | **114** | **52** |
+| **Totals** | **29 concrete + 33 families** | **1262** | **114** | **52** |
 
 Decision breakdown across all cells:
 - **allowed (A):** Explicit grants where the workspace map, surface characteristics, and governing references clearly support access.

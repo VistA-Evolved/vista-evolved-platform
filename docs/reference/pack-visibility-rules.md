@@ -13,7 +13,7 @@
 
 ### 1.1 What this document is
 
-This document defines the **first governed rules for how pack variation affects the visibility of platform surfaces**. It answers the question: given the 7 canonical pack families, the 25 concrete inventoried surfaces, the 33 deferred surface families, and the 8-step resolution-order model defined here — what is the planning-stage visibility posture for each surface?
+This document defines the **first governed rules for how pack variation affects the visibility of platform surfaces**. It answers the question: given the 7 canonical pack families, the 29 concrete inventoried surfaces, the 33 deferred surface families, and the 8-step resolution-order model defined here — what is the planning-stage visibility posture for each surface?
 
 It is a **planning-stage reference artifact**, not a resolver implementation. It produces human-readable rules that downstream artifacts (screen-contract instances, resolver logic, feature-flag schema) will consume.
 
@@ -21,7 +21,7 @@ It is a **planning-stage reference artifact**, not a resolver implementation. It
 
 | Predecessor | What it provides to this document |
 |------------|----------------------------------|
-| Screen inventory (`docs/reference/screen-inventory.md`) | 25 concrete surface IDs + 33 deferred families, `packVariationSensitivity` field per entry, evidence postures, scope postures |
+| Screen inventory (`docs/reference/screen-inventory.md`) | 29 concrete surface IDs + 33 deferred families, `packVariationSensitivity` field per entry, evidence postures, scope postures |
 | Permissions matrix (`docs/reference/permissions-matrix.md`) | Role × surface × action × entity-context decision matrix; 5 decision values (A/C/—/D/R); 5 critical separations |
 | Pack and adapter architecture governance (`docs/explanation/pack-and-adapter-architecture-governance.md`) | 7 pack families, pack lifecycle states, attachment points, eligibility evaluation, composition and precedence, safety constraints |
 | Capability truth and claim-gating spec (`docs/explanation/capability-truth-and-claim-gating-spec.md`) | 9 readiness states, 10 scope dimensions, evidence classes, claim surfaces, claim-gating rules |
@@ -54,7 +54,7 @@ It is a **planning-stage reference artifact**, not a resolver implementation. It
 
 | Input | What is used |
 |-------|-------------|
-| 25 concrete surface IDs | Each surface is assessed for pack-visibility posture |
+| 29 concrete surface IDs | Each surface is assessed for pack-visibility posture |
 | 33 deferred surface families | Each family is assessed at the family level |
 | `packVariationSensitivity` field | The per-surface planning annotation that indicates which pack dimensions affect the surface. Values: `none`, `language-only`, `country-regulatory`, `payer-specific`, `specialty-specific`, `multi-dimensional` |
 | Evidence posture | Whether the surface has real evidence, is inferred, or needs research. Affects confidence in the visibility rule. |
@@ -234,7 +234,7 @@ When determining a surface's visibility posture, the following 8-step resolution
 
 ### 7.1 How visibility postures were assigned
 
-For each of the 25 concrete surfaces and 33 deferred families, the following method was applied:
+For each of the 29 concrete surfaces and 33 deferred families, the following method was applied:
 
 1. **Read the surface's `packVariationSensitivity` value** from the screen inventory.
 2. **If `none`:** The surface is `base-visible` with respect to pack rules. Packs do not gate it. Record the posture and stop.
@@ -263,11 +263,15 @@ Control-plane surfaces serve platform operators managing the enterprise. They go
 | Surface ID | packVariationSensitivity | Visibility posture | Condition (if any) | Confidence | Notes |
 |-----------|-------------------------|-------------------|-------------------|------------|-------|
 | `control-plane.tenants.list` | `none` | `base-visible` | — | High | Tenant management is a governance function. No pack gates it. |
+| `control-plane.tenants.detail` | `none` | `base-visible` | — | High | Single-tenant summary and action-launch surface. Drill-target from tenants.list. No pack gates it. |
+| `control-plane.tenants.bootstrap` | `country-regulatory` | `base-visible` | — | High | Content variation: bootstrap plans include market-specific payer seeds, regulatory pack selections, and compliance configuration. The surface itself is always visible — operators must be able to bootstrap tenants in any market. |
 | `control-plane.markets.management` | `country-regulatory` | `base-visible` | — | High | Content variation: market definitions include regulatory context, country codes, and market-level compliance requirements. But the surface always appears for platform-operator roles — operators must see all markets regardless of regulatory pack state. |
+| `control-plane.markets.detail` | `country-regulatory` | `base-visible` | — | High | Content variation: market readiness detail includes regulatory requirements, payer readiness, and pack eligibility that vary by jurisdiction. The surface itself is always visible — operators must see any market's detail regardless of regulatory pack state. |
 | `control-plane.packs.catalog` | `multi-dimensional` | `base-visible` | — | High | The pack catalog is the governance surface for managing packs. It displays packs across all dimensions (language, regulatory, specialty, payer). It must always be visible to platform operators regardless of which packs are active. Content varies by dimension — visibility does not. |
+| `control-plane.provisioning.runs` | `none` | `base-visible` | — | High | Provisioning lifecycle tracking is infrastructure governance. Completely pack-independent — runs are tracked regardless of what packs the provisioned tenant will use. |
 | `control-plane.system.config` | `none` | `base-visible` | — | High | System configuration is infrastructure governance. Completely pack-independent. |
 
-**Workspace A summary:** All 4 control-plane surfaces are `base-visible`. No pack family gates control-plane surface visibility. Two surfaces have `country-regulatory` or `multi-dimensional` sensitivity — this means their *content* (which markets are shown, which packs are displayed, which compliance contexts apply) varies by pack dimension. But the surfaces themselves are always visible to platform operators.
+**Workspace A summary:** All 8 control-plane surfaces are `base-visible`. No pack family gates control-plane surface visibility. Three surfaces have `country-regulatory` sensitivity and one has `multi-dimensional` sensitivity — this means their *content* (which markets are shown, which packs are displayed, which bootstrap plans are offered, which compliance contexts apply) varies by pack dimension. But the surfaces themselves are always visible to platform operators.
 
 **Rationale:** Control-plane surfaces are platform-operator governance tools. Making them conditionally visible based on pack state would undermine the operator's ability to manage packs in the first place — the operator needs to see the pack catalog to activate packs, and must see market management to manage markets regardless of regulatory pack state.
 
@@ -516,9 +520,9 @@ This document enables and constrains the following downstream artifacts. **None 
 
 | Finding | Detail |
 |---------|--------|
-| **Most concrete surfaces are `base-visible`.** | 20 of 25 concrete surfaces are `base-visible` — packs do not gate their visibility. Pack state affects content within these surfaces, not whether they appear. |
+| **Most concrete surfaces are `base-visible`.** | 24 of 29 concrete surfaces are `base-visible` — packs do not gate their visibility. Pack state affects content within these surfaces, not whether they appear. |
 | **5 concrete surfaces are `conditionally-visible`.** | 4 terminal surfaces (conditioned on terminal enablement/capability) + 1 tenant-admin surface (content catalog, conditioned on content-management capability). Terminal conditions are not pack-driven. Only 1 concrete surface has a condition that references capability readiness potentially connected to packs (`tenant-admin.content.catalog`). |
-| **No concrete surface is `hidden-by-default` or `suppressed`.** | All 25 concrete surfaces are either always visible or conditionally visible. None is hidden by default. None is suppressed. |
+| **No concrete surface is `hidden-by-default` or `suppressed`.** | All 29 concrete surfaces are either always visible or conditionally visible. None is hidden by default. None is suppressed. |
 | **Language, locale, and tenant-overlay packs never gate visibility.** | These 3 pack families have zero visibility impact. They affect content and formatting only. |
 | **Regulatory and national-standards packs primarily affect content, not visibility.** | Among concrete surfaces, no visibility rule is conditioned on regulatory or standards pack activation. Deferred families may have research-required regulatory visibility gates. |
 | **Payer packs are the strongest visibility-gating candidate.** | Among deferred revenue-cycle families, payer pack activation is a strong candidate for `conditionally-visible` gating (claims management, EDI pipeline). |
@@ -530,10 +534,10 @@ This document enables and constrains the following downstream artifacts. **None 
 
 | Visibility posture | Concrete surfaces | Deferred families |
 |-------------------|------------------|-------------------|
-| `base-visible` | 20 | 0 |
+| `base-visible` | 24 | 0 |
 | `conditionally-visible` | 5 | 0 |
 | `hidden-by-default` | 0 | 0 |
 | `suppressed` | 0 | 0 |
 | `deferred` | 0 | 28 |
 | `research-required` | 0 | 5 |
-| **Total** | **25** | **33** |
+| **Total** | **29** | **33** |

@@ -897,6 +897,118 @@ These surfaces belong to the control-plane workspace (`apps/control-plane/`) per
 | **governingReferences** | Workspace map §11.2. |
 | **notes** | Platform-wide settings, deployment profiles, feature flags. Platform-native; no VistA counterpart. |
 
+### 9.5 Tenant detail
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.tenants.detail` |
+| **surfaceName** | Tenant Detail |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `secondary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | `tenantId` |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into tenant-admin (context: `tenantId`), launch bootstrap (context: `tenantId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `full-replacement` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `evidenced-in-current-repo-truth` |
+| **governingReferences** | Workspace map §11.2, VE-PLAT-ADR-0003, bootstrap/provisioning contract map §3, control-panel surface expansion batch 1 §5.1. |
+| **notes** | Single-tenant summary and action-launch surface. Drill target from `control-plane.tenants.list`. Displays tenant configuration summary, bootstrap history, provisioning status, and available actions. Entry point for bootstrap workflow. Platform-native — no VistA equivalent. |
+
+### 9.6 Tenant bootstrap
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.tenants.bootstrap` |
+| **surfaceName** | Tenant Bootstrap |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `secondary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | `tenantId` |
+| **readWritePosture** | `controlled-write` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | `{ claimSurfaceType: "control-plane-provisioning", claimDomains: ["bootstrap", "plan-resolution"], informationalOnly: false }` |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into provisioning.runs (context: `bootstrapRequestId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `country-regulatory` |
+| **evidencePosture** | `evidenced-in-current-repo-truth` |
+| **governingReferences** | Workspace map §11.2, VE-PLAT-ADR-0003, bootstrap/provisioning contract map §4–§5, OpenAPI control-plane-operator-bootstrap-and-provisioning (resolveEffectiveConfigurationPlan, createTenantBootstrapRequest, getTenantBootstrapRequest), AsyncAPI control-plane-provisioning-events (tenant.bootstrap.requested, effective-plan.resolved), control-panel surface expansion batch 1 §5.2. |
+| **notes** | Operator-initiated bootstrap request, plan review, and queuing surface. Outcome-oriented naming — not layout-opinionated (interaction model is a rendering choice). Directly bound to 3 OpenAPI operations and 2 AsyncAPI events. Plan resolution is market-dependent: resolved packs, deferred items, and gating blockers vary by legal market. Country-regulatory pack variation affects content (which packs appear in the plan), not surface visibility. |
+
+### 9.7 Provisioning runs
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.provisioning.runs` |
+| **surfaceName** | Provisioning Runs |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `secondary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | `provisioningRunId` |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `operational` |
+| **claimSurface** | `{ claimSurfaceType: "control-plane-provisioning", claimDomains: ["provisioning-lifecycle"], informationalOnly: false }` |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Incoming: from tenants.bootstrap (context: `bootstrapRequestId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `evidenced-in-current-repo-truth` |
+| **governingReferences** | Workspace map §11.2, VE-PLAT-ADR-0003, bootstrap/provisioning contract map §6, OpenAPI control-plane-operator-bootstrap-and-provisioning (createProvisioningRun, getProvisioningRunStatus), AsyncAPI control-plane-provisioning-events (provisioning.run.requested, provisioning.run.started, provisioning.step.changed, provisioning.run.completed, provisioning.run.failed), control-panel surface expansion batch 1 §5.3. |
+| **notes** | Provisioning lifecycle status, step progress, blocker diagnosis, and retry/cancel surface. Directly bound to 2 OpenAPI operations and 5 AsyncAPI events. Fully asynchronous model — no synchronous provisioning success endpoint exists. Pack-independent: provisioning steps may involve pack activation, but the monitoring surface is infrastructure governance. |
+
+### 9.8 Legal market detail
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.markets.detail` |
+| **surfaceName** | Legal Market Detail |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `secondary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | `legalMarketId` |
+| **readWritePosture** | `read-only` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `claim-readiness-registry` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | `{ claimSurfaceType: "control-plane-provisioning", claimDomains: ["market", "readiness"], informationalOnly: true }` |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Incoming: from markets.management (context: `legalMarketId`). Outgoing: launch bootstrap (context: `legalMarketId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `country-regulatory` |
+| **evidencePosture** | `evidenced-in-current-repo-truth` |
+| **governingReferences** | Workspace map §11.2, capability truth §15, country-payer readiness spec, OpenAPI control-plane-operator-bootstrap-and-provisioning (getLegalMarketProfile), bootstrap/provisioning contract map §3, control-panel surface expansion batch 1 §5.4. |
+| **notes** | Single legal-market readiness summary surface. Drill target from `control-plane.markets.management`. Displays market readiness dimensions, launch tier, mandated/default-on/eligible/excluded packs. Directly bound to 1 OpenAPI operation (getLegalMarketProfile). Claim surface shows full readiness detail including internal-only states (informational). PH.json instance provides concrete evidence of displayed data. Entry point for bootstrap workflow targeting this market. |
+
 ---
 
 ## 10. Surface inventory — Priority Group D: Deferred workspace families
@@ -1047,10 +1159,10 @@ The recommended next bounded prompt targets:
 | **A — Terminal/VistA foundation** | clinical (terminal) | 4 | — | 3 evidenced-in-current-repo, 1 evidenced-in-salvage |
 | **B — Tenant admin foundation** | tenant-admin | 10 | — | 2 inferred, 6 inferred, 1 research-required, 1 inferred |
 | **C — VistA-native admin/ops** | it-integration | 7 | — | 3 evidenced-in-current-repo, 1 research-required, 1 research-required, 1 research-required, 1 research-required |
-| **C — Control-plane** | control-plane | 4 | — | 4 inferred |
+| **C — Control-plane** | control-plane | 8 | — | 4 inferred, 4 evidenced-in-current-repo-truth |
 | **D — Clinical (deferred)** | clinical | — | 14 families | Mostly evidenced-in-salvage (RPC registry discovery) |
 | **D — Ancillary (deferred)** | ancillary-ops | — | 3 families | All research-required |
 | **D — Revenue cycle (deferred)** | revenue-cycle | — | 4 families | Mostly research-required |
 | **D — Analytics (deferred)** | analytics-bi | — | 4 families | All inferred |
 | **D — Additional deferred** | mixed | — | 8 families | Mostly research-required |
-| **Totals** | — | **25 concrete** | **33 deferred families** | — |
+| **Totals** | — | **29 concrete** | **33 deferred families** | — |

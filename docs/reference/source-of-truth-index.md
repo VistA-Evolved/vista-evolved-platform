@@ -41,6 +41,7 @@
 | Pack visibility rules | `docs/reference/pack-visibility-rules.md` | Planning-stage rules for how pack variation affects surface visibility. Consumes screen inventory, permissions matrix, pack-and-adapter governance. Produces visibility postures for downstream screen-contract instances. |
 | Legal-market composition and effective-configuration resolver | `docs/explanation/legal-market-composition-and-effective-configuration-resolver-spec.md` | Legal-market profiles, pack composition algorithm, effective-tenant-configuration plans, resolution guarantees, precedence rules |
 | Control-plane operator bootstrap and provisioning contract map | `docs/explanation/control-plane-operator-bootstrap-and-provisioning-contract-map.md` | Binds operator actions to API operations, events, canonical IDs, and PH truth constraints |
+| Control-panel surface expansion batch 1 | `docs/explanation/control-panel-surface-expansion-batch-1.md` | Batch 1 surface expansion: rationale, stop-and-reconcile, surface-to-service binding, field-level explanation for 4 new control-plane surfaces |
 | AI assist safety | `docs/explanation/ai-assist-safety-spec.md` | Assist taxonomy, input/output governance, review model, write-back rules, PHI handling, provider posture, audit, claim boundaries |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
