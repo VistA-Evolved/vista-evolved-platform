@@ -1,0 +1,112 @@
+{
+  "capabilityId": "billing.ph-philhealth-claims",
+  "displayName": "PhilHealth Claims Billing",
+  "description": "Philippine national health insurance claims capability via PhilHealth eClaims. Covers electronic claims submission (CF1-CF4 format), eligibility verification, and remittance processing for PhilHealth, the universal health coverage program. Requires regulatory compliance pack, national coding standards pack, locale pack, and the PhilHealth eClaims connector adapter.",
+  "capabilityClass": "billing",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "declared",
+    "evidenceSummary": "Payer pack manifest (payer-philhealth.json) identifies PhilHealth as the target payer with government-portal integration mode. Configuration keys for claim format and payer identifier are declared. The required adapter (philhealth-eclaims-connector) is not implemented — fallback is integration-pending. The archive repo contains a prototype PhilHealth connector (Phase 38/40) that is reference material only and not production code.",
+    "scopeBounds": "PhilHealth only (1 of 15+ PH payers). Private HMO payer integrations are not covered. Single-payer capability bound.",
+    "constrainingFactors": [
+      "payer-philhealth pack is draft — no connector configuration or rules exist.",
+      "philhealth-eclaims-connector adapter is not implemented. Current status: integration-pending.",
+      "Depends on regulatory-philhealth-doh (draft) and standards-ph (draft) which are also blocking.",
+      "Requires rcm-module license entitlement (declared in pack eligibility).",
+      "Archive repo prototype is reference only — not ported to platform repo.",
+      "No claim submission, eligibility, or remittance processing has been tested."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "payer-philhealth",
+      "packFamily": "payer",
+      "relationship": "required",
+      "rationale": "PhilHealth claims capability is directly provided by the PhilHealth payer pack."
+    },
+    {
+      "packId": "regulatory-philhealth-doh",
+      "packFamily": "regulatory",
+      "relationship": "required",
+      "rationale": "PhilHealth claims require DOH regulatory compliance context. Claim submission rules derive from the regulatory framework."
+    },
+    {
+      "packId": "standards-ph",
+      "packFamily": "national-standards",
+      "relationship": "required",
+      "rationale": "PhilHealth claims require ICD-10-CM and RVS coding per national standards. Claim validation depends on correct coding."
+    },
+    {
+      "packId": "locale-ph",
+      "packFamily": "locale",
+      "relationship": "required",
+      "rationale": "PhilHealth claims require PH locale conventions for currency (PHP), date formatting, and payer-specific field formatting."
+    }
+  ],
+
+  "adapterDependencies": [
+    {
+      "adapterId": "philhealth-eclaims-connector",
+      "adapterType": "external-system",
+      "required": true,
+      "currentStatus": "integration-pending",
+      "fallbackBehavior": "integration-pending"
+    }
+  ],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "PhilHealth has been identified as the target national payer for the PH market in a planning-stage pack manifest. No claims submission, eligibility verification, or remittance processing capability exists. The connector adapter is not implemented.",
+    "prohibitedClaims": [
+      "Must not claim 'PhilHealth billing support' or 'PhilHealth integration'.",
+      "Must not claim claims submission capability for any PH payer.",
+      "Must not claim eligibility verification for PhilHealth members.",
+      "Must not reference archive repo prototype as current platform capability.",
+      "Must not claim PH billing readiness based on this capability alone."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "PhilHealth billing is visible in control-plane for PH market planning but blocked by multiple unmet dependencies. Hidden from tenant admins until adapter is implemented and packs reach published state."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "payer-philhealth pack must reach at least published lifecycle state.",
+      "regulatory-philhealth-doh pack must reach at least published lifecycle state.",
+      "standards-ph pack must reach at least published lifecycle state.",
+      "locale-ph pack must reach at least published lifecycle state.",
+      "philhealth-eclaims-connector adapter must be implemented and at least in sandbox mode.",
+      "Tenant must have rcm-module license entitlement."
+    ],
+    "deactivationConstraints": []
+  },
+
+  "notes": [
+    "This is the most dependency-heavy capability in the current PH seed corpus.",
+    "PhilHealth uses CF1-CF4 JSON bundles, NOT X12 EDI format (see archive repo Phase 40 note).",
+    "Archive repo (Phase 38/40) contains a prototype connector and serializer — reference material only.",
+    "PhilHealth covers 1 of 15+ PH payers. Private HMO payers (Maxicare, Intellicare, etc.) require separate payer packs.",
+    "This is a gating blocker for PH market payer-readiness dimension.",
+    "Single-payer bound: claim posture cannot be widened to multi-payer without additional payer pack instances."
+  ]
+}

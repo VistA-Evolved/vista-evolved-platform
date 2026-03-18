@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capability-manifest",
+  "title": "CapabilityManifest",
+  "description": "Canonical manifest for a discrete, verifiable capability in VistA Evolved. Defines identity, lifecycle, readiness, scope, pack/adapter dependencies, claim posture, visibility posture, and activation semantics. Fulfills capability-truth-and-claim-gating-spec.md §19.2 (deferred schema) and pack-and-adapter-architecture-governance.md §19.1 (capability manifest structure). Instances live in packages/contracts/capability-manifests/ and are named {capabilityId}.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "capabilityId": {
+      "type": "string",
+      "description": "Unique capability identifier. Convention: {capabilityClass}.{qualifier} (e.g. 'billing.ph-philhealth-claims', 'clinical.language-support'). Must match the capabilityId referenced in pack-manifest capabilityContributions.",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+    },
+    "displayName": {
+      "type": "string",
+      "description": "Human-readable name (e.g. 'PhilHealth Claims Billing', 'English Language Support')."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this capability means and what it enables when fully realized."
+    },
+    "capabilityClass": {
+      "$ref": "#/$defs/capabilityClassEnum",
+      "description": "Named grouping of related capabilities sharing a readiness domain. Per capability-truth spec §5."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver version of this capability manifest.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+
+    "lifecycle": {
+      "$ref": "#/$defs/lifecycleBlock",
+      "description": "Governance and lifecycle metadata for this capability manifest."
+    },
+
+    "readiness": {
+      "$ref": "#/$defs/readinessBlock",
+      "description": "Current governed readiness state per capability-truth spec §7. Readiness is scoped — the state applies within the declared scopeBounds."
+    },
+
+    "scope": {
+      "$ref": "#/$defs/scopeBlock",
+      "description": "Where this capability is applicable. Defines legal-market, facility-type, service-line, and tenant-scope boundaries."
+    },
+
+    "packDependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/packDependencyEntry" },
+      "default": [],
+      "description": "Packs that this capability requires or optionally benefits from. Per pack-and-adapter §19.1."
+    },
+
+    "adapterDependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/adapterDependencyEntry" },
+      "default": [],
+      "description": "Adapters/connectors this capability requires or optionally benefits from. Per capability-truth spec §14.2."
+    },
+
+    "claimPosture": {
+      "$ref": "#/$defs/claimPostureBlock",
+      "description": "Claim-gating posture: what can be truthfully stated about this capability on public surfaces. Per capability-truth spec §10, §11."
+    },
+
+    "visibilityPosture": {
+      "$ref": "#/$defs/visibilityPostureBlock",
+      "description": "Control-plane and tenant-admin visibility posture. Supports future UI decisions without overbuilding that layer now. Per capability-truth spec §16."
+    },
+
+    "activationSemantics": {
+      "$ref": "#/$defs/activationSemanticsBlock",
+      "description": "How this capability becomes active: automatic when packs are active, operator-selectable, or blocked pending dependencies. Per capability-truth spec §12."
+    },
+
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Free-form notes, constraints, or context. Must not contain readiness claims — use readiness block for those."
+    }
+  },
+  "required": [
+    "capabilityId",
+    "displayName",
+    "description",
+    "capabilityClass",
+    "version",
+    "lifecycle",
+    "readiness",
+    "scope",
+    "packDependencies",
+    "claimPosture",
+    "activationSemantics"
+  ],
+
+  "$defs": {
+    "capabilityClassEnum": {
+      "type": "string",
+      "enum": [
+        "clinical",
+        "billing",
+        "scheduling",
+        "localization",
+        "regulatory",
+        "platform",
+        "imaging",
+        "telehealth",
+        "analytics",
+        "interop"
+      ],
+      "description": "Capability class groupings per capability-truth spec §5. clinical = clinical workflows and content. billing = RCM/payer/claims. scheduling = appointment/resource. localization = language/locale. regulatory = compliance/regulatory. platform = platform-native infrastructure capabilities. imaging = radiology/DICOM. telehealth = virtual care. analytics = reporting/BI. interop = HL7/FHIR/integration."
+    },
+
+    "readinessStateEnum": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "specified",
+        "implemented",
+        "validated",
+        "verified",
+        "claimable",
+        "production-eligible",
+        "deprecated",
+        "retired"
+      ],
+      "description": "The 9-state readiness lifecycle from capability-truth spec §7.1 and country-payer-readiness-registry spec §10.1. Transitions: declared→specified→implemented→validated→verified→claimable→production-eligible; degradation possible; deprecated→retired."
+    },
+
+    "lifecycleBlock": {
+      "type": "object",
+      "description": "Governance metadata for the capability manifest itself.",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["draft", "active", "deprecated", "retired"],
+          "description": "Manifest document lifecycle state (not the capability readiness state). draft = initial authoring. active = accepted and governing. deprecated = being phased out. retired = no longer valid."
+        },
+        "owner": {
+          "type": "string",
+          "description": "Team or role responsible for this capability's truth (e.g. 'platform-team', 'ph-market-team')."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of initial creation."
+        },
+        "lastModifiedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last modification."
+        }
+      },
+      "required": ["state", "owner"]
+    },
+
+    "readinessBlock": {
+      "type": "object",
+      "description": "Governed readiness state for this capability. Per capability-truth spec §7. State is always scoped — it applies within the declared scopeBounds.",
+      "additionalProperties": false,
+      "properties": {
+        "currentState": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "Current governed readiness state."
+        },
+        "evidenceSummary": {
+          "type": "string",
+          "description": "Brief summary of what evidence supports the current state. Must be truthful — no overclaiming. Reference artifacts/ paths if evidence exists."
+        },
+        "scopeBounds": {
+          "type": "string",
+          "description": "Explicit bounds within which the readiness state is valid. Per capability-truth spec §9.2 — truth is never flat, always scoped."
+        },
+        "constrainingFactors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Factors that prevent the capability from advancing to a higher readiness state."
+        }
+      },
+      "required": ["currentState", "evidenceSummary", "scopeBounds"]
+    },
+
+    "scopeBlock": {
+      "type": "object",
+      "description": "Where this capability is applicable. Empty arrays mean no restriction on that dimension.",
+      "additionalProperties": false,
+      "properties": {
+        "legalMarkets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Legal-market IDs (ISO 3166-1 alpha-2) where this capability applies. Empty = global."
+        },
+        "facilityTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Facility-type identifiers where this capability applies. Empty = any."
+        },
+        "serviceLines": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Service-line identifiers where this capability applies. Empty = any."
+        },
+        "tenantScopes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Tenant-scope identifiers (e.g. 'single-tenant', 'multi-tenant') where this capability applies. Empty = any."
+        }
+      }
+    },
+
+    "packDependencyEntry": {
+      "type": "object",
+      "description": "A pack this capability depends on. Per pack-and-adapter §19.1.",
+      "additionalProperties": false,
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "Pack ID from the pack manifest registry."
+        },
+        "packFamily": {
+          "type": "string",
+          "description": "Pack family for context (language, locale, regulatory, etc.)."
+        },
+        "relationship": {
+          "type": "string",
+          "enum": ["required", "enhances"],
+          "description": "required = capability is not achievable without this pack. enhances = capability works without this pack but gains features with it."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this pack is needed for this capability."
+        }
+      },
+      "required": ["packId", "relationship", "rationale"]
+    },
+
+    "adapterDependencyEntry": {
+      "type": "object",
+      "description": "An adapter this capability depends on. Per capability-truth spec §14.2.",
+      "additionalProperties": false,
+      "properties": {
+        "adapterId": {
+          "type": "string",
+          "description": "Adapter identifier matching adapterRequirements in pack manifests."
+        },
+        "adapterType": {
+          "type": "string",
+          "enum": ["vista", "external-system", "stub", "bridge"],
+          "description": "Adapter type per pack-and-adapter §7."
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the adapter is required (true) or optional/enhancing (false)."
+        },
+        "currentStatus": {
+          "type": "string",
+          "enum": ["available", "integration-pending", "stub", "unavailable"],
+          "description": "Current known status of this adapter. Must be truthful."
+        },
+        "fallbackBehavior": {
+          "type": "string",
+          "description": "What happens when the adapter is unavailable. Required adapters must specify 'integration-pending'."
+        }
+      },
+      "required": ["adapterId", "adapterType", "required", "currentStatus"]
+    },
+
+    "claimPostureBlock": {
+      "type": "object",
+      "description": "Claim-gating posture per capability-truth spec §10, §11. Governs what can be truthfully stated on public surfaces.",
+      "additionalProperties": false,
+      "properties": {
+        "currentClaimLevel": {
+          "type": "string",
+          "enum": [
+            "no-claim",
+            "internal-only",
+            "roadmap-disclosed",
+            "bounded-claim",
+            "general-claim"
+          ],
+          "description": "no-claim = capability must not be mentioned publicly. internal-only = visible to internal team only. roadmap-disclosed = may appear in roadmaps labeled as planned/in-development. bounded-claim = may be claimed publicly within explicit scope bounds. general-claim = may be claimed publicly without scope qualifiers."
+        },
+        "permittedScopeStatement": {
+          "type": "string",
+          "description": "The maximum truthful public statement about this capability. Must not exceed what readiness state and evidence support."
+        },
+        "prohibitedClaims": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Specific claims that are explicitly prohibited despite current state. Per anti-drift rules in capability-truth spec §4."
+        }
+      },
+      "required": ["currentClaimLevel", "permittedScopeStatement"]
+    },
+
+    "visibilityPostureBlock": {
+      "type": "object",
+      "description": "Visibility posture for control-plane and tenant-admin surfaces. Conceptual per capability-truth spec §16 — supports future UI decisions without building that layer now.",
+      "additionalProperties": false,
+      "properties": {
+        "controlPlaneVisibility": {
+          "type": "string",
+          "enum": ["hidden", "visible-disabled", "visible-enabled"],
+          "description": "hidden = not shown in control-plane. visible-disabled = shown but not activatable. visible-enabled = shown and activatable."
+        },
+        "tenantAdminVisibility": {
+          "type": "string",
+          "enum": ["hidden", "visible-disabled", "visible-enabled"],
+          "description": "hidden = not shown to tenant admins. visible-disabled = shown but not configurable. visible-enabled = shown and configurable."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this visibility posture was chosen."
+        }
+      },
+      "required": ["controlPlaneVisibility", "tenantAdminVisibility"]
+    },
+
+    "activationSemanticsBlock": {
+      "type": "object",
+      "description": "How this capability becomes active. Per capability-truth spec §12.",
+      "additionalProperties": false,
+      "properties": {
+        "activationMode": {
+          "type": "string",
+          "enum": [
+            "automatic",
+            "operator-selectable",
+            "dependency-blocked"
+          ],
+          "description": "automatic = capability activates when all required packs and adapters are active. operator-selectable = requires explicit operator activation even when dependencies met. dependency-blocked = cannot activate because required dependencies are not met."
+        },
+        "activationConstraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Constraints that must be satisfied before activation is possible."
+        },
+        "deactivationConstraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Constraints on deactivating this capability (e.g. other capabilities depend on it)."
+        }
+      },
+      "required": ["activationMode"]
+    }
+  }
+}

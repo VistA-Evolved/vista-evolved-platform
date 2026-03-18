@@ -1,0 +1,74 @@
+{
+  "capabilityId": "platform.locale-support",
+  "displayName": "Philippine Locale Support",
+  "description": "Locale conventions for the Philippine market. Configures date formatting (DD/MM/YYYY), currency display (PHP — Philippine Peso), number formatting (period decimal, comma thousands), and address formatting patterns appropriate for Philippine healthcare facilities.",
+  "capabilityClass": "platform",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "specified",
+    "evidenceSummary": "Pack manifest exists (locale-ph.json) defining PH locale conventions. Configuration keys for dateFormat, currencyCode, and numberFormat are declared. No runtime locale configuration or formatting infrastructure exists yet.",
+    "scopeBounds": "en-PH locale only. Covers date, currency, number, and address formatting for Philippine market.",
+    "constrainingFactors": [
+      "locale-ph pack is draft — no runtime locale configuration exists.",
+      "No formatting infrastructure implemented in platform or distro.",
+      "Locale switching and multi-locale tenant support not yet designed."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "locale-ph",
+      "packFamily": "locale",
+      "relationship": "required",
+      "rationale": "PH locale conventions pack provides all formatting configuration for the Philippine market."
+    }
+  ],
+
+  "adapterDependencies": [],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "Philippine locale pack manifest has been authored as a planning artifact defining PH-specific formatting conventions. No runtime locale implementation exists yet.",
+    "prohibitedClaims": [
+      "Must not claim 'PH locale support' is implemented or available.",
+      "Must not claim date/currency/number formatting works for PH market."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "Locale capability is visible in control-plane for PH market planning but not activatable. Hidden from tenant admins until formatting infrastructure exists."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "locale-ph pack must reach at least published lifecycle state.",
+      "Runtime formatting infrastructure must exist in platform.",
+      "No locale formatting infrastructure exists yet."
+    ],
+    "deactivationConstraints": []
+  },
+
+  "notes": [
+    "PH-market-specific capability. Other markets require their own locale packs and capability instances.",
+    "en-PH locale uses English text with Philippine formatting conventions.",
+    "Future fil-PH locale would require separate locale pack if Filipino-language formatting differs."
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "capabilityId": "clinical.language-support",
+  "displayName": "Clinical Language Support",
+  "description": "Baseline language capability for the VistA Evolved platform. Provides English-language UI strings, terminal prompts, VistA dialog translations, and menu translations. English is the baseline product language; all other language packs supplement but do not replace it. Full language support for additional languages requires per-language packs and distro runtime readiness.",
+  "capabilityClass": "clinical",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "platform-team",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "specified",
+    "evidenceSummary": "Pack manifest exists (lang-en.json) defining English baseline. No runtime translation artifacts or string bundles exist yet. Pack lifecycle is draft.",
+    "scopeBounds": "English language only. No non-English language support is covered by this capability instance. Additional languages require separate language packs and distro verification.",
+    "constrainingFactors": [
+      "lang-en pack is draft — no runtime string bundles or translation files exist.",
+      "Cross-repo implementation required: distro owns VistA terminal translations, platform owns UI strings.",
+      "No other language packs are available in the current PH seed corpus."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": [],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "lang-en",
+      "packFamily": "language",
+      "relationship": "required",
+      "rationale": "English baseline is the foundational language pack. All language-support capability depends on it."
+    }
+  ],
+
+  "adapterDependencies": [],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "English language pack manifest has been authored as a planning artifact. No runtime language implementation exists yet.",
+    "prohibitedClaims": [
+      "Must not claim 'multilingual support' based on this capability alone.",
+      "Must not claim 'language-ready' for any non-English language.",
+      "Must not claim runtime language switching capability."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "Language-support capability is visible in control-plane for planning purposes but cannot be activated. Not shown to tenant admins until runtime implementation exists."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "lang-en pack must reach at least published lifecycle state.",
+      "Runtime string bundles must exist in platform and/or distro.",
+      "No runtime language infrastructure exists yet."
+    ],
+    "deactivationConstraints": [
+      "English baseline should not be deactivated as it is the foundation for all language support."
+    ]
+  },
+
+  "notes": [
+    "This is a global capability — not PH-market-specific. All markets require English baseline.",
+    "Additional language packs (lang-fil, lang-ko, lang-es) supplement this capability when authored and verified.",
+    "Distro L0-L5 maturity model governs language readiness depth per language."
+  ]
+}

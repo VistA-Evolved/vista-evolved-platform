@@ -1,0 +1,81 @@
+{
+  "capabilityId": "regulatory.ph-compliance",
+  "displayName": "Philippine Regulatory Compliance",
+  "description": "Regulatory compliance capability for the Philippine market. Ensures adherence to the Universal Health Care Act of 2019 (RA 11223), the Data Privacy Act of 2012 (RA 10173), and PhilHealth eClaims regulatory requirements as mandated by the Department of Health (DOH). This capability is a prerequisite for any operational deployment in the Philippine legal market.",
+  "capabilityClass": "regulatory",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "declared",
+    "evidenceSummary": "Compliance frameworks are identified in the pack manifest (regulatory-philhealth-doh.json): UHC Act 2019, Data Privacy Act 2012, PhilHealth eClaims. No compliance validation logic, rules, or configuration has been implemented.",
+    "scopeBounds": "Philippine legal market only. Compliance frameworks identified but not implemented.",
+    "constrainingFactors": [
+      "regulatory-philhealth-doh pack is draft — no compliance logic exists.",
+      "No compliance validation rules or runtime checks implemented.",
+      "Regulatory body (DOH) requirements are identified but not codified.",
+      "This pack is mandated by PH legal-market profile but cannot enforce mandate at draft state."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "regulatory-philhealth-doh",
+      "packFamily": "regulatory",
+      "relationship": "required",
+      "rationale": "PH regulatory compliance requires the DOH/PhilHealth regulatory pack defining compliance framework rules and configuration."
+    }
+  ],
+
+  "adapterDependencies": [],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "Philippine regulatory frameworks (UHC Act, Data Privacy Act, PhilHealth eClaims) are identified in a planning-stage pack manifest. No compliance logic is implemented.",
+    "prohibitedClaims": [
+      "Must not claim 'compliant with Philippine regulations'.",
+      "Must not claim 'DOH-approved' or 'PhilHealth-certified'.",
+      "Must not claim regulatory readiness for any operational deployment.",
+      "Must not use regulatory compliance as a market-entry claim for PH."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "Regulatory compliance is visible in control-plane for PH market planning (mandated pack) but cannot be activated. Hidden from tenant admins until compliance logic is implemented and at least validated."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "regulatory-philhealth-doh pack must reach at least published lifecycle state.",
+      "Compliance validation logic must be implemented and tested against known PH regulatory requirements.",
+      "Pack is mandated by PH legal-market profile — activation is automatic once constraints are met, not operator-selectable."
+    ],
+    "deactivationConstraints": [
+      "PH regulatory compliance is mandated — cannot be deactivated for PH-market tenants per legal-market profile.",
+      "billing.ph-philhealth-claims and clinical.ph-coding-standards capabilities depend on this."
+    ]
+  },
+
+  "notes": [
+    "Mandated by PH legal-market profile. All PH tenants require this capability.",
+    "This is a gating blocker for PH market launch tier advancement beyond T0.",
+    "Compliance frameworks reference real Philippine legislation but no compliance logic exists yet.",
+    "Pack has no adapter dependencies — compliance rules are configuration/rule-based, not connector-based."
+  ]
+}

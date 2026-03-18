@@ -1,0 +1,88 @@
+{
+  "capabilityId": "clinical.ph-coding-standards",
+  "displayName": "Philippine National Coding Standards",
+  "description": "National healthcare coding standards for the Philippine market. Covers ICD-10-CM diagnosis coding and the Relative Value Scale (RVS) procedure coding system as required by DOH and PhilHealth for claim submission and clinical documentation. This capability enables correct code selection, validation, and mapping for Philippine healthcare encounters.",
+  "capabilityClass": "clinical",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "declared",
+    "evidenceSummary": "Coding systems (ICD-10-CM, RVS) are identified in pack manifest (standards-ph.json). No coding tables, validation rules, or mapping infrastructure exists. Configuration keys for primarySystem and procedureSystem are declared but not implemented.",
+    "scopeBounds": "Philippine legal market only. ICD-10-CM and RVS coding systems identified but not implemented.",
+    "constrainingFactors": [
+      "standards-ph pack is draft — no coding tables or mappings exist.",
+      "Depends on regulatory-philhealth-doh pack which is also draft.",
+      "No coding validation infrastructure implemented in platform.",
+      "This pack is mandated by PH legal-market profile but cannot enforce mandate at draft state."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "standards-ph",
+      "packFamily": "national-standards",
+      "relationship": "required",
+      "rationale": "PH coding standards capability requires the national standards pack providing ICD-10-CM and RVS coding tables and configuration."
+    },
+    {
+      "packId": "regulatory-philhealth-doh",
+      "packFamily": "regulatory",
+      "relationship": "required",
+      "rationale": "Coding standards are mandated by the DOH regulatory framework. The regulatory pack defines the compliance context under which coding standards apply."
+    }
+  ],
+
+  "adapterDependencies": [],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "ICD-10-CM and RVS coding systems for the Philippine market are identified in planning-stage pack manifests. No coding tables, validation, or mapping infrastructure exists.",
+    "prohibitedClaims": [
+      "Must not claim 'supports ICD-10-CM coding' — no coding tables exist.",
+      "Must not claim 'RVS procedure coding available' — no RVS tables exist.",
+      "Must not claim coding standards compliance for PH market."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "Coding standards are visible in control-plane for PH market planning (mandated pack) but cannot be activated. Hidden from tenant admins until coding infrastructure is implemented."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "standards-ph pack must reach at least published lifecycle state.",
+      "regulatory-philhealth-doh pack must reach at least published lifecycle state.",
+      "Coding tables (ICD-10-CM, RVS) must be loaded and validated.",
+      "Pack is mandated by PH legal-market profile — activation is automatic once constraints are met."
+    ],
+    "deactivationConstraints": [
+      "PH coding standards are mandated — cannot be deactivated for PH-market tenants per legal-market profile.",
+      "billing.ph-philhealth-claims capability depends on correct coding for claim submission."
+    ]
+  },
+
+  "notes": [
+    "Mandated by PH legal-market profile via standards-ph pack.",
+    "ICD-10-CM is shared with US market but applied within PH regulatory context.",
+    "RVS is PH-specific (not the US RBRVS). Professional fee schedule links to PhilHealth reimbursement.",
+    "This is a gating blocker for PH market launch tier advancement beyond T0.",
+    "No proprietary code set tables are bundled — code values pass through. See archive repo Phase 40 BUG-117 note."
+  ]
+}
