@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "title": "Tenant Detail",
   "status": "draft",
-  "description": "Platform-wide single-tenant summary and action-launch surface. Drill target from control-plane.tenants.list. Displays tenant configuration summary, bootstrap history, provisioning status, and available actions. Entry point for bootstrap workflow (same-workspace navigation to control-plane.tenants.bootstrap) and cross-workspace transition to tenant-admin workspace for tenant-scoped administration. Platform-native — no VistA equivalent. Planning-stage navigationLevel is 'secondary' (drill target from primary surface); schema-term 'local' represents this.",
+  "description": "Platform-wide single-tenant summary and action-launch surface. Drill target from control-plane.tenants.list. Displays tenant configuration summary, bootstrap history, provisioning status, and available actions. Entry point for bootstrap workflow (same-workspace navigation to control-plane.tenants.bootstrap) and cross-workspace transition to tenant-admin workspace for tenant-scoped administration. Platform-native — no VistA equivalent.",
   "workspaceFamily": "control-plane",
   "navigationLevel": "local",
   "surfaceType": "admin",

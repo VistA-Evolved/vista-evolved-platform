@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "title": "Tenant Bootstrap",
   "status": "draft",
-  "description": "Operator-initiated bootstrap request, plan review, and queuing surface. Outcome-oriented naming — interaction model (wizard, multi-step, review-and-submit) is a rendering choice, not a surface identity. Directly bound to 3 OpenAPI operations (resolveEffectiveConfigurationPlan, createTenantBootstrapRequest, getTenantBootstrapRequest) and 2 AsyncAPI events (tenant.bootstrap.requested, effective-plan.resolved). Plan resolution is market-dependent: resolved packs, deferred items, and gating blockers vary by legal market. Country-regulatory pack variation affects content (which packs appear in the plan), not surface visibility. Same-workspace drill target from control-plane.tenants.detail. Planning-stage navigationLevel is 'secondary'; schema-term 'local' represents this.",
+  "description": "Operator-initiated bootstrap request, plan review, and queuing surface. Outcome-oriented naming — interaction model (wizard, multi-step, review-and-submit) is a rendering choice, not a surface identity. Directly bound to 3 OpenAPI operations (resolveEffectiveConfigurationPlan, createTenantBootstrapRequest, getTenantBootstrapRequest) and 2 AsyncAPI events (tenant.bootstrap.requested, effective-plan.resolved). Plan resolution is market-dependent: resolved packs, deferred items, and gating blockers vary by legal market. Country-regulatory pack variation affects content (which packs appear in the plan), not surface visibility. Same-workspace drill target from control-plane.tenants.detail.",
   "workspaceFamily": "control-plane",
   "navigationLevel": "local",
   "surfaceType": "admin",
