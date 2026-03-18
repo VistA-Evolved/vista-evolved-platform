@@ -1,0 +1,48 @@
+{
+  "packId": "lang-en",
+  "displayName": "English Language Pack (Baseline)",
+  "description": "Baseline English language pack. Provides UI strings, VistA dialog translations, terminal prompts, and menu translations in English. English is the baseline product language from which all other language packs derive.",
+  "packFamily": "language",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "platform-team",
+    "implementationLocus": "cross-repo",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "tenant",
+    "overrideScopes": ["facility"]
+  },
+
+  "dependencies": [],
+
+  "eligibility": {
+    "legalMarkets": [],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["translations", "templates"],
+    "artifactCount": 0,
+    "languageTag": "en",
+    "translationCoverage": 100
+  },
+
+  "adapterRequirements": [],
+  "configurationKeys": [],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "clinical.language-support",
+      "contributionType": "required",
+      "description": "English baseline is required for all language-support capabilities. Other language packs supplement but do not replace the English baseline."
+    }
+  ]
+}

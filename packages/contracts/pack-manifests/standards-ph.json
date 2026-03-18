@@ -1,0 +1,66 @@
+{
+  "packId": "standards-ph",
+  "displayName": "Philippines National Standards Pack",
+  "description": "National healthcare standards for the Philippines market. Covers ICD-10-CM diagnosis coding and the Relative Value Scale (RVS) procedure coding system as required by DOH and PhilHealth. This is a planning-stage manifest; no implemented coding tables or mappings exist yet.",
+  "packFamily": "national-standards",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "legal-market",
+    "overrideScopes": []
+  },
+
+  "dependencies": [
+    {
+      "packId": "regulatory-philhealth-doh",
+      "type": "required",
+      "rationale": "PH national standards (ICD-10-CM, RVS) are mandated by DOH regulatory framework. Standards pack requires regulatory pack to define the compliance context."
+    }
+  ],
+
+  "eligibility": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["coding-tables", "configuration"],
+    "artifactCount": 0,
+    "codingSystems": ["ICD-10-CM", "RVS"],
+    "standardsBody": "DOH"
+  },
+
+  "adapterRequirements": [],
+
+  "configurationKeys": [
+    {
+      "key": "coding.primarySystem",
+      "action": "provides",
+      "description": "Sets ICD-10-CM as the primary diagnosis coding system for PH market."
+    },
+    {
+      "key": "coding.procedureSystem",
+      "action": "provides",
+      "description": "Sets RVS as the procedure coding system for PH market."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "clinical.ph-coding-standards",
+      "contributionType": "required",
+      "description": "PH national coding standards (ICD-10-CM + RVS) required for correct claim coding in the Philippines market."
+    }
+  ]
+}

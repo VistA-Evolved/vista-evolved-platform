@@ -1,0 +1,59 @@
+{
+  "packId": "regulatory-philhealth-doh",
+  "displayName": "Philippines DOH / PhilHealth Regulatory Pack",
+  "description": "Regulatory compliance rules for the Philippines market as mandated by the Department of Health (DOH) and PhilHealth. Covers compliance frameworks including the Universal Health Care Act of 2019 (RA 11223), the Data Privacy Act of 2012 (RA 10173), and PhilHealth eClaims requirements. This is a planning-stage manifest; no implemented compliance logic exists yet.",
+  "packFamily": "regulatory",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "legal-market",
+    "overrideScopes": []
+  },
+
+  "dependencies": [],
+
+  "eligibility": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["rules", "configuration"],
+    "artifactCount": 0,
+    "complianceFrameworks": [
+      "PH-UHC-Act-2019",
+      "PH-Data-Privacy-Act-2012",
+      "PhilHealth-eClaims"
+    ],
+    "regulatoryBody": "DOH"
+  },
+
+  "adapterRequirements": [],
+
+  "configurationKeys": [
+    {
+      "key": "regulatory.ph.complianceMode",
+      "action": "provides",
+      "description": "Activates PH-specific regulatory compliance checks when implemented."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "regulatory.ph-compliance",
+      "contributionType": "required",
+      "description": "PH regulatory compliance is not claimable without this pack active and verified."
+    }
+  ]
+}

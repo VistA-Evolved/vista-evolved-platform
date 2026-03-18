@@ -1,0 +1,64 @@
+{
+  "packId": "locale-ph",
+  "displayName": "Philippines Locale Pack",
+  "description": "Locale conventions for the Philippines market. Configures date formats (DD/MM/YYYY), currency (PHP — Philippine Peso), address formatting, number formatting (period decimal, comma thousands), and measurement units appropriate for Philippine healthcare facilities.",
+  "packFamily": "locale",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "tenant",
+    "overrideScopes": ["facility"]
+  },
+
+  "dependencies": [],
+
+  "eligibility": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["configuration"],
+    "artifactCount": 0,
+    "localeIdentifier": "en-PH"
+  },
+
+  "adapterRequirements": [],
+
+  "configurationKeys": [
+    {
+      "key": "locale.dateFormat",
+      "action": "provides",
+      "description": "Date display format for PH locale (DD/MM/YYYY)."
+    },
+    {
+      "key": "locale.currencyCode",
+      "action": "provides",
+      "description": "Currency code for PH locale (PHP)."
+    },
+    {
+      "key": "locale.numberFormat",
+      "action": "provides",
+      "description": "Number formatting conventions for PH locale."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "platform.locale-support",
+      "contributionType": "required",
+      "description": "PH locale conventions required for correct date, currency, and number display in Philippine market tenants."
+    }
+  ]
+}

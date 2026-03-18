@@ -1,0 +1,139 @@
+{
+  "legalMarketId": "PH",
+  "version": "0.1.0",
+  "displayName": "Philippines",
+  "status": "draft",
+
+  "mandatedPacks": [
+    {
+      "packId": "regulatory-philhealth-doh",
+      "packFamily": "regulatory",
+      "rationale": "DOH and PhilHealth regulatory compliance is a legal requirement for all healthcare facilities operating in the Philippines. The Universal Health Care Act (RA 11223) and Data Privacy Act (RA 10173) establish mandatory compliance frameworks.",
+      "minimumPackState": "published"
+    },
+    {
+      "packId": "standards-ph",
+      "packFamily": "national-standards",
+      "rationale": "ICD-10-CM diagnosis coding and RVS procedure coding are mandated by DOH for all PhilHealth claims. Facilities cannot submit valid claims without these coding systems.",
+      "minimumPackState": "published"
+    }
+  ],
+
+  "defaultOnPacks": [
+    {
+      "packId": "lang-en",
+      "packFamily": "language",
+      "rationale": "English is the baseline product language and the primary professional language used in Philippine healthcare facilities.",
+      "deactivationConstraints": [
+        "Baseline product language cannot be deactivated."
+      ]
+    },
+    {
+      "packId": "locale-ph",
+      "packFamily": "locale",
+      "rationale": "PH locale conventions (date format, currency PHP, number formatting) are expected defaults for all Philippine tenants.",
+      "deactivationConstraints": [
+        "Locale pack is required for correct date, currency, and number display."
+      ]
+    },
+    {
+      "packId": "payer-philhealth",
+      "packFamily": "payer",
+      "rationale": "PhilHealth is the universal national health insurance program. Nearly all Philippine facilities process PhilHealth claims. Enabled by default; facilities with exclusively private-pay patients may disable."
+    }
+  ],
+
+  "eligiblePacks": [
+    {
+      "packId": "lang-fil",
+      "packFamily": "language",
+      "eligibilityConditions": [
+        "Requires a distro ADR (VE-DISTRO-ADR-NNNN) adding Filipino as a bounded product language per VE-DISTRO-ADR-0003.",
+        "Currently only English, Korean, and Spanish are bounded product languages.",
+        "This pack does not yet exist."
+      ]
+    }
+  ],
+
+  "excludedPacks": [
+    {
+      "packId": "regulatory-hipaa",
+      "packFamily": "regulatory",
+      "exclusionRationale": "HIPAA is a US-only regulatory framework. It does not apply to the Philippine legal market and cannot be composed alongside PH regulatory packs."
+    }
+  ],
+
+  "readinessDimensions": {
+    "language": {
+      "state": "specified",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "English baseline only. Filipino not yet a bounded product language.",
+      "notes": "English pack (lang-en) exists as a draft manifest. No implemented translations yet."
+    },
+    "regulatory": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "UHC Act + Data Privacy Act + PhilHealth eClaims identified. No compliance logic implemented.",
+      "notes": "Regulatory pack (regulatory-philhealth-doh) exists as a draft manifest. Compliance frameworks listed but not yet validated against DOH requirements."
+    },
+    "payer": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "PhilHealth only. Private HMO payers not yet addressed.",
+      "notes": "Payer pack (payer-philhealth) exists as a draft manifest. Archive repo has a prototype PhilHealth connector (Phase 38/40) as reference material."
+    },
+    "nationalStandards": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "ICD-10-CM and RVS identified. No coding tables or mappings implemented.",
+      "notes": "Standards pack (standards-ph) exists as a draft manifest. Coding system integration is a future implementation concern."
+    },
+    "locale": {
+      "state": "specified",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "en-PH locale only. Date, currency (PHP), and number formatting identified.",
+      "notes": "Locale pack (locale-ph) exists as a draft manifest. No implemented locale configuration yet."
+    },
+    "clinicalContent": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "No PH-specific clinical content identified yet.",
+      "notes": "Clinical content packs for PH are a future concern. VistA clinical data model is market-neutral at baseline."
+    },
+    "infrastructure": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "No PH-specific infrastructure requirements identified beyond PhilHealth eClaims API connectivity.",
+      "notes": "PhilHealth eClaims adapter is an external-system adapter with integration-pending fallback."
+    },
+    "operational": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-18T00:00:00Z",
+      "scopeBounds": "No operational runbooks, training materials, or support documentation for PH market.",
+      "notes": "Operational readiness is a future concern gated by implementation progress in other dimensions."
+    }
+  },
+
+  "launchTier": "T0",
+
+  "standards": {
+    "regulatoryBody": "DOH",
+    "complianceFrameworks": [
+      "PH-UHC-Act-2019",
+      "PH-Data-Privacy-Act-2012",
+      "PhilHealth-eClaims"
+    ],
+    "codingSystems": [
+      "ICD-10-CM",
+      "RVS"
+    ]
+  }
+}

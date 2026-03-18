@@ -1,0 +1,78 @@
+{
+  "packId": "payer-philhealth",
+  "displayName": "PhilHealth Payer Pack",
+  "description": "Payer integration pack for PhilHealth, the Philippine national health insurance program (universal coverage). Covers eClaims submission configuration, eligibility check configuration, and remittance parsing rules. This is a planning-stage manifest; the adapter connector is not yet implemented in the platform repo. The archive repo contains a prototype PhilHealth connector (Phase 38/40) that is reference material only.",
+  "packFamily": "payer",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "ph-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-18T00:00:00Z",
+    "lastModifiedAt": "2026-03-18T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "tenant",
+    "overrideScopes": ["facility"]
+  },
+
+  "dependencies": [
+    {
+      "packId": "regulatory-philhealth-doh",
+      "type": "required",
+      "rationale": "PhilHealth claims require DOH regulatory compliance context. Claim submission rules derive from the regulatory framework."
+    },
+    {
+      "packId": "standards-ph",
+      "type": "required",
+      "rationale": "PhilHealth claims require ICD-10-CM and RVS coding per national standards. Claim validation depends on correct coding system configuration."
+    }
+  ],
+
+  "eligibility": {
+    "legalMarkets": ["PH"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": ["rcm-module"]
+  },
+
+  "contentSummary": {
+    "contentTypes": ["connector-config", "rules", "configuration"],
+    "artifactCount": 0,
+    "payerIdentifiers": ["PhilHealth"],
+    "integrationModes": ["government-portal"]
+  },
+
+  "adapterRequirements": [
+    {
+      "adapterId": "philhealth-eclaims-connector",
+      "adapterType": "external-system",
+      "required": true,
+      "fallbackBehavior": "integration-pending"
+    }
+  ],
+
+  "configurationKeys": [
+    {
+      "key": "billing.claimFormat",
+      "action": "provides",
+      "description": "Sets PhilHealth CF1-CF4 as the claim format for this payer."
+    },
+    {
+      "key": "billing.payerIdentifier",
+      "action": "provides",
+      "description": "Sets PhilHealth as the active government payer."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "billing.ph-philhealth-claims",
+      "contributionType": "required",
+      "description": "PhilHealth claims capability requires this payer pack active and its adapter connected."
+    }
+  ]
+}
