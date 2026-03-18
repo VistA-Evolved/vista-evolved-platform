@@ -57,6 +57,8 @@
 | Screen contract schema | `packages/contracts/schemas/screen-contract.schema.json` | Workspace placement, boundary enforcement, claim/analytics surface governance (artifact #7) |
 | Legal-market profile schema | `packages/contracts/schemas/legal-market-profile.schema.json` | Market-level pack composition: mandated, default-on, eligible, excluded packs; readiness dimensions; launch tier |
 | Effective-tenant-configuration-plan schema | `packages/contracts/schemas/effective-tenant-configuration-plan.schema.json` | Resolved tenant config: activated packs, deferred items, readiness posture, tenant selections |
+| Pack manifest schema | `packages/contracts/schemas/pack-manifest.schema.json` | Focused pack identity, lifecycle, attachment, dependencies, eligibility, content summary, adapter requirements, configuration keys, capability contributions |
+| Pack manifest instances | `packages/contracts/pack-manifests/` | Schema-valid JSON instances per pack. Named `{packId}.json`. |
 | Screen contract instances | `packages/contracts/screen-contracts/` | Schema-valid JSON instances per surface. Named `{surfaceId}.json`. |
 | Capability manifests | `packages/contracts/capability-manifests/` | Module/capability config |
 | Contract policy | `docs/reference/contract-policy.md` | Rules for contract usage |

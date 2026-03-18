@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pack-manifest",
+  "title": "PackManifest",
+  "description": "Concrete manifest for a focused pack. Defines identity, lifecycle, attachment, dependencies, eligibility, content summary, adapter requirements, configuration keys, and capability contributions. Fulfills pack-and-adapter-architecture-governance.md §5.2 and §21.2. Referenced by legal-market-profile.schema.json and effective-tenant-configuration-plan.schema.json via packId.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "packId": {
+      "type": "string",
+      "description": "Unique pack identifier. Convention: {family-shortcode}-{qualifier} (e.g. 'lang-ko', 'regulatory-philhealth-doh', 'payer-philhealth', 'locale-ph').",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "displayName": {
+      "type": "string",
+      "description": "Human-readable name (e.g. 'Korean Language Pack', 'PhilHealth Regulatory Pack')."
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of what the pack provides."
+    },
+    "packFamily": {
+      "$ref": "#/$defs/packFamilyEnum",
+      "description": "Which of the 7 focused pack families this pack belongs to. Per pack-and-adapter §6."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver version per pack-and-adapter §13. MAJOR = breaking config/dependency changes. MINOR = non-breaking additions. PATCH = fixes and corrections.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+
+    "lifecycle": {
+      "$ref": "#/$defs/lifecycleBlock",
+      "description": "Governance and lifecycle metadata per pack-and-adapter §12."
+    },
+
+    "attachment": {
+      "$ref": "#/$defs/attachmentBlock",
+      "description": "Scope attachment: what entity this pack primarily attaches to and available override scopes. Per pack-and-adapter §9."
+    },
+
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependencyEntry" },
+      "default": [],
+      "description": "Declared dependencies and conflicts with other packs. Per pack-and-adapter §10. Forms a DAG — cycles are invalid."
+    },
+
+    "eligibility": {
+      "$ref": "#/$defs/eligibilityBlock",
+      "description": "Criteria for this pack to be activatable for a given scope. Per pack-and-adapter §11. Empty arrays mean no restriction on that criterion."
+    },
+
+    "contentSummary": {
+      "$ref": "#/$defs/contentSummaryBlock",
+      "description": "Summary of pack contents. Generic fields plus optional family-specific metadata per pack-and-adapter §6."
+    },
+
+    "adapterRequirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/adapterRequirementEntry" },
+      "default": [],
+      "description": "Adapters this pack requires or benefits from. Per pack-and-adapter §7, §15."
+    },
+
+    "configurationKeys": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/configurationKeyEntry" },
+      "default": [],
+      "description": "Configuration keys this pack provides or modifies. Used for composition conflict detection per pack-and-adapter §17."
+    },
+
+    "capabilityContributions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/capabilityContributionEntry" },
+      "default": [],
+      "description": "Capabilities this pack contributes to. Per pack-and-adapter §19. Feeds claim-gating evaluation."
+    }
+  },
+  "required": [
+    "packId",
+    "displayName",
+    "description",
+    "packFamily",
+    "version",
+    "lifecycle",
+    "attachment",
+    "eligibility",
+    "contentSummary"
+  ],
+
+  "$defs": {
+    "packFamilyEnum": {
+      "type": "string",
+      "enum": [
+        "language",
+        "locale",
+        "regulatory",
+        "national-standards",
+        "payer",
+        "specialty",
+        "tenant-overlay"
+      ],
+      "description": "The 7 focused pack families from pack-and-adapter §6."
+    },
+
+    "packLifecycleStateEnum": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "validated",
+        "tested",
+        "published",
+        "activated",
+        "deactivated",
+        "retired"
+      ],
+      "description": "Pack lifecycle states per pack-and-adapter §12. Transitions: draft→validated (schema + dependency validation), validated→tested (content + integration validation), tested→published (quality gates passed), published→activated (eligibility evaluation passed), activated↔deactivated (explicit operator action), any→retired (no active dependents)."
+    },
+
+    "implementationLocusEnum": {
+      "type": "string",
+      "enum": [
+        "platform",
+        "distro",
+        "cross-repo"
+      ],
+      "description": "Which repo owns the pack content per pack-and-adapter §8. platform = vista-evolved-platform. distro = vista-evolved-vista-distro. cross-repo = coordinated across both."
+    },
+
+    "attachmentEntityEnum": {
+      "type": "string",
+      "enum": [
+        "system",
+        "legal-market",
+        "tenant",
+        "facility",
+        "service-line"
+      ],
+      "description": "Entity types a pack can attach to per pack-and-adapter §9 attachment matrix. system = global. legal-market = market-scoped. tenant = tenant-scoped. facility = facility-scoped. service-line = service-line-scoped."
+    },
+
+    "dependencyTypeEnum": {
+      "type": "string",
+      "enum": [
+        "required",
+        "recommended",
+        "conflicts"
+      ],
+      "description": "Dependency relationship types per pack-and-adapter §10. required = must be active for this pack to activate. recommended = should be active for full functionality. conflicts = must NOT be active simultaneously."
+    },
+
+    "adapterTypeEnum": {
+      "type": "string",
+      "enum": [
+        "vista",
+        "external-system",
+        "stub",
+        "bridge"
+      ],
+      "description": "Adapter types per pack-and-adapter §7. vista = VistA subsystem adapter. external-system = third-party integration. stub = integration-pending placeholder. bridge = cross-system data bridge."
+    },
+
+    "configurationKeyActionEnum": {
+      "type": "string",
+      "enum": [
+        "provides",
+        "modifies",
+        "overrides"
+      ],
+      "description": "How this pack interacts with a configuration key. provides = introduces a new key. modifies = adjusts an existing key's value. overrides = replaces an existing key's value entirely."
+    },
+
+    "capabilityContributionTypeEnum": {
+      "type": "string",
+      "enum": [
+        "required",
+        "enhances"
+      ],
+      "description": "How this pack contributes to a capability. required = capability is not claimable without this pack. enhances = capability works without this pack but gains features with it."
+    },
+
+    "lifecycleBlock": {
+      "type": "object",
+      "description": "Governance and lifecycle metadata for the pack.",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/packLifecycleStateEnum",
+          "description": "Current lifecycle state."
+        },
+        "owner": {
+          "type": "string",
+          "description": "Team or role responsible for this pack's lifecycle (e.g. 'platform-team', 'ph-market-team')."
+        },
+        "implementationLocus": {
+          "$ref": "#/$defs/implementationLocusEnum",
+          "description": "Which repo owns the pack content."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of initial creation."
+        },
+        "lastModifiedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last modification."
+        }
+      },
+      "required": ["state", "owner", "implementationLocus"]
+    },
+
+    "attachmentBlock": {
+      "type": "object",
+      "description": "Scope attachment per pack-and-adapter §9. Defines what entity this pack primarily binds to and at what additional scopes it can be overridden.",
+      "properties": {
+        "primaryEntity": {
+          "$ref": "#/$defs/attachmentEntityEnum",
+          "description": "Primary entity this pack attaches to. Derived from pack family per §9 attachment matrix."
+        },
+        "overrideScopes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attachmentEntityEnum" },
+          "default": [],
+          "description": "Additional scopes where this pack's settings can be overridden per §9.3 inheritance. Lower scope overrides higher scope."
+        }
+      },
+      "required": ["primaryEntity"]
+    },
+
+    "dependencyEntry": {
+      "type": "object",
+      "description": "A dependency or conflict declaration with another pack.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "Pack ID of the dependency target."
+        },
+        "type": {
+          "$ref": "#/$defs/dependencyTypeEnum",
+          "description": "Relationship type."
+        },
+        "versionConstraint": {
+          "type": "string",
+          "description": "Optional semver range constraint (e.g. '>=1.0.0', '^2.0.0')."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this dependency or conflict exists."
+        }
+      },
+      "required": ["packId", "type", "rationale"]
+    },
+
+    "eligibilityBlock": {
+      "type": "object",
+      "description": "Criteria for this pack to be activatable per pack-and-adapter §11. Each array acts as a whitelist; empty array means no restriction on that criterion.",
+      "properties": {
+        "legalMarkets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Legal-market IDs where this pack is eligible (e.g. 'PH', 'US', 'KR'). Empty = eligible for any market."
+        },
+        "facilityTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Facility-type identifiers where this pack applies. Empty = any facility type."
+        },
+        "serviceLines": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Service-line or specialty identifiers where this pack applies. Empty = any service line."
+        },
+        "infrastructureRequirements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Infrastructure prerequisites (e.g. 'vista-utf8-lane', 'orthanc-dicom', 'keycloak-oidc'). Empty = no special infrastructure needed."
+        },
+        "licenseRequirements": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "License or entitlement prerequisites (e.g. 'imaging-module', 'telehealth-module'). Empty = no special licensing needed."
+        }
+      }
+    },
+
+    "contentSummaryBlock": {
+      "type": "object",
+      "description": "Summary of pack contents. Generic fields for all families, plus optional family-specific metadata per pack-and-adapter §6 per-family attributes.",
+      "properties": {
+        "contentTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Types of content in this pack (e.g. 'translations', 'rules', 'templates', 'configuration', 'coding-tables', 'connector-config', 'clinical-content')."
+        },
+        "artifactCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of content artifacts in this pack."
+        },
+        "languageTag": {
+          "type": "string",
+          "description": "BCP 47 language tag. Applicable to language packs (e.g. 'ko', 'fil', 'es')."
+        },
+        "translationCoverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Translation coverage percentage (0-100). Applicable to language packs."
+        },
+        "localeIdentifier": {
+          "type": "string",
+          "description": "CLDR locale identifier. Applicable to locale packs (e.g. 'en-PH', 'ko-KR')."
+        },
+        "complianceFrameworks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Compliance framework identifiers. Applicable to regulatory packs (e.g. 'PH-UHC-Act-2019', 'HIPAA')."
+        },
+        "regulatoryBody": {
+          "type": "string",
+          "description": "Primary regulatory authority. Applicable to regulatory packs (e.g. 'DOH', 'CMS')."
+        },
+        "codingSystems": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Coding system identifiers. Applicable to national-standards packs (e.g. 'ICD-10-CM', 'CPT-HCPCS', 'RVS')."
+        },
+        "standardsBody": {
+          "type": "string",
+          "description": "Standards authority. Applicable to national-standards packs."
+        },
+        "payerIdentifiers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Payer identifiers covered. Applicable to payer packs."
+        },
+        "integrationModes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Payer integration modes. Applicable to payer packs (e.g. 'clearinghouse', 'government-portal', 'portal-batch')."
+        },
+        "clinicalSpecialty": {
+          "type": "string",
+          "description": "Clinical specialty identifier. Applicable to specialty packs (e.g. 'geriatrics', 'cardiology')."
+        },
+        "specialtyContentAreas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Content areas within the specialty. Applicable to specialty packs (e.g. 'templates', 'order-sets', 'clinical-rules')."
+        },
+        "overrideAreas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Configuration areas this pack overrides. Applicable to tenant-overlay packs (e.g. 'branding', 'workflow-defaults', 'report-headers')."
+        }
+      },
+      "required": ["contentTypes"]
+    },
+
+    "adapterRequirementEntry": {
+      "type": "object",
+      "description": "An adapter this pack requires or benefits from.",
+      "properties": {
+        "adapterId": {
+          "type": "string",
+          "description": "Adapter identifier (e.g. 'philhealth-eclaims-connector', 'vista-billing-adapter')."
+        },
+        "adapterType": {
+          "$ref": "#/$defs/adapterTypeEnum",
+          "description": "Type of adapter."
+        },
+        "required": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the adapter is required (true) or optional/enhancing (false). When required and unavailable, pack degrades to integration-pending per global architecture anti-goal."
+        },
+        "fallbackBehavior": {
+          "type": "string",
+          "description": "Expected behavior if adapter is unavailable. Must be 'integration-pending' for required adapters per global architecture. Optional adapters may specify 'degraded' or 'feature-unavailable'."
+        }
+      },
+      "required": ["adapterId", "adapterType"]
+    },
+
+    "configurationKeyEntry": {
+      "type": "object",
+      "description": "A configuration key this pack provides or modifies. Used for composition conflict detection per pack-and-adapter §17. Two packs modifying the same key are resolved by precedence (§10.3) or flagged as conflicts.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Configuration key path using dot notation (e.g. 'billing.claimFormat', 'locale.dateFormat', 'coding.primarySystem')."
+        },
+        "action": {
+          "$ref": "#/$defs/configurationKeyActionEnum",
+          "description": "How this pack interacts with the key."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this configuration key does."
+        }
+      },
+      "required": ["key", "action"]
+    },
+
+    "capabilityContributionEntry": {
+      "type": "object",
+      "description": "A capability this pack contributes to per pack-and-adapter §19. Required contributions gate capability claims: capability is not claimable until all required packs are active and verified (§19.2).",
+      "properties": {
+        "capabilityId": {
+          "type": "string",
+          "description": "Capability identifier from the capability manifest registry."
+        },
+        "contributionType": {
+          "$ref": "#/$defs/capabilityContributionTypeEnum",
+          "description": "Whether this pack is required for or enhances the capability."
+        },
+        "description": {
+          "type": "string",
+          "description": "How this pack contributes to the capability."
+        }
+      },
+      "required": ["capabilityId", "contributionType"]
+    }
+  }
+}
