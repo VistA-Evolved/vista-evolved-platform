@@ -1,0 +1,932 @@
+openapi: '3.1.0'
+info:
+  title: Control-Plane Operator Bootstrap and Provisioning API
+  version: 0.1.0
+  description: |
+    Operator-initiated tenant bootstrap and provisioning contract for VistA Evolved control plane.
+
+    **Scope:** This contract covers ONLY operator-initiated bootstrap and provisioning operations.
+    It does NOT cover public self-service signup, billing, tenant-admin configuration, clinical APIs,
+    or provisioning engine internals.
+
+    **Asynchronous model:** Provisioning is a multi-step asynchronous workflow. POST operations
+    that initiate work return 202 Accepted. Clients poll GET endpoints for status.
+
+    **Current PH truth:** The PH legal market is draft/T0. All PH packs are lifecycle draft.
+    No capability is claimable or production-eligible. This API surface reflects those constraints
+    truthfully in all responses.
+  contact:
+    name: VistA Evolved Platform Team
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+
+servers:
+  - url: /api/control-plane/v1
+    description: Control-plane API base path (version 1)
+
+security:
+  - operatorBearerAuth: []
+
+tags:
+  - name: legal-market-profiles
+    description: Read-only access to legal-market profile summaries for operator review.
+  - name: effective-configuration-plans
+    description: Plan resolution from market profile and operator selections.
+  - name: tenant-bootstrap-requests
+    description: Operator-initiated bootstrap request lifecycle.
+  - name: provisioning-runs
+    description: Asynchronous provisioning run lifecycle.
+
+paths:
+  /legal-market-profiles/{legalMarketId}:
+    get:
+      operationId: getLegalMarketProfile
+      summary: Retrieve a legal-market profile for operator review
+      description: |
+        Returns the legal-market profile summary for the specified market.
+        Includes mandated/default-on/eligible/excluded packs, readiness dimensions,
+        and launch tier. This is a read-only operation for operator review before
+        initiating plan resolution.
+
+        **Does not imply production readiness.** The response includes the profile's
+        `status` and `launchTier` fields which may be `draft` and `T0` respectively.
+      tags: [legal-market-profiles]
+      parameters:
+        - $ref: '#/components/parameters/LegalMarketIdPath'
+      responses:
+        '200':
+          description: Legal-market profile found and returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalMarketProfileSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /effective-configuration-plans\:resolve:
+    post:
+      operationId: resolveEffectiveConfigurationPlan
+      summary: Resolve an effective-tenant-configuration plan
+      description: |
+        Accepts operator selections (legal market, facility type, optional pack selections)
+        and runs the composition resolver to produce an effective-tenant-configuration plan.
+
+        The resolved plan includes:
+        - **resolvedPacks:** packs that will be activated, with their current lifecycle and readiness states
+        - **deferredItems:** packs that cannot be activated, with explicit reasons (pack-not-published, adapter-unavailable, dependency-missing, eligibility-failed, readiness-insufficient, infrastructure-pending)
+        - **readinessPosture:** per-dimension readiness aggregate with effective launch tier and gating blockers
+
+        The plan is a **snapshot** — it captures the state of truth at resolution time.
+        Deferred items and gating blockers are first-class fields, not hidden validation notes.
+
+        The resolved plan is stored and assigned an `effectivePlanId` for downstream reference.
+      tags: [effective-configuration-plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanResolutionRequest'
+      responses:
+        '200':
+          description: Plan resolved successfully. May contain deferredItems and gating blockers — this is NOT an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResolutionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Referenced legal-market profile not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Resolution blocked — profile is in an unresolvable state (e.g., retired) or operator selections conflict with profile constraints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tenant-bootstrap-requests:
+    post:
+      operationId: createTenantBootstrapRequest
+      summary: Create an operator-initiated tenant bootstrap request
+      description: |
+        Submits a bootstrap request referencing a previously resolved effective plan.
+
+        This operation:
+        - Validates the referenced effectivePlanId exists and is not expired
+        - Creates a new tenantId (or references an existing one for re-bootstrap)
+        - Records the bootstrap request as `pending`
+        - Emits a `tenant.bootstrap.requested` event
+
+        This is NOT public self-service signup. The operator must be authenticated with
+        `control-plane:tenant:bootstrap` permission.
+
+        The response is 202 Accepted — the bootstrap request is queued for provisioning
+        eligibility evaluation, not immediately provisioned.
+      tags: [tenant-bootstrap-requests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantBootstrapRequest'
+      responses:
+        '202':
+          description: Bootstrap request accepted and queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantBootstrapRequestResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Referenced effectivePlanId not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate bootstrap request for this tenant and plan combination.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Bootstrap blocked — referenced plan has unresolvable gating blockers or has expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tenant-bootstrap-requests/{bootstrapRequestId}:
+    get:
+      operationId: getTenantBootstrapRequest
+      summary: Get the status of a tenant bootstrap request
+      description: |
+        Returns the current status of a bootstrap request, including the referenced plan,
+        the tenant identity, and whether provisioning has been queued or completed.
+      tags: [tenant-bootstrap-requests]
+      parameters:
+        - $ref: '#/components/parameters/BootstrapRequestIdPath'
+      responses:
+        '200':
+          description: Bootstrap request found and returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantBootstrapRequestStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /provisioning-runs:
+    post:
+      operationId: createProvisioningRun
+      summary: Initiate an asynchronous provisioning run
+      description: |
+        Starts a provisioning run for an approved bootstrap request.
+
+        This operation:
+        - Validates the bootstrapRequestId references an approved bootstrap request
+        - Creates a provisioningRunId
+        - Emits a `provisioning.run.requested` event
+        - Returns 202 Accepted immediately — **provisioning is fully asynchronous**
+
+        The provisioning orchestrator (not part of this API contract) picks up the run
+        and progresses through steps, emitting events at each transition.
+
+        **No endpoint in this API returns synchronous provisioning success.**
+      tags: [provisioning-runs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningRunRequest'
+      responses:
+        '202':
+          description: Provisioning run accepted and queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisioningRunResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Referenced bootstrapRequestId not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: A provisioning run is already in progress for this bootstrap request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Provisioning blocked — bootstrap request is not in an approvable state, or the referenced plan has expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /provisioning-runs/{provisioningRunId}:
+    get:
+      operationId: getProvisioningRun
+      summary: Get the status of a provisioning run
+      description: |
+        Returns the current state of a provisioning run including:
+        - Overall run status (queued, in-progress, completed, failed)
+        - Step summary with per-step status
+        - Blockers and failures if any
+        - Linked artifact references (plan, bootstrap request, tenant)
+      tags: [provisioning-runs]
+      parameters:
+        - $ref: '#/components/parameters/ProvisioningRunIdPath'
+      responses:
+        '200':
+          description: Provisioning run found and returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisioningRunStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    operatorBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Operator authentication token. The identity provider and token format are
+        implementation-specific. This contract requires only that the token carry
+        operator identity and permission claims. The `requestedBy` audit field
+        is derived from this token, not from request body fields.
+
+  parameters:
+    LegalMarketIdPath:
+      name: legalMarketId
+      in: path
+      required: true
+      description: Legal-market identifier (ISO 3166-1 alpha-2, optionally qualified).
+      schema:
+        type: string
+        pattern: '^[A-Z]{2}(-[A-Z0-9]{1,8})?$'
+        examples:
+          - PH
+          - US
+          - US-VA
+
+    BootstrapRequestIdPath:
+      name: bootstrapRequestId
+      in: path
+      required: true
+      description: Unique identifier for the tenant bootstrap request.
+      schema:
+        type: string
+        format: uuid
+
+    ProvisioningRunIdPath:
+      name: provisioningRunId
+      in: path
+      required: true
+      description: Unique identifier for the provisioning run.
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # --- Request schemas ---
+
+    PlanResolutionRequest:
+      type: object
+      description: Input for resolving an effective-tenant-configuration plan.
+      required:
+        - legalMarketId
+      properties:
+        legalMarketId:
+          type: string
+          pattern: '^[A-Z]{2}(-[A-Z0-9]{1,8})?$'
+          description: Target legal market.
+        tenantDisplayName:
+          type: string
+          description: Human-readable tenant name for the plan resolution context.
+        facilityType:
+          type: string
+          description: Facility type identifier (e.g., single-clinic, hospital, multi-facility). Affects pack eligibility.
+        selectedPacks:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Pack IDs the operator wishes to activate beyond defaults. Must be in the profile's eligiblePacks.
+        deselectedDefaults:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Default-on pack IDs the operator wishes to deactivate. Subject to deactivation constraints.
+        selectedPayers:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Payer pack IDs the operator wishes to include.
+        selectedSpecialties:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Specialty/content pack IDs the operator wishes to include.
+
+    TenantBootstrapRequest:
+      type: object
+      description: Operator-initiated bootstrap request referencing a resolved plan.
+      required:
+        - effectivePlanId
+        - tenantDisplayName
+      properties:
+        effectivePlanId:
+          type: string
+          format: uuid
+          description: Reference to a previously resolved effective-tenant-configuration plan.
+        tenantDisplayName:
+          type: string
+          description: Human-readable name for the new tenant.
+          minLength: 1
+          maxLength: 256
+        tenantNotes:
+          type: string
+          description: Operator notes about this bootstrap request.
+          maxLength: 2048
+
+    ProvisioningRunRequest:
+      type: object
+      description: Request to initiate a provisioning run for an approved bootstrap request.
+      required:
+        - bootstrapRequestId
+      properties:
+        bootstrapRequestId:
+          type: string
+          format: uuid
+          description: Reference to the approved tenant bootstrap request.
+
+    # --- Response schemas ---
+
+    LegalMarketProfileSummary:
+      type: object
+      description: |
+        Summary of a legal-market profile for operator review.
+        Wraps the canonical legal-market-profile data with API-level metadata.
+        Does not imply production readiness — check `status` and `launchTier` fields.
+      required:
+        - legalMarketId
+        - version
+        - displayName
+        - status
+        - launchTier
+        - mandatedPackCount
+        - defaultOnPackCount
+        - eligiblePackCount
+        - excludedPackCount
+        - readinessDimensions
+      properties:
+        legalMarketId:
+          type: string
+        version:
+          type: string
+          description: Profile version (semver).
+        displayName:
+          type: string
+        status:
+          type: string
+          enum: [draft, active, deprecated, retired]
+        launchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+        mandatedPackCount:
+          type: integer
+          description: Number of mandated packs in this profile.
+        defaultOnPackCount:
+          type: integer
+          description: Number of default-on packs in this profile.
+        eligiblePackCount:
+          type: integer
+          description: Number of eligible (opt-in) packs in this profile.
+        excludedPackCount:
+          type: integer
+          description: Number of excluded packs in this profile.
+        readinessDimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessDimensionSummary'
+          description: Per-dimension readiness snapshot.
+        mandatedPacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackReference'
+        defaultOnPacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackReference'
+        eligiblePacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackReference'
+
+    PlanResolutionResult:
+      type: object
+      description: |
+        Result of resolving an effective-tenant-configuration plan.
+        Contains the full resolved plan plus API-level metadata.
+        Deferred items and gating blockers are first-class fields — a plan
+        with deferred items is still a valid resolution result.
+      required:
+        - effectivePlanId
+        - legalMarketId
+        - resolvedAt
+        - resolvedPacks
+        - deferredItems
+        - readinessPosture
+        - tenantSelections
+      properties:
+        effectivePlanId:
+          type: string
+          format: uuid
+          description: Unique ID for this plan resolution snapshot.
+        legalMarketId:
+          type: string
+        profileVersion:
+          type: string
+          description: Version of the legal-market profile used for resolution.
+        resolverVersion:
+          type: string
+          description: Version of the resolver algorithm used.
+        resolvedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of resolution.
+        resolvedPacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolvedPackEntry'
+          description: Packs that will be activated with their current states.
+        deferredItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeferredItemEntry'
+          description: Packs that cannot be activated, with explicit reasons.
+        readinessPosture:
+          $ref: '#/components/schemas/ReadinessPosture'
+          description: Aggregate readiness with effective launch tier and gating blockers.
+        tenantSelections:
+          $ref: '#/components/schemas/TenantSelectionsRecord'
+          description: Record of operator selections for auditability and re-resolution.
+
+    TenantBootstrapRequestResponse:
+      type: object
+      description: Confirmation of a queued bootstrap request.
+      required:
+        - bootstrapRequestId
+        - tenantId
+        - effectivePlanId
+        - status
+        - correlationId
+        - createdAt
+      properties:
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          description: Assigned tenant identifier.
+        effectivePlanId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, approved, provisioning, completed, failed, cancelled]
+          description: Current status of the bootstrap request.
+        correlationId:
+          type: string
+          format: uuid
+          description: End-to-end workflow correlation identifier for tracing.
+        createdAt:
+          type: string
+          format: date-time
+
+    TenantBootstrapRequestStatus:
+      type: object
+      description: Full status of a bootstrap request including linked provisioning state.
+      required:
+        - bootstrapRequestId
+        - tenantId
+        - effectivePlanId
+        - legalMarketId
+        - status
+        - correlationId
+        - createdAt
+      properties:
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        effectivePlanId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        tenantDisplayName:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, provisioning, completed, failed, cancelled]
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+          description: Present when provisioning has been initiated.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProvisioningRunResponse:
+      type: object
+      description: Confirmation that a provisioning run has been accepted and queued.
+      required:
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - status
+        - correlationId
+        - createdAt
+      properties:
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        status:
+          type: string
+          enum: [queued, in-progress, completed, failed]
+          description: Initial status is always `queued`.
+        correlationId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    ProvisioningRunStatus:
+      type: object
+      description: |
+        Full status of a provisioning run.
+        Includes step-level detail, blockers, failures, and linked artifact references.
+      required:
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - effectivePlanId
+        - legalMarketId
+        - status
+        - correlationId
+        - steps
+        - createdAt
+      properties:
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        effectivePlanId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        status:
+          type: string
+          enum: [queued, in-progress, completed, failed]
+        correlationId:
+          type: string
+          format: uuid
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisioningStepSummary'
+          description: Ordered list of provisioning steps with per-step status.
+        blockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisioningBlocker'
+          default: []
+          description: Blockers preventing provisioning progress.
+        failures:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisioningFailure'
+          default: []
+          description: Step failures encountered during the run.
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          description: When the provisioning orchestrator began executing. Absent if still queued.
+        completedAt:
+          type: string
+          format: date-time
+          description: When the run reached a terminal state (completed or failed). Absent if still running.
+
+    # --- Shared component schemas ---
+
+    ReadinessDimensionSummary:
+      type: object
+      required: [dimension, state]
+      properties:
+        dimension:
+          type: string
+          description: Readiness dimension name (language, regulatory, payer, etc.).
+        state:
+          type: string
+          enum: [declared, specified, implemented, validated, verified, claimable, production-eligible, deprecated, retired]
+        scopeBounds:
+          type: string
+          description: Scope within which this readiness state applies.
+
+    PackReference:
+      type: object
+      required: [packId, packFamily]
+      properties:
+        packId:
+          type: string
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+        displayName:
+          type: string
+        lifecycleState:
+          type: string
+          enum: [draft, validated, tested, published, activated, deactivated, retired]
+
+    ResolvedPackEntry:
+      type: object
+      required: [packId, packFamily, activationSource, packState, readinessState]
+      properties:
+        packId:
+          type: string
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+        activationSource:
+          type: string
+          enum: [mandated, default-on, operator-selected, dependency-required, tenant-override]
+        packState:
+          type: string
+          enum: [draft, validated, tested, published, activated, deactivated, retired]
+        readinessState:
+          type: string
+          enum: [declared, specified, implemented, validated, verified, claimable, production-eligible, deprecated, retired]
+        constraints:
+          type: array
+          items:
+            type: string
+          default: []
+
+    DeferredItemEntry:
+      type: object
+      required: [packId, reason]
+      properties:
+        packId:
+          type: string
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+        reason:
+          type: string
+          enum: [pack-not-published, adapter-unavailable, dependency-missing, eligibility-failed, readiness-insufficient, infrastructure-pending]
+        migrationPath:
+          type: string
+          description: What must change for this pack to become resolvable.
+        targetState:
+          type: string
+          description: The readiness state required for this pack to be resolved.
+
+    ReadinessPosture:
+      type: object
+      required: [dimensions, effectiveLaunchTier]
+      properties:
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessDimensionSummary'
+        effectiveLaunchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+          description: Effective launch tier after accounting for deferred items and degraded dimensions.
+        gatingBlockers:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatingBlocker'
+          default: []
+
+    GatingBlocker:
+      type: object
+      required: [dimension, blockerType, description]
+      properties:
+        dimension:
+          type: string
+        blockerType:
+          type: string
+          description: Category of blocker (e.g., pack-not-published, adapter-unavailable, infrastructure-pending).
+        description:
+          type: string
+
+    TenantSelectionsRecord:
+      type: object
+      description: Record of operator selections for auditability.
+      properties:
+        selectedPacks:
+          type: array
+          items:
+            type: string
+          default: []
+        deselectedDefaults:
+          type: array
+          items:
+            type: string
+          default: []
+        facilityType:
+          type: string
+        selectedPayers:
+          type: array
+          items:
+            type: string
+          default: []
+        selectedSpecialties:
+          type: array
+          items:
+            type: string
+          default: []
+
+    ProvisioningStepSummary:
+      type: object
+      required: [stepId, stepName, status]
+      properties:
+        stepId:
+          type: string
+          description: Unique step identifier within the run.
+        stepName:
+          type: string
+          description: Human-readable step name (e.g., 'tenant-database-init', 'pack-activation', 'adapter-initialization').
+        status:
+          type: string
+          enum: [pending, in-progress, completed, failed, skipped]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        detail:
+          type: string
+          description: Optional detail about step outcome.
+
+    ProvisioningBlocker:
+      type: object
+      required: [blockerType, description]
+      properties:
+        blockerType:
+          type: string
+          description: Category (dependency-unavailable, adapter-integration-pending, infrastructure-missing, readiness-insufficient).
+        description:
+          type: string
+        affectedStep:
+          type: string
+          description: Step ID that is blocked.
+
+    ProvisioningFailure:
+      type: object
+      required: [stepId, failureType, description]
+      properties:
+        stepId:
+          type: string
+        failureType:
+          type: string
+          description: Category (infrastructure-error, adapter-error, dependency-error, timeout, unknown).
+        description:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+
+    # --- Error schemas ---
+
+    ErrorResponse:
+      type: object
+      description: Standard error response.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code.
+              enum:
+                - VALIDATION_FAILED
+                - READINESS_BLOCKED
+                - ELIGIBILITY_BLOCKED
+                - DEPENDENCY_UNAVAILABLE
+                - INTEGRATION_PENDING
+                - ARTIFACT_NOT_FOUND
+                - CONFLICT
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - INTERNAL_ERROR
+            message:
+              type: string
+              description: Human-readable error description.
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  reason:
+                    type: string
+              description: Optional field-level validation details.
+
+  responses:
+    Unauthorized:
+      description: Authentication required. No valid operator token provided.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Authenticated operator lacks required permission for this operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Requested resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    ValidationError:
+      description: Request body failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

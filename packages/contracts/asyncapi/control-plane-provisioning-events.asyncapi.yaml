@@ -1,0 +1,507 @@
+asyncapi: '3.0.0'
+info:
+  title: Control-Plane Provisioning Events
+  version: 0.1.0
+  description: |
+    Event contract for operator-initiated tenant bootstrap and provisioning lifecycle.
+
+    **Scope:** Events emitted by the control-plane during bootstrap request processing
+    and asynchronous provisioning run execution. Consumed by:
+    - Provisioning orchestrator (picks up work)
+    - Operator control panel (real-time status updates)
+    - Audit subsystem (immutable event trail)
+
+    This contract does NOT define events for: clinical workflows, public signup,
+    billing, tenant-admin operations, or provisioning engine internals.
+
+    **Every event carries:** eventId, eventType, occurredAt, correlationId,
+    and the relevant domain identifiers (tenantId, bootstrapRequestId,
+    provisioningRunId, effectivePlanId, legalMarketId).
+
+    **No PHI:** These events contain only operational/infrastructure identifiers.
+    Patient data never flows through bootstrap/provisioning events.
+  contact:
+    name: VistA Evolved Platform Team
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+
+defaultContentType: application/json
+
+channels:
+  tenantBootstrapRequested:
+    address: tenant.bootstrap.requested
+    description: |
+      Emitted when an operator submits a tenant bootstrap request.
+      Consumers: provisioning eligibility evaluator, audit subsystem.
+    messages:
+      tenantBootstrapRequestedMessage:
+        $ref: '#/components/messages/TenantBootstrapRequested'
+
+  effectivePlanResolved:
+    address: effective-plan.resolved
+    description: |
+      Emitted when the composition resolver produces an effective-tenant-configuration plan.
+      Consumers: operator control panel (plan review), audit subsystem.
+      This is an informational event — the resolved plan may contain deferred items
+      and gating blockers. It does NOT imply production readiness.
+    messages:
+      effectivePlanResolvedMessage:
+        $ref: '#/components/messages/EffectivePlanResolved'
+
+  provisioningRunRequested:
+    address: provisioning.run.requested
+    description: |
+      Emitted when an operator initiates a provisioning run for an approved bootstrap request.
+      Consumers: provisioning orchestrator (picks up and begins execution), audit subsystem.
+    messages:
+      provisioningRunRequestedMessage:
+        $ref: '#/components/messages/ProvisioningRunRequested'
+
+  provisioningRunStarted:
+    address: provisioning.run.started
+    description: |
+      Emitted when the provisioning orchestrator begins executing a queued run.
+      Consumers: operator control panel (status update), audit subsystem.
+    messages:
+      provisioningRunStartedMessage:
+        $ref: '#/components/messages/ProvisioningRunStarted'
+
+  provisioningStepChanged:
+    address: provisioning.step.changed
+    description: |
+      Emitted when a provisioning step transitions state (pending -> in-progress -> completed/failed/skipped).
+      Consumers: operator control panel (progress updates), audit subsystem.
+      May be emitted multiple times per run (once per step transition).
+    messages:
+      provisioningStepChangedMessage:
+        $ref: '#/components/messages/ProvisioningStepChanged'
+
+  provisioningRunCompleted:
+    address: provisioning.run.completed
+    description: |
+      Emitted when all provisioning steps have completed successfully.
+      Consumers: operator control panel (completion notification), bootstrap request status updater, audit subsystem.
+    messages:
+      provisioningRunCompletedMessage:
+        $ref: '#/components/messages/ProvisioningRunCompleted'
+
+  provisioningRunFailed:
+    address: provisioning.run.failed
+    description: |
+      Emitted when a provisioning run fails and cannot self-recover.
+      Consumers: operator control panel (failure alert), bootstrap request status updater, audit subsystem, alerting.
+      Includes failure details and affected step for operator diagnosis.
+    messages:
+      provisioningRunFailedMessage:
+        $ref: '#/components/messages/ProvisioningRunFailed'
+
+operations:
+  onTenantBootstrapRequested:
+    action: receive
+    channel:
+      $ref: '#/channels/tenantBootstrapRequested'
+    summary: Receive event when operator submits a bootstrap request.
+
+  onEffectivePlanResolved:
+    action: receive
+    channel:
+      $ref: '#/channels/effectivePlanResolved'
+    summary: Receive event when a plan is resolved.
+
+  onProvisioningRunRequested:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningRunRequested'
+    summary: Receive event when a provisioning run is initiated.
+
+  onProvisioningRunStarted:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningRunStarted'
+    summary: Receive event when the orchestrator starts executing a run.
+
+  onProvisioningStepChanged:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningStepChanged'
+    summary: Receive event when a provisioning step changes state.
+
+  onProvisioningRunCompleted:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningRunCompleted'
+    summary: Receive event when a provisioning run completes successfully.
+
+  onProvisioningRunFailed:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningRunFailed'
+    summary: Receive event when a provisioning run fails.
+
+components:
+  messages:
+    TenantBootstrapRequested:
+      name: TenantBootstrapRequested
+      title: Tenant Bootstrap Requested
+      summary: An operator submitted a tenant bootstrap request.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TenantBootstrapRequestedPayload'
+
+    EffectivePlanResolved:
+      name: EffectivePlanResolved
+      title: Effective Plan Resolved
+      summary: The composition resolver produced an effective-tenant-configuration plan.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/EffectivePlanResolvedPayload'
+
+    ProvisioningRunRequested:
+      name: ProvisioningRunRequested
+      title: Provisioning Run Requested
+      summary: An operator initiated an asynchronous provisioning run.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningRunRequestedPayload'
+
+    ProvisioningRunStarted:
+      name: ProvisioningRunStarted
+      title: Provisioning Run Started
+      summary: The provisioning orchestrator began executing a run.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningRunStartedPayload'
+
+    ProvisioningStepChanged:
+      name: ProvisioningStepChanged
+      title: Provisioning Step Changed
+      summary: A provisioning step transitioned state.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningStepChangedPayload'
+
+    ProvisioningRunCompleted:
+      name: ProvisioningRunCompleted
+      title: Provisioning Run Completed
+      summary: All provisioning steps completed successfully.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningRunCompletedPayload'
+
+    ProvisioningRunFailed:
+      name: ProvisioningRunFailed
+      title: Provisioning Run Failed
+      summary: A provisioning run failed and cannot self-recover.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningRunFailedPayload'
+
+  schemas:
+    # --- Common event envelope fields ---
+    # All payloads include: eventId, eventType, occurredAt, correlationId
+
+    TenantBootstrapRequestedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - bootstrapRequestId
+        - tenantId
+        - effectivePlanId
+        - legalMarketId
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Unique event identifier.
+        eventType:
+          type: string
+          const: tenant.bootstrap.requested
+        occurredAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the event occurred.
+        correlationId:
+          type: string
+          format: uuid
+          description: End-to-end workflow correlation identifier.
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          description: Assigned tenant identifier.
+        effectivePlanId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    EffectivePlanResolvedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - effectivePlanId
+        - legalMarketId
+        - resolvedPackCount
+        - deferredItemCount
+        - effectiveLaunchTier
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: effective-plan.resolved
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        effectivePlanId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        resolvedPackCount:
+          type: integer
+          description: Number of packs in the resolved plan.
+        deferredItemCount:
+          type: integer
+          description: Number of deferred items. Zero means no packs were deferred.
+        effectiveLaunchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+        requestedBy:
+          type: string
+
+    ProvisioningRunRequestedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - effectivePlanId
+        - legalMarketId
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.run.requested
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        effectivePlanId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        requestedBy:
+          type: string
+
+    ProvisioningRunStartedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.run.started
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        totalStepCount:
+          type: integer
+          description: Total number of provisioning steps planned.
+
+    ProvisioningStepChangedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - tenantId
+        - stepId
+        - stepName
+        - previousStatus
+        - newStatus
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.step.changed
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        stepId:
+          type: string
+        stepName:
+          type: string
+        previousStatus:
+          type: string
+          enum: [pending, in-progress, completed, failed, skipped]
+        newStatus:
+          type: string
+          enum: [pending, in-progress, completed, failed, skipped]
+        detail:
+          type: string
+          description: Optional detail about the transition.
+
+    ProvisioningRunCompletedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - effectivePlanId
+        - totalStepCount
+        - completedStepCount
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.run.completed
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        effectivePlanId:
+          type: string
+          format: uuid
+        totalStepCount:
+          type: integer
+        completedStepCount:
+          type: integer
+        durationMs:
+          type: integer
+          description: Total provisioning run duration in milliseconds.
+
+    ProvisioningRunFailedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - failedStepId
+        - failureType
+        - failureDescription
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.run.failed
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        effectivePlanId:
+          type: string
+          format: uuid
+        failedStepId:
+          type: string
+        failedStepName:
+          type: string
+        failureType:
+          type: string
+          description: Category (infrastructure-error, adapter-error, dependency-error, timeout, unknown).
+        failureDescription:
+          type: string
+        completedStepCount:
+          type: integer
+          description: Number of steps that completed before the failure.
+        totalStepCount:
+          type: integer
