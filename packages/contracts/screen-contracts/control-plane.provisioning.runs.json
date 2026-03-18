@@ -1,0 +1,66 @@
+{
+  "surfaceId": "control-plane.provisioning.runs",
+  "version": "0.1.0",
+  "title": "Provisioning Runs",
+  "status": "draft",
+  "description": "Provisioning lifecycle status, step progress, blocker diagnosis, and retry/cancel surface. Directly bound to 2 OpenAPI operations (createProvisioningRun, getProvisioningRunStatus) and 5 AsyncAPI events (provisioning.run.requested, provisioning.run.started, provisioning.step.changed, provisioning.run.completed, provisioning.run.failed). Fully asynchronous model — no OpenAPI endpoint returns synchronous provisioning success. Pack-independent: provisioning steps may involve pack activation, but the monitoring surface is infrastructure governance. Same-workspace incoming navigation from control-plane.tenants.bootstrap. Planning-stage navigationLevel is 'secondary'; schema-term 'local' represents this.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide",
+    "entityContextRequired": ["provisioningRunId"]
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "createProvisioningRun",
+      "sourceDomainClass": "platform-governance",
+      "description": "Initiate an asynchronous provisioning run for an approved bootstrap request. Returns 202 Accepted."
+    },
+    {
+      "sourceId": "getProvisioningRun",
+      "sourceDomainClass": "platform-governance",
+      "description": "Get current state of a provisioning run including overall status, step summary, blockers, and linked artifacts."
+    },
+    {
+      "sourceId": "provisioning.run.requested",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when operator initiates a provisioning run."
+    },
+    {
+      "sourceId": "provisioning.run.started",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when the provisioning orchestrator begins executing a queued run."
+    },
+    {
+      "sourceId": "provisioning.step.changed",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when a provisioning step transitions state. May fire multiple times per run."
+    },
+    {
+      "sourceId": "provisioning.run.completed",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when all provisioning steps complete successfully."
+    },
+    {
+      "sourceId": "provisioning.run.failed",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when a provisioning run fails. Includes failure details and affected step."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["capability"],
+    "informationalOnly": false,
+    "gatingRuleRef": "capability-truth-§11-no-provisioning-without-eligibility",
+    "minimumReadinessState": "declared"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "event-driven"
+}

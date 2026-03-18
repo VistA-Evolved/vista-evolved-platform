@@ -1,0 +1,36 @@
+{
+  "surfaceId": "control-plane.markets.detail",
+  "version": "0.1.0",
+  "title": "Legal Market Detail",
+  "status": "draft",
+  "description": "Single legal-market readiness summary surface. Drill target from control-plane.markets.management. Displays market readiness dimensions, launch tier, mandated/default-on/eligible/excluded packs. Directly bound to 1 OpenAPI operation (getLegalMarketProfile). Claim surface shows full readiness detail including internal-only states (informational — does not modify market definitions). Entry point for bootstrap workflow targeting this market (same-workspace navigation to control-plane.tenants.bootstrap with market context). Country-regulatory pack variation affects content (readiness dimensions, packs vary by market), not surface visibility. PH.json instance provides concrete evidence of displayed data. Planning-stage navigationLevel is 'secondary'; schema-term 'local' represents this.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide",
+    "entityContextRequired": ["legalMarketId"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "getLegalMarketProfile",
+      "sourceDomainClass": "claim-readiness-registry",
+      "description": "Legal-market profile summary — mandated/default-on/eligible/excluded packs, readiness dimensions, launch tier."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["market", "capability"],
+    "informationalOnly": true,
+    "gatingRuleRef": "capability-truth-§11-no-provisioning-without-eligibility",
+    "minimumReadinessState": "declared"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

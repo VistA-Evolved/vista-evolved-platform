@@ -1,0 +1,56 @@
+{
+  "surfaceId": "control-plane.tenants.bootstrap",
+  "version": "0.1.0",
+  "title": "Tenant Bootstrap",
+  "status": "draft",
+  "description": "Operator-initiated bootstrap request, plan review, and queuing surface. Outcome-oriented naming — interaction model (wizard, multi-step, review-and-submit) is a rendering choice, not a surface identity. Directly bound to 3 OpenAPI operations (resolveEffectiveConfigurationPlan, createTenantBootstrapRequest, getTenantBootstrapRequest) and 2 AsyncAPI events (tenant.bootstrap.requested, effective-plan.resolved). Plan resolution is market-dependent: resolved packs, deferred items, and gating blockers vary by legal market. Country-regulatory pack variation affects content (which packs appear in the plan), not surface visibility. Same-workspace drill target from control-plane.tenants.detail. Planning-stage navigationLevel is 'secondary'; schema-term 'local' represents this.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "resolveEffectiveConfigurationPlan",
+      "sourceDomainClass": "platform-governance",
+      "description": "Resolve an effective-tenant-configuration plan from market profile and operator selections. Returns resolvedPacks, deferredItems, readinessPosture."
+    },
+    {
+      "sourceId": "createTenantBootstrapRequest",
+      "sourceDomainClass": "platform-governance",
+      "description": "Submit a bootstrap request referencing a resolved effective plan. Returns 202 Accepted — queued, not immediately provisioned."
+    },
+    {
+      "sourceId": "getTenantBootstrapRequest",
+      "sourceDomainClass": "platform-governance",
+      "description": "Check status of a previously submitted bootstrap request."
+    },
+    {
+      "sourceId": "tenant.bootstrap.requested",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when operator submits a bootstrap request."
+    },
+    {
+      "sourceId": "effective-plan.resolved",
+      "sourceDomainClass": "platform-governance",
+      "description": "AsyncAPI event emitted when composition resolver produces an effective-tenant-configuration plan."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["capability", "market", "pack-eligibility"],
+    "informationalOnly": false,
+    "gatingRuleRef": "capability-truth-§11-no-provisioning-without-eligibility",
+    "minimumReadinessState": "declared"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}
