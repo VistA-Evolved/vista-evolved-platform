@@ -3,11 +3,12 @@ info:
   title: Control-Plane Operator Bootstrap and Provisioning API
   version: 0.1.0
   description: |
-    Operator-initiated tenant bootstrap and provisioning contract for VistA Evolved control plane.
+    Operator-initiated tenant lifecycle, bootstrap, and provisioning contract for VistA Evolved control plane.
 
-    **Scope:** This contract covers ONLY operator-initiated bootstrap and provisioning operations.
-    It does NOT cover public self-service signup, billing, tenant-admin configuration, clinical APIs,
-    or provisioning engine internals.
+    **Scope:** This contract covers operator-initiated tenant lifecycle reads, bootstrap, and
+    provisioning operations. It does NOT cover public self-service signup, billing, tenant-admin
+    configuration, clinical APIs, provisioning engine internals, pack catalog management, or
+    system configuration management.
 
     **Asynchronous model:** Provisioning is a multi-step asynchronous workflow. POST operations
     that initiate work return 202 Accepted. Clients poll GET endpoints for status.
@@ -29,6 +30,8 @@ security:
   - operatorBearerAuth: []
 
 tags:
+  - name: tenants
+    description: Tenant registry reads for operator review and lifecycle management.
   - name: legal-market-profiles
     description: Read-only access to legal-market profile summaries for operator review.
   - name: effective-configuration-plans
@@ -39,6 +42,111 @@ tags:
     description: Asynchronous provisioning run lifecycle.
 
 paths:
+  /tenants:
+    get:
+      operationId: listTenants
+      summary: List tenants with optional filters
+      description: |
+        Returns a paginated list of tenants visible to the authenticated operator.
+        Supports filtering by status, legal market, and text search on tenant name/ID.
+
+        This is the data source for the `control-plane.tenants.list` surface.
+      tags: [tenants]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by tenant lifecycle status. Multiple values comma-separated.
+          schema:
+            type: string
+        - name: legalMarketId
+          in: query
+          required: false
+          description: Filter by legal market identifier.
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          description: Text search on tenant display name or ID.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paginated list of tenant summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /tenants/{tenantId}:
+    get:
+      operationId: getTenant
+      summary: Get a single tenant's detail
+      description: |
+        Returns full detail for a single tenant, including configuration summary,
+        bootstrap history references, and active provisioning state.
+
+        This is the data source for the `control-plane.tenants.detail` surface.
+      tags: [tenants]
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: Tenant detail found and returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /legal-market-profiles:
+    get:
+      operationId: listLegalMarketProfiles
+      summary: List all legal-market profile summaries
+      description: |
+        Returns a list of all configured legal-market profiles with summary readiness
+        data. Supports filtering by status and launch tier.
+
+        This is the data source for the `control-plane.markets.management` surface.
+      tags: [legal-market-profiles]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by profile status.
+          schema:
+            type: string
+            enum: [draft, active, deprecated, retired]
+        - name: launchTier
+          in: query
+          required: false
+          description: Filter by launch tier.
+          schema:
+            type: string
+            enum: [T0, T1, T2, T3]
+      responses:
+        '200':
+          description: List of legal-market profile summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalMarketProfileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /legal-market-profiles/{legalMarketId}:
     get:
       operationId: getLegalMarketProfile
@@ -119,6 +227,41 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /tenant-bootstrap-requests:
+    get:
+      operationId: listTenantBootstrapRequests
+      summary: List bootstrap requests with optional filters
+      description: |
+        Returns a paginated list of bootstrap requests. Supports filtering by tenantId
+        and status. Used by the `control-plane.tenants.detail` surface to show bootstrap
+        history for a specific tenant.
+      tags: [tenant-bootstrap-requests]
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          description: Filter by tenant identifier.
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          description: Filter by bootstrap request status.
+          schema:
+            type: string
+            enum: [pending, approved, provisioning, completed, failed, cancelled]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paginated list of bootstrap request summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapRequestListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       operationId: createTenantBootstrapRequest
       summary: Create an operator-initiated tenant bootstrap request
@@ -200,6 +343,42 @@ paths:
           $ref: '#/components/responses/NotFound'
 
   /provisioning-runs:
+    get:
+      operationId: listProvisioningRuns
+      summary: List provisioning runs with optional filters
+      description: |
+        Returns a paginated list of provisioning runs. Supports filtering by
+        bootstrapRequestId and status. Used by the `control-plane.provisioning.runs`
+        surface and the `control-plane.tenants.detail` surface.
+      tags: [provisioning-runs]
+      parameters:
+        - name: bootstrapRequestId
+          in: query
+          required: false
+          description: Filter by bootstrap request identifier.
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          description: Filter by provisioning run status.
+          schema:
+            type: string
+            enum: [queued, in-progress, completed, failed]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paginated list of provisioning run summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisioningRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       operationId: createProvisioningRun
       summary: Initiate an asynchronous provisioning run
@@ -326,6 +505,35 @@ components:
         type: string
         format: uuid
 
+    TenantIdPath:
+      name: tenantId
+      in: path
+      required: true
+      description: Unique tenant identifier.
+      schema:
+        type: string
+
+    PageParam:
+      name: page
+      in: query
+      required: false
+      description: Page number (1-based). Defaults to 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PageSizeParam:
+      name: pageSize
+      in: query
+      required: false
+      description: Number of items per page. Defaults to 25, maximum 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+
   schemas:
     # --- Request schemas ---
 
@@ -403,6 +611,130 @@ components:
           description: Reference to the approved tenant bootstrap request.
 
     # --- Response schemas ---
+
+    PaginationMeta:
+      type: object
+      description: Pagination metadata included in all list responses.
+      required: [page, pageSize, totalItems, totalPages]
+      properties:
+        page:
+          type: integer
+          description: Current page number (1-based).
+        pageSize:
+          type: integer
+          description: Items per page.
+        totalItems:
+          type: integer
+          description: Total number of items matching the filter.
+        totalPages:
+          type: integer
+          description: Total number of pages.
+
+    TenantSummary:
+      type: object
+      description: Lightweight tenant record for list views.
+      required: [tenantId, displayName, status, legalMarketId, createdAt]
+      properties:
+        tenantId:
+          type: string
+        displayName:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended, archived, provisioning, bootstrap-pending]
+        legalMarketId:
+          type: string
+        launchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+        createdAt:
+          type: string
+          format: date-time
+
+    TenantDetail:
+      type: object
+      description: Full tenant record with bootstrap and provisioning references.
+      required: [tenantId, displayName, status, legalMarketId, createdAt]
+      properties:
+        tenantId:
+          type: string
+        displayName:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended, archived, provisioning, bootstrap-pending]
+        legalMarketId:
+          type: string
+        launchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+        bootstrapRequestId:
+          type: string
+          format: uuid
+          description: Reference to the bootstrap request that created this tenant.
+        latestProvisioningRunId:
+          type: string
+          format: uuid
+          description: Most recent provisioning run for this tenant.
+        activePacks:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackReference'
+          description: Currently active packs for this tenant.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TenantListResponse:
+      type: object
+      description: Paginated list of tenant summaries.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantSummary'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    LegalMarketProfileListResponse:
+      type: object
+      description: Paginated list of legal-market profile summaries.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegalMarketProfileSummary'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    BootstrapRequestListResponse:
+      type: object
+      description: Paginated list of bootstrap request summaries.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantBootstrapRequestStatus'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    ProvisioningRunListResponse:
+      type: object
+      description: Paginated list of provisioning run summaries.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvisioningRunStatus'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
 
     LegalMarketProfileSummary:
       type: object
