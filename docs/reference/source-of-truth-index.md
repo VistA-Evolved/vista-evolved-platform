@@ -60,6 +60,7 @@
 | Pack manifest schema | `packages/contracts/schemas/pack-manifest.schema.json` | Focused pack identity, lifecycle, attachment, dependencies, eligibility, content summary, adapter requirements, configuration keys, capability contributions |
 | Pack manifest instances | `packages/contracts/pack-manifests/` | Schema-valid JSON instances per pack. Named `{packId}.json`. |
 | Legal-market profile instances | `packages/contracts/legal-market-profiles/` | Schema-valid JSON instances per legal market. Named `{legalMarketId}.json` (uppercase ISO 3166-1 alpha-2). |
+| Effective-tenant-configuration-plan instances | `packages/contracts/effective-tenant-configuration-plans/` | Schema-valid JSON instances per tenant scenario. Named `{legalMarketId}-{scenario}.json`. |
 | Screen contract instances | `packages/contracts/screen-contracts/` | Schema-valid JSON instances per surface. Named `{surfaceId}.json`. |
 | Capability manifests | `packages/contracts/capability-manifests/` | Module/capability config |
 | Contract policy | `docs/reference/contract-policy.md` | Rules for contract usage |

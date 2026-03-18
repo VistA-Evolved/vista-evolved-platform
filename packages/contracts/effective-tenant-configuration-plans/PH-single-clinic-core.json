@@ -1,0 +1,177 @@
+{
+  "tenantId": "ph-demo-clinic-001",
+  "legalMarketId": "PH",
+  "profileVersion": "0.1.0",
+  "generatedAt": "2026-03-18T00:00:00Z",
+  "resolverVersion": "0.0.0",
+
+  "resolvedPacks": [
+    {
+      "packId": "lang-en",
+      "packFamily": "language",
+      "activationSource": "default-on",
+      "packState": "draft",
+      "readinessState": "specified",
+      "constraints": [
+        "Pack lifecycle is draft. No implemented translations or runtime artifacts exist yet."
+      ]
+    },
+    {
+      "packId": "locale-ph",
+      "packFamily": "locale",
+      "activationSource": "default-on",
+      "packState": "draft",
+      "readinessState": "specified",
+      "constraints": [
+        "Pack lifecycle is draft. No implemented locale configuration exists yet."
+      ]
+    },
+    {
+      "packId": "regulatory-philhealth-doh",
+      "packFamily": "regulatory",
+      "activationSource": "mandated",
+      "packState": "draft",
+      "readinessState": "declared",
+      "constraints": [
+        "Pack lifecycle is draft but mandated minimum is published. Mandate cannot be enforced until pack reaches published state.",
+        "No compliance logic implemented. Compliance frameworks are identified only."
+      ]
+    },
+    {
+      "packId": "standards-ph",
+      "packFamily": "national-standards",
+      "activationSource": "mandated",
+      "packState": "draft",
+      "readinessState": "declared",
+      "constraints": [
+        "Pack lifecycle is draft but mandated minimum is published. Mandate cannot be enforced until pack reaches published state.",
+        "No coding tables or mappings implemented. ICD-10-CM and RVS are identified only.",
+        "Depends on regulatory-philhealth-doh which is also draft."
+      ]
+    },
+    {
+      "packId": "payer-philhealth",
+      "packFamily": "payer",
+      "activationSource": "default-on",
+      "packState": "draft",
+      "readinessState": "declared",
+      "constraints": [
+        "Pack lifecycle is draft. No payer connector implemented.",
+        "Required adapter philhealth-eclaims-connector is not available; fallback is integration-pending.",
+        "Depends on regulatory-philhealth-doh (draft) and standards-ph (draft), both below required published state."
+      ]
+    }
+  ],
+
+  "deferredItems": [
+    {
+      "packId": "lang-fil",
+      "reason": "eligibility-failed",
+      "migrationPath": "Requires: (1) distro ADR (VE-DISTRO-ADR-NNNN) adding Filipino as a bounded product language per VE-DISTRO-ADR-0003, (2) lang-fil pack manifest authored and published, (3) Filipino translations implemented in distro and platform. Currently only English, Korean, and Spanish are bounded product languages.",
+      "targetState": "specified"
+    }
+  ],
+
+  "readinessPosture": {
+    "language": {
+      "state": "specified",
+      "scopeBounds": "English baseline only. Filipino not yet a bounded product language.",
+      "constrainingFactors": [
+        "Only English is available. Filipino requires distro ADR and bounded-language expansion.",
+        "English pack (lang-en) is draft — no runtime artifacts."
+      ]
+    },
+    "regulatory": {
+      "state": "declared",
+      "scopeBounds": "UHC Act + Data Privacy Act + PhilHealth eClaims identified. No compliance logic implemented.",
+      "constrainingFactors": [
+        "Regulatory pack is draft. Mandated minimum is published.",
+        "No compliance validation logic exists."
+      ]
+    },
+    "payer": {
+      "state": "declared",
+      "scopeBounds": "PhilHealth only. Private HMO payers not yet addressed.",
+      "constrainingFactors": [
+        "Payer pack is draft. PhilHealth eClaims adapter not implemented.",
+        "Adapter fallback is integration-pending."
+      ]
+    },
+    "nationalStandards": {
+      "state": "declared",
+      "scopeBounds": "ICD-10-CM and RVS identified. No coding tables or mappings implemented.",
+      "constrainingFactors": [
+        "Standards pack is draft. Mandated minimum is published.",
+        "No coding system integration exists."
+      ]
+    },
+    "locale": {
+      "state": "specified",
+      "scopeBounds": "en-PH locale only. Date, currency (PHP), and number formatting identified.",
+      "constrainingFactors": [
+        "Locale pack is draft — no runtime locale configuration."
+      ]
+    },
+    "clinicalContent": {
+      "state": "declared",
+      "scopeBounds": "No PH-specific clinical content identified yet.",
+      "constrainingFactors": [
+        "No clinical content packs exist for PH."
+      ]
+    },
+    "infrastructure": {
+      "state": "declared",
+      "scopeBounds": "No PH-specific infrastructure requirements identified beyond PhilHealth eClaims API connectivity.",
+      "constrainingFactors": [
+        "PhilHealth eClaims adapter is integration-pending.",
+        "No infrastructure provisioning exists."
+      ]
+    },
+    "operational": {
+      "state": "declared",
+      "scopeBounds": "No operational runbooks, training materials, or support documentation for PH market.",
+      "constrainingFactors": [
+        "No operational readiness exists for PH."
+      ]
+    },
+    "effectiveLaunchTier": "T0",
+    "gatingBlockers": [
+      {
+        "dimension": "regulatory",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "Regulatory pack (regulatory-philhealth-doh) is draft with no compliance logic. Must reach at least implemented readiness and published lifecycle before mandate is actionable."
+      },
+      {
+        "dimension": "nationalStandards",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "Standards pack (standards-ph) is draft with no coding tables. Must reach at least implemented readiness and published lifecycle before mandate is actionable."
+      },
+      {
+        "dimension": "payer",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "Payer pack (payer-philhealth) has no adapter. philhealth-eclaims-connector is not implemented. Fallback is integration-pending."
+      },
+      {
+        "dimension": "infrastructure",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "No PH-specific infrastructure provisioning exists. PhilHealth eClaims connectivity requires adapter implementation."
+      },
+      {
+        "dimension": "operational",
+        "currentState": "declared",
+        "requiredState": "specified",
+        "blocker": "No operational documentation, training materials, or support processes exist for PH market tenants."
+      }
+    ]
+  },
+
+  "tenantSelections": {
+    "selectedPacks": ["lang-fil"],
+    "deselectedDefaults": [],
+    "facilityType": "single-clinic"
+  }
+}
