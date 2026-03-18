@@ -904,7 +904,7 @@ These surfaces belong to the control-plane workspace (`apps/control-plane/`) per
 | **surfaceId** | `control-plane.tenants.detail` |
 | **surfaceName** | Tenant Detail |
 | **workspaceFamily** | `control-plane` |
-| **navigationLevel** | `secondary` |
+| **navigationLevel** | `local` |
 | **surfaceType** | `admin` |
 | **primaryAudience** | `platform-operator` |
 | **scopePosture** | `platform-wide` |
@@ -932,7 +932,7 @@ These surfaces belong to the control-plane workspace (`apps/control-plane/`) per
 | **surfaceId** | `control-plane.tenants.bootstrap` |
 | **surfaceName** | Tenant Bootstrap |
 | **workspaceFamily** | `control-plane` |
-| **navigationLevel** | `secondary` |
+| **navigationLevel** | `local` |
 | **surfaceType** | `admin` |
 | **primaryAudience** | `platform-operator` |
 | **scopePosture** | `platform-wide` |
@@ -960,7 +960,7 @@ These surfaces belong to the control-plane workspace (`apps/control-plane/`) per
 | **surfaceId** | `control-plane.provisioning.runs` |
 | **surfaceName** | Provisioning Runs |
 | **workspaceFamily** | `control-plane` |
-| **navigationLevel** | `secondary` |
+| **navigationLevel** | `local` |
 | **surfaceType** | `admin` |
 | **primaryAudience** | `platform-operator` |
 | **scopePosture** | `platform-wide` |
@@ -988,7 +988,7 @@ These surfaces belong to the control-plane workspace (`apps/control-plane/`) per
 | **surfaceId** | `control-plane.markets.detail` |
 | **surfaceName** | Legal Market Detail |
 | **workspaceFamily** | `control-plane` |
-| **navigationLevel** | `secondary` |
+| **navigationLevel** | `local` |
 | **surfaceType** | `admin` |
 | **primaryAudience** | `platform-operator` |
 | **scopePosture** | `platform-wide` |

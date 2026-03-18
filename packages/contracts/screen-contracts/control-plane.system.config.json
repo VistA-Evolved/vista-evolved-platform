@@ -1,0 +1,29 @@
+{
+  "surfaceId": "control-plane.system.config",
+  "version": "0.1.0",
+  "title": "Platform System Configuration",
+  "status": "draft",
+  "description": "Platform-wide settings, deployment profiles, and feature flags. Platform-native surface with no VistA counterpart. Platform operators configure system-level parameters. Completely pack-independent — no pack variation affects this surface's content or visibility. No claim surface. No cross-workspace transitions.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-system-configuration",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform-wide settings — deployment profiles, feature flags, system parameters."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

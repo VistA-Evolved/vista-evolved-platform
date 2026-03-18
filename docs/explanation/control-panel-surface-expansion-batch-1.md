@@ -223,7 +223,7 @@ All four surfaces use `platform-wide` scope posture. This is consistent with all
 
 ### 7.5 navigationLevel
 
-All four surfaces are `secondary` — they are drill targets from existing primary surfaces (tenants.list, markets.management) or from sibling secondary surfaces (tenants.detail → tenants.bootstrap → provisioning.runs).
+All four surfaces are `local` — they are drill targets from existing primary surfaces (tenants.list, markets.management) or from sibling local surfaces (tenants.detail → tenants.bootstrap → provisioning.runs). The workspace map §9.1 defines two surface-level navigation tiers: `primary` and `local`. These surfaces are `local` because they are sub-areas and detail views within a functional area.
 
 ### 7.6 initialImplementationPosture
 
