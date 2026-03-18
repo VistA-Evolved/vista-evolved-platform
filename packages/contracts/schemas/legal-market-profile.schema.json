@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "legal-market-profile",
+  "title": "LegalMarketProfile",
+  "description": "Composable market-level declaration of mandated, default-on, eligible, and excluded packs with readiness dimension snapshots. Operationalizes legal-market-composition-and-effective-configuration-resolver-spec.md §5. Reifies the informal 'country pack' concept into a governed, composable structure.",
+  "type": "object",
+  "properties": {
+    "legalMarketId": {
+      "type": "string",
+      "description": "Unique identifier. ISO 3166-1 alpha-2 for country-level (e.g. PH, US, KR) or qualified for sub-jurisdictional (e.g. US-VA).",
+      "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,8})?$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver version. Patch = snapshot updates. Minor = eligible pack additions. Major = mandated pack changes.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "displayName": {
+      "type": "string",
+      "description": "Human-readable market name (e.g. 'Philippines', 'United States')."
+    },
+    "status": {
+      "$ref": "#/$defs/profileStatusEnum",
+      "description": "Profile lifecycle status."
+    },
+
+    "mandatedPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mandatedPackEntry" },
+      "description": "Packs required for this market. Non-deactivatable. Per pack-and-adapter §9: regulatory and national-standards are always mandated."
+    },
+    "defaultOnPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/defaultOnPackEntry" },
+      "description": "Packs activated by default but deactivatable within entitlement."
+    },
+    "eligiblePacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/eligiblePackEntry" },
+      "description": "Packs available for activation but not activated by default."
+    },
+    "excludedPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/excludedPackEntry" },
+      "description": "Packs explicitly ineligible for this market."
+    },
+
+    "readinessDimensions": {
+      "type": "object",
+      "description": "Market readiness across the 8 dimensions from country-payer-readiness §7.2.",
+      "properties": {
+        "language":            { "$ref": "#/$defs/readinessDimensionEntry" },
+        "regulatory":          { "$ref": "#/$defs/readinessDimensionEntry" },
+        "payer":               { "$ref": "#/$defs/readinessDimensionEntry" },
+        "nationalStandards":   { "$ref": "#/$defs/readinessDimensionEntry" },
+        "locale":              { "$ref": "#/$defs/readinessDimensionEntry" },
+        "clinicalContent":     { "$ref": "#/$defs/readinessDimensionEntry" },
+        "infrastructure":      { "$ref": "#/$defs/readinessDimensionEntry" },
+        "operational":         { "$ref": "#/$defs/readinessDimensionEntry" }
+      },
+      "required": [
+        "language", "regulatory", "payer", "nationalStandards",
+        "locale", "clinicalContent", "infrastructure", "operational"
+      ]
+    },
+
+    "launchTier": {
+      "$ref": "#/$defs/launchTierEnum",
+      "description": "Current launch tier per country-payer-readiness §12. Output of dimensional readiness, not an independent assertion."
+    },
+
+    "standards": {
+      "$ref": "#/$defs/standardsMetadata",
+      "description": "Regulatory and standards metadata specific to this market."
+    }
+  },
+  "required": [
+    "legalMarketId",
+    "version",
+    "displayName",
+    "status",
+    "mandatedPacks",
+    "defaultOnPacks",
+    "eligiblePacks",
+    "excludedPacks",
+    "readinessDimensions",
+    "launchTier",
+    "standards"
+  ],
+
+  "$defs": {
+    "profileStatusEnum": {
+      "type": "string",
+      "enum": ["draft", "active", "deprecated", "retired"],
+      "description": "Profile lifecycle status per resolver-spec §12.2."
+    },
+
+    "packFamilyEnum": {
+      "type": "string",
+      "enum": [
+        "language",
+        "locale",
+        "regulatory",
+        "national-standards",
+        "payer",
+        "specialty",
+        "tenant-overlay"
+      ],
+      "description": "The 7 focused pack families from pack-and-adapter §6."
+    },
+
+    "packLifecycleStateEnum": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "validated",
+        "tested",
+        "published",
+        "activated",
+        "deactivated",
+        "retired"
+      ],
+      "description": "Pack lifecycle states per pack-and-adapter §12."
+    },
+
+    "readinessStateEnum": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "specified",
+        "implemented",
+        "validated",
+        "verified",
+        "claimable",
+        "production-eligible",
+        "deprecated",
+        "retired"
+      ],
+      "description": "Readiness states from capability-truth §7."
+    },
+
+    "launchTierEnum": {
+      "type": "string",
+      "enum": ["T0", "T1", "T2", "T3"],
+      "description": "Launch tiers per country-payer-readiness §12. T0=Exploratory, T1=Limited pilot, T2=Controlled availability, T3=General availability."
+    },
+
+    "mandatedPackEntry": {
+      "type": "object",
+      "description": "A pack mandated for this market. Non-deactivatable.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "Reference to a pack in the pack registry."
+        },
+        "packFamily": {
+          "$ref": "#/$defs/packFamilyEnum",
+          "description": "Expected: regulatory or national-standards for mandated packs."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this pack is mandated for this market."
+        },
+        "minimumPackState": {
+          "$ref": "#/$defs/packLifecycleStateEnum",
+          "description": "Minimum lifecycle state for this mandate to be actionable."
+        }
+      },
+      "required": ["packId", "packFamily", "rationale", "minimumPackState"]
+    },
+
+    "defaultOnPackEntry": {
+      "type": "object",
+      "description": "A pack activated by default but deactivatable within entitlement.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "Reference to a pack in the pack registry."
+        },
+        "packFamily": {
+          "$ref": "#/$defs/packFamilyEnum",
+          "description": "Expected: locale, language, or payer for default-on packs."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this pack is default-on."
+        },
+        "deactivationConstraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Conditions under which deactivation is blocked. Empty = freely deactivatable."
+        }
+      },
+      "required": ["packId", "packFamily", "rationale"]
+    },
+
+    "eligiblePackEntry": {
+      "type": "object",
+      "description": "A pack available for activation but not activated by default.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "Reference to a pack in the pack registry."
+        },
+        "packFamily": {
+          "$ref": "#/$defs/packFamilyEnum"
+        },
+        "eligibilityConditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Conditions for this pack to be activatable for a specific tenant scope."
+        }
+      },
+      "required": ["packId", "packFamily"]
+    },
+
+    "excludedPackEntry": {
+      "type": "object",
+      "description": "A pack explicitly ineligible for this market.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "Reference to a pack."
+        },
+        "packFamily": {
+          "$ref": "#/$defs/packFamilyEnum"
+        },
+        "exclusionRationale": {
+          "type": "string",
+          "description": "Why this pack is ineligible for this market."
+        }
+      },
+      "required": ["packId", "packFamily", "exclusionRationale"]
+    },
+
+    "readinessDimensionEntry": {
+      "type": "object",
+      "description": "Point-in-time readiness for one of the 8 market-readiness dimensions.",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "Current readiness state for this dimension."
+        },
+        "evidenceRef": {
+          "type": "string",
+          "description": "Pointer to evidence artifact(s) in artifacts/. Empty string if no evidence."
+        },
+        "lastVerified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last verification."
+        },
+        "scopeBounds": {
+          "type": "string",
+          "description": "What scope this readiness was verified against (e.g. 'pilot-only', 'single-payer')."
+        },
+        "notes": {
+          "type": "string",
+          "default": "",
+          "description": "Operator-facing notes."
+        }
+      },
+      "required": ["state", "evidenceRef", "lastVerified", "scopeBounds"]
+    },
+
+    "standardsMetadata": {
+      "type": "object",
+      "description": "Regulatory and standards metadata for this market.",
+      "properties": {
+        "regulatoryBody": {
+          "type": "string",
+          "description": "Primary regulatory authority (e.g. 'DOH', 'CMS')."
+        },
+        "complianceFrameworks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Compliance framework identifiers relevant to this market."
+        },
+        "codingSystems": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Required coding system identifiers (e.g. 'ICD-10-CM', 'CPT-HCPCS')."
+        }
+      },
+      "required": ["regulatoryBody", "complianceFrameworks", "codingSystems"]
+    }
+  }
+}

@@ -1,0 +1,316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "effective-tenant-configuration-plan",
+  "title": "EffectiveTenantConfigurationPlan",
+  "description": "Tenant-specific resolved output of the composition algorithm. Produced by applying a legal-market profile to a tenant's selections, constraints, and overrides. Operationalizes legal-market-composition-and-effective-configuration-resolver-spec.md §6-7.",
+  "type": "object",
+  "properties": {
+    "tenantId": {
+      "type": "string",
+      "description": "Reference to the tenant."
+    },
+    "legalMarketId": {
+      "type": "string",
+      "description": "The legal-market profile that was resolved."
+    },
+    "profileVersion": {
+      "type": "string",
+      "description": "The version of the legal-market profile used.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when this plan was generated."
+    },
+    "resolverVersion": {
+      "type": "string",
+      "description": "Version of the resolution algorithm used.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+
+    "resolvedPacks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resolvedPackEntry" },
+      "description": "Concrete list of packs to activate for this tenant."
+    },
+
+    "deferredItems": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deferredItemEntry" },
+      "default": [],
+      "description": "Packs or capabilities that could not be resolved."
+    },
+
+    "readinessPosture": {
+      "$ref": "#/$defs/readinessPosture",
+      "description": "Tenant's effective readiness across all 8 dimensions."
+    },
+
+    "tenantSelections": {
+      "$ref": "#/$defs/tenantSelectionsRecord",
+      "description": "Record of operator selections during provisioning. For audit and re-resolution."
+    }
+  },
+  "required": [
+    "tenantId",
+    "legalMarketId",
+    "profileVersion",
+    "generatedAt",
+    "resolverVersion",
+    "resolvedPacks",
+    "deferredItems",
+    "readinessPosture",
+    "tenantSelections"
+  ],
+
+  "$defs": {
+    "packFamilyEnum": {
+      "type": "string",
+      "enum": [
+        "language",
+        "locale",
+        "regulatory",
+        "national-standards",
+        "payer",
+        "specialty",
+        "tenant-overlay"
+      ],
+      "description": "The 7 focused pack families from pack-and-adapter §6."
+    },
+
+    "activationSourceEnum": {
+      "type": "string",
+      "enum": [
+        "mandated",
+        "default-on",
+        "operator-selected",
+        "dependency-required",
+        "tenant-override"
+      ],
+      "description": "Why a pack was activated. Per resolver-spec §6.3."
+    },
+
+    "packLifecycleStateEnum": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "validated",
+        "tested",
+        "published",
+        "activated",
+        "deactivated",
+        "retired"
+      ],
+      "description": "Pack lifecycle states per pack-and-adapter §12."
+    },
+
+    "readinessStateEnum": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "specified",
+        "implemented",
+        "validated",
+        "verified",
+        "claimable",
+        "production-eligible",
+        "deprecated",
+        "retired"
+      ],
+      "description": "Readiness states from capability-truth §7."
+    },
+
+    "launchTierEnum": {
+      "type": "string",
+      "enum": ["T0", "T1", "T2", "T3"],
+      "description": "Launch tiers per country-payer-readiness §12."
+    },
+
+    "deferralReasonEnum": {
+      "type": "string",
+      "enum": [
+        "pack-not-published",
+        "adapter-unavailable",
+        "dependency-missing",
+        "eligibility-failed",
+        "readiness-insufficient",
+        "infrastructure-pending"
+      ],
+      "description": "Why a pack or capability was deferred. Per resolver-spec §6.4."
+    },
+
+    "resolvedPackEntry": {
+      "type": "object",
+      "description": "A pack resolved for activation in this tenant's configuration.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "The pack identifier."
+        },
+        "packFamily": {
+          "$ref": "#/$defs/packFamilyEnum"
+        },
+        "activationSource": {
+          "$ref": "#/$defs/activationSourceEnum",
+          "description": "Why this pack is activated."
+        },
+        "packState": {
+          "$ref": "#/$defs/packLifecycleStateEnum",
+          "description": "Current lifecycle state of the pack."
+        },
+        "readinessState": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "Current readiness state in this tenant's scope."
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Activation constraints or unsatisfied dependency notes."
+        }
+      },
+      "required": [
+        "packId",
+        "packFamily",
+        "activationSource",
+        "packState",
+        "readinessState"
+      ]
+    },
+
+    "deferredItemEntry": {
+      "type": "object",
+      "description": "A pack or capability that could not be resolved.",
+      "properties": {
+        "packId": {
+          "type": "string",
+          "description": "The pack that could not be activated."
+        },
+        "reason": {
+          "$ref": "#/$defs/deferralReasonEnum",
+          "description": "Why the item was deferred."
+        },
+        "migrationPath": {
+          "type": "string",
+          "description": "What needs to happen for this item to become resolvable."
+        },
+        "targetState": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "What readiness state the item needs to reach."
+        }
+      },
+      "required": ["packId", "reason", "migrationPath", "targetState"]
+    },
+
+    "dimensionPosture": {
+      "type": "object",
+      "description": "Effective readiness for one dimension.",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/readinessStateEnum",
+          "description": "Effective readiness state for this dimension."
+        },
+        "scopeBounds": {
+          "type": "string",
+          "description": "Scope bounds for this dimension's readiness."
+        },
+        "constrainingFactors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Factors preventing a higher readiness state."
+        }
+      },
+      "required": ["state", "scopeBounds"]
+    },
+
+    "gatingBlocker": {
+      "type": "object",
+      "description": "An item preventing the tenant from reaching a higher launch tier.",
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "description": "The readiness dimension that is blocked."
+        },
+        "currentState": {
+          "$ref": "#/$defs/readinessStateEnum"
+        },
+        "requiredState": {
+          "$ref": "#/$defs/readinessStateEnum"
+        },
+        "blocker": {
+          "type": "string",
+          "description": "Description of the blocking condition."
+        }
+      },
+      "required": ["dimension", "currentState", "requiredState", "blocker"]
+    },
+
+    "readinessPosture": {
+      "type": "object",
+      "description": "Tenant's effective readiness across all 8 dimensions.",
+      "properties": {
+        "language":            { "$ref": "#/$defs/dimensionPosture" },
+        "regulatory":          { "$ref": "#/$defs/dimensionPosture" },
+        "payer":               { "$ref": "#/$defs/dimensionPosture" },
+        "nationalStandards":   { "$ref": "#/$defs/dimensionPosture" },
+        "locale":              { "$ref": "#/$defs/dimensionPosture" },
+        "clinicalContent":     { "$ref": "#/$defs/dimensionPosture" },
+        "infrastructure":      { "$ref": "#/$defs/dimensionPosture" },
+        "operational":         { "$ref": "#/$defs/dimensionPosture" },
+        "effectiveLaunchTier": {
+          "$ref": "#/$defs/launchTierEnum",
+          "description": "Launch tier supported by the resolved configuration. May be lower than the profile's declared tier."
+        },
+        "gatingBlockers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gatingBlocker" },
+          "default": [],
+          "description": "Items preventing the tenant from reaching a higher launch tier."
+        }
+      },
+      "required": [
+        "language", "regulatory", "payer", "nationalStandards",
+        "locale", "clinicalContent", "infrastructure", "operational",
+        "effectiveLaunchTier", "gatingBlockers"
+      ]
+    },
+
+    "tenantSelectionsRecord": {
+      "type": "object",
+      "description": "Record of operator selections during provisioning.",
+      "properties": {
+        "selectedPacks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Pack IDs explicitly selected by the operator."
+        },
+        "deselectedDefaults": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Default-on pack IDs explicitly deactivated by the operator."
+        },
+        "facilityType": {
+          "type": "string",
+          "description": "Selected facility type."
+        },
+        "selectedPayers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Payer pack IDs explicitly selected."
+        },
+        "selectedSpecialties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Specialty pack IDs explicitly selected."
+        }
+      },
+      "required": ["selectedPacks", "deselectedDefaults", "facilityType"]
+    }
+  }
+}
