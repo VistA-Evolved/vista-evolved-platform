@@ -57,7 +57,7 @@
 | Concern | Canonical location | Notes |
 |---------|-------------------|-------|
 | HTTP API contracts | `packages/contracts/openapi/` | OpenAPI 3.x specs |
-| Control-plane bootstrap/provisioning API | `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml` | Operator-initiated tenant lifecycle reads, bootstrap, and provisioning HTTP contract (11 operations) |
+| Control-plane bootstrap/provisioning API | `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml` | Operator-facing control-plane reads (tenants, markets, packs, system-config), bootstrap, and provisioning HTTP contract (14 operations) |
 | Event/WebSocket contracts | `packages/contracts/asyncapi/` | AsyncAPI specs |
 | Control-plane provisioning events | `packages/contracts/asyncapi/control-plane-provisioning-events.asyncapi.yaml` | Bootstrap and provisioning lifecycle event contract |
 | Config schemas | `packages/contracts/schemas/` | JSON Schema |

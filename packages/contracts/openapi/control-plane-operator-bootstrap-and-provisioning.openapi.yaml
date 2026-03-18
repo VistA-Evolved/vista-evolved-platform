@@ -5,10 +5,11 @@ info:
   description: |
     Operator-initiated tenant lifecycle, bootstrap, and provisioning contract for VistA Evolved control plane.
 
-    **Scope:** This contract covers operator-initiated tenant lifecycle reads, bootstrap, and
+    **Scope:** This contract covers operator-facing control-plane reads (including read-only
+    access to the pack catalog and system configuration for operator review), bootstrap, and
     provisioning operations. It does NOT cover public self-service signup, billing, tenant-admin
-    configuration, clinical APIs, provisioning engine internals, pack catalog management, or
-    system configuration management.
+    configuration, clinical APIs, provisioning engine internals, pack catalog write/management
+    operations, or system configuration write/management operations.
 
     **Asynchronous model:** Provisioning is a multi-step asynchronous workflow. POST operations
     that initiate work return 202 Accepted. Clients poll GET endpoints for status.
@@ -40,6 +41,10 @@ tags:
     description: Operator-initiated bootstrap request lifecycle.
   - name: provisioning-runs
     description: Asynchronous provisioning run lifecycle.
+  - name: packs
+    description: Read-only access to the pack catalog for operator review during bootstrap and provisioning.
+  - name: system-config
+    description: Read-only access to platform system configuration for operator review.
 
 paths:
   /tenants:
@@ -461,6 +466,113 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /packs:
+    get:
+      operationId: listPacks
+      summary: List packs in the catalog with optional filters
+      description: |
+        Returns a paginated list of packs from the platform pack catalog.
+
+        Supports filtering by pack family, lifecycle state, and legal-market eligibility.
+        Operators use this during bootstrap to review which packs are available and their
+        current readiness state.
+
+        **Current PH truth:** All PH packs are lifecycle draft. No pack is published or
+        production-eligible. The response reflects this truthfully.
+      tags: [packs]
+      parameters:
+        - name: packFamily
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+          description: Filter by pack family.
+        - name: lifecycleState
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [draft, validated, tested, published, activated, deactivated, retired]
+          description: Filter by lifecycle state.
+        - name: legalMarketId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter to packs eligible for the specified legal market (e.g., "PH").
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Free-text search on packId, displayName, and description.
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paginated list of packs matching the applied filters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /packs/{packId}:
+    get:
+      operationId: getPack
+      summary: Get full detail for a single pack
+      description: |
+        Returns the full pack detail including lifecycle, dependencies, eligibility,
+        content summary, adapter requirements, configuration keys, and capability
+        contributions.
+
+        The response shape mirrors the canonical pack manifest structure from
+        `packages/contracts/pack-manifests/{packId}.json`.
+      tags: [packs]
+      parameters:
+        - $ref: '#/components/parameters/PackIdPath'
+      responses:
+        '200':
+          description: Pack detail returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /system-config:
+    get:
+      operationId: getSystemConfig
+      summary: Get current platform system configuration
+      description: |
+        Returns a read-only snapshot of the platform system configuration including
+        deployment profile, feature flags, and system parameters.
+
+        This is an operator review endpoint. Write operations (toggle feature flags,
+        update parameters) require a dedicated system-configuration write API that is
+        not part of this contract.
+      tags: [system-config]
+      responses:
+        '200':
+          description: System configuration snapshot returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConfigSnapshot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     operatorBearerAuth:
@@ -533,6 +645,15 @@ components:
         minimum: 1
         maximum: 100
         default: 25
+
+    PackIdPath:
+      name: packId
+      in: path
+      required: true
+      description: Unique pack identifier (e.g., "lang-en", "regulatory-philhealth-doh").
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
 
   schemas:
     # --- Request schemas ---
@@ -1194,6 +1315,331 @@ components:
         occurredAt:
           type: string
           format: date-time
+
+    # --- Pack catalog schemas ---
+
+    PackListResponse:
+      type: object
+      description: Paginated list of packs from the pack catalog.
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackSummary'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PackSummary:
+      type: object
+      description: Summary representation of a pack for list views.
+      required: [packId, displayName, packFamily, version, lifecycleState]
+      properties:
+        packId:
+          type: string
+          description: Unique pack identifier (e.g., "lang-en", "regulatory-philhealth-doh").
+        displayName:
+          type: string
+          description: Human-readable pack name.
+        description:
+          type: string
+          description: Brief description of the pack's purpose.
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+        version:
+          type: string
+          description: Semver version of the pack manifest.
+        lifecycleState:
+          type: string
+          enum: [draft, validated, tested, published, activated, deactivated, retired]
+        eligibleMarkets:
+          type: array
+          items:
+            type: string
+          description: Legal-market IDs this pack is eligible for. Empty array means universally eligible.
+
+    PackDetail:
+      type: object
+      description: |
+        Full pack detail mirroring the canonical pack manifest structure.
+        Includes lifecycle, dependencies, eligibility, content summary, adapter
+        requirements, configuration keys, and capability contributions.
+      required:
+        - packId
+        - displayName
+        - description
+        - packFamily
+        - version
+        - lifecycle
+      properties:
+        packId:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+        version:
+          type: string
+        lifecycle:
+          $ref: '#/components/schemas/PackLifecycle'
+        attachment:
+          type: object
+          properties:
+            primaryEntity:
+              type: string
+              description: Primary entity this pack attaches to (e.g., "tenant", "legal-market").
+            overrideScopes:
+              type: array
+              items:
+                type: string
+              description: Scopes at which this pack's configuration can be overridden.
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackDependency'
+          default: []
+        eligibility:
+          $ref: '#/components/schemas/PackEligibility'
+        contentSummary:
+          $ref: '#/components/schemas/PackContentSummary'
+        adapterRequirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackAdapterRequirement'
+          default: []
+        configurationKeys:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackConfigurationKey'
+          default: []
+        capabilityContributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackCapabilityContribution'
+          default: []
+
+    PackLifecycle:
+      type: object
+      description: Pack lifecycle state and ownership metadata.
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [draft, validated, tested, published, activated, deactivated, retired]
+        owner:
+          type: string
+          description: Team or individual owning this pack.
+        implementationLocus:
+          type: string
+          description: Where this pack is implemented (e.g., "platform", "distro").
+        createdAt:
+          type: string
+          format: date-time
+        lastModifiedAt:
+          type: string
+          format: date-time
+
+    PackDependency:
+      type: object
+      description: Dependency on another pack.
+      required: [packId, type]
+      properties:
+        packId:
+          type: string
+        type:
+          type: string
+          enum: [required, optional]
+        rationale:
+          type: string
+
+    PackEligibility:
+      type: object
+      description: Eligibility constraints for this pack.
+      properties:
+        legalMarkets:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Legal-market IDs this pack is eligible for. Empty means universally eligible.
+        facilityTypes:
+          type: array
+          items:
+            type: string
+          default: []
+        serviceLines:
+          type: array
+          items:
+            type: string
+          default: []
+        infrastructureRequirements:
+          type: array
+          items:
+            type: string
+          default: []
+        licenseRequirements:
+          type: array
+          items:
+            type: string
+          default: []
+
+    PackContentSummary:
+      type: object
+      description: |
+        Summary of pack content. Common fields are typed; pack-family-specific
+        fields use additionalProperties.
+      properties:
+        contentTypes:
+          type: array
+          items:
+            type: string
+          description: Types of content in this pack (e.g., "translations", "coding-tables", "connector-config").
+        artifactCount:
+          type: integer
+          description: Number of content artifacts (0 for draft packs with no implemented artifacts).
+      additionalProperties: true
+
+    PackAdapterRequirement:
+      type: object
+      description: External adapter required by this pack.
+      required: [adapterId, adapterType, required]
+      properties:
+        adapterId:
+          type: string
+        adapterType:
+          type: string
+          description: Adapter category (e.g., "external-system").
+        required:
+          type: boolean
+        fallbackBehavior:
+          type: string
+          description: Behavior when the adapter is unavailable (e.g., "integration-pending").
+
+    PackConfigurationKey:
+      type: object
+      description: Configuration key provided or consumed by this pack.
+      required: [key, action]
+      properties:
+        key:
+          type: string
+          description: Dot-separated configuration key (e.g., "locale.dateFormat").
+        action:
+          type: string
+          enum: [provides, consumes]
+          description: Whether this pack provides a value for this key or consumes one.
+        description:
+          type: string
+
+    PackCapabilityContribution:
+      type: object
+      description: Capability that this pack contributes to.
+      required: [capabilityId, contributionType]
+      properties:
+        capabilityId:
+          type: string
+          description: ID of the capability this pack contributes to.
+        contributionType:
+          type: string
+          enum: [required, optional]
+        description:
+          type: string
+
+    # --- System configuration schemas ---
+
+    SystemConfigSnapshot:
+      type: object
+      description: |
+        Read-only snapshot of current platform system configuration.
+        Write operations on feature flags and parameters are deferred to a
+        dedicated system-configuration write API.
+      required:
+        - deploymentProfile
+        - featureFlags
+        - systemParameters
+        - lastUpdatedAt
+      properties:
+        deploymentProfile:
+          $ref: '#/components/schemas/DeploymentProfileSummary'
+        featureFlags:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureFlagSummary'
+          description: All platform feature flags with current state.
+        systemParameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemParameterSummary'
+          description: System parameters grouped by category.
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          description: When the system configuration was last modified.
+
+    DeploymentProfileSummary:
+      type: object
+      description: Current deployment profile and runtime environment.
+      required: [profileName, runtimeMode, apiVersion, platformVersion]
+      properties:
+        profileName:
+          type: string
+          description: Active deployment profile (e.g., "development", "staging", "production").
+        runtimeMode:
+          type: string
+          enum: [dev, test, rc, prod]
+          description: Platform runtime mode.
+        apiVersion:
+          type: string
+          description: Current API version.
+        platformVersion:
+          type: string
+          description: Platform semver version.
+
+    FeatureFlagSummary:
+      type: object
+      description: A single feature flag with current state.
+      required: [flagKey, displayName, enabled, scope]
+      properties:
+        flagKey:
+          type: string
+          description: Machine-readable flag key.
+        displayName:
+          type: string
+          description: Human-readable flag name.
+        enabled:
+          type: boolean
+          description: Current toggle state.
+        scope:
+          type: string
+          description: Flag scope (e.g., "platform-wide", "per-tenant").
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this flag was last toggled.
+
+    SystemParameterSummary:
+      type: object
+      description: A single configurable system parameter.
+      required: [category, paramKey, value]
+      properties:
+        category:
+          type: string
+          description: Parameter category (e.g., "security", "performance", "integration", "observability").
+        paramKey:
+          type: string
+          description: Parameter key name.
+        value:
+          type: string
+          description: Current parameter value.
+        defaultValue:
+          type: string
+          description: Default value for comparison.
+        description:
+          type: string
+          description: Human-readable description of what this parameter controls.
 
     # --- Error schemas ---
 

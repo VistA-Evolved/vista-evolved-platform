@@ -91,7 +91,7 @@ The tenant registry is the platform operator's entry point for managing all tena
 
 | Source | API operation | Contract |
 |--------|--------------|----------|
-| Tenant list | `GET /tenants` | OpenAPI (to be added — GATE 4) |
+| Tenant list | `GET /tenants` | OpenAPI (`listTenants`) |
 
 **Source of truth:** `platform-tenant-registry` (platform-governance domain class).
 
@@ -162,8 +162,8 @@ Single-tenant summary surface. Shows the complete picture of one tenant: identit
 
 | Source | API operation | Contract |
 |--------|--------------|----------|
-| Tenant record | `GET /tenants/{tenantId}` | OpenAPI (to be added — GATE 4) |
-| Bootstrap history | `GET /tenant-bootstrap-requests?tenantId={tenantId}` | OpenAPI (to be added — GATE 4, filter on existing endpoint) |
+| Tenant record | `GET /tenants/{tenantId}` | OpenAPI (`getTenant`) |
+| Bootstrap history | `GET /tenant-bootstrap-requests?tenantId={tenantId}` | OpenAPI (`listTenantBootstrapRequests` with tenantId filter) |
 | Provisioning status | `getProvisioningRun` | OpenAPI (existing) |
 
 #### 3.2.3 Visible data regions
@@ -376,7 +376,7 @@ This is the only event-driven surface among the 8 — it refreshes based on Asyn
 |--------|--------------|-----------|----------|
 | Initiate run | `createProvisioningRun` | POST (write) | OpenAPI |
 | Run status | `getProvisioningRun` | GET (read) | OpenAPI |
-| Run list | `GET /provisioning-runs?bootstrapRequestId={id}` | GET (read) | OpenAPI (to be added — GATE 4) |
+| Run list | `GET /provisioning-runs?bootstrapRequestId={id}` | GET (read) | OpenAPI (`listProvisioningRuns`) |
 | Run requested | `provisioning.run.requested` | Event (inbound) | AsyncAPI |
 | Run started | `provisioning.run.started` | Event (inbound) | AsyncAPI |
 | Step changed | `provisioning.step.changed` | Event (inbound) | AsyncAPI |
@@ -483,7 +483,7 @@ Platform-wide market registry. Operators view all configured legal markets, thei
 
 | Source | API operation | Contract |
 |--------|--------------|----------|
-| Market list | `GET /legal-market-profiles` | OpenAPI (to be added — GATE 4) |
+| Market list | `GET /legal-market-profiles` | OpenAPI (`listLegalMarketProfiles`) |
 
 **Source of truth:** `claim-readiness-registry`.
 
@@ -636,7 +636,7 @@ The pack catalog is the platform operator's view of all registered packs, their 
 
 | Source | API operation | Contract |
 |--------|--------------|----------|
-| Pack list | `GET /packs` | OpenAPI (to be added — GATE 4) |
+| Pack list | `GET /packs` | OpenAPI (`listPacks`) |
 
 **Source of truth:** `platform-pack-catalog` (platform-governance domain class).
 
@@ -714,7 +714,7 @@ Platform-wide settings surface. Operators view and manage deployment profiles, f
 
 | Source | API operation | Contract |
 |--------|--------------|----------|
-| System config | `GET /system-config` | OpenAPI (to be added — GATE 4) |
+| System config | `GET /system-config` | OpenAPI (`getSystemConfig`) |
 
 **Source of truth:** `platform-system-configuration` (platform-governance domain class).
 
@@ -788,34 +788,34 @@ Controls specified above that require API operations not yet defined:
 
 | Control | Surface | Required API | Status |
 |---------|---------|-------------|--------|
-| Tenant list fetch | `tenants.list` | `GET /tenants` | Added in GATE 4 |
-| Tenant detail fetch | `tenants.detail` | `GET /tenants/{tenantId}` | Added in GATE 4 |
+| Tenant list fetch | `tenants.list` | `GET /tenants` | Added (`listTenants`) |
+| Tenant detail fetch | `tenants.detail` | `GET /tenants/{tenantId}` | Added (`getTenant`) |
 | Tenant suspend | `tenants.detail` | `POST /tenants/{tenantId}/suspend` | Deferred to tenant-lifecycle API |
 | Tenant reactivate | `tenants.detail` | `POST /tenants/{tenantId}/reactivate` | Deferred to tenant-lifecycle API |
 | Tenant archive | `tenants.detail` | `POST /tenants/{tenantId}/archive` | Deferred to tenant-lifecycle API |
-| Market list fetch | `markets.management` | `GET /legal-market-profiles` | Added in GATE 4 |
+| Market list fetch | `markets.management` | `GET /legal-market-profiles` | Added (`listLegalMarketProfiles`) |
 | Market write ops | `markets.management` | market-management API | Deferred (governance-gated) |
-| Pack list fetch | `packs.catalog` | `GET /packs` | Deferred — requires separate pack-catalog API contract |
+| Pack list fetch | `packs.catalog` | `GET /packs` | Added (`listPacks`) |
 | Pack write ops | `packs.catalog` | pack-management API | Deferred (governance-gated) |
-| Provisioning run list | `provisioning.runs` | `GET /provisioning-runs` | Added in GATE 4 |
+| Provisioning run list | `provisioning.runs` | `GET /provisioning-runs` | Added (`listProvisioningRuns`) |
 | Provisioning cancel | `provisioning.runs` | cancel operation | Deferred |
-| System config fetch | `system.config` | `GET /system-config` | Deferred — requires separate system-config API contract |
+| System config fetch | `system.config` | `GET /system-config` | Added (`getSystemConfig`) |
 | Feature flag toggle | `system.config` | config API | Deferred |
 | Parameter update | `system.config` | config API | Deferred |
 
 ---
 
-## 6. API operations required — summary for GATE 4
+## 6. API operations required — summary
 
 New read-side operations this page-spec requires:
 
-1. `GET /tenants` — list tenants with pagination and filters (status, market, search) — **added**
-2. `GET /tenants/{tenantId}` — single tenant detail — **added**
-3. `GET /legal-market-profiles` — list all legal-market profile summaries — **added**
-4. `GET /provisioning-runs` — list provisioning runs with `bootstrapRequestId` filter — **added**
-5. `GET /tenant-bootstrap-requests` — list bootstrap requests with filters — **added**
-6. `GET /packs` — list packs with filters (family, lifecycle, search) — **deferred to future pack-catalog API contract**
-7. `GET /system-config` — read current platform system configuration — **deferred to future system-config API contract**
+1. `GET /tenants` — list tenants with pagination and filters (status, market, search) — **added** (`listTenants`)
+2. `GET /tenants/{tenantId}` — single tenant detail — **added** (`getTenant`)
+3. `GET /legal-market-profiles` — list all legal-market profile summaries — **added** (`listLegalMarketProfiles`)
+4. `GET /provisioning-runs` — list provisioning runs with `bootstrapRequestId` filter — **added** (`listProvisioningRuns`)
+5. `GET /tenant-bootstrap-requests` — list bootstrap requests with filters — **added** (`listTenantBootstrapRequests`)
+6. `GET /packs` — list packs with filters (family, lifecycle, market eligibility, search) — **added** (`listPacks`)
+7. `GET /system-config` — read current platform system configuration — **added** (`getSystemConfig`)
 
 Existing operations that are sufficient:
 - `getLegalMarketProfile` — used by `markets.detail`
@@ -831,7 +831,7 @@ Existing operations that are sufficient:
 
 - [ ] Every surface in §9.1–§9.8 has a corresponding page spec in this document
 - [ ] Every data source in page specs traces to a screen-contract `dataSources[]` entry or an identified API gap
-- [ ] Every operator action traces to an API operation (existing, adding in GATE 4, or deferred)
+- [ ] Every operator action traces to an API operation (existing or deferred)
 - [ ] PH truth constraints are documented for every surface where market affects content
 - [ ] Navigation graph is consistent with screen-contract `crossWorkspaceTransitions` and `navigationLevel`
 - [ ] No screen-inventory fields were modified

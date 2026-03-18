@@ -63,16 +63,16 @@ All 8 control-plane surfaces are restricted to the `platform-operator` role. The
 
 | # | Action | Surface | API Operation | HTTP | Source of Truth | Permission | Status |
 |---|--------|---------|---------------|------|-----------------|------------|--------|
-| R1 | List tenants | `tenants.list` | `listTenants` | `GET /tenants` | platform-tenant-registry | `control-plane:read` | Adding (GATE 4) |
-| R2 | Get tenant detail | `tenants.detail` | `getTenant` | `GET /tenants/{tenantId}` | platform-tenant-registry | `control-plane:read` | Adding (GATE 4) |
-| R3 | List bootstrap requests for tenant | `tenants.detail` | `listTenantBootstrapRequests` | `GET /tenant-bootstrap-requests?tenantId={id}` | platform-governance | `control-plane:read` | Adding (GATE 4) |
+| R1 | List tenants | `tenants.list` | `listTenants` | `GET /tenants` | platform-tenant-registry | `control-plane:read` | Exists |
+| R2 | Get tenant detail | `tenants.detail` | `getTenant` | `GET /tenants/{tenantId}` | platform-tenant-registry | `control-plane:read` | Exists |
+| R3 | List bootstrap requests for tenant | `tenants.detail` | `listTenantBootstrapRequests` | `GET /tenant-bootstrap-requests?tenantId={id}` | platform-governance | `control-plane:read` | Exists |
 | R4 | Get bootstrap request status | `tenants.bootstrap` | `getTenantBootstrapRequest` | `GET /tenant-bootstrap-requests/{id}` | platform-governance | `control-plane:read` | Exists |
 | R5 | Get provisioning run status | `provisioning.runs` | `getProvisioningRun` | `GET /provisioning-runs/{id}` | platform-governance | `control-plane:read` | Exists |
-| R6 | List provisioning runs | `provisioning.runs` | `listProvisioningRuns` | `GET /provisioning-runs?bootstrapRequestId={id}` | platform-governance | `control-plane:read` | Adding (GATE 4) |
+| R6 | List provisioning runs | `provisioning.runs` | `listProvisioningRuns` | `GET /provisioning-runs?bootstrapRequestId={id}` | platform-governance | `control-plane:read` | Exists |
 | R7 | Get legal-market profile | `markets.detail` | `getLegalMarketProfile` | `GET /legal-market-profiles/{id}` | claim-readiness-registry | `control-plane:read` | Exists |
-| R8 | List legal-market profiles | `markets.management` | `listLegalMarketProfiles` | `GET /legal-market-profiles` | claim-readiness-registry | `control-plane:read` | Adding (GATE 4) |
-| R9 | List packs | `packs.catalog` | `listPacks` | `GET /packs` | platform-pack-catalog | `control-plane:read` | Adding (GATE 4) |
-| R10 | Get system config | `system.config` | `getSystemConfig` | `GET /system-config` | platform-system-configuration | `control-plane:read` | Adding (GATE 4) |
+| R8 | List legal-market profiles | `markets.management` | `listLegalMarketProfiles` | `GET /legal-market-profiles` | claim-readiness-registry | `control-plane:read` | Exists |
+| R9 | List packs | `packs.catalog` | `listPacks` | `GET /packs` | platform-pack-catalog | `control-plane:read` | Exists |
+| R10 | Get system config | `system.config` | `getSystemConfig` | `GET /system-config` | platform-system-configuration | `control-plane:read` | Exists |
 
 ### 3.2 Write actions (mutations)
 
@@ -182,8 +182,8 @@ Audit entries are immutable and append-only. The control-plane audit trail is se
 
 | Category | Count | Details |
 |----------|-------|---------|
-| Read actions with existing API | 3 | R4, R5, R7 |
-| Read actions needing new API (GATE 4) | 7 | R1, R2, R3, R6, R8, R9, R10 |
+| Read actions with existing API | 10 | R1–R10 |
+| Read actions needing new API | 0 | — |
 | Write actions with existing API | 4 | W1, W2, W3, W4 |
 | Write actions deferred | 6 | W5, W6, W7, W8, W9, W10 |
 | Navigation actions | 9 | N1–N9 (no API needed) |
@@ -195,7 +195,7 @@ Audit entries are immutable and append-only. The control-plane audit trail is se
 ## 9. Verification checklist
 
 - [ ] Every action in the page specs (GATE 2) appears in this matrix
-- [ ] Every API operation reference matches the OpenAPI contract (existing or GATE 4 additions)
+- [ ] Every API operation reference matches the OpenAPI contract (existing) or is explicitly deferred
 - [ ] Every event reference matches the AsyncAPI contract
 - [ ] Every source-of-truth reference matches a screen-contract `dataSources[]` entry
 - [ ] Permission claims are consistent with the permissions matrix

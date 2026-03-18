@@ -349,7 +349,7 @@ When viewing the PH market detail:
 
 **Data source note:**
 
-The pack catalog surface reads from `platform-pack-catalog` (source of truth). The `GET /packs` list API is **not in scope** of the bootstrap/provisioning OpenAPI contract — it belongs in a future pack-catalog API contract. The design must account for this by showing `integration-pending` state for the data feed until the pack-catalog API is available.
+The pack catalog surface reads from `platform-pack-catalog` (source of truth). The `GET /packs` list API and `GET /packs/{packId}` detail API are defined in the bootstrap/provisioning OpenAPI contract (`listPacks`, `getPack`). Write operations (create/edit pack) remain deferred to a future pack-catalog write API.
 
 **packVariation display:**
 
@@ -366,8 +366,7 @@ The screen-contract declares `packVariation.axes: ["packId", "legalMarketId"]` a
 - [ ] Pack-market multi-dimensional view is structurally present
 - [ ] Claim surface shows eligibility claims per pack-market combination
 - [ ] Write operations (create/edit pack) are deferred — no create button
-- [ ] Data source shows `integration-pending` until pack-catalog API is available
-- [ ] When integration-pending, surface explains what dependency is needed
+- [ ] When no packs match filters, surface shows explicit empty state
 
 ---
 
@@ -383,7 +382,7 @@ The screen-contract declares `packVariation.axes: ["packId", "legalMarketId"]` a
 
 **Data source note:**
 
-The system configuration surface reads from `platform-system-configuration` (source of truth). The `GET /system-config` API is **not in scope** of the bootstrap/provisioning OpenAPI contract — it belongs in a future system-configuration API contract. The design must show `integration-pending` state until that API is available.
+The system configuration surface reads from `platform-system-configuration` (source of truth). The `GET /system-config` API is defined in the bootstrap/provisioning OpenAPI contract (`getSystemConfig`). Write operations (toggle feature flags, update parameters) remain deferred to a future system-configuration write API.
 
 **Reject/ready checklist:**
 
@@ -391,8 +390,7 @@ The system configuration surface reads from `platform-system-configuration` (sou
 - [ ] Each config value shows: key, current value, type, description
 - [ ] No write capabilities present (controlled-write is deferred)
 - [ ] No claim surface present (per screen-contract: no claimSurface)
-- [ ] Data source shows `integration-pending` until system-configuration API is available
-- [ ] When integration-pending, surface explains what dependency is needed
+- [ ] When no parameters or flags exist, surface shows explicit empty state
 
 ---
 
@@ -512,8 +510,8 @@ The following design elements are **not included** in batch 1 because their unde
 | Pack create/edit | packs.catalog | Future pack-catalog write API | Deferred |
 | System config edit | system.config | Future system-config write API | Deferred |
 | Provisioning cancel/retry | provisioning.runs | Future provisioning-management API | Deferred |
-| Pack catalog data feed | packs.catalog | Future pack-catalog read API | Integration-pending |
-| System config data feed | system.config | Future system-config read API | Integration-pending |
+| Pack catalog data feed | packs.catalog | `listPacks` / `getPack` in OpenAPI | Available (read-only) |
+| System config data feed | system.config | `getSystemConfig` in OpenAPI | Available (read-only) |
 | Real-time event updates | provisioning.runs | AsyncAPI event subscription wiring | Design-specified, implementation deferred |
 
 ---
@@ -531,4 +529,4 @@ The following design elements are **not included** in batch 1 because their unde
 - [ ] No screen-contract modifications
 - [ ] PH truth constraints visible in design specs for bootstrap and market surfaces
 - [ ] Claim surface design specified for all surfaces that have claim surfaces
-- [ ] Pack-catalog and system-config surfaces show integration-pending for unavailable APIs
+- [ ] Pack-catalog and system-config surfaces show available read API; write operations remain deferred
