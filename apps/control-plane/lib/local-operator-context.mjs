@@ -15,7 +15,7 @@ const RECOGNIZED_ROLES = [
   'tenant-admin',
   'clinician',
   'ancillary-staff',
-  'revenue-cycle',
+  'revenue-cycle-staff',
   'analyst',
   'it-integration',
 ];

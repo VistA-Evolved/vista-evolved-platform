@@ -31,6 +31,7 @@ import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { loadContractData } from './lib/contract-loader.mjs';
 import { resolveLocalOperatorContext } from './lib/local-operator-context.mjs';
+import { CONTROL_PLANE_REQUIRED_ROLE } from './lib/access-map.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4500', 10);
@@ -79,6 +80,7 @@ await server.register(fastifyStatic, {
 // Local operator-access enforcement — NOT real auth.
 // Role read from X-Local-Role header; default: platform-operator.
 // Only platform-operator may access control-plane API routes.
+// Required role derived from lib/access-map.mjs (grounded in permissions-matrix.md).
 server.addHook('onRequest', async (request, reply) => {
   if (!request.url.startsWith('/api/')) return;
   const ctx = resolveLocalOperatorContext(request);
@@ -94,7 +96,7 @@ server.addHook('onRequest', async (request, reply) => {
       error: 'access_denied',
       message: ctx.reason,
       activeRole: ctx.role,
-      requiredRole: 'platform-operator',
+      requiredRole: CONTROL_PLANE_REQUIRED_ROLE,
     });
   }
 });

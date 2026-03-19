@@ -39,7 +39,7 @@ The active role is read from the `X-Local-Role` request header.
 |----------|--------|
 | Default role | `platform-operator` (when no header is sent) |
 | Allowed role | `platform-operator` — full access to all control-plane routes |
-| Denied roles | `tenant-admin`, `clinician`, `ancillary-staff`, `revenue-cycle`, `analyst`, `it-integration` |
+| Denied roles | `tenant-admin`, `clinician`, `ancillary-staff`, `revenue-cycle-staff`, `analyst`, `it-integration` |
 | Invalid role | Returns 400 with valid role list |
 | Denied response | 403 with `{ error: "access_denied", activeRole, requiredRole }` |
 
@@ -49,6 +49,9 @@ derived from `docs/reference/permissions-matrix.md` — not a real auth subsyste
 
 Static assets (HTML/CSS/JS) are always served regardless of role, so the UI can render
 the access-denied state and role switcher.
+
+The explicit route-to-surface-to-action mapping is maintained in `lib/access-map.mjs`.
+See `docs/explanation/control-plane-local-operator-access-foundation-wave-1.md` for full rationale.
 
 ## API routes
 
