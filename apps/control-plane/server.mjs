@@ -4,8 +4,12 @@
  * Fastify dev server that:
  *   1. Serves static assets (HTML/CSS/JS) from public/
  *   2. Exposes read-only API routes backed by fixture JSON data
+ *   3. Exposes LOCAL REVIEW-ONLY write routes for command simulation
  *
- * All data is fixture-sourced. No persistence, no authentication, no writes.
+ * Read-only routes: /api/control-plane/v1/* — fixture-backed, canonical-aligned.
+ * Review-only routes: /api/control-plane-review/v1/* — validation & preview only.
+ *
+ * No persistence, no authentication, no real writes.
  * Route names and response shapes align with:
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  */
@@ -49,9 +53,13 @@ await server.register(fastifyStatic, {
   prefix: '/',
 });
 
-// Read-only API routes (registered in GATE 2)
+// Read-only API routes (fixture-backed)
 const { default: registerRoutes } = await import('./routes/index.mjs');
 registerRoutes(server, fixtures);
+
+// LOCAL REVIEW-ONLY write routes (validation & preview, no persistence)
+const { default: registerReviewRoutes } = await import('./routes/review.mjs');
+registerReviewRoutes(server);
 
 await server.listen({ port: PORT, host: '127.0.0.1' });
 server.log.info(`Control-plane review runtime listening on http://127.0.0.1:${PORT}`);

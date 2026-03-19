@@ -1,8 +1,8 @@
 # Control Plane — Local Review Runtime
 
-> **Local dev server serving fixture-backed read-only API routes.**
+> **Local dev server serving fixture-backed read-only API routes and review-only write simulation routes.**
 > All data comes from checked-in fixture JSON; no external services required.
-> Read-only. No persistence. No authentication. No writes.
+> Read routes serve fixture data. Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
 
 ## What it is
 
@@ -10,7 +10,8 @@ A local Fastify dev server that:
 
 1. Serves a vanilla HTML/CSS/JS single-page UI from `public/`
 2. Exposes **12 read-only API routes** at `/api/control-plane/v1/*` backed by fixture JSON
-3. Renders all 8 canonical control-plane surfaces
+3. Exposes **15 review-only write simulation routes** at `/api/control-plane-review/v1/*` plus a discovery endpoint
+4. Renders all 8 canonical control-plane surfaces with functional review dialogs for all 15 contracted write actions
 
 Route names and response shapes align with the authoritative OpenAPI contract:
 `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml`
@@ -48,6 +49,37 @@ npm run dev
 
 Unknown IDs return 404. Fixture `_provenance` metadata is stripped from API responses.
 
+## Review-only write simulation routes
+
+All 15 contracted write actions from the OpenAPI specification are exposed as **local review-only routes** at `/api/control-plane-review/v1/*`. These routes:
+
+- Validate input fields against required/optional schemas
+- Return an honest `ReviewEnvelope` with `mode: "local-review"`, `executed: false`, `persistence: "none"`
+- Project which AsyncAPI events *would* be emitted
+- Include audit preview, guardrails, and notes
+- **Never persist anything, never modify fixtures, never fake success**
+
+| # | Action | HTTP | Review Route | Surface |
+|---|--------|------|-------------|---------|
+| W1 | suspendTenant | POST | `/tenants/:tenantId/suspend` | Tenant Detail |
+| W2 | reactivateTenant | POST | `/tenants/:tenantId/reactivate` | Tenant Detail |
+| W3 | archiveTenant | POST | `/tenants/:tenantId/archive` | Tenant Detail |
+| W4 | resolveEffConfigPlan | POST | `/effective-configuration-plans/resolve` | Tenant Registry, Bootstrap |
+| W5 | createBootstrapRequest | POST | `/tenant-bootstrap-requests` | Bootstrap |
+| W6 | createProvisioningRun | POST | `/provisioning-runs` | Provisioning |
+| W7 | cancelProvisioningRun | POST | `/provisioning-runs/:provisioningRunId/cancel` | Provisioning |
+| W8 | createMarketDraft | POST | `/legal-market-profiles` | Markets |
+| W9 | updateMarketDraft | PUT | `/legal-market-profiles/:legalMarketId` | Market Detail |
+| W10 | submitMarketForReview | POST | `/legal-market-profiles/:legalMarketId/submit-review` | Market Detail |
+| W11 | createPackDraft | POST | `/packs` | Pack Catalog |
+| W12 | updatePackDraft | PUT | `/packs/:packId` | Pack Catalog |
+| W13 | submitPackForReview | POST | `/packs/:packId/submit-review` | Pack Catalog |
+| W14 | updateFeatureFlag | PUT | `/system-config/feature-flags/:flagKey` | System Config |
+| W15 | updateSystemParameter | PUT | `/system-config/parameters/:paramKey` | System Config |
+| — | listReviewActions | GET | `/actions` | Discovery |
+
+All review routes are prefixed with `/api/control-plane-review/v1`.
+
 ## 8 Surfaces
 
 | # | Surface | Route | Source Contract |
@@ -64,11 +96,27 @@ Unknown IDs return 404. Fixture `_provenance` metadata is stripped from API resp
 ## Write control posture
 
 - **Batch 1 reads (R1-R10):** Served from local API routes, fixture-backed.
-- **Batch 1 writes (W1-W2):** Shown as functional controls with non-persistent disclaimer.
-- **Batch 2 writes (W5-W8):** Disabled with "integration-pending" tooltip.
-- **Batch 3 writes (W9-W16):** Disabled with "integration-pending" tooltip.
+- **Batch 1 writes (W1-W4):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
+- **Batch 2 writes (W5-W7):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
+- **Batch 3 writes (W8-W15):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
 
-No write API routes are implemented. All mutation is blocked at the UI level.
+All 15 write actions have review routes and UI dialogs. No write action persists data, modifies fixtures, or fakes success. Every review response includes `executed: false` and `persistence: "none"`.
+
+### Review envelope structure
+
+```json
+{
+  "mode": "local-review",
+  "executed": false,
+  "persistence": "none",
+  "canonicalOperationId": "suspendTenant",
+  "validation": { "valid": true, "errors": [] },
+  "projectedEvents": ["tenant.lifecycle.suspended"],
+  "auditPreview": { "who": "local-reviewer", "what": "Reviewed: suspend tenant ph-demo-clinic-001" },
+  "guardrails": ["Requires active tenant status"],
+  "notes": ["Review-only: no state was mutated"]
+}
+```
 
 ## Fixture provenance
 

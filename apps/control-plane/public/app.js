@@ -3,7 +3,7 @@
  *
  * Hash-based routing over 8 canonical control-plane surfaces.
  * Data fetched from local Fastify API routes (fixture-backed).
- * No persistence, no authentication, read-only.
+ * Write actions open LOCAL REVIEW-ONLY dialogs — no persistence, no real execution.
  *
  * Surface IDs (from screen-contract instances):
  *   control-plane.tenants.list
@@ -22,6 +22,7 @@
 // API loader — fetches from local Fastify routes
 // ---------------------------------------------------------------------------
 const API_BASE = '/api/control-plane/v1';
+const REVIEW_API_BASE = '/api/control-plane-review/v1';
 const FIXTURES = {};
 
 async function loadFixtures() {
@@ -66,6 +67,251 @@ function disabledBtn(label, reason) {
 
 function navLink(href, label) {
   return `<a href="${href}" style="color:var(--primary);text-decoration:none;">${escHtml(label)}</a>`;
+}
+
+// ---------------------------------------------------------------------------
+// Review Dialog System — LOCAL REVIEW ONLY
+// ---------------------------------------------------------------------------
+function openReviewDialog(title, operationId, fields, submitFn) {
+  const overlay = document.getElementById('review-dialog-overlay');
+  const dialog = document.getElementById('review-dialog');
+
+  let fieldsHtml = '';
+  for (const f of fields) {
+    if (f.type === 'checkbox') {
+      fieldsHtml += `<div class="review-checkbox"><input type="checkbox" id="rv-${f.key}"><label for="rv-${f.key}">${escHtml(f.label)}</label></div>`;
+    } else if (f.type === 'select') {
+      fieldsHtml += `<label>${escHtml(f.label)}</label><select id="rv-${f.key}">${f.options.map(o => `<option value="${escHtml(o.value)}">${escHtml(o.label)}</option>`).join('')}</select>`;
+    } else if (f.type === 'textarea') {
+      fieldsHtml += `<label>${escHtml(f.label)}${f.required ? ' *' : ''}</label><textarea id="rv-${f.key}" placeholder="${escHtml(f.placeholder || '')}"></textarea>`;
+    } else {
+      fieldsHtml += `<label>${escHtml(f.label)}${f.required ? ' *' : ''}</label><input type="text" id="rv-${f.key}" placeholder="${escHtml(f.placeholder || '')}" value="${escHtml(f.defaultValue || '')}">`;
+    }
+  }
+
+  dialog.innerHTML = `
+    <h2>${escHtml(title)}</h2>
+    <div class="review-subtitle">Canonical operation: <code>${escHtml(operationId)}</code></div>
+    <div class="review-warning-banner">
+      ⚠ REVIEW-ONLY — This action will NOT be executed. No data will be persisted or changed.
+    </div>
+    ${fieldsHtml}
+    <div class="review-actions">
+      <button class="btn btn-primary" id="rv-submit">Submit for Review</button>
+      <button class="btn" id="rv-cancel">Cancel</button>
+    </div>
+    <div id="rv-result"></div>
+  `;
+
+  overlay.style.display = 'flex';
+  dialog.querySelector('#rv-cancel').onclick = () => { overlay.style.display = 'none'; };
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.style.display = 'none'; };
+  dialog.querySelector('#rv-submit').onclick = async () => {
+    const body = {};
+    for (const f of fields) {
+      const el = document.getElementById(`rv-${f.key}`);
+      if (f.type === 'checkbox') body[f.key] = el.checked;
+      else body[f.key] = el.value;
+    }
+    await submitFn(body);
+  };
+}
+
+async function submitReview(method, path, body) {
+  const resp = await fetch(`${REVIEW_API_BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  renderReviewResult(data);
+}
+
+function renderReviewResult(data) {
+  const container = document.getElementById('rv-result');
+  const isValid = data.validation && data.validation.valid;
+
+  container.innerHTML = `
+    <div class="review-result">
+      <div class="result-header ${isValid ? 'valid' : 'invalid'}">
+        ${isValid ? '✓ Validation passed' : '✗ Validation failed'} — Review result for <code>${escHtml(data.canonicalOperationId)}</code>
+      </div>
+
+      ${!isValid ? `
+        <div class="result-section">
+          <h4>Validation Errors</h4>
+          <ul>${data.validation.errors.map(e => `<li style="font-size:13px;color:var(--danger);">${escHtml(e)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
+
+      <div class="result-section">
+        <h4>Canonical Operation</h4>
+        <pre>${escHtml(data.canonicalHttpMethod)} ${escHtml(data.canonicalPath)}\noperationId: ${escHtml(data.canonicalOperationId)}</pre>
+      </div>
+
+      <div class="result-section">
+        <h4>Projected Events</h4>
+        <pre>${data.projectedEvents.map(e => `${escHtml(e.eventAddress)}\n  → ${escHtml(e.description)}`).join('\n')}</pre>
+      </div>
+
+      <div class="result-section">
+        <h4>Audit Preview</h4>
+        <pre>Action class: ${escHtml(data.auditPreview.actionClass)}
+Actor: ${escHtml(data.auditPreview.actorSource)}
+Resource: ${escHtml(data.auditPreview.resourceId)}
+Summary: ${escHtml(data.auditPreview.summary)}</pre>
+      </div>
+
+      <div class="result-section">
+        <h4>Guardrails</h4>
+        <ul>${data.guardrails.map(g => `<li style="font-size:13px;">${escHtml(g)}</li>`).join('')}</ul>
+      </div>
+
+      <div class="no-persist-banner">
+        ${data.notes.map(n => escHtml(n)).join(' · ')}
+      </div>
+    </div>
+  `;
+}
+
+// Review action openers for each surface
+function reviewSuspendTenant(tenantId) {
+  openReviewDialog('Suspend Tenant', 'suspendTenant', [
+    { key: 'reason', label: 'Reason', type: 'textarea', required: true, placeholder: 'Reason for suspending this tenant…' },
+  ], (body) => submitReview('POST', `/tenants/${encodeURIComponent(tenantId)}/suspend`, body));
+}
+function reviewReactivateTenant(tenantId) {
+  openReviewDialog('Reactivate Tenant', 'reactivateTenant', [
+    { key: 'reason', label: 'Reason', type: 'textarea', required: true, placeholder: 'Reason for reactivating this tenant…' },
+  ], (body) => submitReview('POST', `/tenants/${encodeURIComponent(tenantId)}/reactivate`, body));
+}
+function reviewArchiveTenant(tenantId) {
+  openReviewDialog('Archive Tenant (IRREVERSIBLE)', 'archiveTenant', [
+    { key: 'reason', label: 'Reason', type: 'textarea', required: true, placeholder: 'Reason for archiving this tenant…' },
+    { key: 'confirmArchive', label: 'I confirm this tenant should be permanently archived', type: 'checkbox' },
+  ], (body) => submitReview('POST', `/tenants/${encodeURIComponent(tenantId)}/archive`, body));
+}
+function reviewResolvePlan() {
+  const markets = FIXTURES['legal-market-profiles'].items;
+  openReviewDialog('Resolve Effective Configuration Plan', 'resolveEffectiveConfigurationPlan', [
+    { key: 'legalMarketId', label: 'Legal Market ID', type: 'select', options: markets.map(m => ({ value: m.legalMarketId, label: `${m.displayName} (${m.legalMarketId})` })) },
+    { key: 'tenantDisplayName', label: 'Tenant Display Name (optional)', type: 'text', placeholder: 'e.g., Sunrise Medical Center' },
+    { key: 'facilityType', label: 'Facility Type (optional)', type: 'select', options: [{ value: '', label: '(none)' }, { value: 'single-clinic', label: 'Single Clinic' }, { value: 'multi-facility', label: 'Multi-Facility' }, { value: 'hospital', label: 'Hospital' }] },
+  ], (body) => {
+    const cleaned = { legalMarketId: body.legalMarketId };
+    if (body.tenantDisplayName) cleaned.tenantDisplayName = body.tenantDisplayName;
+    if (body.facilityType) cleaned.facilityType = body.facilityType;
+    submitReview('POST', '/effective-configuration-plans/resolve', cleaned);
+  });
+}
+function reviewCreateBootstrapRequest() {
+  openReviewDialog('Create Tenant Bootstrap Request', 'createTenantBootstrapRequest', [
+    { key: 'effectivePlanId', label: 'Effective Plan ID (UUID)', type: 'text', required: true, placeholder: 'UUID of a resolved plan' },
+    { key: 'tenantDisplayName', label: 'Tenant Display Name', type: 'text', required: true, placeholder: 'e.g., Sunrise Medical Center' },
+    { key: 'tenantNotes', label: 'Tenant Notes (optional)', type: 'textarea', placeholder: 'Optional notes…' },
+  ], (body) => {
+    const cleaned = { effectivePlanId: body.effectivePlanId, tenantDisplayName: body.tenantDisplayName };
+    if (body.tenantNotes) cleaned.tenantNotes = body.tenantNotes;
+    submitReview('POST', '/tenant-bootstrap-requests', cleaned);
+  });
+}
+function reviewCreateProvisioningRun() {
+  openReviewDialog('Create Provisioning Run', 'createProvisioningRun', [
+    { key: 'bootstrapRequestId', label: 'Bootstrap Request ID (UUID)', type: 'text', required: true, placeholder: 'UUID of an approved bootstrap request' },
+  ], (body) => submitReview('POST', '/provisioning-runs', body));
+}
+function reviewCancelProvisioningRun(runId) {
+  openReviewDialog('Cancel Provisioning Run', 'cancelProvisioningRun', [
+    { key: 'reason', label: 'Cancellation Reason', type: 'textarea', required: true, placeholder: 'Reason for cancelling this run…' },
+  ], (body) => submitReview('POST', `/provisioning-runs/${encodeURIComponent(runId)}/cancel`, body));
+}
+function reviewCreateMarketDraft() {
+  openReviewDialog('Create Legal-Market Profile Draft', 'createLegalMarketProfileDraft', [
+    { key: 'legalMarketId', label: 'Legal Market ID (ISO 3166-1 alpha-2)', type: 'text', required: true, placeholder: 'e.g., JP, DE, IN' },
+    { key: 'displayName', label: 'Display Name', type: 'text', required: true, placeholder: 'e.g., Japan' },
+    { key: 'launchTier', label: 'Launch Tier', type: 'select', options: [{ value: 'T0', label: 'T0 (draft)' }, { value: 'T1', label: 'T1' }, { value: 'T2', label: 'T2' }, { value: 'T3', label: 'T3' }] },
+  ], (body) => {
+    const cleaned = { legalMarketId: body.legalMarketId, displayName: body.displayName };
+    if (body.launchTier) cleaned.launchTier = body.launchTier;
+    submitReview('POST', '/legal-market-profiles', cleaned);
+  });
+}
+function reviewUpdateMarketDraft(legalMarketId) {
+  openReviewDialog(`Update Market Draft: ${legalMarketId}`, 'updateLegalMarketProfileDraft', [
+    { key: 'displayName', label: 'Display Name (optional)', type: 'text', placeholder: 'New display name' },
+    { key: 'launchTier', label: 'Launch Tier (optional)', type: 'select', options: [{ value: '', label: '(unchanged)' }, { value: 'T0', label: 'T0' }, { value: 'T1', label: 'T1' }, { value: 'T2', label: 'T2' }, { value: 'T3', label: 'T3' }] },
+  ], (body) => {
+    const cleaned = {};
+    if (body.displayName) cleaned.displayName = body.displayName;
+    if (body.launchTier) cleaned.launchTier = body.launchTier;
+    submitReview('PUT', `/legal-market-profiles/${encodeURIComponent(legalMarketId)}`, cleaned);
+  });
+}
+function reviewSubmitMarketForReview(legalMarketId) {
+  openReviewDialog(`Submit Market for Review: ${legalMarketId}`, 'submitLegalMarketProfileForReview', [
+    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Optional reason for submission…' },
+  ], (body) => {
+    const cleaned = {};
+    if (body.reason) cleaned.reason = body.reason;
+    submitReview('POST', `/legal-market-profiles/${encodeURIComponent(legalMarketId)}/submit-review`, cleaned);
+  });
+}
+function reviewCreatePackDraft() {
+  openReviewDialog('Create Pack Manifest Draft', 'createPackManifestDraft', [
+    { key: 'packId', label: 'Pack ID', type: 'text', required: true, placeholder: 'e.g., lang-jp, payer-bcbs' },
+    { key: 'displayName', label: 'Display Name', type: 'text', required: true, placeholder: 'e.g., Japanese Language Pack' },
+    { key: 'packFamily', label: 'Pack Family', type: 'select', required: true, options: [
+      { value: 'language', label: 'language' }, { value: 'locale', label: 'locale' },
+      { value: 'regulatory', label: 'regulatory' }, { value: 'national-standards', label: 'national-standards' },
+      { value: 'payer', label: 'payer' }, { value: 'specialty', label: 'specialty' },
+      { value: 'tenant-overlay', label: 'tenant-overlay' },
+    ]},
+    { key: 'description', label: 'Description (optional)', type: 'textarea', placeholder: 'Pack description…' },
+  ], (body) => {
+    const cleaned = { packId: body.packId, displayName: body.displayName, packFamily: body.packFamily };
+    if (body.description) cleaned.description = body.description;
+    submitReview('POST', '/packs', cleaned);
+  });
+}
+function reviewUpdatePackDraft(packId) {
+  openReviewDialog(`Update Pack Draft: ${packId}`, 'updatePackManifestDraft', [
+    { key: 'displayName', label: 'Display Name (optional)', type: 'text', placeholder: 'New display name' },
+    { key: 'description', label: 'Description (optional)', type: 'textarea', placeholder: 'New description' },
+  ], (body) => {
+    const cleaned = {};
+    if (body.displayName) cleaned.displayName = body.displayName;
+    if (body.description) cleaned.description = body.description;
+    submitReview('PUT', `/packs/${encodeURIComponent(packId)}`, cleaned);
+  });
+}
+function reviewSubmitPackForReview(packId) {
+  openReviewDialog(`Submit Pack for Review: ${packId}`, 'submitPackManifestForReview', [
+    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Optional reason for submission…' },
+  ], (body) => {
+    const cleaned = {};
+    if (body.reason) cleaned.reason = body.reason;
+    submitReview('POST', `/packs/${encodeURIComponent(packId)}/submit-review`, cleaned);
+  });
+}
+function reviewToggleFeatureFlag(flagKey, currentValue) {
+  openReviewDialog(`Toggle Feature Flag: ${flagKey}`, 'updateFeatureFlag', [
+    { key: 'value', label: `New Value (current: ${currentValue})`, type: 'select', options: [{ value: 'true', label: 'true (ON)' }, { value: 'false', label: 'false (OFF)' }] },
+    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Reason for change…' },
+  ], (body) => {
+    const cleaned = { value: body.value === 'true' };
+    if (body.reason) cleaned.reason = body.reason;
+    submitReview('PUT', `/system-config/feature-flags/${encodeURIComponent(flagKey)}`, cleaned);
+  });
+}
+function reviewUpdateSystemParameter(paramKey, currentValue) {
+  openReviewDialog(`Update System Parameter: ${paramKey}`, 'updateSystemParameter', [
+    { key: 'value', label: `New Value (current: ${currentValue})`, type: 'text', required: true, defaultValue: String(currentValue) },
+    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Reason for change…' },
+  ], (body) => {
+    const cleaned = { value: body.value };
+    if (body.reason) cleaned.reason = body.reason;
+    submitReview('PUT', `/system-config/parameters/${encodeURIComponent(paramKey)}`, cleaned);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +360,7 @@ function renderTenantsList() {
       <h1>Tenant Registry</h1>
       <div class="btn-group">
         <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">+ New Tenant Bootstrap</button>
+        <button class="btn" onclick="reviewResolvePlan()">⊕ Resolve Plan (Review)</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -238,11 +485,14 @@ function renderTenantsDetail() {
       <div class="btn-group">
         <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">Initiate Bootstrap</button>
         <button class="btn" onclick="location.hash='#/provisioning'">View Provisioning</button>
-        ${disabledBtn('Suspend Tenant', 'integration-pending — tenant lifecycle write API not implemented (Batch 2)')}
-        ${disabledBtn('Reactivate Tenant', 'integration-pending — tenant lifecycle write API not implemented (Batch 2)')}
-        ${disabledBtn('Archive Tenant', 'integration-pending — tenant lifecycle write API not implemented (Batch 2)')}
+        <button class="btn" onclick="reviewSuspendTenant('${escHtml(tenant.tenantId)}')">Suspend Tenant (Review)</button>
+        <button class="btn" onclick="reviewReactivateTenant('${escHtml(tenant.tenantId)}')">Reactivate Tenant (Review)</button>
+        <button class="btn btn-danger" onclick="reviewArchiveTenant('${escHtml(tenant.tenantId)}')">Archive Tenant (Review)</button>
         <button class="btn" title="Cross-workspace navigation to tenant admin">Open Tenant Admin ↗</button>
       </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
+        Suspend / Reactivate / Archive open review-only dialogs. No real state change occurs.
+      </p>
     </div>
   `;
 }
@@ -373,11 +623,13 @@ function renderTenantsBootstrap() {
     <div class="card" style="margin-top:16px;">
       <h3>Actions</h3>
       <div class="btn-group">
-        ${disabledBtn('Submit Bootstrap Request', 'Disabled — 5 critical gating blockers. Resolve blockers before submission.')}
+        <button class="btn btn-primary" onclick="reviewCreateBootstrapRequest()">Submit Bootstrap Request (Review)</button>
+        <button class="btn" onclick="reviewResolvePlan()">Resolve Plan (Review)</button>
         <button class="btn" onclick="location.hash='#/tenants'">Cancel</button>
       </div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
-        ⚠ Static prototype: Submit would call POST /tenant-bootstrap-requests (W2). No actual API call is made.
+        ⚠ Review-only: Submit opens a review dialog calling POST /tenant-bootstrap-requests. No actual request is created.
+        The plan resolver review calls POST /effective-configuration-plans:resolve. No plan is persisted.
       </p>
     </div>
   `;
@@ -395,6 +647,7 @@ function renderProvisioningRuns() {
     <div class="surface-header">
       <h1>Provisioning Runs</h1>
       <div class="btn-group">
+        <button class="btn btn-primary" onclick="reviewCreateProvisioningRun()">+ Create Provisioning Run (Review)</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -501,9 +754,9 @@ function renderRunDetail(run) {
       <!-- Actions -->
       <div style="margin-top:12px;">
         <div class="btn-group">
-          ${run.status === 'failed' ? '<button class="btn btn-primary">Retry Run</button>' : ''}
+          ${run.status === 'failed' ? `<button class="btn btn-primary" onclick="reviewCreateProvisioningRun('${escHtml(run.tenantId)}', '${escHtml(run.legalMarketId)}')">Retry Run (Review)</button>` : ''}
           ${(run.status === 'queued' || run.status === 'in-progress')
-            ? disabledBtn('Cancel Run', 'integration-pending — provisioning cancel API not implemented (Batch 2)')
+            ? `<button class="btn" onclick="reviewCancelProvisioningRun('${escHtml(run.provisioningRunId)}')">Cancel Run (Review)</button>`
             : ''}
           <button class="btn" onclick="navigate()">↻ Refresh</button>
         </div>
@@ -524,7 +777,7 @@ function renderMarketsManagement() {
     <div class="surface-header">
       <h1>Market Management</h1>
       <div class="btn-group">
-        ${disabledBtn('+ Create Market Draft', 'integration-pending — market authoring API not implemented (Batch 3)')}
+        <button class="btn btn-primary" onclick="reviewCreateMarketDraft()">+ Create Market Draft (Review)</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -707,9 +960,14 @@ function renderMarketsDetail() {
     <div class="card" style="margin-top:16px;">
       <h3>Actions</h3>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">Bootstrap Tenant for PH</button>
+        <button class="btn btn-primary" onclick="reviewUpdateMarketDraft('${escHtml(market.legalMarketId)}')">Update Market Draft (Review)</button>
+        <button class="btn" onclick="reviewSubmitMarketForReview('${escHtml(market.legalMarketId)}')">Submit for Review (Review)</button>
+        <button class="btn" onclick="location.hash='#/tenants/bootstrap'">Bootstrap Tenant for PH</button>
         <button class="btn" onclick="location.hash='#/markets'">← Back to Markets</button>
       </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
+        ⚠ Review-only: Update and Submit open review dialogs. No market profile is actually modified or submitted.
+      </p>
     </div>
   `;
 }
@@ -727,7 +985,7 @@ function renderPacksCatalog() {
     <div class="surface-header">
       <h1>Pack Catalog</h1>
       <div class="btn-group">
-        ${disabledBtn('+ Create Pack Draft', 'integration-pending — pack authoring API not implemented (Batch 3)')}
+        <button class="btn btn-primary" onclick="reviewCreatePackDraft()">+ Create Pack Draft (Review)</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -820,8 +1078,8 @@ function renderPacksCatalog() {
 
       <div style="margin-top:12px;">
         <div class="btn-group">
-          ${disabledBtn('Update Pack Draft', 'integration-pending — pack authoring API not implemented (Batch 3)')}
-          ${disabledBtn('Submit for Review', 'integration-pending — pack review API not implemented (Batch 3)')}
+          <button class="btn" onclick="reviewUpdatePackDraft('${escHtml(items[0].packId)}')">Update Pack Draft (Review)</button>
+          <button class="btn" onclick="reviewSubmitPackForReview('${escHtml(items[0].packId)}')">Submit for Review (Review)</button>
         </div>
       </div>
     </div>
@@ -883,7 +1141,7 @@ function renderSystemConfig() {
               <td>${f.enabled ? '<span style="color:var(--success);font-weight:600;">ON</span>' : '<span style="color:var(--text-muted);">OFF</span>'}</td>
               <td>${escHtml(f.scope)}</td>
               <td>${fmtDate(f.updatedAt)}</td>
-              <td>${disabledBtn('Toggle', 'integration-pending — system config write API not implemented (Batch 3)')}</td>
+              <td><button class="btn" onclick="reviewToggleFeatureFlag('${escHtml(f.flagKey)}', ${f.enabled})">Toggle (Review)</button></td>
             </tr>
           `).join('')}
         </tbody>
@@ -905,7 +1163,7 @@ function renderSystemConfig() {
                   <td><strong>${escHtml(p.value)}</strong></td>
                   <td>${escHtml(p.defaultValue || '—')}</td>
                   <td style="font-size:12px;">${escHtml(p.description || '')}</td>
-                  <td>${disabledBtn('Edit', 'integration-pending — system config write API not implemented (Batch 3)')}</td>
+                  <td><button class="btn" onclick="reviewUpdateSystemParameter('${escHtml(p.paramKey)}', '${escHtml(p.value)}')">Edit (Review)</button></td>
                 </tr>
               `).join('')}
             </tbody>

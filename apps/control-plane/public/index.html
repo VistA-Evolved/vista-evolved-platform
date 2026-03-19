@@ -13,7 +13,7 @@
       LOCAL DEV REVIEW — FIXTURE-BACKED ·
       All data served from local API routes backed by checked-in fixture JSON ·
       Read-only · No persistence · No authentication ·
-      Write controls are visible but non-persistent
+      Write actions open review-only simulation dialogs (no real execution)
     </div>
 
     <div class="shell">
@@ -35,6 +35,11 @@
         <!-- Rendered by app.js -->
       </main>
     </div>
+  </div>
+
+  <!-- Review dialog overlay (populated by app.js) -->
+  <div id="review-dialog-overlay" class="review-overlay" style="display:none;">
+    <div class="review-dialog" id="review-dialog"></div>
   </div>
 
   <script src="app.js"></script>

@@ -48,6 +48,7 @@
 | Control-panel action semantics and source-of-truth binding batch 1 | `docs/explanation/control-panel-action-semantics-and-source-of-truth-binding-batch-1.md` | Master action matrix binding operator actions to API operations, SoT, permissions, events, claim surfaces |
 | Control-panel design contract and static-review prototype batch 1 | `docs/explanation/control-panel-design-contract-and-static-review-prototype-batch-1.md` | Design contract: layout regions, reject/ready checklists, static review criteria, interaction patterns for all 8 control-plane surfaces |
 | Control-plane static-review prototype implementation batch 2 | `docs/explanation/control-plane-static-review-prototype-implementation-batch-2.md` | Implementation record: vanilla HTML/CSS/JS prototype rendering all 8 surfaces from fixture data, write control posture, fixture provenance |
+| Control-plane local write review runtime batch 3 | `docs/explanation/control-plane-local-write-review-runtime-batch-3.md` | Review-only write simulation for all 15 contracted write actions: route architecture, ReviewEnvelope contract, safety posture, UI integration |
 | AI assist safety | `docs/explanation/ai-assist-safety-spec.md` | Assist taxonomy, input/output governance, review model, write-back rules, PHI handling, provider posture, audit, claim boundaries |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
