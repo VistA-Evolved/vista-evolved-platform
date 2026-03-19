@@ -32,6 +32,7 @@ import { readFile } from 'node:fs/promises';
 import { loadContractData } from './lib/contract-loader.mjs';
 import { resolveLocalOperatorContext } from './lib/local-operator-context.mjs';
 import { CONTROL_PLANE_REQUIRED_ROLE } from './lib/access-map.mjs';
+import { runDriftAudit } from './lib/drift-audit.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4500', 10);
@@ -68,6 +69,18 @@ if (contractData.integrityWarnings.length > 0) {
   console.log('[integrity] All pack references resolve — 0 warnings');
 }
 console.log(`[contract-loader] Pack catalog: ${contractData.packCatalog.detailIndex.size} packs loaded (${contractData.packCatalog.detailIndex.size - 1} contract + 1 demo)`);
+
+// Startup drift audit — compare resolver output to seed effective plans
+const driftResult = runDriftAudit(contractData);
+if (driftResult.driftItems.length > 0) {
+  console.warn(`[drift-audit] ${driftResult.summary}`);
+  for (const d of driftResult.driftItems) {
+    const prefix = d.severity === 'error' ? '  ✗' : d.severity === 'warning' ? '  ⚠' : '  ℹ';
+    console.warn(`${prefix} [${d.legalMarketId}] ${d.category}: ${d.detail}`);
+  }
+} else {
+  console.log(`[drift-audit] ${driftResult.summary}`);
+}
 
 const server = Fastify({ logger: true });
 
@@ -107,7 +120,7 @@ registerRoutes(server, fixtures, contractData);
 
 // LOCAL REVIEW-ONLY write routes (validation & preview, no persistence)
 const { default: registerReviewRoutes } = await import('./routes/review.mjs');
-registerReviewRoutes(server);
+registerReviewRoutes(server, contractData);
 
 await server.listen({ port: PORT, host: '127.0.0.1' });
 server.log.info(`Control-plane review runtime listening on http://127.0.0.1:${PORT}`);

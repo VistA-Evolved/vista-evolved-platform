@@ -17,6 +17,7 @@
  */
 
 import { REVIEW_ACTIONS, validateReviewRequest, buildReviewEnvelope } from '../review-action-map.mjs';
+import { resolveEffectivePlan, RESOLVER_VERSION } from '../lib/plan-resolver.mjs';
 
 const PREFIX = '/api/control-plane-review/v1';
 
@@ -34,7 +35,7 @@ function reviewHandler(actionKey, extractParams) {
   };
 }
 
-export default function registerReviewRoutes(server) {
+export default function registerReviewRoutes(server, contractData) {
   // ── Tenant Lifecycle ─────────────────────────────────────────────────
   server.post(`${PREFIX}/tenants/:tenantId/suspend`, reviewHandler(
     'suspendTenant',
@@ -52,17 +53,77 @@ export default function registerReviewRoutes(server) {
   ));
 
   // ── Bootstrap & Provisioning ─────────────────────────────────────────
-  server.post(`${PREFIX}/effective-configuration-plans/resolve`, reviewHandler(
-    'resolveEffectiveConfigurationPlan'
-  ));
+  // W4 — resolver-backed effective configuration plan resolution
+  server.post(`${PREFIX}/effective-configuration-plans/resolve`, async (request, reply) => {
+    const body = request.body || {};
+    const actionKey = 'resolveEffectiveConfigurationPlan';
 
-  server.post(`${PREFIX}/tenant-bootstrap-requests`, reviewHandler(
-    'createTenantBootstrapRequest'
-  ));
+    // Standard review validation
+    const validation = validateReviewRequest(actionKey, body, {});
+    const envelope = buildReviewEnvelope(actionKey, body, {}, validation);
 
-  server.post(`${PREFIX}/provisioning-runs`, reviewHandler(
-    'createProvisioningRun'
-  ));
+    // Run the real resolver if validation passed and contractData available
+    if (validation.valid && contractData) {
+      const result = resolveEffectivePlan(contractData, {
+        legalMarketId: body.legalMarketId,
+        selectedPacks: body.selectedPacks || [],
+        deselectedDefaults: body.deselectedDefaults || [],
+        facilityType: body.facilityType || '',
+        tenantDisplayName: body.tenantDisplayName || '',
+      });
+      envelope.resolutionPreview = result.ok ? result.resolution : null;
+      envelope.resolutionError = result.ok ? null : result.error;
+      envelope.resolverVersion = RESOLVER_VERSION;
+    }
+
+    return envelope;
+  });
+
+  // W5 — bootstrap request with resolver preflight
+  server.post(`${PREFIX}/tenant-bootstrap-requests`, async (request, reply) => {
+    const body = request.body || {};
+    const actionKey = 'createTenantBootstrapRequest';
+
+    const validation = validateReviewRequest(actionKey, body, {});
+    const envelope = buildReviewEnvelope(actionKey, body, {}, validation);
+
+    // Preflight: if the body includes legalMarketId, run resolver for context
+    if (contractData && body.legalMarketId) {
+      const result = resolveEffectivePlan(contractData, {
+        legalMarketId: body.legalMarketId,
+        selectedPacks: body.selectedPacks || [],
+        deselectedDefaults: body.deselectedDefaults || [],
+        facilityType: body.facilityType || '',
+      });
+      envelope.resolverPreflight = {
+        resolverVersion: RESOLVER_VERSION,
+        marketFound: result.ok,
+        resolvedPackCount: result.resolution?.resolvedPacks?.length ?? 0,
+        deferredItemCount: result.resolution?.deferredItems?.length ?? 0,
+        gatingBlockerCount: result.resolution?.readinessPosture?.gatingBlockers?.length ?? 0,
+        effectiveLaunchTier: result.resolution?.readinessPosture?.effectiveLaunchTier ?? 'unknown',
+      };
+    }
+
+    return envelope;
+  });
+
+  // W6 — provisioning run with resolver preflight
+  server.post(`${PREFIX}/provisioning-runs`, async (request, reply) => {
+    const body = request.body || {};
+    const actionKey = 'createProvisioningRun';
+
+    const validation = validateReviewRequest(actionKey, body, {});
+    const envelope = buildReviewEnvelope(actionKey, body, {}, validation);
+
+    // Preflight: provisioning requires a non-empty gating blocker check
+    envelope.resolverPreflight = {
+      resolverVersion: RESOLVER_VERSION,
+      note: 'Provisioning run depends on an approved bootstrap request which references a resolved plan. Full resolver preflight runs at bootstrap time.',
+    };
+
+    return envelope;
+  });
 
   server.post(`${PREFIX}/provisioning-runs/:provisioningRunId/cancel`, reviewHandler(
     'cancelProvisioningRun',

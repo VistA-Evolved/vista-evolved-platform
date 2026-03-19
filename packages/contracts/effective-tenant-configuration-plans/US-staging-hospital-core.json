@@ -55,7 +55,7 @@
     {
       "packId": "lang-es",
       "reason": "pack-not-published",
-      "migrationPath": "Requires: (1) lang-es pack manifest authored and published, (2) Spanish translations implemented in distro and platform. Spanish is already a bounded product language per VE-DISTRO-ADR-0003.",
+      "migrationPath": "Requires: (1) lang-es pack to reach published lifecycle (currently draft), (2) Spanish translations implemented in distro and platform. Spanish is a bounded product language per VE-DISTRO-ADR-0003.",
       "targetState": "specified"
     }
   ],
@@ -63,9 +63,9 @@
   "readinessPosture": {
     "language": {
       "state": "specified",
-      "scopeBounds": "English baseline only. Spanish not yet available as a pack.",
+      "scopeBounds": "English baseline active. Spanish pack (lang-es) exists as draft — no implemented translations.",
       "constrainingFactors": [
-        "Only English is available. Spanish pack (lang-es) does not yet exist.",
+        "Spanish pack (lang-es) exists as draft but has not reached published lifecycle. No translations implemented.",
         "English pack (lang-en) is draft — no runtime artifacts."
       ]
     },

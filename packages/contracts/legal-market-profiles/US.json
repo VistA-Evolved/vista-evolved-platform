@@ -43,10 +43,10 @@
       "packId": "lang-es",
       "packFamily": "language",
       "eligibilityConditions": [
-        "Requires lang-es pack manifest to be authored and published.",
+        "Requires lang-es pack manifest to be published (currently draft).",
         "Spanish is a bounded product language per VE-DISTRO-ADR-0003.",
         "Relevant for facilities serving significant Spanish-speaking populations.",
-        "This pack does not yet exist."
+        "Pack manifest exists as draft. No implemented translations yet."
       ]
     }
   ],
@@ -64,8 +64,8 @@
       "state": "specified",
       "evidenceRef": "",
       "lastVerified": "2026-03-20T00:00:00Z",
-      "scopeBounds": "English baseline only. Spanish not yet available as a pack.",
-      "notes": "English pack (lang-en) exists as a draft manifest. No implemented translations yet. English is the natural baseline for US market."
+      "scopeBounds": "English baseline active. Spanish pack (lang-es) exists as draft — no implemented translations yet.",
+      "notes": "English pack (lang-en) and Spanish pack (lang-es) both exist as draft manifests. No implemented translations for either. English is the natural baseline for US market."
     },
     "regulatory": {
       "state": "declared",

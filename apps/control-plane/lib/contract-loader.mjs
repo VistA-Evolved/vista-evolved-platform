@@ -310,14 +310,20 @@ function auditPackReferences(packCatalog, legalMarketProfiles, capabilities, eff
 
   // Check legal-market profile pack references
   for (const market of legalMarketProfiles.items) {
-    const allRefs = [
+    // Mandated and default-on packs missing a manifest are genuine warnings
+    const requiredRefs = [
       ...(market.mandatedPacks || []),
       ...(market.defaultOnPacks || []),
-      ...(market.eligiblePacks || []),
     ];
-    for (const ref of allRefs) {
+    for (const ref of requiredRefs) {
       if (!knownPackIds.has(ref.packId)) {
-        warnings.push(`legal-market-profile "${market.legalMarketId}" references unknown pack "${ref.packId}"`);
+        warnings.push(`legal-market-profile "${market.legalMarketId}" references unknown pack "${ref.packId}" (mandated/default-on — should exist)`);
+      }
+    }
+    // Eligible packs missing a manifest are policy-deferred, not broken
+    for (const ref of (market.eligiblePacks || [])) {
+      if (!knownPackIds.has(ref.packId)) {
+        warnings.push(`legal-market-profile "${market.legalMarketId}" eligible pack "${ref.packId}" has no manifest (policy-deferred — eligibility conditions not yet met)`);
       }
     }
   }

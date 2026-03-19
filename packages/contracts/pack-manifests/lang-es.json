@@ -1,0 +1,47 @@
+{
+  "packId": "lang-es",
+  "displayName": "Spanish Language Pack",
+  "description": "Spanish language pack for facilities serving Spanish-speaking populations. Provides future UI strings, VistA dialog translations, terminal prompts, and menu translations in Spanish. Spanish is a bounded product language per VE-DISTRO-ADR-0003 (UTF-8 primary lane). This is a planning-stage manifest; no implemented translations exist yet.",
+  "packFamily": "language",
+  "version": "0.1.0",
+  "lifecycle": {
+    "state": "draft",
+    "owner": "platform-team",
+    "implementationLocus": "cross-repo",
+    "createdAt": "2026-03-20T00:00:00Z",
+    "lastModifiedAt": "2026-03-20T00:00:00Z"
+  },
+  "attachment": {
+    "primaryEntity": "tenant",
+    "overrideScopes": ["facility"]
+  },
+  "dependencies": [
+    {
+      "packId": "lang-en",
+      "type": "required",
+      "rationale": "English baseline is required. Spanish supplements but does not replace English."
+    }
+  ],
+  "eligibility": {
+    "legalMarkets": ["US"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+  "contentSummary": {
+    "contentTypes": ["translations", "templates"],
+    "artifactCount": 0,
+    "languageTag": "es",
+    "translationCoverage": 0
+  },
+  "adapterRequirements": [],
+  "configurationKeys": [],
+  "capabilityContributions": [
+    {
+      "capabilityId": "clinical.language-support",
+      "contributionType": "enhances",
+      "description": "Spanish language support enhances the language-support capability for facilities serving Spanish-speaking populations. Requires English baseline active."
+    }
+  ]
+}

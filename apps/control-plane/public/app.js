@@ -189,6 +189,106 @@ function renderReviewResult(data) {
   const container = document.getElementById('rv-result');
   const isValid = data.validation && data.validation.valid;
 
+  let resolutionHtml = '';
+  if (data.resolutionPreview) {
+    const rp = data.resolutionPreview;
+    resolutionHtml = `
+      <div class="result-section">
+        <h4>Resolution Preview (Resolver v${escHtml(data.resolverVersion || rp.resolverVersion)})</h4>
+        <dl class="kv-list" style="font-size:13px;">
+          <dt>Legal Market</dt><dd>${escHtml(rp.legalMarketId)}</dd>
+          <dt>Profile Version</dt><dd>${escHtml(rp.profileVersion)}</dd>
+          <dt>Resolver Version</dt><dd>${escHtml(rp.resolverVersion)}</dd>
+          <dt>Facility Type</dt><dd>${escHtml(rp.facilityType || 'unspecified')}</dd>
+          <dt>Resolved Packs</dt><dd>${rp.resolvedPacks.length}</dd>
+          <dt>Deferred Items</dt><dd>${rp.deferredItems.length}</dd>
+          <dt>Dependency Issues</dt><dd>${(rp.dependencyIssues || []).length}</dd>
+          <dt>Gating Blockers</dt><dd>${rp.readinessPosture.gatingBlockers.length}</dd>
+          <dt>Effective Launch Tier</dt><dd>${badge(rp.readinessPosture.effectiveLaunchTier)}</dd>
+          <dt>Resolved At</dt><dd>${fmtDate(rp.resolvedAt)}</dd>
+        </dl>
+      </div>
+
+      <div class="result-section">
+        <h4>Resolved Packs (${rp.resolvedPacks.length})</h4>
+        <table style="font-size:13px;">
+          <thead><tr><th>Pack ID</th><th>Family</th><th>Source</th><th>State</th><th>Readiness</th><th>Constraints</th></tr></thead>
+          <tbody>
+            ${rp.resolvedPacks.map(p => `<tr>
+              <td><code>${escHtml(p.packId)}</code></td>
+              <td>${badge(p.packFamily)}</td>
+              <td>${badge(p.activationSource)}</td>
+              <td>${badge(p.packState)}</td>
+              <td>${badge(p.readinessState)}</td>
+              <td style="font-size:11px;">${(p.constraints || []).map(c => '• ' + escHtml(c)).join('<br>')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      ${rp.deferredItems.length > 0 ? `
+        <div class="result-section">
+          <h4>Deferred Items (${rp.deferredItems.length})</h4>
+          <table style="font-size:13px;">
+            <thead><tr><th>Pack ID</th><th>Reason</th><th>Migration Path</th></tr></thead>
+            <tbody>
+              ${rp.deferredItems.map(d => `<tr>
+                <td><code>${escHtml(d.packId)}</code></td>
+                <td>${badge(d.reason)}</td>
+                <td style="font-size:11px;">${escHtml(d.migrationPath)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      ${(rp.dependencyIssues || []).length > 0 ? `
+        <div class="result-section">
+          <h4>Dependency Issues (${rp.dependencyIssues.length})</h4>
+          <ul>${rp.dependencyIssues.map(i => `<li style="font-size:13px;">${escHtml(i.detail)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
+
+      <div class="result-section">
+        <h4>Gating Blockers (${rp.readinessPosture.gatingBlockers.length})</h4>
+        ${rp.readinessPosture.gatingBlockers.length > 0 ? `
+          <ul class="blocker-list">
+            ${rp.readinessPosture.gatingBlockers.map(b => `
+              <li class="warning" style="font-size:13px;">
+                <span class="blocker-dim">${escHtml(b.dimension)}</span>: ${escHtml(b.blocker)}
+              </li>
+            `).join('')}
+          </ul>
+        ` : '<p style="font-size:13px;color:var(--success);">No gating blockers.</p>'}
+      </div>
+    `;
+  } else if (data.resolutionError) {
+    resolutionHtml = `
+      <div class="result-section">
+        <h4>Resolution Error</h4>
+        <p style="color:var(--danger);">${escHtml(data.resolutionError)}</p>
+      </div>
+    `;
+  }
+
+  let preflightHtml = '';
+  if (data.resolverPreflight) {
+    const pf = data.resolverPreflight;
+    preflightHtml = `
+      <div class="result-section">
+        <h4>Resolver Preflight (v${escHtml(pf.resolverVersion || '?')})</h4>
+        <dl class="kv-list" style="font-size:13px;">
+          ${pf.marketFound !== undefined ? `<dt>Market Found</dt><dd>${pf.marketFound ? 'Yes' : 'No'}</dd>` : ''}
+          ${pf.resolvedPackCount !== undefined ? `<dt>Resolved Packs</dt><dd>${pf.resolvedPackCount}</dd>` : ''}
+          ${pf.deferredItemCount !== undefined ? `<dt>Deferred Items</dt><dd>${pf.deferredItemCount}</dd>` : ''}
+          ${pf.gatingBlockerCount !== undefined ? `<dt>Gating Blockers</dt><dd>${pf.gatingBlockerCount}</dd>` : ''}
+          ${pf.effectiveLaunchTier ? `<dt>Effective Launch Tier</dt><dd>${badge(pf.effectiveLaunchTier)}</dd>` : ''}
+          ${pf.note ? `<dt>Note</dt><dd>${escHtml(pf.note)}</dd>` : ''}
+        </dl>
+      </div>
+    `;
+  }
+
   container.innerHTML = `
     <div class="review-result">
       <div class="result-header ${isValid ? 'valid' : 'invalid'}">
@@ -201,6 +301,9 @@ function renderReviewResult(data) {
           <ul>${data.validation.errors.map(e => `<li style="font-size:13px;color:var(--danger);">${escHtml(e)}</li>`).join('')}</ul>
         </div>
       ` : ''}
+
+      ${resolutionHtml}
+      ${preflightHtml}
 
       <div class="result-section">
         <h4>Canonical Operation</h4>
@@ -251,16 +354,71 @@ function reviewArchiveTenant(tenantId) {
 }
 function reviewResolvePlan() {
   const markets = FIXTURES['legal-market-profiles'].items;
+  const packItems = FIXTURES['packs'].items;
+
+  // Build eligible pack checkboxes per market
+  function eligiblePacksFor(marketId) {
+    const market = markets.find(m => m.legalMarketId === marketId);
+    if (!market || !market.eligiblePacks) return [];
+    return market.eligiblePacks.map(p => ({
+      packId: typeof p === 'string' ? p : p.packId,
+      displayName: (typeof p === 'object' && p.displayName) ? p.displayName : (typeof p === 'string' ? p : p.packId),
+      hasManifest: packItems.some(pi => pi.packId === (typeof p === 'string' ? p : p.packId)),
+    }));
+  }
+
   openReviewDialog('Resolve Effective Configuration Plan', 'resolveEffectiveConfigurationPlan', [
     { key: 'legalMarketId', label: 'Legal Market ID', type: 'select', options: markets.map(m => ({ value: m.legalMarketId, label: `${m.displayName} (${m.legalMarketId})` })) },
     { key: 'tenantDisplayName', label: 'Tenant Display Name (optional)', type: 'text', placeholder: 'e.g., Sunrise Medical Center' },
     { key: 'facilityType', label: 'Facility Type (optional)', type: 'select', options: [{ value: '', label: '(none)' }, { value: 'single-clinic', label: 'Single Clinic' }, { value: 'multi-facility', label: 'Multi-Facility' }, { value: 'hospital', label: 'Hospital' }] },
-  ], (body) => {
+  ], async (body) => {
     const cleaned = { legalMarketId: body.legalMarketId };
     if (body.tenantDisplayName) cleaned.tenantDisplayName = body.tenantDisplayName;
     if (body.facilityType) cleaned.facilityType = body.facilityType;
-    submitReview('POST', '/effective-configuration-plans/resolve', cleaned);
+
+    // Collect eligible pack selections
+    const eligible = eligiblePacksFor(body.legalMarketId);
+    const selectedPacks = eligible
+      .filter(ep => { const el = document.getElementById(`rv-ep-${ep.packId}`); return el && el.checked; })
+      .map(ep => ep.packId);
+    if (selectedPacks.length > 0) cleaned.selectedPacks = selectedPacks;
+
+    await submitReview('POST', '/effective-configuration-plans/resolve', cleaned);
   });
+
+  // After dialog opens, inject eligible pack checkboxes
+  setTimeout(() => {
+    const marketSel = document.getElementById('rv-legalMarketId');
+    const submitBtn = document.getElementById('rv-submit');
+    if (!marketSel || !submitBtn) return;
+
+    function renderEligibleSection() {
+      let existing = document.getElementById('rv-eligible-section');
+      if (existing) existing.remove();
+
+      const eligible = eligiblePacksFor(marketSel.value);
+      if (eligible.length === 0) return;
+
+      const section = document.createElement('div');
+      section.id = 'rv-eligible-section';
+      section.style.cssText = 'margin-top:12px;padding:8px;border:1px solid var(--border);border-radius:4px;';
+      section.innerHTML = `
+        <label style="font-size:13px;font-weight:600;">Eligible Packs (optional selections)</label>
+        ${eligible.map(ep => `
+          <div class="review-checkbox" style="margin-top:4px;">
+            <input type="checkbox" id="rv-ep-${escHtml(ep.packId)}" ${!ep.hasManifest ? 'disabled' : ''}>
+            <label for="rv-ep-${escHtml(ep.packId)}" style="${!ep.hasManifest ? 'opacity:0.5;' : ''}">
+              ${escHtml(ep.packId)} ${!ep.hasManifest ? '(no manifest — will be deferred)' : ''}
+            </label>
+          </div>
+        `).join('')}
+      `;
+      submitBtn.parentElement.insertBefore(section, submitBtn.parentElement.firstChild);
+    }
+
+    renderEligibleSection();
+    marketSel.addEventListener('change', renderEligibleSection);
+  }, 50);
 }
 function reviewCreateBootstrapRequest() {
   openReviewDialog('Create Tenant Bootstrap Request', 'createTenantBootstrapRequest', [

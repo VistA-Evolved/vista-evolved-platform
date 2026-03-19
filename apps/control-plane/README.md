@@ -149,6 +149,50 @@ All fixture JSON files in `fixtures/` include `_provenance` metadata tracing eac
 value back to its source contract artifact. The `_provenance` key is stripped from
 API responses so clients see clean data matching the OpenAPI response schemas.
 
+## Composition engine (resolver)
+
+The control plane includes a **deterministic effective-configuration composition engine**
+in `lib/plan-resolver.mjs`. This resolver computes which packs apply to a given
+market + tenant configuration without any runtime infrastructure.
+
+### How it works
+
+Given a legal market ID and optional tenant selections (selected packs, deselected defaults),
+the resolver:
+
+1. Looks up the legal market profile (mandated, default-on, eligible, excluded packs)
+2. Builds an exclusion set from the market's `excludedPacks`
+3. Resolves mandated packs (required by law — always included if the manifest exists)
+4. Resolves default-on packs (included unless the tenant deselects, honoring deactivation constraints)
+5. Resolves eligible packs (included only if the tenant explicitly selects them)
+6. Runs a dependency resolution pass (adds any required dependencies not already resolved)
+7. Computes a readiness posture with gating blockers
+
+The output is a `resolution` object containing `resolvedPacks`, `deferredItems`,
+`dependencyIssues`, and `readinessPosture`.
+
+### Resolver-backed review routes
+
+- **W4** (`POST .../effective-configuration-plans/resolve`) — runs the full resolver and returns
+  a `resolutionPreview` in the review envelope
+- **W5** (`POST .../tenant-bootstrap-requests`) — includes a `resolverPreflight` summary
+  showing how many packs would resolve for the specified market
+- **W6** (`POST .../provisioning-runs`) — includes a `resolverPreflight` note
+
+### Startup drift audit
+
+At startup, `lib/drift-audit.mjs` re-resolves each seed effective plan and compares
+the output to the seed's static data. Drift categories include `resolver-version-stale`,
+`deferred-reason-changed`, `pack-count-changed`, etc. Drift is reported as startup
+warnings — it does not block the server.
+
+### Pack integrity audit
+
+At startup, `lib/contract-loader.mjs` validates that all pack IDs referenced by market
+profiles, capabilities, and effective plans resolve to actual manifests. Warnings distinguish:
+- **mandated/default-on** packs missing a manifest — genuine issue
+- **eligible** packs missing a manifest — policy-deferred (eligibility conditions not yet met)
+
 ## What this is NOT
 
 - Not a production runtime — hybrid contract/fixture-backed, no real data store.
