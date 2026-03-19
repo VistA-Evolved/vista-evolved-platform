@@ -20,7 +20,7 @@
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  *
  * Base path: /api/control-plane/v1
- * No writes, no auth, no persistence.
+ * No writes, no persistence. Operator-access enforced at server level.
  */
 
 const PREFIX = '/api/control-plane/v1';

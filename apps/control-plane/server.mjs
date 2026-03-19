@@ -19,7 +19,7 @@
  *
  * Review-only routes: /api/control-plane-review/v1/* — validation & preview only.
  *
- * No persistence, no authentication, no real writes.
+ * No persistence, no real writes. Local operator-access enforcement (not real auth).
  * Route names and response shapes align with:
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  */
@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { loadContractData } from './lib/contract-loader.mjs';
+import { resolveLocalOperatorContext } from './lib/local-operator-context.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4500', 10);
@@ -73,6 +74,29 @@ const server = Fastify({ logger: true });
 await server.register(fastifyStatic, {
   root: join(__dirname, 'public'),
   prefix: '/',
+});
+
+// Local operator-access enforcement — NOT real auth.
+// Role read from X-Local-Role header; default: platform-operator.
+// Only platform-operator may access control-plane API routes.
+server.addHook('onRequest', async (request, reply) => {
+  if (!request.url.startsWith('/api/')) return;
+  const ctx = resolveLocalOperatorContext(request);
+  if (!ctx.recognized) {
+    return reply.code(400).send({
+      error: 'invalid_role',
+      message: ctx.reason,
+      validRoles: ctx.validRoles,
+    });
+  }
+  if (!ctx.allowed) {
+    return reply.code(403).send({
+      error: 'access_denied',
+      message: ctx.reason,
+      activeRole: ctx.role,
+      requiredRole: 'platform-operator',
+    });
+  }
 });
 
 // Read-only API routes (hybrid: contract-backed + fixture-backed)

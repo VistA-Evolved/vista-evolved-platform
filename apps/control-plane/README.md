@@ -30,6 +30,26 @@ For file-watching during development:
 npm run dev
 ```
 
+## Local operator-access enforcement
+
+All API routes enforce a **local operator-access layer** (not real authentication).
+The active role is read from the `X-Local-Role` request header.
+
+| Behavior | Detail |
+|----------|--------|
+| Default role | `platform-operator` (when no header is sent) |
+| Allowed role | `platform-operator` — full access to all control-plane routes |
+| Denied roles | `tenant-admin`, `clinician`, `ancillary-staff`, `revenue-cycle`, `analyst`, `it-integration` |
+| Invalid role | Returns 400 with valid role list |
+| Denied response | 403 with `{ error: "access_denied", activeRole, requiredRole }` |
+
+The UI includes a role switcher in the top banner. Selecting a non-operator role triggers
+403 responses and displays an access-denied state. This is a local review-only simulation
+derived from `docs/reference/permissions-matrix.md` — not a real auth subsystem.
+
+Static assets (HTML/CSS/JS) are always served regardless of role, so the UI can render
+the access-denied state and role switcher.
+
 ## API routes
 
 | # | Operation | Route | Source |
@@ -131,3 +151,4 @@ API responses so clients see clean data matching the OpenAPI response schemas.
 - Not a production runtime — hybrid contract/fixture-backed, no real data store.
 - Not a design mockup — layout follows the screen-contract spec, not visual design.
 - Not persistent — form inputs reset on navigation. Write routes are review-only (local simulation, no persistence).
+- Not real authentication — the local operator-access layer simulates role enforcement via request header, not SSO/OIDC/JWT.

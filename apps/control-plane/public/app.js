@@ -19,6 +19,28 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
+// Local operator role — review-only role simulation (NOT real auth)
+// ---------------------------------------------------------------------------
+function getActiveRole() {
+  return localStorage.getItem('cp-local-role') || 'platform-operator';
+}
+
+function setActiveRole(role) {
+  localStorage.setItem('cp-local-role', role);
+}
+
+function apiFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  headers['X-Local-Role'] = getActiveRole();
+  return fetch(url, { ...options, headers });
+}
+
+function switchRole(role) {
+  setActiveRole(role);
+  boot();
+}
+
+// ---------------------------------------------------------------------------
 // API loader — fetches from local Fastify routes
 // ---------------------------------------------------------------------------
 const API_BASE = '/api/control-plane/v1';
@@ -37,9 +59,37 @@ async function loadFixtures() {
     ['system-config',         '/system-config']
   ];
   for (const [key, path] of endpoints) {
-    const resp = await fetch(`${API_BASE}${path}`);
+    const resp = await apiFetch(`${API_BASE}${path}`);
+    if (resp.status === 403 || resp.status === 400) {
+      const err = await resp.json();
+      renderAccessDenied(err);
+      return false;
+    }
     FIXTURES[key] = await resp.json();
   }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Access-denied rendering
+// ---------------------------------------------------------------------------
+function renderAccessDenied(err) {
+  document.getElementById('app').innerHTML = `
+    <div class="access-denied">
+      <div class="access-denied-icon">&#x1f512;</div>
+      <h2>Access Denied</h2>
+      <p>${escHtml(err.message || 'Access denied')}</p>
+      <dl class="kv-list" style="margin-top:16px;">
+        <dt>Active Role</dt><dd><strong>${escHtml(err.activeRole || getActiveRole())}</strong></dd>
+        <dt>Required Role</dt><dd><strong>platform-operator</strong></dd>
+      </dl>
+      <p style="margin-top:16px;font-size:13px;color:var(--text-muted);">
+        Use the role selector in the banner to switch to <em>platform-operator</em>.
+        This is a local review-only role simulation &mdash; not real authentication.
+      </p>
+    </div>
+  `;
+  document.querySelectorAll('.nav-sidebar a').forEach(a => a.classList.remove('active'));
 }
 
 // ---------------------------------------------------------------------------
@@ -118,11 +168,19 @@ function openReviewDialog(title, operationId, fields, submitFn) {
 }
 
 async function submitReview(method, path, body) {
-  const resp = await fetch(`${REVIEW_API_BASE}${path}`, {
+  const resp = await apiFetch(`${REVIEW_API_BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  if (resp.status === 403 || resp.status === 400) {
+    const err = await resp.json();
+    const container = document.getElementById('rv-result');
+    if (container) {
+      container.innerHTML = `<div class="review-result"><div class="result-header invalid">Access Denied &mdash; ${escHtml(err.message || 'Insufficient permissions')}</div></div>`;
+    }
+    return;
+  }
   const data = await resp.json();
   renderReviewResult(data);
 }
@@ -1208,8 +1266,13 @@ function renderErrorState() {
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
-(async function boot() {
-  await loadFixtures();
+async function boot() {
+  const sel = document.getElementById('role-selector');
+  if (sel) sel.value = getActiveRole();
+  const ok = await loadFixtures();
+  if (!ok) return;
   navigate();
-  window.addEventListener('hashchange', navigate);
-})();
+}
+
+boot();
+window.addEventListener('hashchange', navigate);
