@@ -1,0 +1,65 @@
+{
+  "_provenance": {
+    "source": "PH market data derived VERBATIM from packages/contracts/legal-market-profiles/PH.json. US market fabricated from OpenAPI LegalMarketProfileSummary schema to demonstrate a second market at draft/T0 status.",
+    "generatedFor": "Static review prototype — PH data is real contract data, US data is fabricated",
+    "schemaRef": "LegalMarketProfileSummary, LegalMarketProfileListResponse, ReadinessDimensionSummary"
+  },
+  "items": [
+    {
+      "legalMarketId": "PH",
+      "version": "0.1.0",
+      "displayName": "Philippines",
+      "status": "draft",
+      "launchTier": "T0",
+      "mandatedPackCount": 2,
+      "defaultOnPackCount": 3,
+      "eligiblePackCount": 1,
+      "excludedPackCount": 1,
+      "mandatedPacks": [
+        { "packId": "regulatory-philhealth-doh", "packFamily": "regulatory", "displayName": "Philippines DOH / PhilHealth Regulatory Pack", "lifecycleState": "draft" },
+        { "packId": "standards-ph", "packFamily": "national-standards", "displayName": "Philippines National Standards Pack", "lifecycleState": "draft" }
+      ],
+      "defaultOnPacks": [
+        { "packId": "lang-en", "packFamily": "language", "displayName": "English Language Pack (Baseline)", "lifecycleState": "draft" },
+        { "packId": "locale-ph", "packFamily": "locale", "displayName": "Philippines Locale Pack", "lifecycleState": "draft" },
+        { "packId": "payer-philhealth", "packFamily": "payer", "displayName": "PhilHealth Payer Pack", "lifecycleState": "draft" }
+      ],
+      "eligiblePacks": [
+        { "packId": "lang-fil", "packFamily": "language", "displayName": "Filipino Language Pack", "lifecycleState": "draft" }
+      ],
+      "readinessDimensions": [
+        { "dimension": "language", "state": "specified", "scopeBounds": "English baseline only. Filipino not yet a bounded product language." },
+        { "dimension": "regulatory", "state": "declared", "scopeBounds": "UHC Act + Data Privacy Act + PhilHealth eClaims identified. No compliance logic implemented." },
+        { "dimension": "payer", "state": "declared", "scopeBounds": "PhilHealth only. Private HMO payers not yet addressed." },
+        { "dimension": "nationalStandards", "state": "declared", "scopeBounds": "ICD-10-CM and RVS identified. No coding tables or mappings implemented." },
+        { "dimension": "locale", "state": "specified", "scopeBounds": "en-PH locale only." },
+        { "dimension": "clinicalContent", "state": "declared", "scopeBounds": "No PH-specific clinical content identified yet." },
+        { "dimension": "infrastructure", "state": "declared", "scopeBounds": "PhilHealth eClaims API connectivity only." },
+        { "dimension": "operational", "state": "declared", "scopeBounds": "No operational runbooks or training for PH market." }
+      ]
+    },
+    {
+      "legalMarketId": "US",
+      "version": "0.0.1",
+      "displayName": "United States",
+      "status": "draft",
+      "launchTier": "T0",
+      "mandatedPackCount": 1,
+      "defaultOnPackCount": 1,
+      "eligiblePackCount": 0,
+      "excludedPackCount": 0,
+      "readinessDimensions": [
+        { "dimension": "language", "state": "specified", "scopeBounds": "English baseline." },
+        { "dimension": "regulatory", "state": "declared", "scopeBounds": "HIPAA identified. No compliance logic." },
+        { "dimension": "payer", "state": "declared", "scopeBounds": "No US payer packs defined yet." },
+        { "dimension": "locale", "state": "declared", "scopeBounds": "en-US locale not yet defined." }
+      ]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 2,
+    "totalPages": 1
+  }
+}

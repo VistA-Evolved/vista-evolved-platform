@@ -1,0 +1,28 @@
+{
+  "_provenance": {
+    "source": "Fabricated from OpenAPI SystemConfigSnapshot, DeploymentProfileSummary, FeatureFlagSummary, SystemParameterSummary schemas (control-plane-operator-bootstrap-and-provisioning.openapi.yaml). Values are representative of a development deployment.",
+    "generatedFor": "Static review prototype — not real system configuration",
+    "schemaRef": "SystemConfigSnapshot, DeploymentProfileSummary, FeatureFlagSummary, SystemParameterSummary"
+  },
+  "deploymentProfile": {
+    "profileName": "development",
+    "runtimeMode": "dev",
+    "apiVersion": "0.3.0",
+    "platformVersion": "0.1.0"
+  },
+  "featureFlags": [
+    { "flagKey": "pack-authoring-enabled", "displayName": "Pack Authoring", "enabled": false, "scope": "platform-wide", "updatedAt": "2026-03-18T00:00:00Z" },
+    { "flagKey": "market-authoring-enabled", "displayName": "Market Profile Authoring", "enabled": false, "scope": "platform-wide", "updatedAt": "2026-03-18T00:00:00Z" },
+    { "flagKey": "provisioning-auto-retry", "displayName": "Provisioning Auto-Retry", "enabled": true, "scope": "platform-wide", "updatedAt": "2026-03-17T00:00:00Z" },
+    { "flagKey": "multi-tenant-rls", "displayName": "Multi-Tenant Row-Level Security", "enabled": true, "scope": "per-tenant", "updatedAt": "2026-03-15T00:00:00Z" }
+  ],
+  "systemParameters": [
+    { "category": "security", "paramKey": "session.timeout.minutes", "value": "30", "defaultValue": "30", "description": "Session idle timeout in minutes" },
+    { "category": "security", "paramKey": "auth.mode", "value": "vista-rpc", "defaultValue": "vista-rpc", "description": "Authentication mode (vista-rpc or oidc)" },
+    { "category": "performance", "paramKey": "rpc.pool.max.connections", "value": "10", "defaultValue": "5", "description": "Maximum RPC broker connections per tenant" },
+    { "category": "performance", "paramKey": "api.rate.limit.rpm", "value": "120", "defaultValue": "60", "description": "API rate limit (requests per minute)" },
+    { "category": "integration", "paramKey": "vista.instance.id", "value": "vehu-dev", "defaultValue": "vehu-dev", "description": "Active VistA instance identifier" },
+    { "category": "observability", "paramKey": "otel.enabled", "value": "false", "defaultValue": "false", "description": "OpenTelemetry tracing enabled" }
+  ],
+  "lastUpdatedAt": "2026-03-18T00:00:00Z"
+}

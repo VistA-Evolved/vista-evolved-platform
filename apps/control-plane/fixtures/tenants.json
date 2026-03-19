@@ -1,0 +1,53 @@
+{
+  "_provenance": {
+    "source": "Fabricated from OpenAPI TenantSummary + TenantDetail schemas (control-plane-operator-bootstrap-and-provisioning.openapi.yaml). PH tenant uses legalMarketId from packages/contracts/legal-market-profiles/PH.json.",
+    "generatedFor": "Static review prototype — not real tenant data",
+    "schemaRef": "TenantSummary, TenantDetail"
+  },
+  "items": [
+    {
+      "tenantId": "ph-demo-clinic-001",
+      "displayName": "Sunrise Medical Center (Manila)",
+      "status": "active",
+      "legalMarketId": "PH",
+      "launchTier": "T0",
+      "bootstrapRequestId": "a1b2c3d4-1111-4000-8000-000000000001",
+      "latestProvisioningRunId": "d4e5f6a7-2222-4000-8000-000000000001",
+      "activePacks": [
+        { "packId": "lang-en", "packFamily": "language", "displayName": "English Language Pack (Baseline)", "lifecycleState": "draft" },
+        { "packId": "locale-ph", "packFamily": "locale", "displayName": "Philippines Locale Pack", "lifecycleState": "draft" },
+        { "packId": "regulatory-philhealth-doh", "packFamily": "regulatory", "displayName": "Philippines DOH / PhilHealth Regulatory Pack", "lifecycleState": "draft" },
+        { "packId": "standards-ph", "packFamily": "national-standards", "displayName": "Philippines National Standards Pack", "lifecycleState": "draft" },
+        { "packId": "payer-philhealth", "packFamily": "payer", "displayName": "PhilHealth Payer Pack", "lifecycleState": "draft" }
+      ],
+      "createdAt": "2026-03-18T08:00:00Z",
+      "updatedAt": "2026-03-18T10:30:00Z"
+    },
+    {
+      "tenantId": "us-staging-hospital-001",
+      "displayName": "Valley General Hospital (Staging)",
+      "status": "provisioning",
+      "legalMarketId": "US",
+      "launchTier": "T0",
+      "bootstrapRequestId": "b2c3d4e5-3333-4000-8000-000000000002",
+      "latestProvisioningRunId": "e5f6a7b8-4444-4000-8000-000000000002",
+      "activePacks": [],
+      "createdAt": "2026-03-19T06:00:00Z",
+      "updatedAt": "2026-03-19T06:05:00Z"
+    },
+    {
+      "tenantId": "test-bootstrap-pending-001",
+      "displayName": "Test Clinic (Bootstrap Pending)",
+      "status": "bootstrap-pending",
+      "legalMarketId": "PH",
+      "launchTier": "T0",
+      "createdAt": "2026-03-19T09:00:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "totalItems": 3,
+    "totalPages": 1
+  }
+}

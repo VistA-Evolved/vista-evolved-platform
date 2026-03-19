@@ -1,0 +1,59 @@
+{
+  "_provenance": {
+    "source": "Data derived VERBATIM from packages/contracts/capability-manifests/ (billing.ph-philhealth-claims.json, clinical.language-support.json, clinical.ph-coding-standards.json, platform.locale-support.json, regulatory.ph-compliance.json). Key fields extracted per capability-manifest.schema.json.",
+    "generatedFor": "Static review prototype — all capability data is real contract data",
+    "schemaRef": "capability-manifest.schema.json"
+  },
+  "items": [
+    {
+      "capabilityId": "billing.ph-philhealth-claims",
+      "displayName": "PhilHealth Claims Processing",
+      "capabilityClass": "billing",
+      "capabilityName": "ph-philhealth-claims",
+      "readiness": { "state": "declared", "scopeBounds": "PhilHealth eClaims submission via CF1-CF4 format." },
+      "packDependencies": ["payer-philhealth"],
+      "adapterDependencies": ["philhealth-eclaims-connector"],
+      "claimPosture": "not-claimable"
+    },
+    {
+      "capabilityId": "clinical.language-support",
+      "displayName": "Multi-Language Clinical UI",
+      "capabilityClass": "clinical",
+      "capabilityName": "language-support",
+      "readiness": { "state": "specified", "scopeBounds": "English baseline only. Other languages require bounded-language ADR + pack." },
+      "packDependencies": ["lang-en"],
+      "adapterDependencies": [],
+      "claimPosture": "not-claimable"
+    },
+    {
+      "capabilityId": "clinical.ph-coding-standards",
+      "displayName": "PH Coding Standards (ICD-10-CM + RVS)",
+      "capabilityClass": "clinical",
+      "capabilityName": "ph-coding-standards",
+      "readiness": { "state": "declared", "scopeBounds": "ICD-10-CM diagnosis and RVS procedure coding for PH." },
+      "packDependencies": ["standards-ph"],
+      "adapterDependencies": [],
+      "claimPosture": "not-claimable"
+    },
+    {
+      "capabilityId": "platform.locale-support",
+      "displayName": "Locale-Aware Display",
+      "capabilityClass": "platform",
+      "capabilityName": "locale-support",
+      "readiness": { "state": "specified", "scopeBounds": "en-PH locale: DD/MM/YYYY dates, PHP currency, Philippine number formatting." },
+      "packDependencies": ["locale-ph"],
+      "adapterDependencies": [],
+      "claimPosture": "not-claimable"
+    },
+    {
+      "capabilityId": "regulatory.ph-compliance",
+      "displayName": "PH Regulatory Compliance",
+      "capabilityClass": "regulatory",
+      "capabilityName": "ph-compliance",
+      "readiness": { "state": "declared", "scopeBounds": "UHC Act, Data Privacy Act, PhilHealth eClaims compliance frameworks." },
+      "packDependencies": ["regulatory-philhealth-doh"],
+      "adapterDependencies": [],
+      "claimPosture": "not-claimable"
+    }
+  ]
+}

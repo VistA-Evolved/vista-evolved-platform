@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control Plane — Static Review Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div style="display:flex;flex-direction:column;width:100%;">
+    <!-- STATIC REVIEW BANNER — always visible -->
+    <div class="review-banner">
+      ⚠ STATIC REVIEW — NOT RUNTIME ·
+      All data is fabricated fixture data derived from checked-in contract artifacts ·
+      No API calls · No persistence · No authentication ·
+      Write controls are visible but non-persistent
+    </div>
+
+    <div class="shell">
+      <!-- Left navigation -->
+      <nav class="nav-sidebar">
+        <h2>Control Plane</h2>
+        <a href="#/tenants" data-route="tenants">Tenant Registry</a>
+        <a href="#/tenants/detail" data-route="tenants-detail">Tenant Detail</a>
+        <a href="#/tenants/bootstrap" data-route="tenants-bootstrap">Tenant Bootstrap</a>
+        <a href="#/provisioning" data-route="provisioning">Provisioning Runs</a>
+        <a href="#/markets" data-route="markets">Market Management</a>
+        <a href="#/markets/detail" data-route="markets-detail">Market Detail</a>
+        <a href="#/packs" data-route="packs">Pack Catalog</a>
+        <a href="#/system-config" data-route="system-config">System Configuration</a>
+      </nav>
+
+      <!-- Main content area -->
+      <main class="main-content" id="app">
+        <!-- Rendered by app.js -->
+      </main>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
