@@ -1,0 +1,34 @@
+{
+  "surfaceId": "control-plane.platform.support",
+  "version": "0.1.0",
+  "title": "Support Console",
+  "status": "draft",
+  "description": "Cross-tenant support case and incident management. Operators create, triage, and resolve support cases. Critical cases can be escalated to incidents with their own lifecycle. The support console is append-only for context — entries once created cannot be deleted or modified, only supplemented. Service domain: Support / Incident / Audit. No VistA equivalent — platform-native support governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "support-case-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Support case records: case ID, tenant, priority, category, summary, status, age, assignee. Source of truth: support-incident-store."
+    },
+    {
+      "sourceId": "support-incident-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Incident records escalated from critical support cases. Separate lifecycle from cases."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

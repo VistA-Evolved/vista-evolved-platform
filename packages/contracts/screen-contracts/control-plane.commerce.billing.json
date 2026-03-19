@@ -1,0 +1,42 @@
+{
+  "surfaceId": "control-plane.commerce.billing",
+  "version": "0.1.0",
+  "title": "Billing & Entitlements Snapshot",
+  "status": "draft",
+  "description": "Overview of tenant billing status, subscription tiers, entitlements, and payment state. The operator identifies past-due accounts, manages subscription changes, and triggers commercial lifecycle events (suspension for non-payment, reactivation after payment). Service domain: Commercial. Note: commercial suspension triggers tenant suspension in the Tenant Portfolio service per service-map §2.2.5. No VistA equivalent — platform-native commercial governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "commercial-billing-summary",
+      "sourceDomainClass": "platform-governance",
+      "description": "Per-tenant billing overview: subscription tier, billing status (current/past-due/suspended/grace-period), last payment, next due, balance."
+    },
+    {
+      "sourceId": "commercial-subscription-detail",
+      "sourceDomainClass": "platform-governance",
+      "description": "Per-tenant subscription detail: tier, entitlements, module entitlements, usage limits, payment history."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.tenants.detail",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

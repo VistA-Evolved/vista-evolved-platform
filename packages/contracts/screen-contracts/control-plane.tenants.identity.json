@@ -1,0 +1,42 @@
+{
+  "surfaceId": "control-plane.tenants.identity",
+  "version": "0.1.0",
+  "title": "Identity & Invitations",
+  "status": "draft",
+  "description": "Platform-wide identity directory and invitation lifecycle manager. Operators view all user identities across tenants, manage pending invitations, and monitor acceptance status. Single surface for answering 'who has access to what tenant and how did they get it.' Service domain: Tenant Portfolio. No VistA equivalent — platform-native identity governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-identity-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform-wide user identity records across all tenants: display name, email, role, status, last login."
+    },
+    {
+      "sourceId": "platform-invitation-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Invitation lifecycle records: invitee email, target tenant, assigned role, sent timestamp, expiry, acceptance status."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "tenant-admin",
+      "targetSurfaceId": "tenant-admin.users.list",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": true
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

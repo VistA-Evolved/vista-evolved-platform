@@ -1,0 +1,39 @@
+{
+  "surfaceId": "control-plane.platform.operations-center",
+  "version": "0.1.0",
+  "title": "Operations Center",
+  "status": "draft",
+  "description": "Platform health dashboard and operator attention router. Aggregates status signals from all 7 service domains into a single view. Default landing page for the operator console. The operator starts here and drills into specific surfaces based on what needs attention. Cross-cutting: reads from all service domains. No VistA equivalent — platform-native infrastructure governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "operational",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-health",
+      "sourceDomainClass": "platform-governance",
+      "description": "Aggregated health status from all 7 service domains: Tenant Portfolio, Composition, Bootstrap, Fleet, Commercial, Support, Governance."
+    },
+    {
+      "sourceId": "active-alerts",
+      "sourceDomainClass": "platform-governance",
+      "description": "Active alerts across all service domains, prioritized for operator attention."
+    },
+    {
+      "sourceId": "platform-events",
+      "sourceDomainClass": "platform-governance",
+      "description": "Recent platform event timeline: tenant created, provisioning completed, alert fired, etc."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "polling"
+}

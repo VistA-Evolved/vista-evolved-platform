@@ -1,6 +1,6 @@
 # Control-Panel Design Contract and Static-Review Prototype — Batch 1
 
-> **⚠️ PARTIALLY SUPERSEDED.** Page specs and action semantics are now covered by v2 documents (`control-panel-page-specs-v2.md`, `control-panel-action-semantics-v2.md`). This design contract's layout regions and review checklists remain valid for the 8 batch-1 surfaces. A v2 design contract covering all 21 surfaces has not yet been authored.
+> **⚠️ SUPERSEDED by v2.** The v2 design contract (`control-panel-design-contract-v2.md`) covers all 21 surfaces. This batch-1 document is retained as reference for detailed per-field specifications of the original 8 surfaces. The v2 document carries forward batch-1 layout regions for surfaces §9.2–§9.5, §9.7–§9.9, §9.17 by reference.
 
 > **Status:** Partially superseded  
 > **Scope:** 8 canonical control-plane surfaces
