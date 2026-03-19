@@ -49,11 +49,11 @@ All 8 control-plane surfaces are restricted to the `platform-operator` role. The
 | `control-plane:tenant:bootstrap` | Initiate bootstrap requests | `tenants.bootstrap` |
 | `control-plane:provisioning:manage` | Create/retry/cancel provisioning runs | `provisioning.runs` |
 | `control-plane:tenant:lifecycle` | Suspend/reactivate/archive tenants | `tenants.detail` |
-| `control-plane:config:write` | Modify system configuration | `system.config` (deferred) |
-| `control-plane:packs:write` | Modify pack catalog | `packs.catalog` (deferred) |
-| `control-plane:markets:write` | Modify market profiles | `markets.management` (deferred) |
+| `control-plane:config:write` | Modify system configuration | `system.config` |
+| `control-plane:packs:write` | Modify pack catalog | `packs.catalog` |
+| `control-plane:markets:write` | Modify market profiles | `markets.management` |
 
-**Note:** Write permissions for config, packs, and markets are defined here for completeness but the corresponding API operations are **deferred** to future contracts.
+**Note:** Write permissions for config, packs, and markets are contracted in the Batch 3 OpenAPI (W9–W16).
 
 ---
 
@@ -86,8 +86,14 @@ All 8 control-plane surfaces are restricted to the `platform-operator` role. The
 | W6 | Suspend tenant | `tenants.detail` | `suspendTenant` | `POST /tenants/{id}/suspend` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `active` | Tenant status → `suspended` | Contracted |
 | W7 | Reactivate tenant | `tenants.detail` | `reactivateTenant` | `POST /tenants/{id}/reactivate` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `suspended` | Tenant status → `active` | Contracted |
 | W8 | Archive tenant | `tenants.detail` | `archiveTenant` | `POST /tenants/{id}/archive` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `suspended`; operator confirms | Tenant status → `archived`; irreversible | Contracted |
-| W9 | Toggle feature flag | `system.config` | `updateFeatureFlag` | `PUT /system-config/feature-flags/{key}` | platform-system-configuration | `control-plane:config:write` | Flag exists | Flag toggled | Deferred |
-| W10 | Update system parameter | `system.config` | `updateSystemParameter` | `PUT /system-config/parameters/{key}` | platform-system-configuration | `control-plane:config:write` | Parameter is editable | Parameter updated | Deferred |
+| W9 | Toggle feature flag | `system.config` | `updateFeatureFlag` | `PUT /system-config/feature-flags/{flagKey}` | platform-system-configuration | `control-plane:config:write` | Flag exists | Flag toggled; emits `system.config.feature-flag.updated` | Contracted |
+| W10 | Update system parameter | `system.config` | `updateSystemParameter` | `PUT /system-config/parameters/{paramKey}` | platform-system-configuration | `control-plane:config:write` | Parameter is editable | Parameter updated; emits `system.config.parameter.updated` | Contracted |
+| W11 | Create market profile draft | `markets.management` | `createLegalMarketProfileDraft` | `POST /legal-market-profiles` | claim-readiness-registry | `control-plane:markets:write` | Operator has write permission | Draft profile created; emits `market.profile.draft.created` | Contracted |
+| W12 | Update market profile draft | `markets.management` | `updateLegalMarketProfileDraft` | `PUT /legal-market-profiles/{legalMarketId}` | claim-readiness-registry | `control-plane:markets:write` | Profile is `draft` | Draft profile updated; emits `market.profile.draft.updated` | Contracted |
+| W13 | Submit market profile for review | `markets.management` | `submitLegalMarketProfileForReview` | `POST /legal-market-profiles/{legalMarketId}:submit-review` | claim-readiness-registry | `control-plane:markets:write` | Profile is `draft` | Status → `review-pending`; emits `market.profile.review.submitted` | Contracted |
+| W14 | Create pack manifest draft | `packs.catalog` | `createPackManifestDraft` | `POST /packs` | platform-pack-catalog | `control-plane:packs:write` | Operator has write permission | Draft manifest created; emits `pack.manifest.draft.created` | Contracted |
+| W15 | Update pack manifest draft | `packs.catalog` | `updatePackManifestDraft` | `PUT /packs/{packId}` | platform-pack-catalog | `control-plane:packs:write` | Pack is `draft` | Draft manifest updated; emits `pack.manifest.draft.updated` | Contracted |
+| W16 | Submit pack manifest for review | `packs.catalog` | `submitPackManifestForReview` | `POST /packs/{packId}:submit-review` | platform-pack-catalog | `control-plane:packs:write` | Pack is `draft` | lifecycleState → `review-pending`; emits `pack.manifest.review.submitted` | Contracted |
 
 ### 3.3 Navigation actions (no API call)
 
@@ -114,6 +120,14 @@ All 8 control-plane surfaces are restricted to the `platform-operator` role. The
 | W1 (resolve plan) | `effective-plan.resolved` | `effectivePlanResolved` | effectivePlanId, legalMarketId, resolvedPackCount, deferredItemCount, effectiveLaunchTier |
 | W2 (submit bootstrap) | `tenant.bootstrap.requested` | `tenantBootstrapRequested` | bootstrapRequestId, tenantId, effectivePlanId, legalMarketId, requestedBy |
 | W3 (initiate run) | `provisioning.run.requested` | `provisioningRunRequested` | provisioningRunId, bootstrapRequestId, tenantId, effectivePlanId, legalMarketId |
+| W9 (toggle flag) | `system.config.feature-flag.updated` | `systemConfigFeatureFlagUpdated` | flagKey, enabled, previousEnabled, updatedBy |
+| W10 (update param) | `system.config.parameter.updated` | `systemConfigParameterUpdated` | paramKey, value, previousValue, updatedBy |
+| W11 (create market) | `market.profile.draft.created` | `marketProfileDraftCreated` | legalMarketId, displayName, launchTier, requestedBy |
+| W12 (update market) | `market.profile.draft.updated` | `marketProfileDraftUpdated` | legalMarketId, updatedFields, requestedBy |
+| W13 (submit market) | `market.profile.review.submitted` | `marketProfileReviewSubmitted` | legalMarketId, submittedBy, justification |
+| W14 (create pack) | `pack.manifest.draft.created` | `packManifestDraftCreated` | packId, packFamily, displayName, requestedBy |
+| W15 (update pack) | `pack.manifest.draft.updated` | `packManifestDraftUpdated` | packId, updatedFields, requestedBy |
+| W16 (submit pack) | `pack.manifest.review.submitted` | `packManifestReviewSubmitted` | packId, packFamily, submittedBy, justification |
 
 ### 4.2 Events consumed by surfaces
 
@@ -124,7 +138,7 @@ All 8 control-plane surfaces are restricted to the `platform-operator` role. The
 
 ### 4.3 Events not consumed by any Batch 1 surface
 
-None. All 7 AsyncAPI events are consumed by at least one surface.
+Batch 3 write events (W9–W16) are produced but their consumption by specific surfaces is implementation-deferred. All 7 original AsyncAPI events are consumed by at least one surface.
 
 ---
 
@@ -134,9 +148,9 @@ None. All 7 AsyncAPI events are consumed by at least one surface.
 |----------------|-------------|-------------------|--------------------|--------------------|
 | `platform-tenant-registry` | platform-governance | `tenants.list`, `tenants.detail` | `tenants.detail` (lifecycle ops — contracted) | configuration |
 | `platform-governance` (bootstrap/provisioning) | platform-governance | `tenants.bootstrap`, `provisioning.runs`, `tenants.detail` | `tenants.bootstrap` (resolve, submit), `provisioning.runs` (create) | configuration / operational |
-| `claim-readiness-registry` | claim-readiness-registry | `markets.management`, `markets.detail` | `markets.management` (deferred) | configuration |
-| `platform-pack-catalog` | platform-governance | `packs.catalog` | `packs.catalog` (deferred) | configuration |
-| `platform-system-configuration` | platform-governance | `system.config` | `system.config` (deferred) | configuration |
+| `claim-readiness-registry` | claim-readiness-registry | `markets.management`, `markets.detail` | `markets.management` (W11–W13, contracted) | configuration |
+| `platform-pack-catalog` | platform-governance | `packs.catalog` | `packs.catalog` (W14–W16, contracted) | configuration |
+| `platform-system-configuration` | platform-governance | `system.config` | `system.config` (W9–W10, contracted) | configuration |
 
 ---
 
@@ -163,7 +177,7 @@ None. All 7 AsyncAPI events are consumed by at least one surface.
 
 ## 7. Audit trail requirements
 
-Every write action (W1–W10) must produce an audit entry:
+Every write action (W1–W16) must produce an audit entry:
 
 | Field | Source |
 |-------|--------|
@@ -186,10 +200,11 @@ Audit entries are immutable and append-only. The control-plane audit trail is se
 | Read actions needing new API | 0 | — |
 | Write actions with existing API | 4 | W1, W2, W3, W4 |
 | Write actions contracted (Batch 2) | 4 | W5, W6, W7, W8 |
-| Write actions deferred | 2 | W9, W10 |
+| Write actions contracted (Batch 3) | 8 | W9–W16 (system-config, markets, packs) |
+| Write actions deferred | 0 | — |
 | Navigation actions | 9 | N1–N9 (no API needed) |
-| Events produced | 3 | Already in AsyncAPI |
-| Events consumed | 7 | Already in AsyncAPI |
+| Events produced | 11 | 3 original + 8 Batch 3 (market, pack, system-config) |
+| Events consumed | 7 | Original AsyncAPI events (Batch 3 event consumption is implementation-deferred) |
 
 ---
 

@@ -288,7 +288,7 @@ The market management claim surface spans 2 domains: market readiness and capabi
 - [ ] Row click navigates to market detail
 - [ ] Claim surface shows per-market readiness aggregate
 - [ ] Empty state: "No legal-market profiles configured"
-- [ ] Write operations (create/edit market) are deferred — no create button present
+- [ ] Write operations (create/edit market) contracted (Batch 3) — controls enabled when implementation is wired; show "integration-pending" until then
 
 ---
 
@@ -365,7 +365,7 @@ The screen-contract declares `packVariation.axes: ["packId", "legalMarketId"]` a
 - [ ] Lifecycle filter covers all 7 lifecycleState enum values
 - [ ] Pack-market multi-dimensional view is structurally present
 - [ ] Claim surface shows eligibility claims per pack-market combination
-- [ ] Write operations (create/edit pack) are deferred — no create button
+- [ ] Write operations (create/edit pack) contracted (Batch 3) — controls enabled when implementation is wired; show "integration-pending" until then
 - [ ] When no packs match filters, surface shows explicit empty state
 
 ---
@@ -388,7 +388,7 @@ The system configuration surface reads from `platform-system-configuration` (sou
 
 - [ ] Config sections are grouped logically (not a flat key-value dump)
 - [ ] Each config value shows: key, current value, type, description
-- [ ] No write capabilities present (controlled-write is deferred)
+- [ ] No write capabilities present (controlled-write contracted in Batch 3; show "integration-pending" until implementation wired)
 - [ ] No claim surface present (per screen-contract: no claimSurface)
 - [ ] When no parameters or flags exist, surface shows explicit empty state
 
@@ -506,9 +506,9 @@ The following design elements are **not included** in batch 1 because their unde
 | Element | Surface(s) | Dependency | Status |
 |---------|-----------|------------|--------|
 | Tenant suspend/reactivate/archive | tenants.detail | Tenant-lifecycle API (contracted, Batch 2) | Contracted |
-| Market create/edit | markets.management | Future market-management write API | Deferred |
-| Pack create/edit | packs.catalog | Future pack-catalog write API | Deferred |
-| System config edit | system.config | Future system-config write API | Deferred |
+| Market create/edit | markets.management | Market-management write API (contracted, Batch 3) | Contracted |
+| Pack create/edit | packs.catalog | Pack-catalog write API (contracted, Batch 3) | Contracted |
+| System config edit | system.config | System-config write API (contracted, Batch 3) | Contracted |
 | Provisioning cancel/retry | provisioning.runs | Provisioning-management API (contracted, Batch 2) | Contracted |
 | Pack catalog data feed | packs.catalog | `listPacks` / `getPack` in OpenAPI | Available (read-only) |
 | System config data feed | system.config | `getSystemConfig` in OpenAPI | Available (read-only) |
@@ -529,4 +529,4 @@ The following design elements are **not included** in batch 1 because their unde
 - [ ] No screen-contract modifications
 - [ ] PH truth constraints visible in design specs for bootstrap and market surfaces
 - [ ] Claim surface design specified for all surfaces that have claim surfaces
-- [ ] Pack-catalog and system-config surfaces show available read API; write operations remain deferred
+- [ ] Pack-catalog and system-config surfaces show available read API; write operations are contracted (Batch 3) with implementation pending

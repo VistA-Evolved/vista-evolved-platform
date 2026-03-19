@@ -477,7 +477,7 @@ For a PH provisioning run:
 
 #### 3.5.1 Purpose
 
-Platform-wide market registry. Operators view all configured legal markets, their readiness dimensions, launch tiers, and pack composition at a glance. Drill into individual markets for detail. Market write operations (create/update profiles) are governance-gated and deferred to a future contract.
+Platform-wide market registry. Operators view all configured legal markets, their readiness dimensions, launch tiers, and pack composition at a glance. Drill into individual markets for detail. Market write operations (create/update/submit-for-review) are contracted in Batch 3; implementation wiring is pending.
 
 #### 3.5.2 Data sources
 
@@ -515,9 +515,12 @@ Platform-wide market registry. Operators view all configured legal markets, thei
 | Action | Type | Target | Precondition |
 |--------|------|--------|-------------|
 | View market detail | Drill (row click) | `control-plane.markets.detail` | Passes `legalMarketId` |
+| Create market profile draft | Controlled write | `POST /legal-market-profiles` | Operator has `control-plane:markets:write` — **contracted (Batch 3), implementation pending** |
+| Update market profile draft | Controlled write | `PUT /legal-market-profiles/{legalMarketId}` | Profile is `draft` — **contracted (Batch 3), implementation pending** |
+| Submit market for review | Controlled write | `POST /legal-market-profiles/{legalMarketId}:submit-review` | Profile is `draft` — **contracted (Batch 3), implementation pending** |
 | Refresh | Button | Re-fetches market list | — |
 
-**Write actions are deferred.** Market profile creation/update requires governance approval and is not part of the Batch 1 operator surface. The surface will display these controls in a disabled state with "governance-gated — not yet available" indicator.
+**Write actions are contracted (Batch 3).** Market profile create, update, and submit-for-review API operations are defined in the OpenAPI contract (v0.3.0). Until implementation is wired, the surface will show these controls in a disabled state with "integration-pending" indicator.
 
 #### 3.5.5 PH truth constraints
 
@@ -672,9 +675,12 @@ Server-side pagination with page size selector.
 | Action | Type | Target | Precondition |
 |--------|------|--------|-------------|
 | View pack detail | Drill (row click) | Pack detail view (sub-surface) | Passes `packId` |
+| Create pack manifest draft | Controlled write | `POST /packs` | Operator has `control-plane:packs:write` — **contracted (Batch 3), implementation pending** |
+| Update pack manifest draft | Controlled write | `PUT /packs/{packId}` | Pack is `draft` — **contracted (Batch 3), implementation pending** |
+| Submit pack for review | Controlled write | `POST /packs/{packId}:submit-review` | Pack is `draft` — **contracted (Batch 3), implementation pending** |
 | Refresh | Button | Re-fetches pack list | — |
 
-**Write actions are deferred.** Pack creation, lifecycle transitions, and eligibility rule management require governance-gated processes that are not part of Batch 1. Controls show as disabled with "governance-gated" indicator.
+**Write actions are contracted (Batch 3).** Pack create, update, and submit-for-review API operations are defined in the OpenAPI contract (v0.3.0). Until implementation is wired, controls show as disabled with "integration-pending" indicator.
 
 #### 3.7.5 Pack variation sensitivity
 
@@ -716,7 +722,7 @@ Platform-wide settings surface. Operators view and manage deployment profiles, f
 |--------|--------------|----------|
 | System config | `GET /system-config` | OpenAPI (`getSystemConfig`) |
 
-**Source of truth:** `platform-system-configuration` (platform-governance domain class).
+**Source of truth:** `platform-system-configuration` (platform-governance domain class). Write operations (`updateFeatureFlag`, `updateSystemParameter`) are contracted in the Batch 3 OpenAPI (v0.3.0).
 
 #### 3.8.3 Visible data regions
 
@@ -755,11 +761,11 @@ Key-value table of configurable system parameters grouped by category (security,
 
 | Action | Precondition | Behavior |
 |--------|-------------|----------|
-| Toggle feature flag | Flag exists | Calls `PUT /system-config/feature-flags/{flagKey}` — **deferred until config API exists** |
-| Update parameter | Parameter is editable | Calls `PUT /system-config/parameters/{paramKey}` — **deferred until config API exists** |
+| Toggle feature flag | Flag exists | Calls `PUT /system-config/feature-flags/{flagKey}` — **contracted (Batch 3), implementation pending** |
+| Update parameter | Parameter is editable | Calls `PUT /system-config/parameters/{paramKey}` — **contracted (Batch 3), implementation pending** |
 | Refresh | — | Re-fetches `GET /system-config` |
 
-**Write actions are deferred.** System configuration writes require a dedicated config-management API that is not part of the current OpenAPI contract. Read-only display is the Batch 1 target. Write controls show as disabled with "read-only — config API pending" indicator.
+**Write actions are contracted (Batch 3).** Feature flag toggle and parameter update API operations are defined in the OpenAPI contract (v0.3.0). Until implementation is wired, write controls show as disabled with "integration-pending" indicator.
 
 #### 3.8.5 PH truth constraints
 
@@ -794,14 +800,14 @@ Controls specified above that require API operations not yet defined:
 | Tenant reactivate | `tenants.detail` | `POST /tenants/{tenantId}/reactivate` | Contracted (Batch 2 — `reactivateTenant`) |
 | Tenant archive | `tenants.detail` | `POST /tenants/{tenantId}/archive` | Contracted (Batch 2 — `archiveTenant`) |
 | Market list fetch | `markets.management` | `GET /legal-market-profiles` | Added (`listLegalMarketProfiles`) |
-| Market write ops | `markets.management` | market-management API | Deferred (governance-gated) |
+| Market write ops | `markets.management` | `POST /legal-market-profiles`, `PUT /legal-market-profiles/{id}`, `POST .../submit-review` | Contracted (Batch 3 — `createLegalMarketProfileDraft`, `updateLegalMarketProfileDraft`, `submitLegalMarketProfileForReview`) |
 | Pack list fetch | `packs.catalog` | `GET /packs` | Added (`listPacks`) |
-| Pack write ops | `packs.catalog` | pack-management API | Deferred (governance-gated) |
+| Pack write ops | `packs.catalog` | `POST /packs`, `PUT /packs/{id}`, `POST .../submit-review` | Contracted (Batch 3 — `createPackManifestDraft`, `updatePackManifestDraft`, `submitPackManifestForReview`) |
 | Provisioning run list | `provisioning.runs` | `GET /provisioning-runs` | Added (`listProvisioningRuns`) |
 | Provisioning cancel | `provisioning.runs` | `POST /provisioning-runs/{id}/cancel` | Contracted (Batch 2 — `cancelProvisioningRun`) |
 | System config fetch | `system.config` | `GET /system-config` | Added (`getSystemConfig`) |
-| Feature flag toggle | `system.config` | config API | Deferred |
-| Parameter update | `system.config` | config API | Deferred |
+| Feature flag toggle | `system.config` | `PUT /system-config/feature-flags/{flagKey}` | Contracted (Batch 3 — `updateFeatureFlag`) |
+| Parameter update | `system.config` | `PUT /system-config/parameters/{paramKey}` | Contracted (Batch 3 — `updateSystemParameter`) |
 
 ---
 

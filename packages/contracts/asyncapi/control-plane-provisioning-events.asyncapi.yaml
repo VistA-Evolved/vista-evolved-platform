@@ -1,14 +1,18 @@
 asyncapi: '3.0.0'
 info:
   title: Control-Plane Provisioning Events
-  version: 0.2.0
+  version: 0.3.0
   description: |
-    Event contract for operator-initiated tenant lifecycle, bootstrap, and provisioning workflows.
+    Event contract for operator-initiated tenant lifecycle, bootstrap, provisioning,
+    market/pack authoring, and system configuration workflows.
 
     **Scope:** Events emitted by the control-plane during:
     - Tenant lifecycle transitions (suspend, reactivate, archive)
     - Bootstrap request processing
     - Asynchronous provisioning run execution and control (including cancel)
+    - Legal-market profile draft authoring and review submission
+    - Pack manifest draft authoring and review submission
+    - System configuration writes (feature flags, system parameters)
 
     Consumed by:
     - Provisioning orchestrator (picks up work, receives cancel signals)
@@ -153,6 +157,86 @@ channels:
       provisioningRunCancelledMessage:
         $ref: '#/components/messages/ProvisioningRunCancelled'
 
+  # --- Market profile authoring channels (Batch 3) ---
+
+  marketProfileDraftCreated:
+    address: market.profile.draft.created
+    description: |
+      Emitted when an operator creates a new legal-market profile in draft status.
+      Consumers: audit subsystem, governance review queue (informational).
+    messages:
+      marketProfileDraftCreatedMessage:
+        $ref: '#/components/messages/MarketProfileDraftCreated'
+
+  marketProfileDraftUpdated:
+    address: market.profile.draft.updated
+    description: |
+      Emitted when an operator updates a draft legal-market profile.
+      Consumers: audit subsystem.
+    messages:
+      marketProfileDraftUpdatedMessage:
+        $ref: '#/components/messages/MarketProfileDraftUpdated'
+
+  marketProfileReviewSubmitted:
+    address: market.profile.review.submitted
+    description: |
+      Emitted when an operator submits a draft legal-market profile for governance review.
+      The profile transitions from `draft` to `review-pending`.
+      Consumers: governance review queue, audit subsystem.
+    messages:
+      marketProfileReviewSubmittedMessage:
+        $ref: '#/components/messages/MarketProfileReviewSubmitted'
+
+  # --- Pack manifest authoring channels (Batch 3) ---
+
+  packManifestDraftCreated:
+    address: pack.manifest.draft.created
+    description: |
+      Emitted when an operator creates a new pack manifest in draft lifecycle state.
+      Consumers: audit subsystem, governance review queue (informational).
+    messages:
+      packManifestDraftCreatedMessage:
+        $ref: '#/components/messages/PackManifestDraftCreated'
+
+  packManifestDraftUpdated:
+    address: pack.manifest.draft.updated
+    description: |
+      Emitted when an operator updates a draft pack manifest.
+      Consumers: audit subsystem.
+    messages:
+      packManifestDraftUpdatedMessage:
+        $ref: '#/components/messages/PackManifestDraftUpdated'
+
+  packManifestReviewSubmitted:
+    address: pack.manifest.review.submitted
+    description: |
+      Emitted when an operator submits a draft pack manifest for governance review.
+      The manifest transitions from `draft` to `review-pending`.
+      Consumers: governance review queue, audit subsystem.
+    messages:
+      packManifestReviewSubmittedMessage:
+        $ref: '#/components/messages/PackManifestReviewSubmitted'
+
+  # --- System configuration write channels (Batch 3) ---
+
+  systemConfigFeatureFlagUpdated:
+    address: system.config.feature-flag.updated
+    description: |
+      Emitted when an operator updates a feature flag value.
+      Consumers: tenant runtime planes (flag propagation), audit subsystem.
+    messages:
+      systemConfigFeatureFlagUpdatedMessage:
+        $ref: '#/components/messages/SystemConfigFeatureFlagUpdated'
+
+  systemConfigParameterUpdated:
+    address: system.config.parameter.updated
+    description: |
+      Emitted when an operator updates a system parameter value.
+      Consumers: tenant runtime planes (parameter propagation), audit subsystem.
+    messages:
+      systemConfigParameterUpdatedMessage:
+        $ref: '#/components/messages/SystemConfigParameterUpdated'
+
 operations:
   onTenantBootstrapRequested:
     action: receive
@@ -229,6 +313,60 @@ operations:
     channel:
       $ref: '#/channels/provisioningRunCancelled'
     summary: Receive event when a provisioning run reaches cancelled terminal state.
+
+  # --- Market profile authoring operations (Batch 3) ---
+
+  onMarketProfileDraftCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/marketProfileDraftCreated'
+    summary: Receive event when a draft legal-market profile is created.
+
+  onMarketProfileDraftUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/marketProfileDraftUpdated'
+    summary: Receive event when a draft legal-market profile is updated.
+
+  onMarketProfileReviewSubmitted:
+    action: receive
+    channel:
+      $ref: '#/channels/marketProfileReviewSubmitted'
+    summary: Receive event when a legal-market profile is submitted for governance review.
+
+  # --- Pack manifest authoring operations (Batch 3) ---
+
+  onPackManifestDraftCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/packManifestDraftCreated'
+    summary: Receive event when a draft pack manifest is created.
+
+  onPackManifestDraftUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/packManifestDraftUpdated'
+    summary: Receive event when a draft pack manifest is updated.
+
+  onPackManifestReviewSubmitted:
+    action: receive
+    channel:
+      $ref: '#/channels/packManifestReviewSubmitted'
+    summary: Receive event when a pack manifest is submitted for governance review.
+
+  # --- System configuration write operations (Batch 3) ---
+
+  onSystemConfigFeatureFlagUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/systemConfigFeatureFlagUpdated'
+    summary: Receive event when a feature flag value is updated.
+
+  onSystemConfigParameterUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/systemConfigParameterUpdated'
+    summary: Receive event when a system parameter value is updated.
 
 components:
   messages:
@@ -331,6 +469,76 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ProvisioningRunCancelledPayload'
+
+    # --- Market profile authoring messages (Batch 3) ---
+
+    MarketProfileDraftCreated:
+      name: MarketProfileDraftCreated
+      title: Market Profile Draft Created
+      summary: An operator created a new legal-market profile in draft status.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MarketProfileDraftCreatedPayload'
+
+    MarketProfileDraftUpdated:
+      name: MarketProfileDraftUpdated
+      title: Market Profile Draft Updated
+      summary: An operator updated a draft legal-market profile.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MarketProfileDraftUpdatedPayload'
+
+    MarketProfileReviewSubmitted:
+      name: MarketProfileReviewSubmitted
+      title: Market Profile Review Submitted
+      summary: An operator submitted a draft legal-market profile for governance review.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MarketProfileReviewSubmittedPayload'
+
+    # --- Pack manifest authoring messages (Batch 3) ---
+
+    PackManifestDraftCreated:
+      name: PackManifestDraftCreated
+      title: Pack Manifest Draft Created
+      summary: An operator created a new pack manifest in draft lifecycle state.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PackManifestDraftCreatedPayload'
+
+    PackManifestDraftUpdated:
+      name: PackManifestDraftUpdated
+      title: Pack Manifest Draft Updated
+      summary: An operator updated a draft pack manifest.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PackManifestDraftUpdatedPayload'
+
+    PackManifestReviewSubmitted:
+      name: PackManifestReviewSubmitted
+      title: Pack Manifest Review Submitted
+      summary: An operator submitted a draft pack manifest for governance review.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PackManifestReviewSubmittedPayload'
+
+    # --- System configuration write messages (Batch 3) ---
+
+    SystemConfigFeatureFlagUpdated:
+      name: SystemConfigFeatureFlagUpdated
+      title: System Config Feature Flag Updated
+      summary: An operator updated a feature flag value.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SystemConfigFeatureFlagUpdatedPayload'
+
+    SystemConfigParameterUpdated:
+      name: SystemConfigParameterUpdated
+      title: System Config Parameter Updated
+      summary: An operator updated a system parameter value.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SystemConfigParameterUpdatedPayload'
 
   schemas:
     # --- Common event envelope fields ---
@@ -863,3 +1071,318 @@ components:
         durationMs:
           type: integer
           description: Total duration from run start to cancelled terminal state in milliseconds.
+
+    # --- Market profile authoring event payloads (Batch 3) ---
+
+    MarketProfileDraftCreatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - legalMarketId
+        - displayName
+        - launchTier
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: market.profile.draft.created
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+          description: ISO 3166-1 alpha-2 code of the new market profile.
+        displayName:
+          type: string
+        launchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    MarketProfileDraftUpdatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - legalMarketId
+        - updatedFields
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: market.profile.draft.updated
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        updatedFields:
+          type: array
+          items:
+            type: string
+          description: List of field names that were updated.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    MarketProfileReviewSubmittedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - legalMarketId
+        - previousStatus
+        - newStatus
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: market.profile.review.submitted
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        legalMarketId:
+          type: string
+        previousStatus:
+          type: string
+          const: draft
+        newStatus:
+          type: string
+          const: review-pending
+        reason:
+          type: string
+          description: Operator-provided justification (if any).
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    # --- Pack manifest authoring event payloads (Batch 3) ---
+
+    PackManifestDraftCreatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - packId
+        - displayName
+        - packFamily
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: pack.manifest.draft.created
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        packId:
+          type: string
+        displayName:
+          type: string
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    PackManifestDraftUpdatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - packId
+        - updatedFields
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: pack.manifest.draft.updated
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        packId:
+          type: string
+        updatedFields:
+          type: array
+          items:
+            type: string
+          description: List of field names that were updated.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    PackManifestReviewSubmittedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - packId
+        - previousLifecycleState
+        - newLifecycleState
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: pack.manifest.review.submitted
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        packId:
+          type: string
+        previousLifecycleState:
+          type: string
+          const: draft
+        newLifecycleState:
+          type: string
+          const: review-pending
+        reason:
+          type: string
+          description: Operator-provided justification (if any).
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    # --- System configuration write event payloads (Batch 3) ---
+
+    SystemConfigFeatureFlagUpdatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - flagKey
+        - previousValue
+        - newValue
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: system.config.feature-flag.updated
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        flagKey:
+          type: string
+        previousValue:
+          description: The value before the update.
+          oneOf:
+            - type: boolean
+            - type: string
+            - type: integer
+        newValue:
+          description: The value after the update.
+          oneOf:
+            - type: boolean
+            - type: string
+            - type: integer
+        reason:
+          type: string
+          description: Operator-provided reason for the change.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    SystemConfigParameterUpdatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - paramKey
+        - previousValue
+        - newValue
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: system.config.parameter.updated
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        paramKey:
+          type: string
+        previousValue:
+          description: The value before the update.
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+        newValue:
+          description: The value after the update.
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+        reason:
+          type: string
+          description: Operator-provided reason for the change.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).

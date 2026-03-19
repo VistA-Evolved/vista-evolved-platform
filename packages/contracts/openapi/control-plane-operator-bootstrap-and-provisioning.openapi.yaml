@@ -1,21 +1,31 @@
 openapi: '3.1.0'
 info:
   title: Control-Plane Operator Bootstrap and Provisioning API
-  version: 0.2.0
+  version: 0.3.0
   description: |
-    Operator-initiated tenant lifecycle, bootstrap, and provisioning contract for VistA Evolved control plane.
+    Operator-initiated tenant lifecycle, bootstrap, provisioning, market/pack authoring, and
+    system configuration contract for VistA Evolved control plane.
 
-    **Scope:** This contract covers operator-facing control-plane reads (including read-only
-    access to the pack catalog and system configuration for operator review), tenant lifecycle
-    writes (suspend, reactivate, archive), bootstrap, provisioning, and provisioning control
-    (cancel) operations. It does NOT cover public self-service signup, billing, tenant-admin
-    configuration, clinical APIs, provisioning engine internals, pack catalog write/management
-    operations, or system configuration write/management operations.
+    **Scope:** This contract covers operator-facing control-plane reads (pack catalog, system
+    config, legal-market profiles, tenants, bootstrap requests, provisioning runs), tenant
+    lifecycle writes (suspend, reactivate, archive), bootstrap, provisioning, provisioning
+    control (cancel), legal-market profile draft authoring (create, edit, submit-review),
+    pack manifest draft authoring (create, edit, submit-review), and system configuration
+    writes (feature flag toggle, parameter update).
+
+    It does NOT cover public self-service signup, billing, tenant-admin configuration,
+    clinical APIs, provisioning engine internals, market activation/deprecation/retirement,
+    pack publish/activate/deactivate/retire, launch tier escalation, or readiness dimension
+    direct manipulation.
+
+    **Write governance:** Market profile and pack manifest writes are limited to draft-phase
+    operations. Submit-for-review transitions to `review-pending` status; advancement beyond
+    that requires human governance approval outside this API. System configuration writes
+    are scoped to existing keys — operators cannot create or delete flags or parameters.
 
     **Asynchronous model:** Provisioning operations (create, cancel) are multi-step asynchronous
     workflows. POST operations that initiate async work return 202 Accepted. Clients poll GET
-    endpoints for status. Tenant lifecycle writes (suspend, reactivate, archive) are synchronous
-    and return 200 OK with the updated tenant record.
+    endpoints for status. All other write operations are synchronous.
 
     **Current PH truth:** The PH legal market is draft/T0. All PH packs are lifecycle draft.
     No capability is claimable or production-eligible. This API surface reflects those constraints
@@ -39,7 +49,7 @@ tags:
   - name: tenant-lifecycle
     description: Tenant lifecycle state transitions — suspend, reactivate, archive.
   - name: legal-market-profiles
-    description: Read-only access to legal-market profile summaries for operator review.
+    description: Legal-market profile reads and draft authoring (create, edit, submit-review).
   - name: effective-configuration-plans
     description: Plan resolution from market profile and operator selections.
   - name: tenant-bootstrap-requests
@@ -47,9 +57,9 @@ tags:
   - name: provisioning-runs
     description: Asynchronous provisioning run lifecycle.
   - name: packs
-    description: Read-only access to the pack catalog for operator review during bootstrap and provisioning.
+    description: Pack catalog reads and draft authoring (create, edit, submit-review).
   - name: system-config
-    description: Read-only access to platform system configuration for operator review.
+    description: Platform system configuration reads and controlled writes (feature flags, parameters).
 
 paths:
   /tenants:
@@ -297,6 +307,51 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: createLegalMarketProfileDraft
+      summary: Create a new legal-market profile in draft status
+      description: |
+        Creates a new legal-market profile with `status: draft`. The profile requires
+        a valid `legalMarketId` (ISO 3166-1 alpha-2), display name, and initial
+        readiness dimension declarations.
+
+        **Governance constraint:** The profile is created in `draft` status only.
+        Advancing to `active` requires governance review via `submitLegalMarketProfileForReview`
+        followed by human approval (outside this API).
+
+        **Permission:** `control-plane:markets:write`
+        **Audit:** Emits `market.profile.draft.created`
+      tags: [legal-market-profiles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLegalMarketProfileDraftRequest'
+      responses:
+        '201':
+          description: Draft legal-market profile created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalMarketProfileSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A profile already exists with this `legalMarketId`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed — invalid `legalMarketId` format or missing required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /legal-market-profiles/{legalMarketId}:
     get:
       operationId: getLegalMarketProfile
@@ -325,6 +380,108 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updateLegalMarketProfileDraft
+      summary: Update a draft legal-market profile
+      description: |
+        Updates fields on a legal-market profile that is in `draft` status. Only profiles
+        with `status: draft` can be updated through this endpoint.
+
+        Updatable fields: `displayName`, `launchTier`, `readinessDimensions`,
+        `mandatedPacks`, `defaultOnPacks`, `eligiblePacks`, `excludedPacks`.
+
+        **Governance constraint:** Profiles with `status: active` or `review-pending` cannot
+        be updated through this endpoint. Active profiles require a governance review cycle
+        to modify.
+
+        **Permission:** `control-plane:markets:write`
+        **Audit:** Emits `market.profile.draft.updated`
+      tags: [legal-market-profiles]
+      parameters:
+        - $ref: '#/components/parameters/LegalMarketIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLegalMarketProfileDraftRequest'
+      responses:
+        '200':
+          description: Draft profile updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalMarketProfileSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Profile is not in `draft` status and cannot be updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed on updated fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /legal-market-profiles/{legalMarketId}\:submit-review:
+    post:
+      operationId: submitLegalMarketProfileForReview
+      summary: Submit a draft legal-market profile for governance review
+      description: |
+        Transitions a draft legal-market profile to `review-pending` status.
+        The profile must currently be in `draft` status.
+
+        This is a one-way transition — once submitted, the profile cannot be edited
+        until governance review is complete (approved → `active`, or rejected → `draft`).
+
+        **Governance constraint:** The profile must pass structural validation
+        (non-empty display name, valid `legalMarketId`, at least one readiness dimension declared)
+        before submission is accepted.
+
+        **Permission:** `control-plane:markets:write`
+        **Audit:** Emits `market.profile.review.submitted`
+      tags: [legal-market-profiles]
+      parameters:
+        - $ref: '#/components/parameters/LegalMarketIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionRequest'
+      responses:
+        '200':
+          description: Profile transitioned to `review-pending`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSubmissionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Profile is not in `draft` status — cannot submit for review.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Profile fails pre-submission validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /effective-configuration-plans\:resolve:
     post:
@@ -688,7 +845,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [draft, validated, tested, published, activated, deactivated, retired]
+            enum: [draft, review-pending, validated, tested, published, activated, deactivated, retired]
           description: Filter by lifecycle state.
         - name: legalMarketId
           in: query
@@ -715,6 +872,49 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: createPackManifestDraft
+      summary: Create a new pack manifest in draft lifecycle state
+      description: |
+        Creates a new pack manifest with `lifecycleState: draft`. The manifest requires
+        a unique `packId`, display name, pack family, and initial metadata.
+
+        **Governance constraint:** The pack is created in `draft` lifecycle state only.
+        Advancing through the lifecycle (validated → tested → published) requires
+        governance review via `submitPackManifestForReview` followed by human approval.
+
+        **Permission:** `control-plane:packs:write`
+        **Audit:** Emits `pack.manifest.draft.created`
+      tags: [packs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePackManifestDraftRequest'
+      responses:
+        '201':
+          description: Draft pack manifest created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A pack already exists with this `packId`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed — invalid packId format, missing required fields, or invalid pack family.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /packs/{packId}:
     get:
@@ -743,6 +943,109 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updatePackManifestDraft
+      summary: Update a draft pack manifest
+      description: |
+        Updates fields on a pack manifest that is in `draft` lifecycle state. Only packs
+        with `lifecycleState: draft` can be updated through this endpoint.
+
+        Updatable fields: `displayName`, `description`, `packFamily`, `dependencies`,
+        `eligibility`, `contentSummary`, `adapterRequirements`, `configurationKeys`,
+        `capabilityContributions`.
+
+        **Governance constraint:** Packs beyond `draft` state cannot be updated here.
+        Published/activated packs require a governance review cycle to modify.
+
+        **Permission:** `control-plane:packs:write`
+        **Audit:** Emits `pack.manifest.draft.updated`
+      tags: [packs]
+      parameters:
+        - $ref: '#/components/parameters/PackIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePackManifestDraftRequest'
+      responses:
+        '200':
+          description: Draft pack manifest updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Pack is not in `draft` lifecycle state and cannot be updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation failed on updated fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /packs/{packId}\:submit-review:
+    post:
+      operationId: submitPackManifestForReview
+      summary: Submit a draft pack manifest for governance review
+      description: |
+        Transitions a draft pack manifest to `review-pending` lifecycle state.
+        The pack must currently be in `draft` state.
+
+        This is a one-way transition — once submitted, the manifest cannot be edited
+        until governance review is complete (approved → next lifecycle state, or
+        rejected → `draft`).
+
+        **Governance constraint:** The manifest must pass structural validation
+        (non-empty display name, valid pack family, declared eligibility) before
+        submission is accepted.
+
+        **Permission:** `control-plane:packs:write`
+        **Audit:** Emits `pack.manifest.review.submitted`
+      tags: [packs]
+      parameters:
+        - $ref: '#/components/parameters/PackIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmissionRequest'
+      responses:
+        '200':
+          description: Pack manifest transitioned to `review-pending`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSubmissionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Pack is not in `draft` lifecycle state — cannot submit for review.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Pack fails pre-submission validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /system-config:
     get:
@@ -752,9 +1055,9 @@ paths:
         Returns a read-only snapshot of the platform system configuration including
         deployment profile, feature flags, and system parameters.
 
-        This is an operator review endpoint. Write operations (toggle feature flags,
-        update parameters) require a dedicated system-configuration write API that is
-        not part of this contract.
+        Write operations for feature flags and system parameters are available at
+        `/system-config/feature-flags/{flagKey}` and `/system-config/parameters/{paramKey}`
+        respectively.
       tags: [system-config]
       responses:
         '200':
@@ -767,6 +1070,100 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /system-config/feature-flags/{flagKey}:
+    put:
+      operationId: updateFeatureFlag
+      summary: Update a feature flag value
+      description: |
+        Updates the value of an existing feature flag identified by `flagKey`.
+        Only existing flag keys can be updated — this endpoint does not create new flags.
+
+        **Governance constraint:** Feature flag updates are scoped to existing keys only.
+        Creating new feature flags or deleting existing ones requires a governance review
+        cycle outside this API.
+
+        **Permission:** `control-plane:config:write`
+        **Audit:** Emits `system.config.feature-flag.updated`
+      tags: [system-config]
+      parameters:
+        - $ref: '#/components/parameters/FlagKeyPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeatureFlagUpdateRequest'
+      responses:
+        '200':
+          description: Feature flag updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlagUpdateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No feature flag exists with this `flagKey`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid flag value for this flag's type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /system-config/parameters/{paramKey}:
+    put:
+      operationId: updateSystemParameter
+      summary: Update a system parameter value
+      description: |
+        Updates the value of an existing system parameter identified by `paramKey`.
+        Only existing parameter keys can be updated — this endpoint does not create new parameters.
+
+        **Governance constraint:** System parameter updates are scoped to existing keys only.
+        Creating new parameters or deleting existing ones requires a governance review
+        cycle outside this API.
+
+        **Permission:** `control-plane:config:write`
+        **Audit:** Emits `system.config.parameter.updated`
+      tags: [system-config]
+      parameters:
+        - $ref: '#/components/parameters/ParamKeyPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemParameterUpdateRequest'
+      responses:
+        '200':
+          description: System parameter updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemParameterUpdateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: No system parameter exists with this `paramKey`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid parameter value for this parameter's type or constraints.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -846,6 +1243,24 @@ components:
       in: path
       required: true
       description: Unique pack identifier (e.g., "lang-en", "regulatory-philhealth-doh").
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+
+    FlagKeyPath:
+      name: flagKey
+      in: path
+      required: true
+      description: Feature flag key identifier (e.g., "multi-language-enabled", "telehealth-enabled").
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9-]*$'
+
+    ParamKeyPath:
+      name: paramKey
+      in: path
+      required: true
+      description: System parameter key identifier (e.g., "session-timeout-minutes", "max-concurrent-users").
       schema:
         type: string
         pattern: '^[a-z][a-z0-9-]*$'
@@ -973,6 +1388,280 @@ components:
           type: string
           description: Operator-provided reason for cancelling the provisioning run.
           minLength: 1
+          maxLength: 2048
+
+    CreateLegalMarketProfileDraftRequest:
+      type: object
+      description: |
+        Request body for creating a new legal-market profile in draft status.
+        The `legalMarketId` must be a valid ISO 3166-1 alpha-2 code (optionally with
+        a sub-region suffix).
+      required:
+        - legalMarketId
+        - displayName
+      properties:
+        legalMarketId:
+          type: string
+          pattern: '^[A-Z]{2}(-[A-Z0-9]{1,8})?$'
+          description: ISO 3166-1 alpha-2 code with optional sub-region suffix (e.g., "PH", "US-VA").
+        displayName:
+          type: string
+          description: Human-readable name for the legal market.
+          minLength: 1
+          maxLength: 256
+        launchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+          default: T0
+          description: Initial launch tier classification.
+        readinessDimensions:
+          type: object
+          description: |
+            Initial readiness dimension declarations. Keys are dimension names
+            (e.g., "regulatory", "language", "payer", "clinical-content"),
+            values are readiness assessments.
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [not-assessed, in-progress, ready, blocked]
+              notes:
+                type: string
+                maxLength: 2048
+        mandatedPacks:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Pack IDs mandated by regulation for this market.
+        defaultOnPacks:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Pack IDs activated by default for this market.
+        eligiblePacks:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Pack IDs eligible for operator selection in this market.
+        excludedPacks:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Pack IDs explicitly excluded from this market.
+
+    UpdateLegalMarketProfileDraftRequest:
+      type: object
+      description: |
+        Request body for updating a draft legal-market profile. Only profiles in
+        `draft` status accept updates. All fields are optional — only provided fields
+        are updated.
+      properties:
+        displayName:
+          type: string
+          description: Updated display name.
+          minLength: 1
+          maxLength: 256
+        launchTier:
+          type: string
+          enum: [T0, T1, T2, T3]
+          description: Updated launch tier.
+        readinessDimensions:
+          type: object
+          description: Updated readiness dimensions (replaces the full dimensions object).
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [not-assessed, in-progress, ready, blocked]
+              notes:
+                type: string
+                maxLength: 2048
+        mandatedPacks:
+          type: array
+          items:
+            type: string
+          description: Updated mandated pack IDs.
+        defaultOnPacks:
+          type: array
+          items:
+            type: string
+          description: Updated default-on pack IDs.
+        eligiblePacks:
+          type: array
+          items:
+            type: string
+          description: Updated eligible pack IDs.
+        excludedPacks:
+          type: array
+          items:
+            type: string
+          description: Updated excluded pack IDs.
+
+    CreatePackManifestDraftRequest:
+      type: object
+      description: |
+        Request body for creating a new pack manifest in draft lifecycle state.
+        The `packId` must be unique and follow the kebab-case naming convention.
+      required:
+        - packId
+        - displayName
+        - packFamily
+      properties:
+        packId:
+          type: string
+          pattern: '^[a-z][a-z0-9-]*$'
+          description: Unique pack identifier in kebab-case.
+        displayName:
+          type: string
+          description: Human-readable pack name.
+          minLength: 1
+          maxLength: 256
+        description:
+          type: string
+          description: Pack description.
+          maxLength: 4096
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+          description: Pack family classification.
+        dependencies:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Pack IDs this pack depends on.
+        eligibility:
+          type: object
+          description: Initial eligibility constraints.
+          properties:
+            legalMarkets:
+              type: array
+              items:
+                type: string
+              description: Legal market IDs where this pack is eligible.
+            facilityTypes:
+              type: array
+              items:
+                type: string
+              description: Facility types eligible for this pack.
+        adapterRequirements:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Adapter interface IDs required by this pack.
+
+    UpdatePackManifestDraftRequest:
+      type: object
+      description: |
+        Request body for updating a draft pack manifest. Only packs in `draft`
+        lifecycle state accept updates. All fields are optional — only provided
+        fields are updated.
+      properties:
+        displayName:
+          type: string
+          description: Updated display name.
+          minLength: 1
+          maxLength: 256
+        description:
+          type: string
+          description: Updated description.
+          maxLength: 4096
+        packFamily:
+          type: string
+          enum: [language, locale, regulatory, national-standards, payer, specialty, tenant-overlay]
+          description: Updated pack family.
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: Updated dependency pack IDs.
+        eligibility:
+          type: object
+          description: Updated eligibility constraints.
+          properties:
+            legalMarkets:
+              type: array
+              items:
+                type: string
+            facilityTypes:
+              type: array
+              items:
+                type: string
+        contentSummary:
+          type: object
+          description: Updated content summary.
+          additionalProperties: true
+        adapterRequirements:
+          type: array
+          items:
+            type: string
+          description: Updated adapter requirement IDs.
+        configurationKeys:
+          type: array
+          items:
+            type: string
+          description: Updated configuration key declarations.
+        capabilityContributions:
+          type: array
+          items:
+            type: string
+          description: Updated capability contribution declarations.
+
+    FeatureFlagUpdateRequest:
+      type: object
+      description: |
+        Request body for updating a feature flag value. The flag must already exist
+        in the system configuration.
+      required:
+        - value
+      properties:
+        value:
+          description: New value for the feature flag. Type must match the flag's declared type.
+          oneOf:
+            - type: boolean
+            - type: string
+            - type: integer
+        reason:
+          type: string
+          description: Operator-provided reason for the change.
+          maxLength: 2048
+
+    SystemParameterUpdateRequest:
+      type: object
+      description: |
+        Request body for updating a system parameter value. The parameter must
+        already exist in the system configuration.
+      required:
+        - value
+      properties:
+        value:
+          description: New value for the system parameter. Type must match the parameter's declared type.
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+        reason:
+          type: string
+          description: Operator-provided reason for the change.
+          maxLength: 2048
+
+    ReviewSubmissionRequest:
+      type: object
+      description: |
+        Optional request body for submit-review endpoints. Contains a reason or
+        notes for the governance review.
+      properties:
+        reason:
+          type: string
+          description: Operator-provided justification for requesting governance review.
           maxLength: 2048
 
     # --- Response schemas ---
@@ -1128,7 +1817,7 @@ components:
           type: string
         status:
           type: string
-          enum: [draft, active, deprecated, retired]
+          enum: [draft, review-pending, active, deprecated, retired]
         launchTier:
           type: string
           enum: [T0, T1, T2, T3]
@@ -1408,6 +2097,90 @@ components:
           format: date-time
           description: When the run reached a terminal state (completed or failed). Absent if still running.
 
+    FeatureFlagUpdateResponse:
+      type: object
+      description: Response after updating a feature flag.
+      required: [flagKey, value, updatedAt, updatedBy]
+      properties:
+        flagKey:
+          type: string
+          description: The feature flag key that was updated.
+        value:
+          description: The new value of the feature flag.
+          oneOf:
+            - type: boolean
+            - type: string
+            - type: integer
+        previousValue:
+          description: The previous value before this update.
+          oneOf:
+            - type: boolean
+            - type: string
+            - type: integer
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+          description: Operator identity who made the change.
+
+    SystemParameterUpdateResponse:
+      type: object
+      description: Response after updating a system parameter.
+      required: [paramKey, value, updatedAt, updatedBy]
+      properties:
+        paramKey:
+          type: string
+          description: The system parameter key that was updated.
+        value:
+          description: The new value of the system parameter.
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+        previousValue:
+          description: The previous value before this update.
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+          description: Operator identity who made the change.
+
+    ReviewSubmissionResponse:
+      type: object
+      description: Response after submitting a draft entity for governance review.
+      required: [entityId, entityType, previousStatus, newStatus, submittedAt, submittedBy]
+      properties:
+        entityId:
+          type: string
+          description: Identifier of the entity submitted (legalMarketId or packId).
+        entityType:
+          type: string
+          enum: [legal-market-profile, pack-manifest]
+          description: Type of entity submitted for review.
+        previousStatus:
+          type: string
+          description: Status before submission (always `draft`).
+        newStatus:
+          type: string
+          description: Status after submission (always `review-pending`).
+        submittedAt:
+          type: string
+          format: date-time
+        submittedBy:
+          type: string
+          description: Operator identity who submitted.
+        reason:
+          type: string
+          description: Operator-provided justification (if any).
+
     # --- Shared component schemas ---
 
     ReadinessDimensionSummary:
@@ -1437,7 +2210,7 @@ components:
           type: string
         lifecycleState:
           type: string
-          enum: [draft, validated, tested, published, activated, deactivated, retired]
+          enum: [draft, review-pending, validated, tested, published, activated, deactivated, retired]
 
     ResolvedPackEntry:
       type: object
@@ -1453,7 +2226,7 @@ components:
           enum: [mandated, default-on, operator-selected, dependency-required, tenant-override]
         packState:
           type: string
-          enum: [draft, validated, tested, published, activated, deactivated, retired]
+          enum: [draft, review-pending, validated, tested, published, activated, deactivated, retired]
         readinessState:
           type: string
           enum: [declared, specified, implemented, validated, verified, claimable, production-eligible, deprecated, retired]
@@ -1626,7 +2399,7 @@ components:
           description: Semver version of the pack manifest.
         lifecycleState:
           type: string
-          enum: [draft, validated, tested, published, activated, deactivated, retired]
+          enum: [draft, review-pending, validated, tested, published, activated, deactivated, retired]
         eligibleMarkets:
           type: array
           items:
@@ -1703,7 +2476,7 @@ components:
       properties:
         state:
           type: string
-          enum: [draft, validated, tested, published, activated, deactivated, retired]
+          enum: [draft, review-pending, validated, tested, published, activated, deactivated, retired]
         owner:
           type: string
           description: Team or individual owning this pack.
