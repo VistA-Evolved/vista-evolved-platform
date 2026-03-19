@@ -5,6 +5,8 @@
  *   Contract-backed (loaded from packages/contracts/ at startup):
  *     - R3: listLegalMarketProfiles
  *     - R4: getLegalMarketProfile
+ *     - R9: listPacks (hybrid: contract manifests + 1 fabricated demo)
+ *     - R9b: getPack (hybrid: contract manifests + 1 fabricated demo)
  *     - capabilities
  *     - effective-plans
  *
@@ -12,7 +14,7 @@
  *     - R1: listTenants, R2: getTenant
  *     - R5: listTenantBootstrapRequests, R6: getTenantBootstrapRequest
  *     - R7: listProvisioningRuns, R8: getProvisioningRun
- *     - R9: listPacks, R10: getSystemConfig
+ *     - R10: getSystemConfig
  *
  * Response shapes align with the OpenAPI contract:
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
@@ -106,9 +108,53 @@ export default function registerRoutes(server, fixtures, contractData) {
     return stripProvenance(run);
   });
 
-  // ── R9: listPacks ──────────────────────────────────────────────────────
+  // ── R9: listPacks (contract-backed hybrid + filters) ─────────────────────
   server.get(`${PREFIX}/packs`, async (request, reply) => {
-    return stripProvenance(fixtures['packs']);
+    const { packFamily, lifecycleState, legalMarketId, search, page, pageSize } = request.query;
+    let items = contractData.packCatalog.summaries;
+
+    // Filters per OpenAPI: packFamily, lifecycleState, legalMarketId, search
+    if (packFamily) {
+      items = items.filter(p => p.packFamily === packFamily);
+    }
+    if (lifecycleState) {
+      items = items.filter(p => p.lifecycleState === lifecycleState);
+    }
+    if (legalMarketId) {
+      items = items.filter(p => p.eligibleMarkets.includes(legalMarketId));
+    }
+    if (search) {
+      const term = search.toLowerCase();
+      items = items.filter(p =>
+        p.packId.toLowerCase().includes(term) ||
+        p.displayName.toLowerCase().includes(term) ||
+        (p.description && p.description.toLowerCase().includes(term))
+      );
+    }
+
+    // Pagination
+    const pg = Math.max(1, parseInt(page, 10) || 1);
+    const ps = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20));
+    const totalItems = items.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / ps));
+    const start = (pg - 1) * ps;
+    const paged = items.slice(start, start + ps);
+
+    return {
+      items: paged,
+      pagination: { page: pg, pageSize: ps, totalItems, totalPages },
+    };
+  });
+
+  // ── R9b: getPack (contract-backed hybrid) ───────────────────────────────
+  server.get(`${PREFIX}/packs/:packId`, async (request, reply) => {
+    const { packId } = request.params;
+    const detail = contractData.packCatalog.detailIndex.get(packId);
+    if (!detail) {
+      reply.code(404);
+      return { error: 'not_found', message: `Pack ${packId} not found` };
+    }
+    return detail;
   });
 
   // ── R10: getSystemConfig ────────────────────────────────────────────────

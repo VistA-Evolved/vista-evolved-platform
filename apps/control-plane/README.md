@@ -1,7 +1,7 @@
 # Control Plane — Local Review Runtime
 
 > **Local dev server serving read-only API routes and review-only write simulation routes.**
-> 4 read routes are contract-backed (loaded from `packages/contracts/`); the rest are fixture-backed.
+> 6 read routes are contract-backed (loaded from `packages/contracts/`); the rest are fixture-backed.
 > No external services required. Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
 
 ## What it is
@@ -9,7 +9,7 @@
 A local Fastify dev server that:
 
 1. Serves a vanilla HTML/CSS/JS single-page UI from `public/`
-2. Exposes **12 read-only API routes** at `/api/control-plane/v1/*` — 4 contract-backed, 8 fixture-backed
+2. Exposes **13 read-only API routes** at `/api/control-plane/v1/*` — 6 contract-backed, 7 fixture-backed
 3. Exposes **15 review-only write simulation routes** at `/api/control-plane-review/v1/*` plus a discovery endpoint
 4. Renders all 8 canonical control-plane surfaces with functional review dialogs for all 15 contracted write actions
 
@@ -42,7 +42,8 @@ npm run dev
 | R6 | getBootstrapRequest | `GET /api/control-plane/v1/tenant-bootstrap-requests/:id` | Fixture: `fixtures/bootstrap-requests.json` |
 | R7 | listProvisioningRuns | `GET /api/control-plane/v1/provisioning-runs` | Fixture: `fixtures/provisioning-runs.json` |
 | R8 | getProvisioningRun | `GET /api/control-plane/v1/provisioning-runs/:id` | Fixture: `fixtures/provisioning-runs.json` |
-| R9 | listPacks | `GET /api/control-plane/v1/packs` | Fixture: `fixtures/packs.json` |
+| R9 | listPacks | `GET /api/control-plane/v1/packs` | **Contract:** `packages/contracts/pack-manifests/` + 1 fabricated demo |
+| R9b | getPack | `GET /api/control-plane/v1/packs/:packId` | **Contract:** `packages/contracts/pack-manifests/` + 1 fabricated demo |
 | R10 | getSystemConfig | `GET /api/control-plane/v1/system-config` | Fixture: `fixtures/system-config.json` |
 | — | listCapabilities | `GET /api/control-plane/v1/capabilities` | **Contract:** `packages/contracts/capability-manifests/` |
 | — | listEffectivePlans | `GET /api/control-plane/v1/effective-plans` | **Contract:** `packages/contracts/effective-tenant-configuration-plans/` |
@@ -96,7 +97,7 @@ All review routes are prefixed with `/api/control-plane-review/v1`.
 
 ## Write control posture
 
-- **Batch 1 reads (R1-R10 + capabilities + effective-plans):** R3, R4, capabilities, effective-plans are contract-backed; all others are fixture-backed.
+- **Batch 1 reads (R1-R10 + capabilities + effective-plans):** R3, R4, R9, R9b, capabilities, effective-plans are contract-backed; all others are fixture-backed.
 - **Batch 1 writes (W1-W4):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
 - **Batch 2 writes (W5-W7):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
 - **Batch 3 writes (W8-W15):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.

@@ -9,6 +9,8 @@
  *   - GET /api/control-plane/v1/legal-market-profiles/:legalMarketId
  *   - GET /api/control-plane/v1/capabilities
  *   - GET /api/control-plane/v1/effective-plans
+ *   - GET /api/control-plane/v1/packs          (hybrid: contract + 1 fabricated demo)
+ *   - GET /api/control-plane/v1/packs/:packId  (hybrid: contract + 1 fabricated demo)
  *
  * All other read routes remain fixture-backed.
  * No auth, no persistence, no write execution.
@@ -217,11 +219,149 @@ async function loadEffectivePlans(appRoot) {
 }
 
 // ---------------------------------------------------------------------------
+// Pack Catalog — hybrid: 8 contract manifests + 1 fabricated demo pack
+// ---------------------------------------------------------------------------
+
+/**
+ * Fabricated demo pack for the specialty pack family.
+ * NOT from packages/contracts/pack-manifests/ — explicitly fabricated for
+ * review prototype demonstration of a specialty-type pack. Segregated here
+ * so it's visible and easy to remove when real specialty packs arrive.
+ */
+const DEMO_PACK_SPECIALTY_CARDIOLOGY = {
+  packId: 'specialty-cardiology',
+  displayName: 'Cardiology Specialty Pack',
+  description: 'Cardiology specialty variation pack. Fabricated for review prototype demonstration of specialty pack family.',
+  packFamily: 'specialty',
+  version: '0.0.1',
+  lifecycle: {
+    state: 'draft',
+    owner: 'clinical-team',
+    implementationLocus: 'platform',
+    createdAt: '2026-03-19T00:00:00Z',
+    lastModifiedAt: '2026-03-19T00:00:00Z',
+  },
+  attachment: { primaryEntity: 'tenant', overrideScopes: [] },
+  dependencies: [],
+  eligibility: { legalMarkets: [], facilityTypes: [] },
+  contentSummary: { contentTypes: ['templates', 'configuration'], artifactCount: 0 },
+  adapterRequirements: [],
+  configurationKeys: [],
+  capabilityContributions: [],
+  _demo: true,
+};
+
+/** Transform a pack manifest into the OpenAPI PackSummary shape (for list items) */
+function toPackCatalogSummary(manifest) {
+  return {
+    packId: manifest.packId,
+    displayName: manifest.displayName,
+    description: manifest.description,
+    packFamily: manifest.packFamily,
+    version: manifest.version,
+    lifecycleState: manifest.lifecycle.state,
+    eligibleMarkets: (manifest.eligibility && manifest.eligibility.legalMarkets) || [],
+  };
+}
+
+/** Transform a pack manifest into the OpenAPI PackDetail shape (for single pack) */
+function toPackCatalogDetail(manifest) {
+  return {
+    packId: manifest.packId,
+    displayName: manifest.displayName,
+    description: manifest.description,
+    packFamily: manifest.packFamily,
+    version: manifest.version,
+    lifecycle: manifest.lifecycle,
+    attachment: manifest.attachment || { primaryEntity: 'tenant', overrideScopes: [] },
+    dependencies: manifest.dependencies || [],
+    eligibility: manifest.eligibility || { legalMarkets: [], facilityTypes: [] },
+    contentSummary: manifest.contentSummary || { contentTypes: [], artifactCount: 0 },
+    adapterRequirements: manifest.adapterRequirements || [],
+    configurationKeys: manifest.configurationKeys || [],
+    capabilityContributions: manifest.capabilityContributions || [],
+  };
+}
+
+async function loadPackCatalog(appRoot) {
+  const packIndex = await loadPackManifestIndex(appRoot);
+  // Merge contract manifests + fabricated demo
+  const allManifests = [...packIndex.values(), DEMO_PACK_SPECIALTY_CARDIOLOGY];
+  const detailIndex = new Map();
+  for (const m of allManifests) {
+    detailIndex.set(m.packId, toPackCatalogDetail(m));
+  }
+  const summaries = allManifests.map(toPackCatalogSummary);
+  return { summaries, detailIndex };
+}
+
+// ---------------------------------------------------------------------------
+// Pack Reference Integrity Audit — validates cross-references at startup
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify that all pack IDs referenced by other contract-backed data
+ * (legal-market profiles, capabilities, effective-plans) resolve against
+ * the loaded pack catalog. Returns an array of warning strings; empty = clean.
+ */
+function auditPackReferences(packCatalog, legalMarketProfiles, capabilities, effectivePlans) {
+  const knownPackIds = new Set(packCatalog.detailIndex.keys());
+  const warnings = [];
+
+  // Check legal-market profile pack references
+  for (const market of legalMarketProfiles.items) {
+    const allRefs = [
+      ...(market.mandatedPacks || []),
+      ...(market.defaultOnPacks || []),
+      ...(market.eligiblePacks || []),
+    ];
+    for (const ref of allRefs) {
+      if (!knownPackIds.has(ref.packId)) {
+        warnings.push(`legal-market-profile "${market.legalMarketId}" references unknown pack "${ref.packId}"`);
+      }
+    }
+  }
+
+  // Check capability pack dependencies
+  for (const cap of (capabilities.items || [])) {
+    for (const depPackId of (cap.packDependencies || [])) {
+      if (!knownPackIds.has(depPackId)) {
+        warnings.push(`capability "${cap.capabilityId}" references unknown pack "${depPackId}"`);
+      }
+    }
+  }
+
+  // Check effective-plan resolved packs
+  for (const plan of (effectivePlans.plans || [])) {
+    for (const rp of (plan.resolvedPacks || [])) {
+      if (!knownPackIds.has(rp.packId)) {
+        warnings.push(`effective-plan "${plan.effectivePlanId}" references unknown resolved pack "${rp.packId}"`);
+      }
+    }
+  }
+
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------
 // Public API — load all contract-backed data at startup
 // ---------------------------------------------------------------------------
 export async function loadContractData(appRoot) {
   const legalMarketProfiles = await loadLegalMarketProfiles(appRoot);
   const capabilities = await loadCapabilities(appRoot);
   const effectivePlans = await loadEffectivePlans(appRoot);
-  return { legalMarketProfiles, capabilities, effectivePlans };
+  const packCatalog = await loadPackCatalog(appRoot);
+
+  // Startup integrity audit — warn honestly if pack references are broken
+  const integrityWarnings = auditPackReferences(
+    packCatalog, legalMarketProfiles, capabilities, effectivePlans
+  );
+
+  return {
+    legalMarketProfiles,
+    capabilities,
+    effectivePlans,
+    packCatalog,
+    integrityWarnings,
+  };
 }
