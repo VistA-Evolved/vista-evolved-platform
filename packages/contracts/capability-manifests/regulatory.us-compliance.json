@@ -1,0 +1,90 @@
+{
+  "capabilityId": "regulatory.us-compliance",
+  "displayName": "US HIPAA Regulatory Compliance",
+  "description": "United States healthcare regulatory compliance capability covering HIPAA Privacy Rule, Security Rule, Breach Notification Rule, and HITECH Act requirements. When fully realized, enables HIPAA-compliant data handling, access controls, audit trails, and breach notification workflows for US-market tenants.",
+  "capabilityClass": "regulatory",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "us-market-team",
+    "createdAt": "2026-03-20T00:00:00Z",
+    "lastModifiedAt": "2026-03-20T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "declared",
+    "evidenceSummary": "Regulatory pack manifest (regulatory-hipaa.json) identifies HIPAA Privacy Rule, Security Rule, Breach Notification Rule, and HITECH Act as the target compliance frameworks. Configuration key for US compliance mode is declared. No compliance logic, access control patterns, or audit trail specializations are implemented. The platform's existing audit trail (immutable-audit.ts) and RBAC (policy-engine.ts) in the archive repo provide reference patterns but are not HIPAA-specialized.",
+    "scopeBounds": "HIPAA federal requirements only. State-level health information privacy laws (e.g., California CCPA/CMIA, New York SHIELD) are not addressed.",
+    "constrainingFactors": [
+      "regulatory-hipaa pack is draft — no compliance logic or configuration implemented.",
+      "standards-us pack is draft — no coding tables or transaction standards implemented.",
+      "No HIPAA-specific access control policies exist beyond the general RBAC framework.",
+      "No breach notification workflow exists.",
+      "No BAA (Business Associate Agreement) management capability.",
+      "No HIPAA-specific audit trail features beyond the general immutable audit."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": ["US"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "regulatory-hipaa",
+      "packFamily": "regulatory",
+      "relationship": "required",
+      "rationale": "US HIPAA compliance is directly provided by the HIPAA regulatory pack."
+    },
+    {
+      "packId": "standards-us",
+      "packFamily": "national-standards",
+      "relationship": "required",
+      "rationale": "HIPAA Administrative Simplification mandates ICD-10-CM, CPT/HCPCS coding and X12 5010 transaction standards."
+    }
+  ],
+
+  "adapterDependencies": [],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "HIPAA has been identified as the target regulatory framework for the US market in a planning-stage pack manifest. No HIPAA compliance logic, breach notification workflow, or BAA management capability exists. The platform's general security features (audit trail, RBAC, encryption) are not HIPAA-specialized.",
+    "prohibitedClaims": [
+      "Must not claim 'HIPAA compliant' or 'HIPAA certified'.",
+      "Must not claim any specific HIPAA Rule compliance.",
+      "Must not claim BAA management capability.",
+      "Must not claim breach notification capability.",
+      "Must not claim HIPAA-specific audit trail features.",
+      "Must not reference archive repo security features as HIPAA compliance."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "US HIPAA compliance is visible in control-plane for US market planning but blocked by all dependencies being draft. Hidden from tenant admins until regulatory pack and standards pack reach published state and compliance logic is implemented."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "regulatory-hipaa pack must reach at least published lifecycle state.",
+      "standards-us pack must reach at least published lifecycle state.",
+      "HIPAA-specific compliance logic must be implemented and validated.",
+      "HIPAA-specific audit trail features must be implemented.",
+      "Breach notification workflow must be implemented."
+    ],
+    "autoActivation": false,
+    "operatorSelectable": false
+  },
+
+  "notes": [
+    "HIPAA compliance is a prerequisite for any US market deployment beyond T0/exploratory.",
+    "The platform's existing security primitives (immutable audit, RBAC, encryption-at-rest) provide a foundation but are not sufficient for HIPAA compliance claims.",
+    "State-level health information privacy laws are out of scope for this capability — they would require separate regulatory packs (e.g., regulatory-ccpa-cmia for California)."
+  ]
+}

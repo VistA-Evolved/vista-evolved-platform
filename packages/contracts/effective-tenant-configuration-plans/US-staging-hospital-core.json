@@ -1,0 +1,168 @@
+{
+  "tenantId": "us-staging-hospital-001",
+  "legalMarketId": "US",
+  "profileVersion": "0.1.0",
+  "generatedAt": "2026-03-20T00:00:00Z",
+  "resolverVersion": "0.0.0",
+
+  "resolvedPacks": [
+    {
+      "packId": "lang-en",
+      "packFamily": "language",
+      "activationSource": "default-on",
+      "packState": "draft",
+      "readinessState": "specified",
+      "constraints": [
+        "Pack lifecycle is draft. No implemented translations or runtime artifacts exist yet."
+      ]
+    },
+    {
+      "packId": "locale-us",
+      "packFamily": "locale",
+      "activationSource": "default-on",
+      "packState": "draft",
+      "readinessState": "specified",
+      "constraints": [
+        "Pack lifecycle is draft. No implemented locale configuration exists yet."
+      ]
+    },
+    {
+      "packId": "regulatory-hipaa",
+      "packFamily": "regulatory",
+      "activationSource": "mandated",
+      "packState": "draft",
+      "readinessState": "declared",
+      "constraints": [
+        "Pack lifecycle is draft but mandated minimum is published. Mandate cannot be enforced until pack reaches published state.",
+        "No HIPAA compliance logic implemented. Compliance frameworks are identified only."
+      ]
+    },
+    {
+      "packId": "standards-us",
+      "packFamily": "national-standards",
+      "activationSource": "mandated",
+      "packState": "draft",
+      "readinessState": "declared",
+      "constraints": [
+        "Pack lifecycle is draft but mandated minimum is published. Mandate cannot be enforced until pack reaches published state.",
+        "No coding tables, mappings, or transaction implementations exist. ICD-10-CM, CPT, HCPCS, and X12 5010 are identified only.",
+        "Depends on regulatory-hipaa which is also draft."
+      ]
+    }
+  ],
+
+  "deferredItems": [
+    {
+      "packId": "lang-es",
+      "reason": "pack-not-published",
+      "migrationPath": "Requires: (1) lang-es pack manifest authored and published, (2) Spanish translations implemented in distro and platform. Spanish is already a bounded product language per VE-DISTRO-ADR-0003.",
+      "targetState": "specified"
+    }
+  ],
+
+  "readinessPosture": {
+    "language": {
+      "state": "specified",
+      "scopeBounds": "English baseline only. Spanish not yet available as a pack.",
+      "constrainingFactors": [
+        "Only English is available. Spanish pack (lang-es) does not yet exist.",
+        "English pack (lang-en) is draft — no runtime artifacts."
+      ]
+    },
+    "regulatory": {
+      "state": "declared",
+      "scopeBounds": "HIPAA federal requirements identified. No compliance logic implemented. State-level privacy laws not addressed.",
+      "constrainingFactors": [
+        "Regulatory pack is draft. Mandated minimum is published.",
+        "No HIPAA compliance validation logic exists.",
+        "State-level privacy laws (CCPA, SHIELD Act, etc.) not addressed."
+      ]
+    },
+    "payer": {
+      "state": "declared",
+      "scopeBounds": "No US payer packs defined yet. Medicare, Medicaid, and commercial payer integrations are future concerns.",
+      "constrainingFactors": [
+        "No payer packs exist for US market.",
+        "No clearinghouse EDI adapter is implemented."
+      ]
+    },
+    "nationalStandards": {
+      "state": "declared",
+      "scopeBounds": "ICD-10-CM, CPT, HCPCS, and X12 5010 identified. No coding tables or transaction implementations.",
+      "constrainingFactors": [
+        "Standards pack is draft. Mandated minimum is published.",
+        "No coding system integration exists.",
+        "CPT licensing constraints not resolved."
+      ]
+    },
+    "locale": {
+      "state": "specified",
+      "scopeBounds": "en-US locale only. Date (MM/DD/YYYY), currency (USD), and number formatting identified.",
+      "constrainingFactors": [
+        "Locale pack is draft — no runtime locale configuration."
+      ]
+    },
+    "clinicalContent": {
+      "state": "declared",
+      "scopeBounds": "No US-specific clinical content identified yet. VistA clinical data model is US-origin.",
+      "constrainingFactors": [
+        "No clinical content packs exist for US market.",
+        "VistA's US-origin clinical model provides natural alignment but no US-specific content packs."
+      ]
+    },
+    "infrastructure": {
+      "state": "declared",
+      "scopeBounds": "No US-specific infrastructure beyond clearinghouse EDI connectivity.",
+      "constrainingFactors": [
+        "No clearinghouse EDI infrastructure exists.",
+        "No HIPAA-specific infrastructure configuration."
+      ]
+    },
+    "operational": {
+      "state": "declared",
+      "scopeBounds": "No operational runbooks or training for US market.",
+      "constrainingFactors": [
+        "No US market operational documentation exists."
+      ]
+    },
+    "effectiveLaunchTier": "T0",
+    "gatingBlockers": [
+      {
+        "dimension": "regulatory",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "Regulatory pack (regulatory-hipaa) is draft with no HIPAA compliance logic. Must reach at least implemented readiness and published lifecycle."
+      },
+      {
+        "dimension": "nationalStandards",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "Standards pack (standards-us) is draft with no coding tables or transaction implementations. Must reach at least implemented readiness and published lifecycle."
+      },
+      {
+        "dimension": "payer",
+        "currentState": "declared",
+        "requiredState": "declared",
+        "blocker": "No US payer packs exist. Medicare/Medicaid/commercial integrations require payer pack manifests and clearinghouse EDI adapter."
+      },
+      {
+        "dimension": "infrastructure",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "No US-specific infrastructure provisioning exists. Clearinghouse EDI connectivity and HIPAA-specific infrastructure are future concerns."
+      },
+      {
+        "dimension": "operational",
+        "currentState": "declared",
+        "requiredState": "implemented",
+        "blocker": "No operational documentation, training materials, or support processes exist for US market tenants."
+      }
+    ]
+  },
+
+  "tenantSelections": {
+    "selectedPacks": [],
+    "deselectedDefaults": [],
+    "facilityType": "hospital"
+  }
+}

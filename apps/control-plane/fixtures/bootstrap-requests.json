@@ -1,6 +1,6 @@
 {
   "_provenance": {
-    "source": "Fabricated from OpenAPI TenantBootstrapRequestStatus schema (control-plane-operator-bootstrap-and-provisioning.openapi.yaml). PH request references legalMarketId PH and effectivePlanId from packages/contracts/effective-tenant-configuration-plans/PH-single-clinic-core.json.",
+    "source": "Fabricated from OpenAPI TenantBootstrapRequestStatus schema (control-plane-operator-bootstrap-and-provisioning.openapi.yaml). PH request references legalMarketId PH and effectivePlanId from packages/contracts/effective-tenant-configuration-plans/PH-single-clinic-core.json. US request references legalMarketId US and effectivePlanId from packages/contracts/effective-tenant-configuration-plans/US-staging-hospital-core.json.",
     "generatedFor": "Static review prototype — not real bootstrap data",
     "schemaRef": "TenantBootstrapRequestStatus, BootstrapRequestListResponse"
   },

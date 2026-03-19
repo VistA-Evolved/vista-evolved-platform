@@ -1,0 +1,72 @@
+{
+  "packId": "standards-us",
+  "displayName": "United States National Standards Pack",
+  "description": "National healthcare standards for the United States market. Covers ICD-10-CM diagnosis coding, CPT/HCPCS procedure coding, and X12 5010 electronic transaction standards as required by CMS and mandated under HIPAA. This is a planning-stage manifest; no implemented coding tables or transaction mappings exist yet.",
+  "packFamily": "national-standards",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "us-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-20T00:00:00Z",
+    "lastModifiedAt": "2026-03-20T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "legal-market",
+    "overrideScopes": []
+  },
+
+  "dependencies": [
+    {
+      "packId": "regulatory-hipaa",
+      "type": "required",
+      "rationale": "US national standards (ICD-10-CM, CPT, HCPCS, X12 5010) are mandated under the HIPAA Administrative Simplification provisions. Standards pack requires regulatory pack to define the compliance context."
+    }
+  ],
+
+  "eligibility": {
+    "legalMarkets": ["US"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["coding-tables", "configuration"],
+    "artifactCount": 0,
+    "codingSystems": ["ICD-10-CM", "CPT", "HCPCS"],
+    "transactionStandards": ["X12-5010-837P", "X12-5010-837I", "X12-5010-835", "X12-5010-270-271"],
+    "standardsBody": "CMS"
+  },
+
+  "adapterRequirements": [],
+
+  "configurationKeys": [
+    {
+      "key": "coding.primarySystem",
+      "action": "provides",
+      "description": "Sets ICD-10-CM as the primary diagnosis coding system for US market."
+    },
+    {
+      "key": "coding.procedureSystem",
+      "action": "provides",
+      "description": "Sets CPT/HCPCS as the procedure coding system for US market."
+    },
+    {
+      "key": "billing.transactionStandard",
+      "action": "provides",
+      "description": "Sets X12 5010 as the electronic transaction standard for US payer interactions."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "regulatory.us-compliance",
+      "contributionType": "enhances",
+      "description": "US national coding and transaction standards are part of HIPAA Administrative Simplification compliance. Required for correct claim coding and electronic data interchange."
+    }
+  ]
+}

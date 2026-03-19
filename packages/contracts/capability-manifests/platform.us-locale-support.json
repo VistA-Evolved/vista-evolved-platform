@@ -1,0 +1,73 @@
+{
+  "capabilityId": "platform.us-locale-support",
+  "displayName": "US Locale-Aware Display",
+  "description": "Locale-aware display capability for the United States market. When fully realized, enables correct date formatting (MM/DD/YYYY), currency display (USD), number formatting, address formatting (US postal conventions), and measurement unit defaults for US-market tenants.",
+  "capabilityClass": "platform",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "us-market-team",
+    "createdAt": "2026-03-20T00:00:00Z",
+    "lastModifiedAt": "2026-03-20T00:00:00Z"
+  },
+
+  "readiness": {
+    "currentState": "specified",
+    "evidenceSummary": "Locale pack manifest (locale-us.json) declares en-US locale with date format (MM/DD/YYYY), currency (USD), and number formatting conventions. Configuration keys are declared. No implemented locale configuration or runtime artifacts exist yet.",
+    "scopeBounds": "en-US locale only. Date, currency (USD), and number formatting identified but not implemented.",
+    "constrainingFactors": [
+      "locale-us pack is draft — no runtime locale configuration exists.",
+      "No locale-switching infrastructure is implemented in the platform.",
+      "No unit testing of US-specific formatting rules."
+    ]
+  },
+
+  "scope": {
+    "legalMarkets": ["US"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "tenantScopes": []
+  },
+
+  "packDependencies": [
+    {
+      "packId": "locale-us",
+      "packFamily": "locale",
+      "relationship": "required",
+      "rationale": "US locale-aware display is directly provided by the US locale pack."
+    }
+  ],
+
+  "adapterDependencies": [],
+
+  "claimPosture": {
+    "currentClaimLevel": "no-claim",
+    "permittedScopeStatement": "en-US locale conventions have been identified in a planning-stage pack manifest. No locale configuration, formatting logic, or runtime artifacts exist.",
+    "prohibitedClaims": [
+      "Must not claim 'US locale support' or 'localized for US market'.",
+      "Must not claim date, currency, or number formatting is implemented."
+    ]
+  },
+
+  "visibilityPosture": {
+    "controlPlaneVisibility": "visible-disabled",
+    "tenantAdminVisibility": "hidden",
+    "rationale": "US locale support is visible in control-plane for planning but blocked until locale pack reaches published state and runtime configuration exists."
+  },
+
+  "activationSemantics": {
+    "activationMode": "dependency-blocked",
+    "activationConstraints": [
+      "locale-us pack must reach at least published lifecycle state.",
+      "Locale-switching infrastructure must be implemented in the platform."
+    ],
+    "autoActivation": true,
+    "operatorSelectable": false
+  },
+
+  "notes": [
+    "en-US is the closest locale to the platform's current default English baseline, making it relatively low-effort to implement compared to non-English locales.",
+    "VistA itself uses US date conventions internally (FileMan dates), so en-US locale alignment with VistA data is naturally high."
+  ]
+}

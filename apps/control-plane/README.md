@@ -128,4 +128,4 @@ API responses so clients see clean data matching the OpenAPI response schemas.
 
 - Not a production runtime — fixture-backed, no real data store.
 - Not a design mockup — layout follows the screen-contract spec, not visual design.
-- Not persistent — form inputs reset on navigation. No write routes exist.
+- Not persistent — form inputs reset on navigation. Write routes are review-only (local simulation, no persistence).

@@ -1,7 +1,7 @@
 {
   "_provenance": {
-    "source": "Five packs derived VERBATIM from packages/contracts/pack-manifests/ (lang-en.json, locale-ph.json, payer-philhealth.json, regulatory-philhealth-doh.json, standards-ph.json). Two additional packs fabricated from OpenAPI PackSummary/PackDetail schemas for US market coverage.",
-    "generatedFor": "Static review prototype — first 5 packs are real contract data, last 2 are fabricated",
+    "source": "Eight packs derived VERBATIM from packages/contracts/pack-manifests/ (lang-en.json, locale-ph.json, locale-us.json, payer-philhealth.json, regulatory-hipaa.json, regulatory-philhealth-doh.json, standards-ph.json, standards-us.json). One additional pack (specialty-cardiology) fabricated from OpenAPI PackSummary/PackDetail schemas for specialty pack family demonstration.",
+    "generatedFor": "Static review prototype — first 8 packs are real contract data, last 1 is fabricated",
     "schemaRef": "PackSummary, PackDetail, PackListResponse"
   },
   "items": [
@@ -112,17 +112,65 @@
     {
       "packId": "regulatory-hipaa",
       "displayName": "HIPAA Regulatory Pack (US)",
-      "description": "US HIPAA regulatory compliance. Fabricated for review prototype demonstration.",
+      "description": "Regulatory compliance rules for the United States market as mandated by HIPAA. Covers Privacy Rule, Security Rule, Breach Notification Rule, and HITECH Act extensions.",
       "packFamily": "regulatory",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "lifecycleState": "draft",
-      "lifecycle": { "state": "draft", "owner": "us-market-team", "implementationLocus": "platform", "createdAt": "2026-03-19T00:00:00Z", "lastModifiedAt": "2026-03-19T00:00:00Z" },
+      "lifecycle": { "state": "draft", "owner": "us-market-team", "implementationLocus": "platform", "createdAt": "2026-03-20T00:00:00Z", "lastModifiedAt": "2026-03-20T00:00:00Z" },
       "dependencies": [],
       "eligibleMarkets": ["US"],
       "adapterRequirements": [],
-      "configurationKeys": [],
-      "capabilityContributions": [],
-      "contentSummary": { "contentTypes": ["rules"], "artifactCount": 0 }
+      "configurationKeys": [
+        { "key": "regulatory.us.complianceMode", "action": "provides", "description": "Activates US-specific HIPAA regulatory compliance checks." }
+      ],
+      "capabilityContributions": [
+        { "capabilityId": "regulatory.us-compliance", "contributionType": "required", "description": "US HIPAA regulatory compliance is not claimable without this pack active and verified." }
+      ],
+      "contentSummary": { "contentTypes": ["rules", "configuration"], "artifactCount": 0 }
+    },
+    {
+      "packId": "standards-us",
+      "displayName": "United States National Standards Pack",
+      "description": "National healthcare standards for the US market. Covers ICD-10-CM diagnosis coding, CPT/HCPCS procedure coding, and X12 5010 electronic transaction standards.",
+      "packFamily": "national-standards",
+      "version": "0.1.0",
+      "lifecycleState": "draft",
+      "lifecycle": { "state": "draft", "owner": "us-market-team", "implementationLocus": "platform", "createdAt": "2026-03-20T00:00:00Z", "lastModifiedAt": "2026-03-20T00:00:00Z" },
+      "dependencies": [
+        { "packId": "regulatory-hipaa", "type": "required", "rationale": "US coding and transaction standards are mandated under HIPAA Administrative Simplification." }
+      ],
+      "eligibleMarkets": ["US"],
+      "adapterRequirements": [],
+      "configurationKeys": [
+        { "key": "coding.primarySystem", "action": "provides", "description": "Sets ICD-10-CM as the diagnosis coding system for US." },
+        { "key": "coding.procedureSystem", "action": "provides", "description": "Sets CPT/HCPCS as the procedure coding system for US." },
+        { "key": "billing.transactionStandard", "action": "provides", "description": "Sets X12 5010 as the electronic transaction standard." }
+      ],
+      "capabilityContributions": [
+        { "capabilityId": "regulatory.us-compliance", "contributionType": "enhances", "description": "US coding and transaction standards are part of HIPAA Administrative Simplification compliance." }
+      ],
+      "contentSummary": { "contentTypes": ["coding-tables", "configuration"], "artifactCount": 0 }
+    },
+    {
+      "packId": "locale-us",
+      "displayName": "United States Locale Pack",
+      "description": "Locale conventions for the US market. Configures date formats (MM/DD/YYYY), currency (USD), address formatting, number formatting.",
+      "packFamily": "locale",
+      "version": "0.1.0",
+      "lifecycleState": "draft",
+      "lifecycle": { "state": "draft", "owner": "us-market-team", "implementationLocus": "platform", "createdAt": "2026-03-20T00:00:00Z", "lastModifiedAt": "2026-03-20T00:00:00Z" },
+      "dependencies": [],
+      "eligibleMarkets": ["US"],
+      "adapterRequirements": [],
+      "configurationKeys": [
+        { "key": "locale.dateFormat", "action": "provides", "description": "Date display format for US locale (MM/DD/YYYY)." },
+        { "key": "locale.currencyCode", "action": "provides", "description": "Currency code for US locale (USD)." },
+        { "key": "locale.numberFormat", "action": "provides", "description": "Number formatting conventions for US locale." }
+      ],
+      "capabilityContributions": [
+        { "capabilityId": "platform.us-locale-support", "contributionType": "required", "description": "US locale conventions required for correct date, currency, and number display." }
+      ],
+      "contentSummary": { "contentTypes": ["configuration"], "artifactCount": 0 }
     },
     {
       "packId": "specialty-cardiology",
@@ -143,7 +191,7 @@
   "pagination": {
     "page": 1,
     "pageSize": 20,
-    "totalItems": 7,
+    "totalItems": 9,
     "totalPages": 1
   }
 }

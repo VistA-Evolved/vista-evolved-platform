@@ -1,6 +1,6 @@
 {
   "_provenance": {
-    "source": "Data derived VERBATIM from packages/contracts/capability-manifests/ (billing.ph-philhealth-claims.json, clinical.language-support.json, clinical.ph-coding-standards.json, platform.locale-support.json, regulatory.ph-compliance.json). Key fields extracted per capability-manifest.schema.json.",
+    "source": "PH data derived VERBATIM from packages/contracts/capability-manifests/ (billing.ph-philhealth-claims.json, clinical.language-support.json, clinical.ph-coding-standards.json, platform.locale-support.json, regulatory.ph-compliance.json). US data derived VERBATIM from packages/contracts/capability-manifests/ (regulatory.us-compliance.json, platform.us-locale-support.json). All capability data is real contract data.",
     "generatedFor": "Static review prototype — all capability data is real contract data",
     "schemaRef": "capability-manifest.schema.json"
   },
@@ -52,6 +52,26 @@
       "capabilityName": "ph-compliance",
       "readiness": { "state": "declared", "scopeBounds": "UHC Act, Data Privacy Act, PhilHealth eClaims compliance frameworks." },
       "packDependencies": ["regulatory-philhealth-doh"],
+      "adapterDependencies": [],
+      "claimPosture": "not-claimable"
+    },
+    {
+      "capabilityId": "regulatory.us-compliance",
+      "displayName": "US HIPAA Regulatory Compliance",
+      "capabilityClass": "regulatory",
+      "capabilityName": "us-compliance",
+      "readiness": { "state": "declared", "scopeBounds": "HIPAA federal requirements only. State-level privacy laws not addressed." },
+      "packDependencies": ["regulatory-hipaa", "standards-us"],
+      "adapterDependencies": [],
+      "claimPosture": "not-claimable"
+    },
+    {
+      "capabilityId": "platform.us-locale-support",
+      "displayName": "US Locale-Aware Display",
+      "capabilityClass": "platform",
+      "capabilityName": "us-locale-support",
+      "readiness": { "state": "specified", "scopeBounds": "en-US locale: MM/DD/YYYY dates, USD currency, US number formatting." },
+      "packDependencies": ["locale-us"],
       "adapterDependencies": [],
       "claimPosture": "not-claimable"
     }

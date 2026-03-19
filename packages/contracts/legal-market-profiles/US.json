@@ -1,0 +1,137 @@
+{
+  "legalMarketId": "US",
+  "version": "0.1.0",
+  "displayName": "United States",
+  "status": "draft",
+
+  "mandatedPacks": [
+    {
+      "packId": "regulatory-hipaa",
+      "packFamily": "regulatory",
+      "rationale": "HIPAA compliance is a federal legal requirement for all covered entities and business associates handling protected health information (PHI) in the United States. The HIPAA Privacy Rule, Security Rule, and Breach Notification Rule establish mandatory compliance frameworks.",
+      "minimumPackState": "published"
+    },
+    {
+      "packId": "standards-us",
+      "packFamily": "national-standards",
+      "rationale": "ICD-10-CM diagnosis coding, CPT/HCPCS procedure coding, and X12 5010 electronic transaction standards are mandated under HIPAA Administrative Simplification. Facilities cannot submit valid claims to US payers without these coding and transaction systems.",
+      "minimumPackState": "published"
+    }
+  ],
+
+  "defaultOnPacks": [
+    {
+      "packId": "lang-en",
+      "packFamily": "language",
+      "rationale": "English is the baseline product language and the primary professional language used in US healthcare facilities.",
+      "deactivationConstraints": [
+        "Baseline product language cannot be deactivated."
+      ]
+    },
+    {
+      "packId": "locale-us",
+      "packFamily": "locale",
+      "rationale": "US locale conventions (MM/DD/YYYY dates, USD currency, US number formatting) are expected defaults for all US tenants.",
+      "deactivationConstraints": [
+        "Locale pack is required for correct date, currency, and number display."
+      ]
+    }
+  ],
+
+  "eligiblePacks": [
+    {
+      "packId": "lang-es",
+      "packFamily": "language",
+      "eligibilityConditions": [
+        "Requires lang-es pack manifest to be authored and published.",
+        "Spanish is a bounded product language per VE-DISTRO-ADR-0003.",
+        "Relevant for facilities serving significant Spanish-speaking populations.",
+        "This pack does not yet exist."
+      ]
+    }
+  ],
+
+  "excludedPacks": [
+    {
+      "packId": "regulatory-philhealth-doh",
+      "packFamily": "regulatory",
+      "exclusionRationale": "PhilHealth/DOH is a Philippines-only regulatory framework. It does not apply to the US legal market and cannot be composed alongside US regulatory packs."
+    }
+  ],
+
+  "readinessDimensions": {
+    "language": {
+      "state": "specified",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "English baseline only. Spanish not yet available as a pack.",
+      "notes": "English pack (lang-en) exists as a draft manifest. No implemented translations yet. English is the natural baseline for US market."
+    },
+    "regulatory": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "HIPAA federal requirements identified. No compliance logic implemented. State-level privacy laws not addressed.",
+      "notes": "Regulatory pack (regulatory-hipaa.json) exists as a draft manifest. HIPAA Privacy Rule, Security Rule, Breach Notification Rule, and HITECH Act identified but not yet validated or implemented."
+    },
+    "payer": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "No US payer packs defined yet. Medicare, Medicaid, and commercial payer integrations are future concerns.",
+      "notes": "The archive repo contains a prototype US clearinghouse EDI connector (Phase 38/40) as reference material only. No payer pack manifests exist for US market."
+    },
+    "nationalStandards": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "ICD-10-CM, CPT, HCPCS, and X12 5010 identified. No coding tables, mappings, or transaction implementations exist.",
+      "notes": "Standards pack (standards-us.json) exists as a draft manifest. Coding and transaction standards are identified only."
+    },
+    "locale": {
+      "state": "specified",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "en-US locale only. Date (MM/DD/YYYY), currency (USD), and number formatting identified.",
+      "notes": "Locale pack (locale-us.json) exists as a draft manifest. No implemented locale configuration yet. en-US is close to platform's default English baseline."
+    },
+    "clinicalContent": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "No US-specific clinical content identified yet. VistA clinical data model is US-origin and broadly compatible.",
+      "notes": "VistA is a US VA system, so clinical content alignment with US standards is naturally high. Specific US clinical content packs are a future concern."
+    },
+    "infrastructure": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "No US-specific infrastructure requirements identified beyond clearinghouse EDI connectivity for payer interactions.",
+      "notes": "US clearinghouse EDI adapter is a future external-system adapter with integration-pending fallback."
+    },
+    "operational": {
+      "state": "declared",
+      "evidenceRef": "",
+      "lastVerified": "2026-03-20T00:00:00Z",
+      "scopeBounds": "No operational runbooks, training materials, or support documentation for US market.",
+      "notes": "Operational readiness is a future concern gated by implementation progress in other dimensions."
+    }
+  },
+
+  "launchTier": "T0",
+
+  "standards": {
+    "regulatoryBody": "HHS-OCR",
+    "complianceFrameworks": [
+      "HIPAA-Privacy-Rule",
+      "HIPAA-Security-Rule",
+      "HIPAA-Breach-Notification-Rule",
+      "HITECH-Act-2009"
+    ],
+    "codingSystems": [
+      "ICD-10-CM",
+      "CPT",
+      "HCPCS"
+    ]
+  }
+}

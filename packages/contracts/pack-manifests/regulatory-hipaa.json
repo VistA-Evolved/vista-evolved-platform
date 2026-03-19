@@ -1,0 +1,60 @@
+{
+  "packId": "regulatory-hipaa",
+  "displayName": "HIPAA Regulatory Pack (US)",
+  "description": "Regulatory compliance rules for the United States market as mandated by the Health Insurance Portability and Accountability Act of 1996 (HIPAA). Covers the Privacy Rule, Security Rule, Breach Notification Rule, and Enforcement Rule. Includes HITECH Act extensions for electronic health records. This is a planning-stage manifest; no implemented compliance logic exists yet.",
+  "packFamily": "regulatory",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "us-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-20T00:00:00Z",
+    "lastModifiedAt": "2026-03-20T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "legal-market",
+    "overrideScopes": []
+  },
+
+  "dependencies": [],
+
+  "eligibility": {
+    "legalMarkets": ["US"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["rules", "configuration"],
+    "artifactCount": 0,
+    "complianceFrameworks": [
+      "HIPAA-Privacy-Rule",
+      "HIPAA-Security-Rule",
+      "HIPAA-Breach-Notification-Rule",
+      "HITECH-Act-2009"
+    ],
+    "regulatoryBody": "HHS-OCR"
+  },
+
+  "adapterRequirements": [],
+
+  "configurationKeys": [
+    {
+      "key": "regulatory.us.complianceMode",
+      "action": "provides",
+      "description": "Activates US-specific HIPAA regulatory compliance checks when implemented."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "regulatory.us-compliance",
+      "contributionType": "required",
+      "description": "US HIPAA regulatory compliance is not claimable without this pack active and verified."
+    }
+  ]
+}

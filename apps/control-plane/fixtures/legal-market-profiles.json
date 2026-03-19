@@ -1,7 +1,7 @@
 {
   "_provenance": {
-    "source": "PH market data derived VERBATIM from packages/contracts/legal-market-profiles/PH.json. US market fabricated from OpenAPI LegalMarketProfileSummary schema to demonstrate a second market at draft/T0 status.",
-    "generatedFor": "Static review prototype — PH data is real contract data, US data is fabricated",
+    "source": "PH market data derived VERBATIM from packages/contracts/legal-market-profiles/PH.json. US market data derived VERBATIM from packages/contracts/legal-market-profiles/US.json. Both markets are canonically backed by contract artifacts.",
+    "generatedFor": "Static review prototype — both PH and US data are real contract data",
     "schemaRef": "LegalMarketProfileSummary, LegalMarketProfileListResponse, ReadinessDimensionSummary"
   },
   "items": [
@@ -40,19 +40,34 @@
     },
     {
       "legalMarketId": "US",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "displayName": "United States",
       "status": "draft",
       "launchTier": "T0",
-      "mandatedPackCount": 1,
-      "defaultOnPackCount": 1,
-      "eligiblePackCount": 0,
-      "excludedPackCount": 0,
+      "mandatedPackCount": 2,
+      "defaultOnPackCount": 2,
+      "eligiblePackCount": 1,
+      "excludedPackCount": 1,
+      "mandatedPacks": [
+        { "packId": "regulatory-hipaa", "packFamily": "regulatory", "displayName": "HIPAA Regulatory Pack (US)", "lifecycleState": "draft" },
+        { "packId": "standards-us", "packFamily": "national-standards", "displayName": "United States National Standards Pack", "lifecycleState": "draft" }
+      ],
+      "defaultOnPacks": [
+        { "packId": "lang-en", "packFamily": "language", "displayName": "English Language Pack (Baseline)", "lifecycleState": "draft" },
+        { "packId": "locale-us", "packFamily": "locale", "displayName": "United States Locale Pack", "lifecycleState": "draft" }
+      ],
+      "eligiblePacks": [
+        { "packId": "lang-es", "packFamily": "language", "displayName": "Spanish Language Pack", "lifecycleState": "draft" }
+      ],
       "readinessDimensions": [
-        { "dimension": "language", "state": "specified", "scopeBounds": "English baseline." },
-        { "dimension": "regulatory", "state": "declared", "scopeBounds": "HIPAA identified. No compliance logic." },
-        { "dimension": "payer", "state": "declared", "scopeBounds": "No US payer packs defined yet." },
-        { "dimension": "locale", "state": "declared", "scopeBounds": "en-US locale not yet defined." }
+        { "dimension": "language", "state": "specified", "scopeBounds": "English baseline only. Spanish not yet available as a pack." },
+        { "dimension": "regulatory", "state": "declared", "scopeBounds": "HIPAA federal requirements identified. No compliance logic implemented. State-level privacy laws not addressed." },
+        { "dimension": "payer", "state": "declared", "scopeBounds": "No US payer packs defined yet. Medicare, Medicaid, and commercial payer integrations are future concerns." },
+        { "dimension": "nationalStandards", "state": "declared", "scopeBounds": "ICD-10-CM, CPT, HCPCS, and X12 5010 identified. No coding tables or transaction implementations." },
+        { "dimension": "locale", "state": "specified", "scopeBounds": "en-US locale only. Date (MM/DD/YYYY), currency (USD), and number formatting identified." },
+        { "dimension": "clinicalContent", "state": "declared", "scopeBounds": "No US-specific clinical content identified yet. VistA clinical data model is US-origin." },
+        { "dimension": "infrastructure", "state": "declared", "scopeBounds": "No US-specific infrastructure beyond clearinghouse EDI connectivity." },
+        { "dimension": "operational", "state": "declared", "scopeBounds": "No operational runbooks or training for US market." }
       ]
     }
   ],

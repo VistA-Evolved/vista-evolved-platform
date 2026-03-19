@@ -1,0 +1,64 @@
+{
+  "packId": "locale-us",
+  "displayName": "United States Locale Pack",
+  "description": "Locale conventions for the United States market. Configures date formats (MM/DD/YYYY), currency (USD — US Dollar), address formatting (US postal conventions), number formatting (period decimal, comma thousands), and measurement units (imperial/US customary with metric for clinical) appropriate for US healthcare facilities.",
+  "packFamily": "locale",
+  "version": "0.1.0",
+
+  "lifecycle": {
+    "state": "draft",
+    "owner": "us-market-team",
+    "implementationLocus": "platform",
+    "createdAt": "2026-03-20T00:00:00Z",
+    "lastModifiedAt": "2026-03-20T00:00:00Z"
+  },
+
+  "attachment": {
+    "primaryEntity": "tenant",
+    "overrideScopes": ["facility"]
+  },
+
+  "dependencies": [],
+
+  "eligibility": {
+    "legalMarkets": ["US"],
+    "facilityTypes": [],
+    "serviceLines": [],
+    "infrastructureRequirements": [],
+    "licenseRequirements": []
+  },
+
+  "contentSummary": {
+    "contentTypes": ["configuration"],
+    "artifactCount": 0,
+    "localeIdentifier": "en-US"
+  },
+
+  "adapterRequirements": [],
+
+  "configurationKeys": [
+    {
+      "key": "locale.dateFormat",
+      "action": "provides",
+      "description": "Date display format for US locale (MM/DD/YYYY)."
+    },
+    {
+      "key": "locale.currencyCode",
+      "action": "provides",
+      "description": "Currency code for US locale (USD)."
+    },
+    {
+      "key": "locale.numberFormat",
+      "action": "provides",
+      "description": "Number formatting conventions for US locale."
+    }
+  ],
+
+  "capabilityContributions": [
+    {
+      "capabilityId": "platform.us-locale-support",
+      "contributionType": "required",
+      "description": "US locale conventions required for correct date, currency, and number display in United States market tenants."
+    }
+  ]
+}
