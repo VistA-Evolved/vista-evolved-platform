@@ -1,21 +1,21 @@
 /**
- * Control-Plane Local Review Runtime
+ * Operator Console — Local Review Runtime
  *
- * Fastify dev server that:
+ * Fastify dev server serving the operator-console SPA (21 surfaces, 7 domain groups).
+ *
  *   1. Serves static assets (HTML/CSS/JS) from public/
  *   2. Exposes read-only API routes — hybrid (contract-backed + fixture-backed)
  *   3. Exposes LOCAL REVIEW-ONLY write routes for command simulation
  *
- * Contract-backed routes (loaded from packages/contracts/):
- *   - GET /api/control-plane/v1/legal-market-profiles
- *   - GET /api/control-plane/v1/legal-market-profiles/:legalMarketId
- *   - GET /api/control-plane/v1/capabilities
- *   - GET /api/control-plane/v1/effective-plans
- *   - GET /api/control-plane/v1/packs          (hybrid: contract + 1 fabricated demo)
- *   - GET /api/control-plane/v1/packs/:packId  (hybrid: contract + 1 fabricated demo)
- *
- * Fixture-backed routes (loaded from fixtures/):
- *   - All other read-only routes (tenants, bootstrap-requests, provisioning-runs, system-config)
+ * Data sourcing tiers:
+ *   Contract-backed (from packages/contracts/):
+ *     - legal-market-profiles, capabilities, effective-plans, packs
+ *   Fixture-backed (from fixtures/):
+ *     - tenants, bootstrap-requests, provisioning-runs, system-config
+ *   Static (no API):
+ *     - 13 surfaces render contracted IA only (identity, payer-readiness,
+ *       eligibility-sim, alerts, backup-dr, environments, billing, usage,
+ *       support, audit, templates, runbooks, overview)
  *
  * Review-only routes: /api/control-plane-review/v1/* — validation & preview only.
  *

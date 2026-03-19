@@ -1,19 +1,44 @@
 /**
- * Control-Plane Local Review Runtime — app.js
+ * Operator Console — Local Review Runtime — app.js
  *
- * Hash-based routing over 8 canonical control-plane surfaces.
- * Data fetched from local Fastify API routes (fixture-backed).
+ * Hash-based routing over 21 operator-console surfaces across 7 domain groups.
+ * Data fetched from local Fastify API routes (contract-backed + fixture-backed).
  * Write actions open LOCAL REVIEW-ONLY dialogs — no persistence, no real execution.
  *
- * Surface IDs (from screen-contract instances):
- *   control-plane.tenants.list
- *   control-plane.tenants.detail
- *   control-plane.tenants.bootstrap
- *   control-plane.provisioning.runs
- *   control-plane.markets.management
- *   control-plane.markets.detail
- *   control-plane.packs.catalog
- *   control-plane.system.config
+ * Domain groups and surface IDs (from control-panel-page-specs-v2.md):
+ *
+ *   Overview
+ *     control-plane.operations.center       — Operations Center (landing)
+ *
+ *   Tenants
+ *     control-plane.tenants.list            — Tenant Registry
+ *     control-plane.tenants.detail          — Tenant Detail
+ *     control-plane.tenants.bootstrap       — Bootstrap Wizard
+ *     control-plane.provisioning.runs       — Provisioning Runs
+ *     control-plane.identity.invitations    — Identity & Invitations
+ *
+ *   Markets & Readiness
+ *     control-plane.markets.management      — Markets Registry
+ *     control-plane.markets.detail          — Market Detail
+ *     control-plane.packs.catalog           — Pack Catalog
+ *     control-plane.markets.payer-readiness — Payer Readiness
+ *     control-plane.markets.eligibility-sim — Eligibility Simulator
+ *
+ *   Operations
+ *     control-plane.ops.alerts              — Alert Center
+ *     control-plane.ops.backup-dr           — Backup / Restore / DR
+ *     control-plane.ops.environments        — Environments & Feature Flags
+ *
+ *   Commercial
+ *     control-plane.commercial.billing      — Billing & Entitlements Snapshot
+ *     control-plane.commercial.usage        — Usage & Metering
+ *
+ *   Platform
+ *     control-plane.system.config           — System Configuration
+ *     control-plane.platform.support        — Support Console
+ *     control-plane.platform.audit          — Audit Trail
+ *     control-plane.platform.templates      — Templates & Presets
+ *     control-plane.platform.runbooks       — Runbooks Hub
  */
 
 'use strict';
@@ -531,31 +556,51 @@ function reviewUpdateSystemParameter(paramKey, currentValue) {
 }
 
 // ---------------------------------------------------------------------------
-// Router
+// Router — 21 surfaces across 7 domain groups
 // ---------------------------------------------------------------------------
 const ROUTES = {
-  'tenants':           renderTenantsList,
-  'tenants-detail':    renderTenantsDetail,
-  'tenants-bootstrap': renderTenantsBootstrap,
-  'provisioning':      renderProvisioningRuns,
-  'markets':           renderMarketsManagement,
-  'markets-detail':    renderMarketsDetail,
-  'packs':             renderPacksCatalog,
-  'system-config':     renderSystemConfig,
+  // Overview
+  'overview':            renderOverview,
+  // Tenants
+  'tenants':             renderTenantsList,
+  'tenants-detail':      renderTenantsDetail,
+  'tenants-bootstrap':   renderTenantsBootstrap,
+  'provisioning':        renderProvisioningRuns,
+  'identity':            renderIdentityInvitations,
+  // Markets & Readiness
+  'markets':             renderMarketsManagement,
+  'markets-detail':      renderMarketsDetail,
+  'packs':               renderPacksCatalog,
+  'payer-readiness':     renderPayerReadiness,
+  'eligibility-simulator': renderEligibilitySimulator,
+  // Operations
+  'operations':          renderOperationsCenter,
+  'alerts':              renderAlertCenter,
+  'backup-dr':           renderBackupDr,
+  'environments':        renderEnvironmentsFlags,
+  // Commercial
+  'billing':             renderBillingEntitlements,
+  'usage':               renderUsageMetering,
+  // Platform
+  'system-config':       renderSystemConfig,
+  'support':             renderSupportConsole,
+  'audit':               renderAuditTrail,
+  'templates':           renderTemplatesPresets,
+  'runbooks':            renderRunbooksHub,
 };
 
+const DEFAULT_ROUTE = 'overview';
+
 function getRoute() {
-  const hash = location.hash.replace('#/', '').replace(/\//g, '-') || 'tenants';
-  // normalize hash to route key
+  const hash = location.hash.replace('#/', '').replace(/\//g, '-') || DEFAULT_ROUTE;
   for (const key of Object.keys(ROUTES)) {
     if (hash === key || hash.startsWith(key)) return key;
   }
-  return 'tenants';
+  return DEFAULT_ROUTE;
 }
 
 function navigate() {
   const route = getRoute();
-  // highlight nav
   document.querySelectorAll('.nav-sidebar a').forEach(a => {
     a.classList.toggle('active', a.dataset.route === route);
   });
@@ -1430,6 +1475,483 @@ async function boot() {
   const ok = await loadFixtures();
   if (!ok) return;
   navigate();
+}
+
+// ---------------------------------------------------------------------------
+// Static Surface Helper — for surfaces with no live data source yet
+// ---------------------------------------------------------------------------
+function renderStaticSurface(title, surfaceId, icon, description, domain, sourceOfTruth, actions) {
+  const app = document.getElementById('app');
+  const actionRows = actions.map(a =>
+    `<tr><td>${escHtml(a.id)}</td><td>${escHtml(a.label)}</td><td>${badge(a.status)}</td><td style="font-size:12px;">${escHtml(a.note)}</td></tr>`
+  ).join('');
+  app.innerHTML = `
+    <div class="static-surface">
+      <div class="static-icon">${icon}</div>
+      <h2>${escHtml(title)}</h2>
+      <div class="static-desc">${escHtml(description)}</div>
+      <div class="static-envelope">
+        LOCAL REVIEW — No live data source. This surface shows the contracted information architecture only.
+        No API routes, no persistence, no real actions.
+      </div>
+      <div class="card" style="text-align:left;">
+        <h3>Surface Contract</h3>
+        <dl class="kv-list">
+          <dt>Surface ID</dt><dd><code>${escHtml(surfaceId)}</code></dd>
+          <dt>Domain Group</dt><dd>${escHtml(domain)}</dd>
+          <dt>Source of Truth</dt><dd>${escHtml(sourceOfTruth)}</dd>
+          <dt>API Status</dt><dd>${badge('deferred')}</dd>
+          <dt>Persistence</dt><dd>None (local review only)</dd>
+        </dl>
+      </div>
+      ${actionRows.length > 0 ? `
+        <div class="card" style="text-align:left;">
+          <h3>Contracted Actions</h3>
+          <table>
+            <thead><tr><th>Action</th><th>Description</th><th>Status</th><th>Notes</th></tr></thead>
+            <tbody>${actionRows}</tbody>
+          </table>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Overview (control-plane.operations.center) — Landing page
+// ---------------------------------------------------------------------------
+function renderOverview() {
+  const app = document.getElementById('app');
+  const tenants = FIXTURES['tenants']?.items || [];
+  const runs = FIXTURES['provisioning-runs']?.items || [];
+  const markets = FIXTURES['legal-market-profiles']?.items || [];
+  const packs = FIXTURES['packs']?.items || [];
+
+  const activeTenants = tenants.filter(t => t.status === 'active').length;
+  const provisioningTenants = tenants.filter(t => t.status === 'provisioning').length;
+  const pendingRuns = runs.filter(r => r.status === 'in-progress' || r.status === 'queued').length;
+
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <h1>Operator Console — Overview</h1>
+        <p style="font-size:13px;color:var(--text-muted);">Platform-wide operational snapshot. Local review data only.</p>
+      </div>
+    </div>
+
+    <div class="static-envelope">
+      LOCAL REVIEW RUNTIME — All counts and data sourced from local contracts and fixtures.
+      No live backend. No real-time metrics.
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-value">${tenants.length}</div>
+        <div class="stat-label">Total Tenants</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${activeTenants}</div>
+        <div class="stat-label">Active</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${provisioningTenants}</div>
+        <div class="stat-label">Provisioning</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${pendingRuns}</div>
+        <div class="stat-label">Active Runs</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${markets.length}</div>
+        <div class="stat-label">Markets</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${packs.length}</div>
+        <div class="stat-label">Pack Manifests</div>
+      </div>
+    </div>
+
+    <h2 style="font-size:16px;margin-bottom:12px;">Domain Quick Access</h2>
+    <div class="overview-grid">
+      <div class="overview-card" onclick="location.hash='#/tenants'">
+        <h3>Tenants</h3>
+        <p>Tenant registry, bootstrap, provisioning, identity</p>
+        <div class="overview-stat">${tenants.length} tenants · ${pendingRuns} active runs</div>
+      </div>
+      <div class="overview-card" onclick="location.hash='#/markets'">
+        <h3>Markets & Readiness</h3>
+        <p>Market profiles, pack catalog, payer readiness</p>
+        <div class="overview-stat">${markets.length} markets · ${packs.length} packs</div>
+      </div>
+      <div class="overview-card" onclick="location.hash='#/operations'">
+        <h3>Operations</h3>
+        <p>Operations center, alerts, backup/DR, environments</p>
+        <div class="overview-stat">Surfaces: 4 · Data: static only</div>
+      </div>
+      <div class="overview-card" onclick="location.hash='#/billing'">
+        <h3>Commercial</h3>
+        <p>Billing & entitlements, usage & metering</p>
+        <div class="overview-stat">Surfaces: 2 · Data: static only</div>
+      </div>
+      <div class="overview-card" onclick="location.hash='#/system-config'">
+        <h3>Platform</h3>
+        <p>System config, support, audit trail, templates, runbooks</p>
+        <div class="overview-stat">Surfaces: 5 · System config: live fixture</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h3>Review Runtime Status</h3>
+      <dl class="kv-list">
+        <dt>Runtime Mode</dt><dd>local-review</dd>
+        <dt>Total Surfaces</dt><dd>21 (8 data-backed, 13 static/deferred)</dd>
+        <dt>Data Sources</dt><dd>Contract-backed (6 routes) · Fixture-backed (7 routes) · Static (13 surfaces)</dd>
+        <dt>Write Actions</dt><dd>15 review-only simulations (no persistence)</dd>
+        <dt>Auth</dt><dd>Local role simulation via X-Local-Role header</dd>
+      </dl>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Identity & Invitations (control-plane.identity.invitations)
+// ---------------------------------------------------------------------------
+function renderIdentityInvitations() {
+  renderStaticSurface(
+    'Identity & Invitations',
+    'control-plane.identity.invitations',
+    '🔑',
+    'Operator identity directory, invitation lifecycle, and OIDC subject mappings for all tenants.',
+    'Tenants',
+    'Platform PG — identity tables',
+    [
+      { id: 'R11', label: 'List operator identities', status: 'deferred', note: 'Requires identity:manage permission' },
+      { id: 'R12', label: 'List pending invitations', status: 'deferred', note: 'Invitation lifecycle tracking' },
+      { id: 'W17', label: 'Create invitation', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W18', label: 'Revoke invitation', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W19', label: 'Suspend operator identity', status: 'deferred', note: 'Review-only when implemented' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Payer Readiness (control-plane.markets.payer-readiness)
+// ---------------------------------------------------------------------------
+function renderPayerReadiness() {
+  renderStaticSurface(
+    'Payer Readiness',
+    'control-plane.markets.payer-readiness',
+    '🏦',
+    'Payer adapter integration status per market. Tracks which payer connectors are declared, tested, and production-eligible.',
+    'Markets & Readiness',
+    'Platform PG — payer_connector_status',
+    [
+      { id: 'R16', label: 'List payer readiness by market', status: 'deferred', note: 'Read-only surface' },
+      { id: 'R17', label: 'Get payer connector detail', status: 'deferred', note: 'Adapter health + test history' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Eligibility Simulator (control-plane.markets.eligibility-sim)
+// ---------------------------------------------------------------------------
+function renderEligibilitySimulator() {
+  renderStaticSurface(
+    'Pack Eligibility Simulator',
+    'control-plane.markets.eligibility-sim',
+    '🧮',
+    'Dry-run pack eligibility evaluation. Select a market and tenant parameters to preview which packs would resolve, defer, or block.',
+    'Markets & Readiness',
+    'Composition & Eligibility Service (Plan Resolver)',
+    [
+      { id: 'R18', label: 'Simulate eligibility', status: 'deferred', note: 'Uses plan-resolver in preview mode — no side effects' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Operations Center (control-plane.operations.center)
+// ---------------------------------------------------------------------------
+function renderOperationsCenter() {
+  const app = document.getElementById('app');
+  const tenants = FIXTURES['tenants']?.items || [];
+  const runs = FIXTURES['provisioning-runs']?.items || [];
+  const config = FIXTURES['system-config'] || {};
+
+  const activeRuns = runs.filter(r => r.status === 'in-progress');
+  const failedRuns = runs.filter(r => r.status === 'failed');
+  const blockedRuns = runs.filter(r => (r.blockers || []).length > 0);
+
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <div class="breadcrumb">${navLink('#/overview', 'Overview')} / Operations</div>
+        <h1>Operations Center</h1>
+      </div>
+    </div>
+
+    <div class="static-envelope">
+      LOCAL REVIEW — Operational data derived from local fixtures only.
+      No live health checks, no real alerting, no real provisioning status.
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-value">${tenants.length}</div>
+        <div class="stat-label">Total Tenants</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${activeRuns.length}</div>
+        <div class="stat-label">Active Runs</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${failedRuns.length}</div>
+        <div class="stat-label">Failed Runs</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${blockedRuns.length}</div>
+        <div class="stat-label">Blocked Runs</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Provisioning Activity</h3>
+      <table>
+        <thead><tr><th>Run ID</th><th>Tenant</th><th>Status</th><th>Blockers</th><th>Started</th></tr></thead>
+        <tbody>
+          ${runs.map(r => `
+            <tr class="clickable" onclick="location.hash='#/provisioning'">
+              <td><code style="font-size:11px;">${escHtml(r.provisioningRunId?.substring(0, 8) || '—')}...</code></td>
+              <td>${escHtml(r.tenantId?.substring(0, 8) || '—')}...</td>
+              <td>${badge(r.status)}</td>
+              <td>${(r.blockers || []).length > 0 ? `<span style="color:var(--warning);font-weight:600;">${r.blockers.length} blocker(s)</span>` : '—'}</td>
+              <td>${fmtDate(r.startedAt)}</td>
+            </tr>
+          `).join('')}
+          ${runs.length === 0 ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No provisioning runs</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>System Posture</h3>
+      <dl class="kv-list">
+        <dt>Auth Mode</dt><dd>${escHtml(config.systemParameters?.find(p => p.paramKey === 'auth-mode')?.value || '—')}</dd>
+        <dt>OTel Enabled</dt><dd>${escHtml(config.systemParameters?.find(p => p.paramKey === 'otel-enabled')?.value || '—')}</dd>
+        <dt>VistA Instance</dt><dd>${escHtml(config.systemParameters?.find(p => p.paramKey === 'vista-instance-id')?.value || '—')}</dd>
+        <dt>Platform Version</dt><dd>${escHtml(config.deploymentProfile?.platformVersion || '—')}</dd>
+      </dl>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Alert Center (control-plane.ops.alerts)
+// ---------------------------------------------------------------------------
+function renderAlertCenter() {
+  renderStaticSurface(
+    'Alert Center',
+    'control-plane.ops.alerts',
+    '🔔',
+    'Platform-wide alert rules, active alerts, and notification channels. Configurable thresholds for provisioning failures, adapter health, and capacity.',
+    'Operations',
+    'Platform PG — alert_rules, alert_events',
+    [
+      { id: 'R25', label: 'List active alerts', status: 'deferred', note: 'Requires alerts:manage permission' },
+      { id: 'R26', label: 'List alert rules', status: 'deferred', note: 'Rule definitions + thresholds' },
+      { id: 'W30', label: 'Create alert rule', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W31', label: 'Acknowledge alert', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W32', label: 'Silence alert', status: 'deferred', note: 'Time-bounded silence with reason' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Backup / Restore / DR (control-plane.ops.backup-dr)
+// ---------------------------------------------------------------------------
+function renderBackupDr() {
+  renderStaticSurface(
+    'Backup / Restore / DR',
+    'control-plane.ops.backup-dr',
+    '🛡️',
+    'Backup schedules, restore points, and disaster recovery posture. Restore is the highest-risk operator action — requires fleet:restore permission and written justification.',
+    'Operations',
+    'Platform PG — backup_schedule, restore_points',
+    [
+      { id: 'R23', label: 'List backup schedules', status: 'deferred', note: 'Per-tenant and platform-wide' },
+      { id: 'R24', label: 'List restore points', status: 'deferred', note: 'Point-in-time restore catalog' },
+      { id: 'W25', label: 'Initiate restore', status: 'deferred', note: 'HIGHEST-RISK: requires fleet:restore + reason + confirmation' },
+      { id: 'W26', label: 'Update backup schedule', status: 'deferred', note: 'Review-only when implemented' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Environments & Feature Flags (control-plane.ops.environments)
+// ---------------------------------------------------------------------------
+function renderEnvironmentsFlags() {
+  renderStaticSurface(
+    'Environments & Feature Flags',
+    'control-plane.ops.environments',
+    '🏗️',
+    'Fleet environment inventory (dev, staging, production), feature flag management with per-environment and per-tenant overrides.',
+    'Operations',
+    'Platform PG — environments, feature_flags',
+    [
+      { id: 'R21', label: 'List environments', status: 'deferred', note: 'Fleet topology view' },
+      { id: 'R22', label: 'List feature flags', status: 'deferred', note: 'Flag definitions + override tree' },
+      { id: 'W27', label: 'Toggle flag for environment', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W28', label: 'Create environment', status: 'deferred', note: 'Review-only when implemented' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Billing & Entitlements (control-plane.commercial.billing)
+// ---------------------------------------------------------------------------
+function renderBillingEntitlements() {
+  const app = document.getElementById('app');
+  const tenants = FIXTURES['tenants']?.items || [];
+
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <div class="breadcrumb">${navLink('#/overview', 'Overview')} / Commercial</div>
+        <h1>Billing & Entitlements Snapshot</h1>
+      </div>
+    </div>
+
+    <div class="static-envelope">
+      LOCAL REVIEW — No live billing backend. Entitlement data derived from tenant fixture status.
+      No real subscription management, no real invoicing.
+    </div>
+
+    <div class="card">
+      <h3>Tenant Entitlement Summary</h3>
+      <table>
+        <thead><tr><th>Tenant</th><th>Status</th><th>Market</th><th>Launch Tier</th><th>Active Packs</th><th>Billing Status</th></tr></thead>
+        <tbody>
+          ${tenants.map(t => `
+            <tr>
+              <td>${navLink(`#/tenants/detail?id=${t.tenantId}`, t.displayName || t.tenantId)}</td>
+              <td>${badge(t.status)}</td>
+              <td>${escHtml(t.legalMarketId || '—')}</td>
+              <td>${badge(t.effectiveLaunchTier || 'T0')}</td>
+              <td>${(t.activePacks || []).length}</td>
+              <td>${badge('not-connected')}</td>
+            </tr>
+          `).join('')}
+          ${tenants.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No tenants</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Surface Contract</h3>
+      <dl class="kv-list">
+        <dt>Surface ID</dt><dd><code>control-plane.commercial.billing</code></dd>
+        <dt>Domain</dt><dd>Commercial</dd>
+        <dt>Source of Truth</dt><dd>Commercial Service (deferred)</dd>
+        <dt>Permission</dt><dd>commerce:manage</dd>
+        <dt>API Status</dt><dd>${badge('deferred')}</dd>
+      </dl>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Usage & Metering (control-plane.commercial.usage)
+// ---------------------------------------------------------------------------
+function renderUsageMetering() {
+  renderStaticSurface(
+    'Usage & Metering',
+    'control-plane.commercial.usage',
+    '📊',
+    'Per-tenant resource consumption metrics: API calls, storage, active users, concurrent sessions. Feeds billing calculations.',
+    'Commercial',
+    'Commercial Service — usage_metrics (deferred)',
+    [
+      { id: 'R29', label: 'List tenant usage summaries', status: 'deferred', note: 'Read-only — commerce:manage permission' },
+      { id: 'R30', label: 'Get tenant usage detail', status: 'deferred', note: 'Time-series breakdown by metric' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Support Console (control-plane.platform.support)
+// ---------------------------------------------------------------------------
+function renderSupportConsole() {
+  renderStaticSurface(
+    'Support Console',
+    'control-plane.platform.support',
+    '🎧',
+    'Support ticket lifecycle for operator-reported and system-detected issues. Links tickets to tenants, provisioning runs, and incidents.',
+    'Platform',
+    'Support/Incident Service (deferred)',
+    [
+      { id: 'R31', label: 'List support tickets', status: 'deferred', note: 'Filterable by tenant, severity, status' },
+      { id: 'R32', label: 'Get ticket detail', status: 'deferred', note: 'Full timeline with audit events' },
+      { id: 'W33', label: 'Create ticket', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W34', label: 'Update ticket status', status: 'deferred', note: 'Open -> investigating -> resolved -> closed' },
+      { id: 'W35', label: 'Escalate ticket', status: 'deferred', note: 'Requires support:manage permission' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Audit Trail (control-plane.platform.audit)
+// ---------------------------------------------------------------------------
+function renderAuditTrail() {
+  renderStaticSurface(
+    'Audit Trail',
+    'control-plane.platform.audit',
+    '📋',
+    'Immutable, hash-chained audit log of all operator actions across the control plane. Supports compliance export and integrity verification.',
+    'Platform',
+    'Platform PG — immutable_audit_log',
+    [
+      { id: 'R33', label: 'List audit entries', status: 'deferred', note: 'Paginated, filterable by actor/action/tenant/date' },
+      { id: 'R34', label: 'Verify chain integrity', status: 'deferred', note: 'SHA-256 hash chain verification' },
+      { id: 'R35', label: 'Export audit range', status: 'deferred', note: 'Requires audit:export permission' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Templates & Presets (control-plane.platform.templates)
+// ---------------------------------------------------------------------------
+function renderTemplatesPresets() {
+  renderStaticSurface(
+    'Templates & Presets',
+    'control-plane.platform.templates',
+    '📄',
+    'Reusable configuration templates for tenant bootstrap, market profiles, and pack bundles. Operators create templates from known-good configurations.',
+    'Platform',
+    'Platform PG — config_templates',
+    [
+      { id: 'R36', label: 'List templates', status: 'deferred', note: 'Grouped by template type' },
+      { id: 'W36', label: 'Create template from snapshot', status: 'deferred', note: 'Review-only when implemented' },
+      { id: 'W37', label: 'Apply template to tenant', status: 'deferred', note: 'Preview diff before apply' },
+    ]
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Surface: Runbooks Hub (control-plane.platform.runbooks)
+// ---------------------------------------------------------------------------
+function renderRunbooksHub() {
+  renderStaticSurface(
+    'Runbooks Hub',
+    'control-plane.platform.runbooks',
+    '📖',
+    'Indexed operator runbook catalog. Links operational procedures to surfaces, services, and failure modes. Read-only reference surface.',
+    'Platform',
+    'docs/runbooks/ (filesystem)',
+    [
+      { id: 'R19', label: 'List runbooks', status: 'deferred', note: 'Read-only catalog index' },
+      { id: 'R20', label: 'Get runbook content', status: 'deferred', note: 'Rendered markdown' },
+    ]
+  );
 }
 
 boot();

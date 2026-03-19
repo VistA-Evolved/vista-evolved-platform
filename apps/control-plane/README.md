@@ -1,7 +1,7 @@
-# Control Plane — Local Review Runtime
+# Operator Console — Local Review Runtime
 
-> **Local dev server serving read-only API routes and review-only write simulation routes.**
-> 6 read routes are contract-backed (loaded from `packages/contracts/`); the rest are fixture-backed.
+> **Local dev server serving the operator console as a 21-surface SPA across 7 domain groups.**
+> Read data is sourced from three tiers: contract-backed (from `packages/contracts/`), fixture-backed (from `fixtures/`), and static (contracted IA only, no API).
 > No external services required. Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
 
 ## What it is
@@ -11,7 +11,7 @@ A local Fastify dev server that:
 1. Serves a vanilla HTML/CSS/JS single-page UI from `public/`
 2. Exposes **13 read-only API routes** at `/api/control-plane/v1/*` — 6 contract-backed, 7 fixture-backed
 3. Exposes **15 review-only write simulation routes** at `/api/control-plane-review/v1/*` plus a discovery endpoint
-4. Renders all 8 canonical control-plane surfaces with functional review dialogs for all 15 contracted write actions
+4. Renders **21 operator-console surfaces** across 7 domain groups with functional review dialogs for all 15 contracted write actions
 
 Route names and response shapes align with the authoritative OpenAPI contract:
 `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml`
@@ -105,25 +105,75 @@ All 15 contracted write actions from the OpenAPI specification are exposed as **
 
 All review routes are prefixed with `/api/control-plane-review/v1`.
 
-## 8 Surfaces
+## 21 Surfaces (7 domain groups)
 
-| # | Surface | Route | Source Contract |
-|---|---------|-------|-----------------|
-| 1 | Tenant Registry | `#/tenants` | `control-plane.tenants.list` |
-| 2 | Tenant Detail | `#/tenants/detail` | `control-plane.tenants.detail` |
-| 3 | Tenant Bootstrap | `#/tenants/bootstrap` | `control-plane.tenants.bootstrap` |
-| 4 | Provisioning Runs | `#/provisioning` | `control-plane.provisioning.runs` |
-| 5 | Market Management | `#/markets` | `control-plane.markets.management` |
-| 6 | Market Detail | `#/markets/detail` | `control-plane.markets.detail` |
-| 7 | Pack Catalog | `#/packs` | `control-plane.packs.catalog` |
-| 8 | System Config | `#/system-config` | `control-plane.system.config` |
+### Overview (landing page)
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 1 | Overview | `#/overview` | `control-plane.operations.center` | Semi-live (fixture aggregation) |
+
+### Tenants
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 2 | Tenant Registry | `#/tenants` | `control-plane.tenants.list` | Fixture |
+| 3 | Tenant Detail | `#/tenants/detail` | `control-plane.tenants.detail` | Fixture |
+| 4 | Tenant Bootstrap | `#/tenants/bootstrap` | `control-plane.tenants.bootstrap` | Fixture |
+| 5 | Provisioning Runs | `#/provisioning` | `control-plane.provisioning.runs` | Fixture |
+| 6 | Identity & Invitations | `#/identity` | `control-plane.identity.invitations` | Static |
+
+### Markets & Readiness
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 7 | Market Management | `#/markets` | `control-plane.markets.management` | Contract |
+| 8 | Market Detail | `#/markets/detail` | `control-plane.markets.detail` | Contract |
+| 9 | Pack Catalog | `#/packs` | `control-plane.packs.catalog` | Contract |
+| 10 | Payer Readiness | `#/payer-readiness` | `control-plane.markets.payer-readiness` | Static |
+| 11 | Eligibility Simulator | `#/eligibility-sim` | `control-plane.markets.eligibility-sim` | Static |
+
+### Operations
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 12 | Operations Center | `#/operations` | `control-plane.operations.center` | Semi-live (fixture) |
+| 13 | Alert Center | `#/alerts` | `control-plane.ops.alerts` | Static |
+| 14 | Backup & DR | `#/backup-dr` | `control-plane.ops.backup-dr` | Static |
+| 15 | Environments & Flags | `#/environments` | `control-plane.ops.environments` | Static |
+
+### Commercial
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 16 | Billing & Entitlements | `#/billing` | `control-plane.commercial.billing` | Semi-live (fixture) |
+| 17 | Usage Metering | `#/usage` | `control-plane.commercial.usage` | Static |
+
+### Platform
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 18 | System Config | `#/system-config` | `control-plane.system.config` | Fixture |
+| 19 | Support Console | `#/support` | `control-plane.platform.support` | Static |
+| 20 | Audit Trail | `#/audit` | `control-plane.platform.audit` | Static |
+| 21 | Templates & Presets | `#/templates` | `control-plane.platform.templates` | Static |
+
+### Runbooks (sidebar link)
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| — | Runbooks Hub | `#/runbooks` | `control-plane.platform.runbooks` | Static |
+
+### Data sourcing tiers
+
+| Tier | Description | Surfaces |
+|------|-------------|----------|
+| **Contract-backed** | Live data loaded from `packages/contracts/` at startup | Markets, Market Detail, Packs, Capabilities, Effective Plans |
+| **Fixture-backed** | Static JSON from `fixtures/` | Tenants, Bootstrap, Provisioning, System Config |
+| **Semi-live** | Aggregates from existing fixture/contract data | Overview, Operations Center, Billing & Entitlements |
+| **Static** | Contracted IA only — no API route, no data | 13 surfaces (Identity, Payer Readiness, Eligibility Sim, Alerts, Backup & DR, Environments, Usage, Support, Audit, Templates, Runbooks) |
 
 ## Write control posture
-
-- **Batch 1 reads (R1-R10 + capabilities + effective-plans):** R3, R4, R9, R9b, capabilities, effective-plans are contract-backed; all others are fixture-backed.
-- **Batch 1 writes (W1-W4):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
-- **Batch 2 writes (W5-W7):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
-- **Batch 3 writes (W8-W15):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
 
 All 15 write actions have review routes and UI dialogs. No write action persists data, modifies fixtures, or fakes success. Every review response includes `executed: false` and `persistence: "none"`.
 
@@ -195,7 +245,8 @@ profiles, capabilities, and effective plans resolve to actual manifests. Warning
 
 ## What this is NOT
 
-- Not a production runtime — hybrid contract/fixture-backed, no real data store.
+- Not a production runtime — hybrid contract/fixture/static-backed, no real data store.
 - Not a design mockup — layout follows the screen-contract spec, not visual design.
 - Not persistent — form inputs reset on navigation. Write routes are review-only (local simulation, no persistence).
+- Not auth — role switcher is local operator-access enforcement only, not a real IAM system.
 - Not real authentication — the local operator-access layer simulates role enforcement via request header, not SSO/OIDC/JWT.

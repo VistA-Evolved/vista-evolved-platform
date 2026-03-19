@@ -1,7 +1,9 @@
 # Control-Panel Action Semantics and Source-of-Truth Binding — Batch 1
 
-> **Status:** Draft  
-> **Scope:** 8 canonical control-plane surfaces  
+> **⚠️ SUPERSEDED** by `control-panel-action-semantics-v2.md` (21 surfaces). This batch-1 document (8 surfaces) is retained as reference. The v2 document carries forward all batch-1 actions (R1–R10, W1–W16, N1–N9) and adds v2 actions (R11–R36, W17–W41, N10–N19).
+
+> **Status:** Superseded  
+> **Scope:** 8 canonical control-plane surfaces (see v2 for full 21-surface coverage)  
 > **Audience:** Implementation engineers, contract reviewers, QA  
 > **Not authorized:** This document specifies action binding; it does not authorize runtime implementation.
 

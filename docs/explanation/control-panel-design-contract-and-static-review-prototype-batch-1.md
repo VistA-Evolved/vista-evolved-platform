@@ -1,6 +1,8 @@
 # Control-Panel Design Contract and Static-Review Prototype — Batch 1
 
-> **Status:** Draft
+> **⚠️ PARTIALLY SUPERSEDED.** Page specs and action semantics are now covered by v2 documents (`control-panel-page-specs-v2.md`, `control-panel-action-semantics-v2.md`). This design contract's layout regions and review checklists remain valid for the 8 batch-1 surfaces. A v2 design contract covering all 21 surfaces has not yet been authored.
+
+> **Status:** Partially superseded  
 > **Scope:** 8 canonical control-plane surfaces
 > **Audience:** Design reviewers, implementation engineers, QA
 > **Not authorized:** This document defines design constraints and review criteria; it does not authorize runtime implementation or UI code.

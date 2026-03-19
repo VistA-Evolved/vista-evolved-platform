@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Control Plane — Local Review Runtime</title>
+  <title>Operator Console — Local Review Runtime</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div style="display:flex;flex-direction:column;width:100%;">
     <!-- STATIC REVIEW BANNER — always visible -->
     <div class="review-banner">
-      LOCAL DEV REVIEW — FIXTURE-BACKED ·
-      Read-only · No persistence ·
-      Write actions open review-only simulation dialogs (no real execution)
+      LOCAL REVIEW RUNTIME — No persistence · No real writes · No live backend ·
+      Read data sourced from contracts + local fixtures ·
+      Write actions open review-only simulation dialogs
       <span class="role-switcher">
         | Role: <select id="role-selector" onchange="switchRole(this.value)">
           <option value="platform-operator">platform-operator</option>
@@ -27,17 +27,52 @@
     </div>
 
     <div class="shell">
-      <!-- Left navigation -->
+      <!-- Left navigation — 7 operator-console domain groups -->
       <nav class="nav-sidebar">
-        <h2>Control Plane</h2>
-        <a href="#/tenants" data-route="tenants">Tenant Registry</a>
-        <a href="#/tenants/detail" data-route="tenants-detail">Tenant Detail</a>
-        <a href="#/tenants/bootstrap" data-route="tenants-bootstrap">Tenant Bootstrap</a>
-        <a href="#/provisioning" data-route="provisioning">Provisioning Runs</a>
-        <a href="#/markets" data-route="markets">Market Management</a>
-        <a href="#/markets/detail" data-route="markets-detail">Market Detail</a>
-        <a href="#/packs" data-route="packs">Pack Catalog</a>
-        <a href="#/system-config" data-route="system-config">System Configuration</a>
+        <h2>Operator Console</h2>
+
+        <a href="#/overview" data-route="overview" class="nav-overview">Overview</a>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Tenants</div>
+          <a href="#/tenants" data-route="tenants">Tenant Registry</a>
+          <a href="#/tenants/detail" data-route="tenants-detail">Tenant Detail</a>
+          <a href="#/tenants/bootstrap" data-route="tenants-bootstrap">Bootstrap Wizard</a>
+          <a href="#/provisioning" data-route="provisioning">Provisioning Runs</a>
+          <a href="#/identity" data-route="identity">Identity &amp; Invitations</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Markets &amp; Readiness</div>
+          <a href="#/markets" data-route="markets">Markets Registry</a>
+          <a href="#/markets/detail" data-route="markets-detail">Market Detail</a>
+          <a href="#/packs" data-route="packs">Pack Catalog</a>
+          <a href="#/payer-readiness" data-route="payer-readiness">Payer Readiness</a>
+          <a href="#/eligibility-simulator" data-route="eligibility-simulator">Eligibility Simulator</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Operations</div>
+          <a href="#/operations" data-route="operations">Operations Center</a>
+          <a href="#/alerts" data-route="alerts">Alert Center</a>
+          <a href="#/backup-dr" data-route="backup-dr">Backup / DR</a>
+          <a href="#/environments" data-route="environments">Environments &amp; Flags</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Commercial</div>
+          <a href="#/billing" data-route="billing">Billing &amp; Entitlements</a>
+          <a href="#/usage" data-route="usage">Usage &amp; Metering</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Platform</div>
+          <a href="#/system-config" data-route="system-config">System Configuration</a>
+          <a href="#/support" data-route="support">Support Console</a>
+          <a href="#/audit" data-route="audit">Audit Trail</a>
+          <a href="#/templates" data-route="templates">Templates &amp; Presets</a>
+          <a href="#/runbooks" data-route="runbooks">Runbooks Hub</a>
+        </div>
       </nav>
 
       <!-- Main content area -->

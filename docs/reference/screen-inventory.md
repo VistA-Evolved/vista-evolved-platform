@@ -785,6 +785,41 @@ These surfaces correspond to VistA-native administrative and operational functio
 
 These surfaces belong to the control-plane workspace (`apps/control-plane/`) per VE-PLAT-ADR-0003 and workspace map §11.
 
+**21 canonical operator-console surfaces** are organized into 5 navigation groups,
+each aligned to a service domain from the service-map architecture doc
+(`docs/explanation/control-plane-service-map-and-operator-console-architecture.md`).
+Existing entries (§9.1–§9.8) retain their original numbering for backward
+compatibility. New entries (§9.9–§9.21) follow. The binding table below
+provides the authoritative grouping.
+
+> **Separation rule:** These 21 surfaces are explicitly distinct from tenant-admin,
+> clinician, ancillary, revenue-cycle, and analytics/executive surfaces. No surface
+> in this section appears in any tenant-scoped workspace.
+
+| Nav group | Surface ID | Surface name | Primary service | §ref |
+|-----------|-----------|-------------|----------------|------|
+| **Tenants** | `control-plane.tenants.list` | Tenant Registry | Tenant Portfolio | §9.1 |
+| | `control-plane.tenants.detail` | Tenant Detail | Tenant Portfolio | §9.5 |
+| | `control-plane.tenants.bootstrap` | New Tenant Bootstrap Wizard | Bootstrap Orchestrator | §9.6 |
+| | `control-plane.provisioning.runs` | Provisioning Runs | Bootstrap Orchestrator | §9.7 |
+| | `control-plane.tenants.identity` | Identity & Invitations | Tenant Portfolio | §9.9 |
+| **Markets** | `control-plane.markets.management` | Markets Registry | Composition & Eligibility | §9.2 |
+| | `control-plane.markets.detail` | Market Detail / Readiness Vector | Composition + Governance | §9.8 |
+| | `control-plane.markets.payer-readiness` | Payer Readiness Registry | Composition + Governance | §9.10 |
+| | `control-plane.packs.catalog` | Pack Catalog | Composition + Governance | §9.3 |
+| | `control-plane.packs.eligibility-simulator` | Pack Eligibility Simulator | Composition | §9.11 |
+| **Fleet** | `control-plane.fleet.environments` | Feature Flags / Environments | Runtime Fleet & Release | §9.12 |
+| | `control-plane.fleet.backup-dr` | Backup / Restore / DR | Runtime Fleet & Release | §9.13 |
+| **Commerce** | `control-plane.commerce.billing` | Billing & Entitlements Snapshot | Commercial | §9.14 |
+| | `control-plane.commerce.usage` | Usage & Metering Explorer | Commercial | §9.15 |
+| **Platform** | `control-plane.platform.operations-center` | Operations Center | All (cross-cutting) | §9.16 |
+| | `control-plane.system.config` | System Configuration | Governance | §9.4 |
+| | `control-plane.platform.templates` | Templates & Presets | Governance | §9.17 |
+| | `control-plane.platform.support` | Support Console | Support/Incident/Audit | §9.18 |
+| | `control-plane.platform.audit` | Audit Trail | Support/Incident/Audit | §9.19 |
+| | `control-plane.platform.alerts` | Alert Center | Support/Incident/Audit | §9.20 |
+| | `control-plane.platform.runbooks` | Operator Runbooks & Docs Hub | Governance | §9.21 |
+
 ### 9.1 Tenant lifecycle management
 
 | Field | Value |
@@ -1009,6 +1044,370 @@ These surfaces belong to the control-plane workspace (`apps/control-plane/`) per
 | **governingReferences** | Workspace map §11.2, capability truth §15, country-payer readiness spec, OpenAPI control-plane-operator-bootstrap-and-provisioning (getLegalMarketProfile), bootstrap/provisioning contract map §3, control-panel surface expansion batch 1 §5.4. |
 | **notes** | Single legal-market readiness summary surface. Drill target from `control-plane.markets.management`. Displays market readiness dimensions, launch tier, mandated/default-on/eligible/excluded packs. Directly bound to 1 OpenAPI operation (getLegalMarketProfile). Claim surface shows full readiness detail including internal-only states (informational). PH.json instance provides concrete evidence of displayed data. Entry point for bootstrap workflow targeting this market. |
 
+### 9.9 Identity & Invitations
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.tenants.identity` |
+| **surfaceName** | Identity & Invitations |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into tenants.detail (context: `tenantId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.1, §4.4 (invitation lifecycle), IA v2 §2. |
+| **notes** | Platform-wide identity directory and invitation lifecycle across all tenants. State machine: invited → accepted → active → revoked / expired. Operator question: "Who has been invited and what is the acceptance status?" Next safe action: send new invitation, revoke access, resend expired. Audit: `tenant.invitation.sent`, `tenant.member.revoked`. |
+
+### 9.10 Payer Readiness Registry
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.markets.payer-readiness` |
+| **surfaceName** | Payer Readiness Registry |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `read-only` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `claim-readiness-registry` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | `{ claimSurfaceType: "control-plane-provisioning", claimDomains: ["payer", "readiness"], informationalOnly: true }` |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into markets.detail (context: `legalMarketId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `payer-specific` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.2, §2.2.7, country-payer readiness spec, IA v2 §2. |
+| **notes** | Lists all payers across all markets with per-payer readiness state, integration mode, and connector status. Operator question: "Which payers in which markets are ready for live claim submission?" Next safe action: drill into market detail for a specific market's payer landscape, flag payer readiness issue. Audit: read-only surface; no state-changing actions. Backed by Composition & Eligibility (payer catalog) and Governance (readiness assessment). |
+
+### 9.11 Pack Eligibility Simulator
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.packs.eligibility-simulator` |
+| **surfaceName** | Pack Eligibility Simulator |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `local` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `read-only` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | `{ claimSurfaceType: "control-plane-provisioning", claimDomains: ["pack-eligibility", "composition"], informationalOnly: true }` |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: launch bootstrap with simulated config (context: simulation parameters) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `multi-dimensional` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.2 (7-step resolver), composition engine, IA v2 §2. |
+| **notes** | Runs the composition resolver in preview mode: given a hypothetical market + selections, shows the effective configuration plan that would result. Deterministic and stateless — no persistent mutation. Operator question: "If I set up a tenant in market X with selections Y, what packs would resolve?" Next safe action: adjust selections and re-run, save simulation as bootstrap template, launch bootstrap with this configuration. Audit: simulation runs are logged but do not constitute state changes. Backed by Composition & Eligibility Service. |
+
+### 9.12 Feature Flags / Environments
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.fleet.environments` |
+| **surfaceName** | Feature Flags / Environments |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `controlled-write` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `operational` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into tenants.detail (context: `tenantId` via environment binding) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.4 (Runtime Fleet & Release), IA v2 §2. |
+| **notes** | Lists all managed runtime environments with feature-flag state, release-channel assignments, VistA lane bindings, and tenant mapping. Operator question: "What feature flags are active per environment, and which tenants are on which release channel?" Next safe action: toggle feature flag, assign release channel, capture fleet health snapshot. Every flag toggle and channel assignment is audit-logged: `fleet.feature-flag.toggled`, `fleet.release-channel.assigned`. Backed by Runtime Fleet & Release Service. |
+
+### 9.13 Backup / Restore / DR
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.fleet.backup-dr` |
+| **surfaceName** | Backup / Restore / DR |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `local` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `controlled-write` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `operational` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | none |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.4, IA v2 §2. |
+| **notes** | Backup status, restore operations, and disaster-recovery test tracking for all managed environments. Operator question: "What is the backup freshness for each environment and is DR tested?" Next safe action: trigger backup, view backup history, initiate restore (second-approval required — restore is destructive), view DR test results. Restore requires explicit second-operator confirmation. Audit: `fleet.backup.triggered`, `fleet.restore.initiated`, `fleet.dr-test.completed`. Backed by Runtime Fleet & Release Service. |
+
+### 9.14 Billing & Entitlements Snapshot
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.commerce.billing` |
+| **surfaceName** | Billing & Entitlements Snapshot |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `commercial` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into tenants.detail (context: `tenantId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.5 (Commercial Service), §4.3 (billing lifecycle), IA v2 §2. |
+| **notes** | Lists all subscriptions and billing accounts with payment status (trial / active / past-due / suspended / terminated). Operator question: "Which tenants have billing issues and which are past-due?" Next safe action: view subscription detail, record payment, trigger commercial suspension (which emits `commercial.suspension.triggered` — Tenant Portfolio subscribes and may suspend tenant). Commercial suspension is the trigger for tenant suspension, not a direct tenant-level action from this surface. Audit: `commercial.payment.recorded`, `commercial.suspension.triggered`. Backed by Commercial Service. |
+
+### 9.15 Usage & Metering Explorer
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.commerce.usage` |
+| **surfaceName** | Usage & Metering Explorer |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `local` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `read-only` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `commercial` |
+| **claimSurface** | null |
+| **analyticsSurface** | `{ analyticsSurfaceType: "usage-metering", aggregationLevel: "tenant", phiPresent: false }` |
+| **crossWorkspaceTransitions** | Outgoing: drill into tenants.detail (context: `tenantId`) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.5 (Commercial Service), IA v2 §2. |
+| **notes** | Metered usage data across all tenants: active users, API calls, storage consumption, and other billable dimensions. Operator question: "How much resource usage has each tenant consumed relative to their subscription tier?" Next safe action: view tenant usage detail, export usage report, compare usage vs subscription ceiling. Read-only surface — no state-changing actions. Usage metering aggregates never contain PHI. Audit: export events logged (`commercial.usage.exported`). Backed by Commercial Service. |
+
+### 9.16 Operations Center
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.platform.operations-center` |
+| **surfaceName** | Operations Center |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `operational` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into any service-domain surface (context varies by drill target) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2 (all 7 services), IA v2 §2. |
+| **notes** | Cross-cutting aggregation dashboard. Consumes summary metrics from all 7 service domains: tenant count by state, active provisioning runs, fleet health, open support cases, pending alerts, billing exceptions, governance warnings. Operator question: "What is the overall platform health right now, and what needs my attention?" Next safe action: acknowledge alert, drill into any service-domain detail surface. Acknowledging an alert is the only write action; all others are navigational. Audit: `platform.alert.acknowledged`. Backed by query aggregation across all services — no single owning service. |
+
+### 9.17 Templates & Presets
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.platform.templates` |
+| **surfaceName** | Templates & Presets |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `local` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `controlled-write` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: launch bootstrap with template (context: template selections) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `multi-dimensional` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.7 (Governance & Readiness), IA v2 §2. |
+| **notes** | Manages shared bootstrap templates, configuration presets, and governance template library. Templates encode reusable market + pack-selection + config combinations for rapid bootstrap. Operator question: "What templates and presets exist, and can I create a new bootstrap from an existing template?" Next safe action: create template draft, edit template, apply template to new bootstrap, publish template. Template publish requires review. Multi-dimensional pack sensitivity: template content varies by market and pack families. Audit: `governance.template.created`, `governance.template.published`. Backed by Governance & Readiness Service. |
+
+### 9.18 Support Console
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.platform.support` |
+| **surfaceName** | Support Console |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `operational` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: drill into tenants.detail (context: `tenantId` from case) |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.6 (Support/Incident/Audit), §4.7, IA v2 §2. |
+| **notes** | Platform-wide support case and incident management. Lists all open/in-progress/resolved cases across all tenants, plus active incidents. Operator question: "What support cases are open and which incidents need attention?" Next safe action: update case priority, assign case, escalate to incident, resolve case. Escalation to incident is a one-way transition. Audit: `support.case.created`, `support.case.updated`, `support.case.resolved`, `incident.created`, `incident.acknowledged`. Backed by Support/Incident/Audit Service. |
+
+### 9.19 Audit Trail
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.platform.audit` |
+| **surfaceName** | Audit Trail |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `read-only` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `audit` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | none |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.6, IA v2 §2. |
+| **notes** | Immutable, hash-chained audit trail viewer for all platform actions across all services. Append-only — no delete, no update. Operator question: "What actions have been taken, by whom, and is the audit chain intact?" Next safe action: search/filter audit events, verify chain integrity, export audit report. No state-changing actions from this surface — it is the read-only lens on the audit event stream. Chain verification detects tampering. Meta-audit: access to this surface is itself audit-logged. Audit data does not contain PHI (control-plane services do not handle PHI). Backed by Support/Incident/Audit Service. |
+
+### 9.20 Alert Center
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.platform.alerts` |
+| **surfaceName** | Alert Center |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `primary` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `mixed` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `operational` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | Outgoing: escalate to support console (context: `alertId`), drill into affected tenant/environment |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.6, IA v2 §2. |
+| **notes** | System alerts, governance warnings, and threshold-breach notifications across the platform. Aggregates alerts from all services: fleet health issues, readiness degradation, commercial payment overdue, provisioning failures, audit anomalies. Operator question: "What system alerts are currently active and what is their severity?" Next safe action: acknowledge alert (stops repeat notification), silence alert (requires justification — time-limited), escalate to incident. Alert silencing is audit-logged with justification. Audit: `platform.alert.acknowledged`, `platform.alert.silenced`, `incident.created`. Backed by Support/Incident/Audit Service. |
+
+### 9.21 Operator Runbooks & Internal Docs Hub
+
+| Field | Value |
+|-------|-------|
+| **surfaceId** | `control-plane.platform.runbooks` |
+| **surfaceName** | Operator Runbooks & Internal Docs Hub |
+| **workspaceFamily** | `control-plane` |
+| **navigationLevel** | `local` |
+| **surfaceType** | `admin` |
+| **primaryAudience** | `platform-operator` |
+| **scopePosture** | `platform-wide` |
+| **entityContextRequired** | — |
+| **readWritePosture** | `read-only` |
+| **directWriteAllowed** | `false` |
+| **sourceOfTruth** | `platform-governance` |
+| **dataClassification** | `configuration` |
+| **claimSurface** | null |
+| **analyticsSurface** | null |
+| **crossWorkspaceTransitions** | none |
+| **vistaAnchorType** | `none` |
+| **vistaAnchor** | — (platform-native concern) |
+| **presentationMode** | `gui-native` |
+| **initialImplementationPosture** | `deferred` |
+| **packVariationSensitivity** | `none` |
+| **evidencePosture** | `inferred-from-architecture` |
+| **governingReferences** | Service-map §2.2.7 (Governance & Readiness), IA v2 §2. |
+| **notes** | Searchable index of operator runbooks, SOPs, internal documentation, and governance references. Content sourced from `docs/runbooks/` and `docs/reference/`. Operator question: "What is the documented procedure for this platform operation?" Next safe action: search runbooks, view runbook content, mark runbook step as completed (workflow tracking — does not modify the runbook itself). Read-only with respect to documentation content — editing is a git workflow, not an in-console operation. Audit: runbook access logged (`platform.runbook.accessed`). Backed by Governance & Readiness Service. |
+
 ---
 
 ## 10. Surface inventory — Priority Group D: Deferred workspace families
@@ -1080,6 +1479,27 @@ These workspace-level capabilities are architecturally defined but well beyond n
 ---
 
 ## 11. Cross-cutting notes
+
+### 11.0 Service-domain binding reconciliation marker
+
+> **Updated 2026-03-20 (Macro Prompt 02)** — §9 has been expanded from 8 to 21 canonical
+> operator-console surfaces, organized into 5 navigation groups (Tenants / Markets / Fleet /
+> Commerce / Platform) aligned to the 7 service domains defined in the service-map doc.
+>
+> **Reconciliation status:**
+> - All 8 existing control-plane surfaces (§9.1–§9.8) retained their original numbering
+>   and remain unchanged in content.
+> - 13 new surfaces (§9.9–§9.21) have been registered with full field entries, covering:
+>   Identity & Invitations, Payer Readiness Registry, Pack Eligibility Simulator,
+>   Feature Flags / Environments, Backup / Restore / DR, Billing & Entitlements Snapshot,
+>   Usage & Metering Explorer, Operations Center, Templates & Presets, Support Console,
+>   Audit Trail, Alert Center, Operator Runbooks & Docs Hub.
+> - The binding table at the top of §9 is the authoritative surface-to-service-domain
+>   mapping for all 21 surfaces.
+> - The 4 candidate self-service onboarding surface IDs (service-map doc §5.2) are NOT
+>   registered here. They remain architecturally defined candidates.
+> - All 21 surfaces are explicitly distinct from tenant-admin, clinician, ancillary,
+>   revenue-cycle, and analytics/executive surfaces.
 
 ### 11.1 Classic-dense vs modern-guided is a rendering choice, not a product split
 
@@ -1159,10 +1579,10 @@ The recommended next bounded prompt targets:
 | **A — Terminal/VistA foundation** | clinical (terminal) | 4 | — | 3 evidenced-in-current-repo, 1 evidenced-in-salvage |
 | **B — Tenant admin foundation** | tenant-admin | 10 | — | 2 inferred, 6 inferred, 1 research-required, 1 inferred |
 | **C — VistA-native admin/ops** | it-integration | 7 | — | 3 evidenced-in-current-repo, 1 research-required, 1 research-required, 1 research-required, 1 research-required |
-| **C — Control-plane** | control-plane | 8 | — | 4 inferred, 4 evidenced-in-current-repo-truth |
+| **C — Control-plane** | control-plane | 21 | — | 8 existing (mixed evidence), 13 new (all inferred-from-architecture) |
 | **D — Clinical (deferred)** | clinical | — | 14 families | Mostly evidenced-in-salvage (RPC registry discovery) |
 | **D — Ancillary (deferred)** | ancillary-ops | — | 3 families | All research-required |
 | **D — Revenue cycle (deferred)** | revenue-cycle | — | 4 families | Mostly research-required |
 | **D — Analytics (deferred)** | analytics-bi | — | 4 families | All inferred |
 | **D — Additional deferred** | mixed | — | 8 families | Mostly research-required |
-| **Totals** | — | **29 concrete** | **33 deferred families** | — |
+| **Totals** | — | **42 concrete** | **33 deferred families** | — |

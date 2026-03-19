@@ -2,26 +2,26 @@
  * Route/Action Access Map — LOCAL REVIEW RUNTIME ONLY
  *
  * Explicit mapping from every current control-plane API route to:
- *   - canonical surface ID (from screen-inventory.md)
- *   - action class (from action-semantics batch-1)
+ *   - canonical surface ID
+ *   - action class
  *   - allowed roles (from permissions-matrix.md)
  *   - denial behavior
  *
  * Grounded in:
  *   docs/reference/permissions-matrix.md
  *   docs/reference/screen-inventory.md
- *   docs/explanation/control-panel-action-semantics-and-source-of-truth-binding-batch-1.md
+ *   docs/explanation/control-panel-action-semantics-v2.md
+ *   docs/explanation/control-panel-page-specs-v2.md
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  *
  * This is NOT a product-wide RBAC engine. It is local enforcement metadata
- * for the control-plane review runtime. See:
- *   docs/explanation/control-plane-local-operator-access-foundation-wave-1.md
+ * for the operator-console review runtime (21 surfaces across 7 domain groups).
  */
 
 /**
- * All current control-plane surfaces require platform-operator.
- * Derived from permissions-matrix.md §3 and every screen contract's
- * accessRequirements.allowedRoles: ["platform-operator"].
+ * All 21 operator-console surfaces require platform-operator.
+ * Derived from permissions-matrix.md: all surfaces assign allowed (A)
+ * only to platform-operator for the current review runtime.
  */
 const ALLOWED_ROLES = ['platform-operator'];
 
@@ -105,22 +105,42 @@ export const REVIEW_ROUTES = [
 export const ALL_ROUTES = [...READ_ROUTES, ...REVIEW_ROUTES];
 
 /**
- * The required role for all current control-plane routes.
- * Derived from permissions-matrix.md: all 8 control-plane surfaces
- * assign allowed (A) only to platform-operator.
+ * The required role for all operator-console routes.
+ * Derived from permissions-matrix.md: all 21 surfaces assign allowed (A)
+ * only to platform-operator.
  */
 export const CONTROL_PLANE_REQUIRED_ROLE = 'platform-operator';
 
 /**
- * Surface-level access summary — one entry per canonical surface.
+ * Surface-level access summary — one entry per canonical surface (21 total).
+ * Grouped by operator-console domain.
  */
 export const SURFACE_ACCESS = {
-  'control-plane.tenants.list':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.tenants.detail':    { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.tenants.bootstrap': { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.provisioning.runs': { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.markets.management':{ allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.markets.detail':    { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.packs.catalog':     { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.system.config':     { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Overview
+  'control-plane.operations.center':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Tenants
+  'control-plane.tenants.list':            { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.tenants.detail':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.tenants.bootstrap':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.provisioning.runs':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.identity.invitations':    { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Markets & Readiness
+  'control-plane.markets.management':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.markets.detail':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.packs.catalog':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.markets.payer-readiness': { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.markets.eligibility-sim': { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Operations
+  'control-plane.ops.alerts':              { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.ops.backup-dr':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.ops.environments':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Commercial
+  'control-plane.commercial.billing':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.commercial.usage':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Platform
+  'control-plane.system.config':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.platform.support':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.platform.audit':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.platform.templates':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.platform.runbooks':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
 };

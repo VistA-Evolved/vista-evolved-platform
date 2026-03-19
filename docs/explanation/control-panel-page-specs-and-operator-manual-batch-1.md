@@ -1,7 +1,9 @@
 # Control-Panel Page Specifications and Operator Manual — Batch 1
 
-> **Status:** Draft  
-> **Scope:** 8 canonical control-plane surfaces  
+> **⚠️ SUPERSEDED** by `control-panel-page-specs-v2.md` (21 surfaces). This batch-1 document (8 surfaces) is retained as reference. The v2 document carries forward all 8 batch-1 surface specs by reference and adds 13 new surface specs.
+
+> **Status:** Superseded  
+> **Scope:** 8 canonical control-plane surfaces (see v2 for full 21-surface coverage)  
 > **Audience:** Platform operators, implementation engineers, design reviewers  
 > **Not authorized:** This document specifies surface behavior; it does not authorize runtime or UI implementation.
 
