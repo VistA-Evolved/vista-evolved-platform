@@ -1,15 +1,15 @@
 # Control Plane — Local Review Runtime
 
-> **Local dev server serving fixture-backed read-only API routes and review-only write simulation routes.**
-> All data comes from checked-in fixture JSON; no external services required.
-> Read routes serve fixture data. Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
+> **Local dev server serving read-only API routes and review-only write simulation routes.**
+> 4 read routes are contract-backed (loaded from `packages/contracts/`); the rest are fixture-backed.
+> No external services required. Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
 
 ## What it is
 
 A local Fastify dev server that:
 
 1. Serves a vanilla HTML/CSS/JS single-page UI from `public/`
-2. Exposes **12 read-only API routes** at `/api/control-plane/v1/*` backed by fixture JSON
+2. Exposes **12 read-only API routes** at `/api/control-plane/v1/*` — 4 contract-backed, 8 fixture-backed
 3. Exposes **15 review-only write simulation routes** at `/api/control-plane-review/v1/*` plus a discovery endpoint
 4. Renders all 8 canonical control-plane surfaces with functional review dialogs for all 15 contracted write actions
 
@@ -32,22 +32,23 @@ npm run dev
 
 ## API routes
 
-| # | Operation | Route | Source Fixture |
-|---|-----------|-------|----------------|
-| R1 | listTenants | `GET /api/control-plane/v1/tenants` | `fixtures/tenants.json` |
-| R2 | getTenant | `GET /api/control-plane/v1/tenants/:tenantId` | `fixtures/tenants.json` |
-| R3 | listLegalMarketProfiles | `GET /api/control-plane/v1/legal-market-profiles` | `fixtures/legal-market-profiles.json` |
-| R4 | getLegalMarketProfile | `GET /api/control-plane/v1/legal-market-profiles/:id` | `fixtures/legal-market-profiles.json` |
-| R5 | listBootstrapRequests | `GET /api/control-plane/v1/tenant-bootstrap-requests` | `fixtures/bootstrap-requests.json` |
-| R6 | getBootstrapRequest | `GET /api/control-plane/v1/tenant-bootstrap-requests/:id` | `fixtures/bootstrap-requests.json` |
-| R7 | listProvisioningRuns | `GET /api/control-plane/v1/provisioning-runs` | `fixtures/provisioning-runs.json` |
-| R8 | getProvisioningRun | `GET /api/control-plane/v1/provisioning-runs/:id` | `fixtures/provisioning-runs.json` |
-| R9 | listPacks | `GET /api/control-plane/v1/packs` | `fixtures/packs.json` |
-| R10 | getSystemConfig | `GET /api/control-plane/v1/system-config` | `fixtures/system-config.json` |
-| — | listCapabilities | `GET /api/control-plane/v1/capabilities` | `fixtures/capabilities.json` |
-| — | listEffectivePlans | `GET /api/control-plane/v1/effective-plans` | `fixtures/effective-plans.json` |
+| # | Operation | Route | Source |
+|---|-----------|-------|--------|
+| R1 | listTenants | `GET /api/control-plane/v1/tenants` | Fixture: `fixtures/tenants.json` |
+| R2 | getTenant | `GET /api/control-plane/v1/tenants/:tenantId` | Fixture: `fixtures/tenants.json` |
+| R3 | listLegalMarketProfiles | `GET /api/control-plane/v1/legal-market-profiles` | **Contract:** `packages/contracts/legal-market-profiles/` |
+| R4 | getLegalMarketProfile | `GET /api/control-plane/v1/legal-market-profiles/:id` | **Contract:** `packages/contracts/legal-market-profiles/` |
+| R5 | listBootstrapRequests | `GET /api/control-plane/v1/tenant-bootstrap-requests` | Fixture: `fixtures/bootstrap-requests.json` |
+| R6 | getBootstrapRequest | `GET /api/control-plane/v1/tenant-bootstrap-requests/:id` | Fixture: `fixtures/bootstrap-requests.json` |
+| R7 | listProvisioningRuns | `GET /api/control-plane/v1/provisioning-runs` | Fixture: `fixtures/provisioning-runs.json` |
+| R8 | getProvisioningRun | `GET /api/control-plane/v1/provisioning-runs/:id` | Fixture: `fixtures/provisioning-runs.json` |
+| R9 | listPacks | `GET /api/control-plane/v1/packs` | Fixture: `fixtures/packs.json` |
+| R10 | getSystemConfig | `GET /api/control-plane/v1/system-config` | Fixture: `fixtures/system-config.json` |
+| — | listCapabilities | `GET /api/control-plane/v1/capabilities` | **Contract:** `packages/contracts/capability-manifests/` |
+| — | listEffectivePlans | `GET /api/control-plane/v1/effective-plans` | **Contract:** `packages/contracts/effective-tenant-configuration-plans/` |
 
-Unknown IDs return 404. Fixture `_provenance` metadata is stripped from API responses.
+Unknown IDs return 404. Fixture `_provenance` metadata is stripped from fixture-backed API responses.
+Contract-backed routes load data from `packages/contracts/` via `lib/contract-loader.mjs` at startup.
 
 ## Review-only write simulation routes
 
@@ -95,7 +96,7 @@ All review routes are prefixed with `/api/control-plane-review/v1`.
 
 ## Write control posture
 
-- **Batch 1 reads (R1-R10):** Served from local API routes, fixture-backed.
+- **Batch 1 reads (R1-R10 + capabilities + effective-plans):** R3, R4, capabilities, effective-plans are contract-backed; all others are fixture-backed.
 - **Batch 1 writes (W1-W4):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
 - **Batch 2 writes (W5-W7):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
 - **Batch 3 writes (W8-W15):** Review-only simulation via `/api/control-plane-review/v1/*`. UI opens review dialogs.
@@ -126,6 +127,6 @@ API responses so clients see clean data matching the OpenAPI response schemas.
 
 ## What this is NOT
 
-- Not a production runtime — fixture-backed, no real data store.
+- Not a production runtime — hybrid contract/fixture-backed, no real data store.
 - Not a design mockup — layout follows the screen-contract spec, not visual design.
 - Not persistent — form inputs reset on navigation. Write routes are review-only (local simulation, no persistence).

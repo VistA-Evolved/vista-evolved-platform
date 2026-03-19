@@ -1,7 +1,20 @@
 /**
  * Read-only API routes for the control-plane review runtime.
  *
- * All routes are fixture-backed. Response shapes align with the OpenAPI contract:
+ * Hybrid sourcing:
+ *   Contract-backed (loaded from packages/contracts/ at startup):
+ *     - R3: listLegalMarketProfiles
+ *     - R4: getLegalMarketProfile
+ *     - capabilities
+ *     - effective-plans
+ *
+ *   Fixture-backed (loaded from fixtures/ at startup):
+ *     - R1: listTenants, R2: getTenant
+ *     - R5: listTenantBootstrapRequests, R6: getTenantBootstrapRequest
+ *     - R7: listProvisioningRuns, R8: getProvisioningRun
+ *     - R9: listPacks, R10: getSystemConfig
+ *
+ * Response shapes align with the OpenAPI contract:
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  *
  * Base path: /api/control-plane/v1
@@ -22,7 +35,7 @@ function stripProvenance(obj) {
   return out;
 }
 
-export default function registerRoutes(server, fixtures) {
+export default function registerRoutes(server, fixtures, contractData) {
   // ── R1: listTenants ─────────────────────────────────────────────────────
   server.get(`${PREFIX}/tenants`, async (request, reply) => {
     return stripProvenance(fixtures['tenants']);
@@ -39,22 +52,22 @@ export default function registerRoutes(server, fixtures) {
     return stripProvenance(tenant);
   });
 
-  // ── R3: listLegalMarketProfiles ─────────────────────────────────────────
+  // ── R3: listLegalMarketProfiles (contract-backed) ────────────────────────
   server.get(`${PREFIX}/legal-market-profiles`, async (request, reply) => {
-    return stripProvenance(fixtures['legal-market-profiles']);
+    return contractData.legalMarketProfiles;
   });
 
-  // ── R4: getLegalMarketProfile ───────────────────────────────────────────
+  // ── R4: getLegalMarketProfile (contract-backed) ─────────────────────────
   server.get(`${PREFIX}/legal-market-profiles/:legalMarketId`, async (request, reply) => {
     const { legalMarketId } = request.params;
-    const market = fixtures['legal-market-profiles'].items.find(
+    const market = contractData.legalMarketProfiles.items.find(
       m => m.legalMarketId === legalMarketId
     );
     if (!market) {
       reply.code(404);
       return { error: 'not_found', message: `Market ${legalMarketId} not found` };
     }
-    return stripProvenance(market);
+    return market;
   });
 
   // ── R5: listTenantBootstrapRequests ─────────────────────────────────────
@@ -103,13 +116,13 @@ export default function registerRoutes(server, fixtures) {
     return stripProvenance(fixtures['system-config']);
   });
 
-  // ── Supplementary: capabilities (no OpenAPI operationId yet) ────────────
+  // ── Supplementary: capabilities (contract-backed) ────────────────────────
   server.get(`${PREFIX}/capabilities`, async (request, reply) => {
-    return stripProvenance(fixtures['capabilities']);
+    return contractData.capabilities;
   });
 
-  // ── Supplementary: effective-plans ──────────────────────────────────────
+  // ── Supplementary: effective-plans (contract-backed) ────────────────────
   server.get(`${PREFIX}/effective-plans`, async (request, reply) => {
-    return stripProvenance(fixtures['effective-plans']);
+    return contractData.effectivePlans;
   });
 }
