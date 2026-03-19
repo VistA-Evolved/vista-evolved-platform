@@ -1,9 +1,9 @@
 /**
- * Control-Plane Static Review Prototype — app.js
+ * Control-Plane Local Review Runtime — app.js
  *
  * Hash-based routing over 8 canonical control-plane surfaces.
- * All data comes from fixture JSON files in ./fixtures/.
- * No API calls, no persistence, no authentication.
+ * Data fetched from local Fastify API routes (fixture-backed).
+ * No persistence, no authentication, read-only.
  *
  * Surface IDs (from screen-contract instances):
  *   control-plane.tenants.list
@@ -19,19 +19,25 @@
 'use strict';
 
 // ---------------------------------------------------------------------------
-// Fixture loader
+// API loader — fetches from local Fastify routes
 // ---------------------------------------------------------------------------
+const API_BASE = '/api/control-plane/v1';
 const FIXTURES = {};
 
 async function loadFixtures() {
-  const files = [
-    'tenants', 'bootstrap-requests', 'provisioning-runs',
-    'legal-market-profiles', 'effective-plans', 'packs',
-    'capabilities', 'system-config'
+  const endpoints = [
+    ['tenants',               '/tenants'],
+    ['bootstrap-requests',    '/tenant-bootstrap-requests'],
+    ['provisioning-runs',     '/provisioning-runs'],
+    ['legal-market-profiles', '/legal-market-profiles'],
+    ['effective-plans',       '/effective-plans'],
+    ['packs',                 '/packs'],
+    ['capabilities',          '/capabilities'],
+    ['system-config',         '/system-config']
   ];
-  for (const f of files) {
-    const resp = await fetch(`fixtures/${f}.json`);
-    FIXTURES[f] = await resp.json();
+  for (const [key, path] of endpoints) {
+    const resp = await fetch(`${API_BASE}${path}`);
+    FIXTURES[key] = await resp.json();
   }
 }
 
