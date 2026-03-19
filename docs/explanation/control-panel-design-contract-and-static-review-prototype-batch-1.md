@@ -2,7 +2,7 @@
 
 > **⚠️ SUPERSEDED by v2.** The v2 design contract (`control-panel-design-contract-v2.md`) covers all 21 surfaces. This batch-1 document is retained as reference for detailed per-field specifications of the original 8 surfaces. The v2 document carries forward batch-1 layout regions for surfaces §9.2–§9.5, §9.7–§9.9, §9.17 by reference.
 
-> **Status:** Partially superseded  
+> **Status:** Superseded by v2  
 > **Scope:** 8 canonical control-plane surfaces
 > **Audience:** Design reviewers, implementation engineers, QA
 > **Not authorized:** This document defines design constraints and review criteria; it does not authorize runtime implementation or UI code.

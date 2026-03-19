@@ -296,6 +296,8 @@ Every non-static surface tracks data freshness:
 
 ### 9.1 Operations Center (`control-plane.operations.center`)
 
+> Screen-contract ID: `control-plane.platform.operations-center` (see §2.2)
+
 **Domain group:** Overview | **Data tier:** Static (future: contract-backed)
 
 | Region | Content | Source |
@@ -348,6 +350,8 @@ Carried forward from batch-1 §3.4. Layout regions, interaction patterns, and ch
 ---
 
 ### 9.6 Identity & Invitations (`control-plane.identity.invitations`)
+
+> Screen-contract ID: `control-plane.tenants.identity` (see §2.2)
 
 **Domain group:** Tenants | **Data tier:** Static (future: contract-backed)
 
@@ -494,6 +498,8 @@ Carried forward from batch-1 §3.7. Layout regions, interaction patterns, and ch
 ---
 
 ### 9.15 Billing & Entitlements Snapshot (`control-plane.commercial.billing`)
+
+> Screen-contract ID: `control-plane.commerce.billing` (see §2.2)
 
 **Domain group:** Commercial | **Data tier:** Static (future: contract-backed)
 
