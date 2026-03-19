@@ -1,15 +1,20 @@
 asyncapi: '3.0.0'
 info:
   title: Control-Plane Provisioning Events
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    Event contract for operator-initiated tenant bootstrap and provisioning lifecycle.
+    Event contract for operator-initiated tenant lifecycle, bootstrap, and provisioning workflows.
 
-    **Scope:** Events emitted by the control-plane during bootstrap request processing
-    and asynchronous provisioning run execution. Consumed by:
-    - Provisioning orchestrator (picks up work)
+    **Scope:** Events emitted by the control-plane during:
+    - Tenant lifecycle transitions (suspend, reactivate, archive)
+    - Bootstrap request processing
+    - Asynchronous provisioning run execution and control (including cancel)
+
+    Consumed by:
+    - Provisioning orchestrator (picks up work, receives cancel signals)
     - Operator control panel (real-time status updates)
     - Audit subsystem (immutable event trail)
+    - Data retention service (archive events)
 
     This contract does NOT define events for: clinical workflows, public signup,
     billing, tenant-admin operations, or provisioning engine internals.
@@ -96,6 +101,58 @@ channels:
       provisioningRunFailedMessage:
         $ref: '#/components/messages/ProvisioningRunFailed'
 
+  # --- Tenant lifecycle events (Batch 2) ---
+
+  tenantLifecycleSuspended:
+    address: tenant.lifecycle.suspended
+    description: |
+      Emitted when an operator suspends an active tenant.
+      Consumers: operator control panel (status refresh), audit subsystem, access control (revoke sessions).
+    messages:
+      tenantLifecycleSuspendedMessage:
+        $ref: '#/components/messages/TenantLifecycleSuspended'
+
+  tenantLifecycleReactivated:
+    address: tenant.lifecycle.reactivated
+    description: |
+      Emitted when an operator reactivates a suspended tenant.
+      Consumers: operator control panel (status refresh), audit subsystem, access control (restore access).
+    messages:
+      tenantLifecycleReactivatedMessage:
+        $ref: '#/components/messages/TenantLifecycleReactivated'
+
+  tenantLifecycleArchived:
+    address: tenant.lifecycle.archived
+    description: |
+      Emitted when an operator archives a suspended tenant. This is an irreversible transition.
+      Consumers: operator control panel (status refresh), audit subsystem, data retention service, access control (permanently revoke access).
+    messages:
+      tenantLifecycleArchivedMessage:
+        $ref: '#/components/messages/TenantLifecycleArchived'
+
+  # --- Provisioning control events (Batch 2) ---
+
+  provisioningRunCancelRequested:
+    address: provisioning.run.cancel.requested
+    description: |
+      Emitted when an operator requests cancellation of a queued or in-progress provisioning run.
+      Consumers: provisioning orchestrator (signals graceful stop), audit subsystem.
+      The orchestrator should stop initiating new steps and allow in-flight steps to complete naturally.
+    messages:
+      provisioningRunCancelRequestedMessage:
+        $ref: '#/components/messages/ProvisioningRunCancelRequested'
+
+  provisioningRunCancelled:
+    address: provisioning.run.cancelled
+    description: |
+      Emitted when the provisioning orchestrator completes graceful wind-down after a cancel request.
+      The run has reached its terminal `cancelled` state. Completed steps remain completed;
+      pending steps were skipped. This is the terminal event for the cancel workflow.
+      Consumers: operator control panel (terminal status), bootstrap request status updater, audit subsystem.
+    messages:
+      provisioningRunCancelledMessage:
+        $ref: '#/components/messages/ProvisioningRunCancelled'
+
 operations:
   onTenantBootstrapRequested:
     action: receive
@@ -138,6 +195,40 @@ operations:
     channel:
       $ref: '#/channels/provisioningRunFailed'
     summary: Receive event when a provisioning run fails.
+
+  # --- Tenant lifecycle operations (Batch 2) ---
+
+  onTenantLifecycleSuspended:
+    action: receive
+    channel:
+      $ref: '#/channels/tenantLifecycleSuspended'
+    summary: Receive event when an operator suspends a tenant.
+
+  onTenantLifecycleReactivated:
+    action: receive
+    channel:
+      $ref: '#/channels/tenantLifecycleReactivated'
+    summary: Receive event when an operator reactivates a tenant.
+
+  onTenantLifecycleArchived:
+    action: receive
+    channel:
+      $ref: '#/channels/tenantLifecycleArchived'
+    summary: Receive event when an operator archives a tenant.
+
+  # --- Provisioning control operations (Batch 2) ---
+
+  onProvisioningRunCancelRequested:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningRunCancelRequested'
+    summary: Receive event when an operator requests cancellation of a provisioning run.
+
+  onProvisioningRunCancelled:
+    action: receive
+    channel:
+      $ref: '#/channels/provisioningRunCancelled'
+    summary: Receive event when a provisioning run reaches cancelled terminal state.
 
 components:
   messages:
@@ -196,6 +287,50 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ProvisioningRunFailedPayload'
+
+    # --- Tenant lifecycle messages (Batch 2) ---
+
+    TenantLifecycleSuspended:
+      name: TenantLifecycleSuspended
+      title: Tenant Lifecycle Suspended
+      summary: An operator suspended an active tenant.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TenantLifecycleSuspendedPayload'
+
+    TenantLifecycleReactivated:
+      name: TenantLifecycleReactivated
+      title: Tenant Lifecycle Reactivated
+      summary: An operator reactivated a suspended tenant.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TenantLifecycleReactivatedPayload'
+
+    TenantLifecycleArchived:
+      name: TenantLifecycleArchived
+      title: Tenant Lifecycle Archived
+      summary: An operator archived a suspended tenant (irreversible).
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TenantLifecycleArchivedPayload'
+
+    # --- Provisioning control messages (Batch 2) ---
+
+    ProvisioningRunCancelRequested:
+      name: ProvisioningRunCancelRequested
+      title: Provisioning Run Cancel Requested
+      summary: An operator requested cancellation of a provisioning run.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningRunCancelRequestedPayload'
+
+    ProvisioningRunCancelled:
+      name: ProvisioningRunCancelled
+      title: Provisioning Run Cancelled
+      summary: A provisioning run reached cancelled terminal state after graceful wind-down.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ProvisioningRunCancelledPayload'
 
   schemas:
     # --- Common event envelope fields ---
@@ -505,3 +640,226 @@ components:
           description: Number of steps that completed before the failure.
         totalStepCount:
           type: integer
+
+    # --- Tenant lifecycle event payloads (Batch 2) ---
+
+    TenantLifecycleSuspendedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - tenantId
+        - previousStatus
+        - newStatus
+        - reason
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: tenant.lifecycle.suspended
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        previousStatus:
+          type: string
+          const: active
+        newStatus:
+          type: string
+          const: suspended
+        reason:
+          type: string
+          description: Operator-provided reason for suspending the tenant.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    TenantLifecycleReactivatedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - tenantId
+        - previousStatus
+        - newStatus
+        - reason
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: tenant.lifecycle.reactivated
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        previousStatus:
+          type: string
+          const: suspended
+        newStatus:
+          type: string
+          const: active
+        reason:
+          type: string
+          description: Operator-provided reason for reactivating the tenant.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    TenantLifecycleArchivedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - tenantId
+        - previousStatus
+        - newStatus
+        - reason
+        - confirmArchive
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: tenant.lifecycle.archived
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        previousStatus:
+          type: string
+          const: suspended
+        newStatus:
+          type: string
+          const: archived
+        reason:
+          type: string
+          description: Operator-provided reason for archiving the tenant.
+        confirmArchive:
+          type: boolean
+          const: true
+          description: Confirmation flag proving explicit operator intent.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    # --- Provisioning control event payloads (Batch 2) ---
+
+    ProvisioningRunCancelRequestedPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - previousRunStatus
+        - reason
+        - requestedBy
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.run.cancel.requested
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        previousRunStatus:
+          type: string
+          enum: [queued, in-progress]
+          description: The run's status before the cancel request was accepted.
+        reason:
+          type: string
+          description: Operator-provided reason for cancelling the run.
+        requestedBy:
+          type: string
+          description: Operator identity (from auth context, not user-supplied).
+
+    ProvisioningRunCancelledPayload:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - occurredAt
+        - correlationId
+        - provisioningRunId
+        - bootstrapRequestId
+        - tenantId
+        - completedStepCount
+        - skippedStepCount
+        - totalStepCount
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+          const: provisioning.run.cancelled
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+          format: uuid
+        provisioningRunId:
+          type: string
+          format: uuid
+        bootstrapRequestId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+        effectivePlanId:
+          type: string
+          format: uuid
+        completedStepCount:
+          type: integer
+          description: Number of steps that completed before cancellation.
+        skippedStepCount:
+          type: integer
+          description: Number of pending steps that were skipped due to cancellation.
+        totalStepCount:
+          type: integer
+        durationMs:
+          type: integer
+          description: Total duration from run start to cancelled terminal state in milliseconds.

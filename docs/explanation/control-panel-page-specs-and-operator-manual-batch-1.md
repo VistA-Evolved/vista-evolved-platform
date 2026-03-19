@@ -214,7 +214,7 @@ If no active run, this region shows "No active provisioning run" with the most r
 | Reactivate tenant | Controlled write | `POST /tenants/{tenantId}/reactivate` | Tenant is `suspended` |
 | Archive tenant | Controlled write | `POST /tenants/{tenantId}/archive` | Tenant is `suspended`; confirmation required |
 
-**Note on suspend/reactivate/archive:** These are lifecycle mutations on the tenant itself. They require dedicated API operations (to be defined in a future tenant-lifecycle OpenAPI contract). For this batch, these actions are specified at the page-spec level but their API operations are **deferred** — the page will show these action buttons in a disabled state with "integration-pending" tooltip until the tenant-lifecycle API exists.
+**Note on suspend/reactivate/archive:** These are lifecycle mutations on the tenant itself. Their API operations (`suspendTenant`, `reactivateTenant`, `archiveTenant`) are **contracted** in the control-plane OpenAPI (Batch 2). Implementation wiring is pending — until then, the page will show these action buttons in a disabled state with "integration-pending" tooltip.
 
 #### 3.2.5 PH truth constraints
 
@@ -790,15 +790,15 @@ Controls specified above that require API operations not yet defined:
 |---------|---------|-------------|--------|
 | Tenant list fetch | `tenants.list` | `GET /tenants` | Added (`listTenants`) |
 | Tenant detail fetch | `tenants.detail` | `GET /tenants/{tenantId}` | Added (`getTenant`) |
-| Tenant suspend | `tenants.detail` | `POST /tenants/{tenantId}/suspend` | Deferred to tenant-lifecycle API |
-| Tenant reactivate | `tenants.detail` | `POST /tenants/{tenantId}/reactivate` | Deferred to tenant-lifecycle API |
-| Tenant archive | `tenants.detail` | `POST /tenants/{tenantId}/archive` | Deferred to tenant-lifecycle API |
+| Tenant suspend | `tenants.detail` | `POST /tenants/{tenantId}/suspend` | Contracted (Batch 2 — `suspendTenant`) |
+| Tenant reactivate | `tenants.detail` | `POST /tenants/{tenantId}/reactivate` | Contracted (Batch 2 — `reactivateTenant`) |
+| Tenant archive | `tenants.detail` | `POST /tenants/{tenantId}/archive` | Contracted (Batch 2 — `archiveTenant`) |
 | Market list fetch | `markets.management` | `GET /legal-market-profiles` | Added (`listLegalMarketProfiles`) |
 | Market write ops | `markets.management` | market-management API | Deferred (governance-gated) |
 | Pack list fetch | `packs.catalog` | `GET /packs` | Added (`listPacks`) |
 | Pack write ops | `packs.catalog` | pack-management API | Deferred (governance-gated) |
 | Provisioning run list | `provisioning.runs` | `GET /provisioning-runs` | Added (`listProvisioningRuns`) |
-| Provisioning cancel | `provisioning.runs` | cancel operation | Deferred |
+| Provisioning cancel | `provisioning.runs` | `POST /provisioning-runs/{id}/cancel` | Contracted (Batch 2 — `cancelProvisioningRun`) |
 | System config fetch | `system.config` | `GET /system-config` | Added (`getSystemConfig`) |
 | Feature flag toggle | `system.config` | config API | Deferred |
 | Parameter update | `system.config` | config API | Deferred |

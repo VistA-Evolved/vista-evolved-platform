@@ -82,10 +82,10 @@ All 8 control-plane surfaces are restricted to the `platform-operator` role. The
 | W2 | Submit bootstrap request | `tenants.bootstrap` | `createTenantBootstrapRequest` | `POST /tenant-bootstrap-requests` | platform-governance | `control-plane:tenant:bootstrap` | Plan resolved; effectivePlanId valid and not expired | 202 Accepted; creates bootstrapRequestId; emits `tenant.bootstrap.requested` | Exists |
 | W3 | Initiate provisioning run | `provisioning.runs` | `createProvisioningRun` | `POST /provisioning-runs` | platform-governance | `control-plane:provisioning:manage` | Bootstrap request approved; no run in progress for this request | 202 Accepted; creates provisioningRunId; emits `provisioning.run.requested` | Exists |
 | W4 | Retry provisioning run | `provisioning.runs` | `createProvisioningRun` | `POST /provisioning-runs` | platform-governance | `control-plane:provisioning:manage` | Previous run is `failed`; same bootstrapRequestId | Creates new provisioningRunId; same semantics as W3 | Exists (reuse) |
-| W5 | Cancel provisioning run | `provisioning.runs` | `cancelProvisioningRun` | `POST /provisioning-runs/{id}/cancel` | platform-governance | `control-plane:provisioning:manage` | Run is `queued` or `in-progress` | Run transitions to `cancelled` | Deferred |
-| W6 | Suspend tenant | `tenants.detail` | `suspendTenant` | `POST /tenants/{id}/suspend` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `active` | Tenant status → `suspended` | Deferred |
-| W7 | Reactivate tenant | `tenants.detail` | `reactivateTenant` | `POST /tenants/{id}/reactivate` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `suspended` | Tenant status → `active` | Deferred |
-| W8 | Archive tenant | `tenants.detail` | `archiveTenant` | `POST /tenants/{id}/archive` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `suspended`; operator confirms | Tenant status → `archived`; irreversible | Deferred |
+| W5 | Cancel provisioning run | `provisioning.runs` | `cancelProvisioningRun` | `POST /provisioning-runs/{id}/cancel` | platform-governance | `control-plane:provisioning:manage` | Run is `queued` or `in-progress` | Run transitions to `cancelled` | Contracted |
+| W6 | Suspend tenant | `tenants.detail` | `suspendTenant` | `POST /tenants/{id}/suspend` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `active` | Tenant status → `suspended` | Contracted |
+| W7 | Reactivate tenant | `tenants.detail` | `reactivateTenant` | `POST /tenants/{id}/reactivate` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `suspended` | Tenant status → `active` | Contracted |
+| W8 | Archive tenant | `tenants.detail` | `archiveTenant` | `POST /tenants/{id}/archive` | platform-tenant-registry | `control-plane:tenant:lifecycle` | Tenant is `suspended`; operator confirms | Tenant status → `archived`; irreversible | Contracted |
 | W9 | Toggle feature flag | `system.config` | `updateFeatureFlag` | `PUT /system-config/feature-flags/{key}` | platform-system-configuration | `control-plane:config:write` | Flag exists | Flag toggled | Deferred |
 | W10 | Update system parameter | `system.config` | `updateSystemParameter` | `PUT /system-config/parameters/{key}` | platform-system-configuration | `control-plane:config:write` | Parameter is editable | Parameter updated | Deferred |
 
@@ -132,7 +132,7 @@ None. All 7 AsyncAPI events are consumed by at least one surface.
 
 | Source of Truth | Domain class | Surfaces that read | Surfaces that write | Data classification |
 |----------------|-------------|-------------------|--------------------|--------------------|
-| `platform-tenant-registry` | platform-governance | `tenants.list`, `tenants.detail` | `tenants.detail` (lifecycle ops — deferred) | configuration |
+| `platform-tenant-registry` | platform-governance | `tenants.list`, `tenants.detail` | `tenants.detail` (lifecycle ops — contracted) | configuration |
 | `platform-governance` (bootstrap/provisioning) | platform-governance | `tenants.bootstrap`, `provisioning.runs`, `tenants.detail` | `tenants.bootstrap` (resolve, submit), `provisioning.runs` (create) | configuration / operational |
 | `claim-readiness-registry` | claim-readiness-registry | `markets.management`, `markets.detail` | `markets.management` (deferred) | configuration |
 | `platform-pack-catalog` | platform-governance | `packs.catalog` | `packs.catalog` (deferred) | configuration |
@@ -185,7 +185,8 @@ Audit entries are immutable and append-only. The control-plane audit trail is se
 | Read actions with existing API | 10 | R1–R10 |
 | Read actions needing new API | 0 | — |
 | Write actions with existing API | 4 | W1, W2, W3, W4 |
-| Write actions deferred | 6 | W5, W6, W7, W8, W9, W10 |
+| Write actions contracted (Batch 2) | 4 | W5, W6, W7, W8 |
+| Write actions deferred | 2 | W9, W10 |
 | Navigation actions | 9 | N1–N9 (no API needed) |
 | Events produced | 3 | Already in AsyncAPI |
 | Events consumed | 7 | Already in AsyncAPI |

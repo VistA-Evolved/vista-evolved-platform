@@ -41,6 +41,7 @@
 | Pack visibility rules | `docs/reference/pack-visibility-rules.md` | Planning-stage rules for how pack variation affects surface visibility. Consumes screen inventory, permissions matrix, pack-and-adapter governance. Produces visibility postures for downstream screen-contract instances. |
 | Legal-market composition and effective-configuration resolver | `docs/explanation/legal-market-composition-and-effective-configuration-resolver-spec.md` | Legal-market profiles, pack composition algorithm, effective-tenant-configuration plans, resolution guarantees, precedence rules |
 | Control-plane operator bootstrap and provisioning contract map | `docs/explanation/control-plane-operator-bootstrap-and-provisioning-contract-map.md` | Binds operator actions to API operations, events, canonical IDs, and PH truth constraints |
+| Control-plane tenant lifecycle and provisioning control contract map (Batch 2) | `docs/explanation/control-plane-tenant-lifecycle-and-provisioning-control-contract-map-batch-2.md` | Batch 2: tenant suspend/reactivate/archive and provisioning cancel write actions, events, error model |
 | Control-panel surface expansion batch 1 | `docs/explanation/control-panel-surface-expansion-batch-1.md` | Batch 1 surface expansion: rationale, stop-and-reconcile, surface-to-service binding, field-level explanation for 4 new control-plane surfaces |
 | Control-panel page specs and operator manual batch 1 | `docs/explanation/control-panel-page-specs-and-operator-manual-batch-1.md` | Page-by-page operator manual: visible data regions, operator actions, navigation, PH truth constraints for all 8 control-plane surfaces |
 | Control-panel action semantics and source-of-truth binding batch 1 | `docs/explanation/control-panel-action-semantics-and-source-of-truth-binding-batch-1.md` | Master action matrix binding operator actions to API operations, SoT, permissions, events, claim surfaces |
@@ -57,7 +58,7 @@
 | Concern | Canonical location | Notes |
 |---------|-------------------|-------|
 | HTTP API contracts | `packages/contracts/openapi/` | OpenAPI 3.x specs |
-| Control-plane bootstrap/provisioning API | `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml` | Operator-facing control-plane reads (tenants, markets, packs, system-config), bootstrap, and provisioning HTTP contract (14 operations) |
+| Control-plane bootstrap/provisioning API | `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml` | Operator-facing control-plane reads (tenants, markets, packs, system-config), bootstrap, provisioning, tenant lifecycle, and provisioning control HTTP contract (18 operations) |
 | Event/WebSocket contracts | `packages/contracts/asyncapi/` | AsyncAPI specs |
 | Control-plane provisioning events | `packages/contracts/asyncapi/control-plane-provisioning-events.asyncapi.yaml` | Bootstrap and provisioning lifecycle event contract |
 | Config schemas | `packages/contracts/schemas/` | JSON Schema |

@@ -1,18 +1,21 @@
 openapi: '3.1.0'
 info:
   title: Control-Plane Operator Bootstrap and Provisioning API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Operator-initiated tenant lifecycle, bootstrap, and provisioning contract for VistA Evolved control plane.
 
     **Scope:** This contract covers operator-facing control-plane reads (including read-only
-    access to the pack catalog and system configuration for operator review), bootstrap, and
-    provisioning operations. It does NOT cover public self-service signup, billing, tenant-admin
+    access to the pack catalog and system configuration for operator review), tenant lifecycle
+    writes (suspend, reactivate, archive), bootstrap, provisioning, and provisioning control
+    (cancel) operations. It does NOT cover public self-service signup, billing, tenant-admin
     configuration, clinical APIs, provisioning engine internals, pack catalog write/management
     operations, or system configuration write/management operations.
 
-    **Asynchronous model:** Provisioning is a multi-step asynchronous workflow. POST operations
-    that initiate work return 202 Accepted. Clients poll GET endpoints for status.
+    **Asynchronous model:** Provisioning operations (create, cancel) are multi-step asynchronous
+    workflows. POST operations that initiate async work return 202 Accepted. Clients poll GET
+    endpoints for status. Tenant lifecycle writes (suspend, reactivate, archive) are synchronous
+    and return 200 OK with the updated tenant record.
 
     **Current PH truth:** The PH legal market is draft/T0. All PH packs are lifecycle draft.
     No capability is claimable or production-eligible. This API surface reflects those constraints
@@ -32,7 +35,9 @@ security:
 
 tags:
   - name: tenants
-    description: Tenant registry reads for operator review and lifecycle management.
+    description: Tenant registry reads for operator review.
+  - name: tenant-lifecycle
+    description: Tenant lifecycle state transitions — suspend, reactivate, archive.
   - name: legal-market-profiles
     description: Read-only access to legal-market profile summaries for operator review.
   - name: effective-configuration-plans
@@ -115,6 +120,146 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /tenants/{tenantId}/suspend:
+    post:
+      operationId: suspendTenant
+      summary: Suspend an active tenant
+      description: |
+        Transitions a tenant from `active` to `suspended` status.
+
+        Suspended tenants retain all configuration and data but are operationally
+        inactive. Users of the suspended tenant lose access to clinical and
+        administrative workspaces until the tenant is reactivated.
+
+        **Precondition:** tenant.status must be `active`.
+        **Permission:** `control-plane:tenant:lifecycle`
+        **Audit:** Emits `tenant.lifecycle.suspended` event with operator identity and reason.
+      tags: [tenant-lifecycle]
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantLifecycleRequest'
+      responses:
+        '200':
+          description: Tenant suspended successfully. Returns updated tenant detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Tenant is not in `active` status and cannot be suspended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tenants/{tenantId}/reactivate:
+    post:
+      operationId: reactivateTenant
+      summary: Reactivate a suspended tenant
+      description: |
+        Transitions a tenant from `suspended` back to `active` status.
+
+        Reactivated tenants regain full operational capability. All previously
+        active packs and configuration are restored. User access resumes.
+
+        **Precondition:** tenant.status must be `suspended`.
+        **Permission:** `control-plane:tenant:lifecycle`
+        **Audit:** Emits `tenant.lifecycle.reactivated` event with operator identity and reason.
+      tags: [tenant-lifecycle]
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantLifecycleRequest'
+      responses:
+        '200':
+          description: Tenant reactivated successfully. Returns updated tenant detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Tenant is not in `suspended` status and cannot be reactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /tenants/{tenantId}/archive:
+    post:
+      operationId: archiveTenant
+      summary: Archive a suspended tenant (irreversible)
+      description: |
+        Transitions a tenant from `suspended` to `archived` status.
+
+        **This operation is irreversible.** Archived tenants cannot be reactivated.
+        The request body must include `confirmArchive: true` to prove explicit
+        operator intent. Omitting the confirmation or setting it to false returns 422.
+
+        Archived tenants:
+        - Retain data for compliance and audit purposes
+        - Are excluded from operational views by default
+        - Cannot be bootstrapped, provisioned, or modified
+        - May be subject to data retention policies
+
+        **Precondition:** tenant.status must be `suspended`; `confirmArchive` must be `true`.
+        **Permission:** `control-plane:tenant:lifecycle`
+        **Audit:** Emits `tenant.lifecycle.archived` event with operator identity, reason, and confirmation flag.
+      tags: [tenant-lifecycle]
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantArchiveRequest'
+      responses:
+        '200':
+          description: Tenant archived successfully. Returns updated tenant detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Tenant is not in `suspended` status and cannot be archived.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Archive blocked — `confirmArchive` is missing or not `true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /legal-market-profiles:
     get:
@@ -370,7 +515,7 @@ paths:
           description: Filter by provisioning run status.
           schema:
             type: string
-            enum: [queued, in-progress, completed, failed]
+            enum: [queued, in-progress, completed, failed, cancel-requested, cancelled]
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/PageSizeParam'
       responses:
@@ -465,6 +610,56 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /provisioning-runs/{provisioningRunId}/cancel:
+    post:
+      operationId: cancelProvisioningRun
+      summary: Request cancellation of a provisioning run
+      description: |
+        Requests cancellation of a queued or in-progress provisioning run.
+
+        This is an **asynchronous control request**, not an immediate undo. The API
+        accepts the cancel request and returns 202 Accepted. The provisioning
+        orchestrator receives the `provisioning.run.cancel.requested` event, stops
+        initiating new steps, allows the currently in-flight step (if any) to complete
+        or fail naturally, marks remaining pending steps as `skipped`, and transitions
+        the run to `cancelled` status.
+
+        **Cancel does NOT roll back completed steps.** Steps that completed before the
+        cancel request remain completed. Rollback semantics are a separate future concern.
+
+        **Precondition:** run.status must be `queued` or `in-progress`.
+        **Permission:** `control-plane:provisioning:manage`
+        **Audit:** Emits `provisioning.run.cancel.requested` immediately;
+        `provisioning.run.cancelled` emitted by orchestrator upon completion.
+      tags: [provisioning-runs]
+      parameters:
+        - $ref: '#/components/parameters/ProvisioningRunIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningRunCancelRequest'
+      responses:
+        '202':
+          description: Cancel request accepted. Run will transition to `cancel-requested` and eventually `cancelled`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisioningRunCancelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Run is in a terminal state (`completed`, `failed`, `cancelled`) or already `cancel-requested`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /packs:
     get:
@@ -730,6 +925,55 @@ components:
           type: string
           format: uuid
           description: Reference to the approved tenant bootstrap request.
+
+    TenantLifecycleRequest:
+      type: object
+      description: |
+        Request body for tenant lifecycle transitions (suspend, reactivate).
+        The `requestedBy` audit field is derived from the operator auth context,
+        not from this request body.
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: Operator-provided reason for the lifecycle transition.
+          minLength: 1
+          maxLength: 2048
+
+    TenantArchiveRequest:
+      type: object
+      description: |
+        Request body for archiving a tenant. Archive is irreversible — the
+        `confirmArchive` field must be explicitly set to `true` to prove
+        operator intent. Omitting it or setting it to `false` returns 422.
+      required:
+        - reason
+        - confirmArchive
+      properties:
+        reason:
+          type: string
+          description: Operator-provided reason for archiving the tenant.
+          minLength: 1
+          maxLength: 2048
+        confirmArchive:
+          type: boolean
+          description: Must be `true` to confirm the irreversible archive operation.
+
+    ProvisioningRunCancelRequest:
+      type: object
+      description: |
+        Request body for cancelling a provisioning run. Cancel is an asynchronous
+        control request — the API acknowledges the request and the orchestrator
+        handles graceful wind-down.
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          description: Operator-provided reason for cancelling the provisioning run.
+          minLength: 1
+          maxLength: 2048
 
     # --- Response schemas ---
 
@@ -1061,7 +1305,7 @@ components:
           type: string
         status:
           type: string
-          enum: [queued, in-progress, completed, failed]
+          enum: [queued, in-progress, completed, failed, cancel-requested, cancelled]
           description: Initial status is always `queued`.
         correlationId:
           type: string
@@ -1069,6 +1313,36 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ProvisioningRunCancelResponse:
+      type: object
+      description: Confirmation that a provisioning run cancel request has been accepted.
+      required:
+        - provisioningRunId
+        - previousStatus
+        - status
+        - correlationId
+        - cancelRequestedAt
+      properties:
+        provisioningRunId:
+          type: string
+          format: uuid
+        previousStatus:
+          type: string
+          enum: [queued, in-progress]
+          description: The run's status before the cancel request was accepted.
+        status:
+          type: string
+          const: cancel-requested
+          description: Status is always `cancel-requested` upon acceptance.
+        correlationId:
+          type: string
+          format: uuid
+          description: Correlation identifier for tracing the cancel workflow.
+        cancelRequestedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the cancel request was accepted.
 
     ProvisioningRunStatus:
       type: object
@@ -1101,7 +1375,7 @@ components:
           type: string
         status:
           type: string
-          enum: [queued, in-progress, completed, failed]
+          enum: [queued, in-progress, completed, failed, cancel-requested, cancelled]
         correlationId:
           type: string
           format: uuid

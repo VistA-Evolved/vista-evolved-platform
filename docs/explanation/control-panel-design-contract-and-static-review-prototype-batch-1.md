@@ -505,11 +505,11 @@ The following design elements are **not included** in batch 1 because their unde
 
 | Element | Surface(s) | Dependency | Status |
 |---------|-----------|------------|--------|
-| Tenant suspend/reactivate/archive | tenants.detail | Future tenant-lifecycle API | Deferred |
+| Tenant suspend/reactivate/archive | tenants.detail | Tenant-lifecycle API (contracted, Batch 2) | Contracted |
 | Market create/edit | markets.management | Future market-management write API | Deferred |
 | Pack create/edit | packs.catalog | Future pack-catalog write API | Deferred |
 | System config edit | system.config | Future system-config write API | Deferred |
-| Provisioning cancel/retry | provisioning.runs | Future provisioning-management API | Deferred |
+| Provisioning cancel/retry | provisioning.runs | Provisioning-management API (contracted, Batch 2) | Contracted |
 | Pack catalog data feed | packs.catalog | `listPacks` / `getPack` in OpenAPI | Available (read-only) |
 | System config data feed | system.config | `getSystemConfig` in OpenAPI | Available (read-only) |
 | Real-time event updates | provisioning.runs | AsyncAPI event subscription wiring | Design-specified, implementation deferred |
