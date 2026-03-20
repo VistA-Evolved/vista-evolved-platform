@@ -1,17 +1,21 @@
-# Operator Console — Local Review Runtime
+# Operator Console — Hybrid Operator Runtime
 
 > **Local dev server serving the operator console as a 21-surface SPA across 7 domain groups.**
-> Read data is sourced from three tiers: contract-backed (from `packages/contracts/`), fixture-backed (from `fixtures/`), and static (contracted IA only, no API).
-> No external services required. Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
+> Read data is sourced from four tiers: **real-backend** (PG-backed via `apps/control-plane-api/` on port 4510, with fixture fallback), **contract-backed** (from `packages/contracts/`), **fixture-backed** (from `fixtures/`), and **static** (contracted IA only, no API).
+> P0 graduated surfaces (Tenants, Bootstrap, Provisioning) use real-backend reads and writes when `control-plane-api` is running; they fall back to fixtures transparently when it is not.
+> Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
+> An AI Operator Copilot subsystem is included but **disabled by default** (`COPILOT_ENABLED=false`).
 
 ## What it is
 
 A local Fastify dev server that:
 
 1. Serves a vanilla HTML/CSS/JS single-page UI from `public/`
-2. Exposes **13 read-only API routes** at `/api/control-plane/v1/*` — 6 contract-backed, 7 fixture-backed
+2. Exposes **13 read-only API routes** at `/api/control-plane/v1/*` — 6 contract-backed, 7 hybrid (real-backend with fixture fallback)
 3. Exposes **15 review-only write simulation routes** at `/api/control-plane-review/v1/*` plus a discovery endpoint
-4. Renders **21 operator-console surfaces** across 7 domain groups with functional review dialogs for all 15 contracted write actions
+4. Exposes **P0 lifecycle proxy routes** at `/api/control-plane-lifecycle/v1/*` — real-backend writes for graduated surfaces (Tenants, Bootstrap, Provisioning)
+5. Exposes **AI copilot routes** at `/api/copilot/v1/*` — status, chat, and audit (disabled by default)
+6. Renders **21 operator-console surfaces** across 7 domain groups with functional review dialogs for all 15 contracted write actions
 
 Route names and response shapes align with the authoritative OpenAPI contract:
 `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml`
@@ -29,6 +33,22 @@ For file-watching during development:
 ```bash
 npm run dev
 ```
+
+### Optional: real backend for P0 surfaces
+
+When `apps/control-plane-api` is running on port 4510, the P0 graduated surfaces
+(Tenants, Bootstrap, Provisioning) read and write against the PG-backed real backend.
+When it is not running, they fall back to fixture data transparently.
+
+```bash
+# In a separate terminal:
+cd apps/control-plane-api
+cp .env.example .env      # first time only — configure PLATFORM_PG_URL
+npm install
+npm start                 # starts on http://127.0.0.1:4510
+```
+
+The real backend URL is configurable via `REAL_BACKEND_URL` (default: `http://127.0.0.1:4510`).
 
 ## Local operator-access enforcement
 
@@ -57,14 +77,14 @@ See `docs/explanation/control-plane-local-operator-access-foundation-wave-1.md` 
 
 | # | Operation | Route | Source |
 |---|-----------|-------|--------|
-| R1 | listTenants | `GET /api/control-plane/v1/tenants` | Fixture: `fixtures/tenants.json` |
-| R2 | getTenant | `GET /api/control-plane/v1/tenants/:tenantId` | Fixture: `fixtures/tenants.json` |
+| R1 | listTenants | `GET /api/control-plane/v1/tenants` | **Hybrid:** real-backend → fixture fallback |
+| R2 | getTenant | `GET /api/control-plane/v1/tenants/:tenantId` | **Hybrid:** real-backend → fixture fallback |
 | R3 | listLegalMarketProfiles | `GET /api/control-plane/v1/legal-market-profiles` | **Contract:** `packages/contracts/legal-market-profiles/` |
 | R4 | getLegalMarketProfile | `GET /api/control-plane/v1/legal-market-profiles/:id` | **Contract:** `packages/contracts/legal-market-profiles/` |
-| R5 | listBootstrapRequests | `GET /api/control-plane/v1/tenant-bootstrap-requests` | Fixture: `fixtures/bootstrap-requests.json` |
-| R6 | getBootstrapRequest | `GET /api/control-plane/v1/tenant-bootstrap-requests/:id` | Fixture: `fixtures/bootstrap-requests.json` |
-| R7 | listProvisioningRuns | `GET /api/control-plane/v1/provisioning-runs` | Fixture: `fixtures/provisioning-runs.json` |
-| R8 | getProvisioningRun | `GET /api/control-plane/v1/provisioning-runs/:id` | Fixture: `fixtures/provisioning-runs.json` |
+| R5 | listBootstrapRequests | `GET /api/control-plane/v1/tenant-bootstrap-requests` | **Hybrid:** real-backend → fixture fallback |
+| R6 | getBootstrapRequest | `GET /api/control-plane/v1/tenant-bootstrap-requests/:id` | **Hybrid:** real-backend → fixture fallback |
+| R7 | listProvisioningRuns | `GET /api/control-plane/v1/provisioning-runs` | **Hybrid:** real-backend → fixture fallback |
+| R8 | getProvisioningRun | `GET /api/control-plane/v1/provisioning-runs/:id` | **Hybrid:** real-backend → fixture fallback |
 | R9 | listPacks | `GET /api/control-plane/v1/packs` | **Contract:** `packages/contracts/pack-manifests/` + 1 fabricated demo |
 | R9b | getPack | `GET /api/control-plane/v1/packs/:packId` | **Contract:** `packages/contracts/pack-manifests/` + 1 fabricated demo |
 | R10 | getSystemConfig | `GET /api/control-plane/v1/system-config` | Fixture: `fixtures/system-config.json` |
@@ -73,6 +93,41 @@ See `docs/explanation/control-plane-local-operator-access-foundation-wave-1.md` 
 
 Unknown IDs return 404. Fixture `_provenance` metadata is stripped from fixture-backed API responses.
 Contract-backed routes load data from `packages/contracts/` via `lib/contract-loader.mjs` at startup.
+
+## P0 lifecycle proxy routes (real backend)
+
+When `control-plane-api` is running, the following routes proxy write mutations to the real backend.
+The UI uses these routes for the graduated P0 surfaces (Tenants, Bootstrap, Provisioning).
+
+| # | Action | HTTP | Route | Backend endpoint |
+|---|--------|------|-------|------------------|
+| L1 | createTenant | POST | `/api/control-plane-lifecycle/v1/tenants` | `POST /api/v1/tenants` |
+| L2 | suspendTenant | POST | `/api/control-plane-lifecycle/v1/tenants/:id/suspend` | `POST /api/v1/tenants/:id/suspend` |
+| L3 | reactivateTenant | POST | `/api/control-plane-lifecycle/v1/tenants/:id/reactivate` | `POST /api/v1/tenants/:id/reactivate` |
+| L4 | archiveTenant | POST | `/api/control-plane-lifecycle/v1/tenants/:id/archive` | `POST /api/v1/tenants/:id/archive` |
+| L5 | createBootstrapRequest | POST | `/api/control-plane-lifecycle/v1/bootstrap-requests` | `POST /api/v1/bootstrap-requests` |
+| L6 | approveBootstrapRequest | POST | `/api/control-plane-lifecycle/v1/bootstrap-requests/:id/approve` | `POST /api/v1/bootstrap-requests/:id/approve` |
+| L7 | rejectBootstrapRequest | POST | `/api/control-plane-lifecycle/v1/bootstrap-requests/:id/reject` | `POST /api/v1/bootstrap-requests/:id/reject` |
+| L8 | startProvisioningRun | POST | `/api/control-plane-lifecycle/v1/provisioning-runs` | `POST /api/v1/provisioning-runs` |
+| L9 | cancelProvisioningRun | POST | `/api/control-plane-lifecycle/v1/provisioning-runs/:id/cancel` | `POST /api/v1/provisioning-runs/:id/cancel` |
+| L10 | retryProvisioningRun | POST | `/api/control-plane-lifecycle/v1/provisioning-runs/:id/retry` | `POST /api/v1/provisioning-runs/:id/retry` |
+
+When the backend is unreachable, the UI shows a `fixture-fallback` source badge.
+Responses from the real backend include `_source: "real-backend"`.
+
+## AI Operator Copilot routes
+
+Disabled by default (`COPILOT_ENABLED=false`). Set `COPILOT_ENABLED=true` and configure
+a provider via `COPILOT_PROVIDER` (default: `openai`) to activate.
+
+| # | Operation | HTTP | Route | Notes |
+|---|-----------|------|-------|-------|
+| C1 | copilotStatus | GET | `/api/copilot/v1/status` | Always returns copilot health (works even when disabled) |
+| C2 | copilotChat | POST | `/api/copilot/v1/chat` | Governed chat — returns 503 when copilot is disabled |
+| C3 | copilotAudit | GET | `/api/copilot/v1/audit` | Interaction audit trail |
+
+The copilot uses 8 bounded tools with operator-role enforcement and full audit logging.
+See `docs/explanation/ai-assist-safety-spec.md` for governance details.
 
 ## Review-only write simulation routes
 
@@ -117,10 +172,10 @@ All review routes are prefixed with `/api/control-plane-review/v1`.
 
 | # | Surface | Hash Route | Surface ID | Data Source |
 |---|---------|-----------|------------|-------------|
-| 2 | Tenant Registry | `#/tenants` | `control-plane.tenants.list` | Fixture |
-| 3 | Tenant Detail | `#/tenants/detail` | `control-plane.tenants.detail` | Fixture |
-| 4 | Tenant Bootstrap | `#/tenants/bootstrap` | `control-plane.tenants.bootstrap` | Fixture |
-| 5 | Provisioning Runs | `#/provisioning` | `control-plane.provisioning.runs` | Fixture |
+| 2 | Tenant Registry | `#/tenants` | `control-plane.tenants.list` | **Hybrid** (real-backend / fixture fallback) |
+| 3 | Tenant Detail | `#/tenants/detail` | `control-plane.tenants.detail` | **Hybrid** (real-backend / fixture fallback) |
+| 4 | Tenant Bootstrap | `#/tenants/bootstrap` | `control-plane.tenants.bootstrap` | **Hybrid** (real-backend / fixture fallback) |
+| 5 | Provisioning Runs | `#/provisioning` | `control-plane.provisioning.runs` | **Hybrid** (real-backend / fixture fallback) |
 | 6 | Identity & Invitations | `#/identity` | `control-plane.identity.invitations` | Static |
 
 ### Markets & Readiness
@@ -168,8 +223,9 @@ All review routes are prefixed with `/api/control-plane-review/v1`.
 
 | Tier | Description | Surfaces |
 |------|-------------|----------|
+| **Real-backend (hybrid)** | PG-backed reads/writes via `control-plane-api` (port 4510), with transparent fixture fallback when backend is unavailable | Tenants (#2-5), Bootstrap (#4), Provisioning (#5) |
 | **Contract-backed** | Live data loaded from `packages/contracts/` at startup | Markets, Market Detail, Packs, Capabilities, Effective Plans |
-| **Fixture-backed** | Static JSON from `fixtures/` | Tenants, Bootstrap, Provisioning, System Config |
+| **Fixture-backed** | Static JSON from `fixtures/` | System Config |
 | **Semi-live** | Aggregates from existing fixture/contract data | Overview, Operations Center, Billing & Entitlements |
 | **Static** | Contracted IA only — no API route, no data | 13 surfaces (Identity, Payer Readiness, Eligibility Sim, Alerts, Backup & DR, Environments, Usage, Support, Audit, Templates, Runbooks) |
 

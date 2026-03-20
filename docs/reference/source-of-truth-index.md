@@ -56,6 +56,20 @@
 | **Control-plane service map and operator console architecture** | `docs/explanation/control-plane-service-map-and-operator-console-architecture.md` | 7 canonical service domains, 4-layer model (services / operator console / self-service / tenant runtime), canonical object model, state families, service-to-surface binding, AI overlay rules, command/event ownership |
 | **Control-plane tenant lifecycle and orchestration model** | `docs/explanation/control-plane-tenant-lifecycle-and-orchestration-model.md` | Detailed state machine transition guards, side effects, orchestration flow choreography, full onboarding saga, failure/rollback scenarios, cross-service event choreography |
 | **Control panel information architecture and wireframe contract v2** | `docs/explanation/control-panel-information-architecture-and-wireframe-contract-v2.md` | Surface-to-service binding, operator console navigation IA, self-service onboarding IA, tenant-admin boundary, wireframe contract rules, disambiguation guide |
+
+## Runtime apps
+
+| Concern | Canonical location | Notes |
+|---------|-------------------|-------|
+| Operator console (SPA + review runtime) | `apps/control-plane/` | 21-surface SPA on port 4500. Hybrid reads (real-backend + fixture fallback), review-only writes, lifecycle proxy, copilot routes |
+| Operator console README | `apps/control-plane/README.md` | Route inventory, surface table, data sourcing tiers, copilot and lifecycle proxy docs |
+| Control-plane real backend API | `apps/control-plane-api/` | PG-backed state engine on port 4510. Tenant CRUD, bootstrap requests, provisioning runs. Optional — console falls back to fixtures when unavailable |
+| Control-plane API README | `apps/control-plane-api/README.md` | Backend architecture, PG schema, Docker compose, API routes |
+| P0 lifecycle proxy routes | `apps/control-plane/routes/lifecycle.mjs` | Proxies tenant/bootstrap/provisioning write mutations to the real backend |
+| AI Operator Copilot subsystem | `apps/control-plane/copilot/` | Provider-neutral copilot with 8 bounded tools, operator-role enforcement, full audit. Disabled by default (`COPILOT_ENABLED=false`) |
+| Copilot API routes | `apps/control-plane/routes/copilot-routes.mjs` | Status, chat, audit endpoints at `/api/copilot/v1/*` |
+| Terminal proof-of-concept | `apps/terminal-proof/` | Terminal-first development scaffold |
+| Admin console shell | `apps/admin-console/` | Future admin console (README placeholder) |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
 | Boundaries | `docs/reference/boundary-policy.md` | Bounded contexts, cross-boundary rules |
