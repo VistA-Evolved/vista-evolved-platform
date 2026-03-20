@@ -90,6 +90,7 @@ nav:
     - VistA Admin Terminal-to-UI Translation Matrix: explanation/vista-admin-terminal-to-ui-translation-matrix.md
     - VistA Admin Slice Ranking and Mode Selection: explanation/vista-admin-slice-ranking-and-mode-selection.md
     - "VistA Admin Grounded Domain: Users, Keys, Signatures": explanation/vista-admin-grounded-domain-users-keys-signatures.md
+    - "VistA Admin Grounded Domain: Institution, Division, Clinic": explanation/vista-admin-grounded-domain-institution-division-clinic.md
   - ADRs:
     - adrs/index.md
     - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md

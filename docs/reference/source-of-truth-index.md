@@ -78,6 +78,7 @@
 | **VistA admin terminal-to-UI translation matrix** | `docs/explanation/vista-admin-terminal-to-ui-translation-matrix.md` | Anti-miss matrix: 49 admin functions across 13 domains, 5 UI translation modes (A–E), column set includes menu path/option/files/globals/RPCs/mode/confidence/verification plan, summary mode distribution |
 | **VistA admin slice ranking and mode selection** | `docs/explanation/vista-admin-slice-ranking-and-mode-selection.md` | Ranked top 25 admin functions (composite scoring × 4 dimensions), first 2 slice candidates with justification: Slice 1 = user/key read workspace (Mode A), Slice 2 = user/key guided writes (Mode B) |
 | **VistA admin grounded domain: users, keys, signatures** | `docs/explanation/vista-admin-grounded-domain-users-keys-signatures.md` | Deep grounded domain reference: File 200/19.1/200.051 field maps, 3-tier RPC inventory (10 VEHU-confirmed, 7 XUS IAM unprobed, 9 custom VE*), MUMPS write patterns, data shape evidence, electronic signature mechanics, implementation strategy decision tree, Slice 1/2 scope specifications, 11 probing requirements |
+| **VistA admin grounded domain: institution, division, clinic** | `docs/explanation/vista-admin-grounded-domain-institution-division-clinic.md` | Deep grounded domain reference: File 4/40.8/44/42 hierarchy, 16 VEHU-confirmed RPCs + 8 custom VE* + 14 SDES/SDEC (absent from VEHU), ZVEFAC.m patterns, 12 custom RPCs needed, SDES/SDEC gap analysis, screen contracts, 6 probe requirements, topology assembly pattern |
 
 ## Runtime apps
 
