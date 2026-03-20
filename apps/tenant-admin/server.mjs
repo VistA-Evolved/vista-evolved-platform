@@ -18,7 +18,7 @@ import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { probeVista, fetchVistaUsers } from './lib/vista-adapter.mjs';
+import { probeVista, fetchVistaUsers, fetchVistaDivisions, fetchVistaClinics } from './lib/vista-adapter.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4520', 10);
@@ -99,19 +99,92 @@ async function main() {
     };
   });
 
-  // ---- Fixture-backed facility routes (grounding deferred to Task 3) ----
+  // ---- Dual-mode facility routes (VistA-first, fixture fallback) ----
 
   app.get('/api/tenant-admin/v1/facilities', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-    return { ok: true, source: 'fixture', tenantId, data: fixtures.facilities };
+
+    // Try VistA adapter: divisions + clinics → assemble topology
+    const divResult = await fetchVistaDivisions();
+    const clinicResult = await fetchVistaClinics(req.query.search || '');
+
+    if (divResult.ok) {
+      // Build topology from VistA data
+      const divisions = (divResult.data || []).map(d => ({
+        id: `div-${d.ien || d.id || 'unknown'}`,
+        name: d.name || d.divisionName || 'Unknown Division',
+        type: 'Division',
+        status: 'active',
+        vistaGrounding: { file40_8Ien: d.ien || d.id, status: 'grounded' },
+        institutionIen: d.institutionIen || null,
+        stationNumber: d.stationNumber || null,
+        children: [],
+      }));
+
+      // Attach clinics to divisions if we have them
+      if (clinicResult.ok) {
+        const clinics = (clinicResult.data || []).map(c => ({
+          id: `loc-${c.ien || c.id || 'unknown'}`,
+          name: c.name || c.locationName || 'Unknown Clinic',
+          type: 'Clinic',
+          status: 'active',
+          vistaGrounding: { file44Ien: c.ien || c.id, status: 'grounded' },
+        }));
+        // If only one division, attach all clinics to it; otherwise flat list
+        if (divisions.length === 1) {
+          divisions[0].children = clinics;
+        } else if (divisions.length > 1) {
+          // Clinics without division-level grouping — attach as flat peers
+          for (const c of clinics) divisions.push(c);
+        }
+      }
+
+      return {
+        ok: true,
+        source: 'vista',
+        tenantId,
+        data: divisions,
+        vistaNote: clinicResult.ok
+          ? 'Divisions via XUS DIVISION GET, clinics via ORWU CLINLOC'
+          : 'Divisions via XUS DIVISION GET (clinics unavailable)',
+      };
+    }
+
+    // Fixture fallback with honest labeling
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: fixtures.facilities,
+      vistaStatus: divResult.error || 'unavailable',
+    };
   });
 
   app.get('/api/tenant-admin/v1/facilities/:facilityId', async (req) => {
     const { facilityId } = req.params;
-    const facility = fixtures.facilities.find(f => f.id === facilityId);
+    // Fixture lookup (VistA detail requires IEN-based global reads — future slice)
+    function findFacility(items, id) {
+      for (const f of items) {
+        if (f.id === id) return f;
+        if (f.children) {
+          const found = findFacility(f.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    const facility = findFacility(fixtures.facilities, facilityId);
     if (!facility) return { ok: false, error: 'facility not found' };
-    return { ok: true, source: 'fixture', data: facility };
+
+    // Probe VistA for source labeling
+    const probe = await probeVista();
+    return {
+      ok: true,
+      source: 'fixture',
+      data: facility,
+      vistaStatus: probe.ok ? 'reachable' : 'unavailable',
+    };
   });
 
   app.get('/api/tenant-admin/v1/roles', async (req) => {

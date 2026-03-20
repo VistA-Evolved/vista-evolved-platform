@@ -93,6 +93,63 @@ export async function checkVistaKey(keyName) {
 }
 
 /**
+ * Fetch divisions available to the authenticated VistA user via XUS DIVISION GET.
+ *
+ * @returns {{ ok: boolean, source: string, data?: Array, error?: string }}
+ */
+export async function fetchVistaDivisions() {
+  if (!VISTA_API_URL) {
+    return { ok: false, source: 'unavailable', error: 'VISTA_API_URL not configured' };
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), VISTA_TIMEOUT_MS);
+    const url = `${VISTA_API_URL}/vista/divisions`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, source: 'vista-error', error: `HTTP ${res.status}` };
+    }
+    const body = await res.json();
+    if (body.ok) {
+      return { ok: true, source: 'vista', data: body.data || [] };
+    }
+    return { ok: false, source: 'vista-error', error: body.error || 'Unknown VistA error' };
+  } catch (err) {
+    return { ok: false, source: 'unavailable', error: err.message };
+  }
+}
+
+/**
+ * Fetch clinic locations from VistA via ORWU CLINLOC.
+ *
+ * @param {string} searchText - Name search filter (empty string for all)
+ * @returns {{ ok: boolean, source: string, data?: Array, error?: string }}
+ */
+export async function fetchVistaClinics(searchText = '') {
+  if (!VISTA_API_URL) {
+    return { ok: false, source: 'unavailable', error: 'VISTA_API_URL not configured' };
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), VISTA_TIMEOUT_MS);
+    const url = `${VISTA_API_URL}/vista/clinics?search=${encodeURIComponent(searchText)}`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, source: 'vista-error', error: `HTTP ${res.status}` };
+    }
+    const body = await res.json();
+    if (body.ok) {
+      return { ok: true, source: 'vista', data: body.data || [] };
+    }
+    return { ok: false, source: 'vista-error', error: body.error || 'Unknown VistA error' };
+  } catch (err) {
+    return { ok: false, source: 'unavailable', error: err.message };
+  }
+}
+
+/**
  * Fetch current authenticated user info from VistA via XUS GET USER INFO.
  *
  * @returns {{ ok: boolean, source: string, data?: object, error?: string }}

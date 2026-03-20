@@ -372,7 +372,7 @@ async function renderFacilityList(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Facility List</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      <span class="source-posture fixture">Loading…</span>
     </div>
     <div class="loading-message">Loading facilities…</div>`;
 
@@ -402,10 +402,14 @@ async function renderFacilityList(el) {
     }).join('');
   }
 
+  const vistaNote = res.vistaNote
+    ? `<span class="vista-note">${escapeHtml(res.vistaNote)}</span>`
+    : '';
+
   el.innerHTML = `
     <div class="page-header">
       <h1>Facility List</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      ${sourceBadge(res.source)}${vistaNote}
     </div>
     <div class="filter-rail">
       <input type="text" id="fac-search" placeholder="Search facilities…" />
@@ -469,6 +473,7 @@ async function renderFacilityDetail(el, facId) {
     <div class="page-header">
       <h1>${escapeHtml(f.name)}</h1>
       <span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(f.status)}</span>
+      ${sourceBadge(res.source)}
     </div>
 
     <div class="detail-layout">
@@ -498,6 +503,8 @@ async function renderFacilityDetail(el, facId) {
           <div class="context-label">Status</div>
           <div class="context-value"><span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(f.status)}</span></div>
           <div class="context-divider"></div>
+          <div class="context-label">Source</div>
+          <div class="context-value">${sourceBadge(res.source)}</div>
           <div class="context-label">VistA Grounding</div>
           <div class="context-value"><span class="badge ${(f.vistaGrounding || {}).status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml((f.vistaGrounding || {}).status || 'unknown')}</span></div>
           <div class="context-divider"></div>
