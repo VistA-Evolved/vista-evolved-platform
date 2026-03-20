@@ -72,6 +72,9 @@
 | **Tenant admin personas, jobs, and first-slice journeys** | `docs/explanation/tenant-admin-personas-jobs-and-first-slice-journeys.md` | 3 primary personas (TA-1/2/3), 10-job catalog, 3 first-slice journeys, 6-surface first-slice inventory |
 | **Operator-to-tenant-admin handoff model** | `docs/explanation/operator-to-tenant-admin-handoff-model.md` | 3 trigger points, context transfer contract, handoff mechanism, safety constraints, references Task 0 implementations |
 | **Tenant admin design contract v1** | `docs/explanation/tenant-admin-design-contract-v1.md` | Shell anatomy, concern-area nav, page header rules, VistA grounding display, per-surface reject/ready checklists, review checklist (15 gates) |
+| **VistA admin corpus discovery pack** | `docs/explanation/vista-admin-corpus-discovery-pack.md` | Externally-sourced master reference: 14 admin domains, file/global/RPC tables, confidence classifications (EXT-CONFIRMED, VIVIAN-LOCAL, NEEDS-LIVE-PROOF), 2,510 admin-relevant RPCs, source provenance |
+| **VistA admin domain map** | `docs/explanation/vista-admin-domain-map.md` | Quick-reference: concern→package→file→global→RPC family mapping for 12 domains (D1–D12 + D-DDR), global-to-file lookup |
+| **VistA admin source manual index** | `docs/explanation/vista-admin-source-manual-index.md` | Bibliography: 12 external sources (Wikipedia, WorldVistA GitHub), 3 local sources (Vivian), 4 failed sources, reliability assessments, research date |
 
 ## Runtime apps
 
