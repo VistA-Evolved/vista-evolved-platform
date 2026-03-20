@@ -2119,3 +2119,95 @@ function renderRunbooksHub() {
 
 boot();
 window.addEventListener('hashchange', navigate);
+
+// ---------------------------------------------------------------------------
+// AI Operator Copilot — drawer UI (disabled by default)
+// ---------------------------------------------------------------------------
+const COPILOT_API = '/api/copilot/v1';
+let copilotHistory = [];
+let copilotReady = false;
+
+async function initCopilot() {
+  try {
+    const resp = await apiFetch(`${COPILOT_API}/status`);
+    if (!resp.ok) { setCopilotStatus('error', 'unreachable'); return; }
+    const data = await resp.json();
+    copilotReady = data.operational;
+    const fab = document.getElementById('copilot-fab');
+    if (fab) fab.style.display = 'flex';
+    setCopilotStatus(
+      data.operational ? 'operational' : 'disabled',
+      data.statusLabel || (data.operational ? 'operational' : 'disabled')
+    );
+    if (!data.operational) {
+      addCopilotMessage('assistant', `Copilot is currently ${escHtml(data.statusLabel || 'disabled')}. Configure COPILOT_ENABLED=true and a provider to activate.`);
+    }
+  } catch {
+    setCopilotStatus('error', 'error');
+  }
+}
+
+function setCopilotStatus(cls, label) {
+  const el = document.getElementById('copilot-status-badge');
+  if (el) { el.className = 'copilot-status ' + cls; el.textContent = label; }
+}
+
+function toggleCopilotDrawer() {
+  const drawer = document.getElementById('copilot-drawer');
+  if (!drawer) return;
+  const visible = drawer.style.display !== 'none';
+  drawer.style.display = visible ? 'none' : 'flex';
+}
+
+function addCopilotMessage(role, text) {
+  const container = document.getElementById('copilot-messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  const isDraft = typeof text === 'string' && text.includes('AI-ASSISTED DRAFT');
+  div.className = 'copilot-msg ' + (isDraft ? 'draft' : role);
+  if (isDraft) {
+    div.innerHTML = '<span class="draft-label">AI-ASSISTED DRAFT</span>' + escHtml(text);
+  } else {
+    div.textContent = text;
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendCopilotMessage() {
+  const input = document.getElementById('copilot-input');
+  if (!input) return;
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addCopilotMessage('user', msg);
+
+  if (!copilotReady) {
+    addCopilotMessage('error', 'Copilot is not operational. Check /api/copilot/v1/status.');
+    return;
+  }
+
+  copilotHistory.push({ role: 'user', content: msg });
+
+  try {
+    const resp = await apiFetch(`${COPILOT_API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, history: copilotHistory.slice(-10) }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      addCopilotMessage('error', err.message || `Error: ${resp.status}`);
+      return;
+    }
+    const data = await resp.json();
+    const reply = data.reply || data.message || '(no response)';
+    addCopilotMessage('assistant', reply);
+    copilotHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    addCopilotMessage('error', 'Network error — could not reach copilot API.');
+  }
+}
+
+// Initialize copilot status on load
+initCopilot();

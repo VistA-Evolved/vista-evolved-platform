@@ -33,6 +33,7 @@ import { loadContractData } from './lib/contract-loader.mjs';
 import { resolveLocalOperatorContext } from './lib/local-operator-context.mjs';
 import { CONTROL_PLANE_REQUIRED_ROLE } from './lib/access-map.mjs';
 import { runDriftAudit } from './lib/drift-audit.mjs';
+import { initCopilot, getCopilotStatus } from './copilot/copilot-service.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4500', 10);
@@ -128,6 +129,14 @@ registerReviewRoutes(server, contractData);
 // P0 lifecycle proxy routes (real backend writes for graduated surfaces)
 const { default: registerLifecycleRoutes } = await import('./routes/lifecycle.mjs');
 registerLifecycleRoutes(server, REAL_BACKEND_URL);
+
+// AI Operator Copilot routes (disabled by default — COPILOT_ENABLED=false)
+initCopilot();
+const copilotStatus = getCopilotStatus();
+console.log(`[copilot] status: ${copilotStatus.statusLabel}${copilotStatus.operational ? ' ✓' : ''}`);
+
+const { default: registerCopilotRoutes } = await import('./routes/copilot-routes.mjs');
+registerCopilotRoutes(server, fixtures, contractData, REAL_BACKEND_URL);
 
 await server.listen({ port: PORT, host: '127.0.0.1' });
 server.log.info(`Control-plane review runtime listening on http://127.0.0.1:${PORT}`);

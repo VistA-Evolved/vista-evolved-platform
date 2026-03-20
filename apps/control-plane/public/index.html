@@ -87,6 +87,22 @@
     <div class="review-dialog" id="review-dialog"></div>
   </div>
 
+  <!-- Copilot side drawer (hidden by default, toggled by FAB) -->
+  <button id="copilot-fab" class="copilot-fab" onclick="toggleCopilotDrawer()" title="AI Operator Copilot" style="display:none;">&#x1f916;</button>
+  <div id="copilot-drawer" class="copilot-drawer" style="display:none;">
+    <div class="copilot-header">
+      <span class="copilot-title">&#x1f916; Operator Copilot</span>
+      <span id="copilot-status-badge" class="copilot-status"></span>
+      <button class="copilot-close" onclick="toggleCopilotDrawer()">&times;</button>
+    </div>
+    <div id="copilot-messages" class="copilot-messages"></div>
+    <div class="copilot-input-row">
+      <input id="copilot-input" type="text" class="copilot-input" placeholder="Ask the operator copilot…" onkeydown="if(event.key==='Enter')sendCopilotMessage()">
+      <button class="copilot-send" onclick="sendCopilotMessage()">&#x27A4;</button>
+    </div>
+    <div class="copilot-footer">Read-only + draft-only &middot; No PHI &middot; Operator review required</div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
