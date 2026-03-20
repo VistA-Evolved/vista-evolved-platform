@@ -697,7 +697,7 @@ This document does NOT:
 | 1 | How many control-plane service domains exist? | 7 (§2.1) |
 | 2 | What objects does the control plane own? | 29 named objects across 7 services (§3.1) |
 | 3 | What state machines exist? | 8 state families (§4) |
-| 4 | Which service backs which surface? | 8 operator console surfaces mapped (§5.1) |
+| 4 | Which service backs which surface? | 8 operator console surfaces mapped at time of writing (§5.1); now expanded to 21 surfaces — see `control-panel-page-specs-v2.md` |
 | 5 | Is there a self-service onboarding layer? | Yes, architecturally defined (§1, §5.2) |
 | 6 | Is control plane the same as the operator console? | No. Four distinct layers (§1). |
 | 7 | How does AI participate? | 4 assist categories, 6 non-negotiable constraints (§7) |

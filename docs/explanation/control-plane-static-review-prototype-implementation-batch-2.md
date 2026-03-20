@@ -1,8 +1,10 @@
 # Control-Plane Static-Review Prototype — Implementation Record (Batch 2)
 
+> **⚠️ SUPERSEDED.** The 8-surface prototype described here was replaced by the 21-surface operator console rewrite (see `apps/control-plane/README.md` and `control-panel-design-contract-v2.md`). This document is retained as a historical implementation record.
+
 > **Category:** explanation
 >
-> **Status:** implementation-record (describes what was built and why)
+> **Status:** superseded-implementation-record (describes what was originally built; runtime now has 21 surfaces)
 
 ## 1. What was built
 

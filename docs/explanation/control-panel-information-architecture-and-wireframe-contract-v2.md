@@ -106,9 +106,11 @@ Example — Tenant Detail surface:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 2.4 Existing surface alignment
+### 2.4 Original surface alignment
 
-The 8 surfaces currently defined in the screen inventory map to the operator console
+> **Note:** The operator console now has 21 surfaces across 7 domain groups. The 8 surfaces listed below were the original foundation; 13 additional surfaces were promoted from the candidates in §2.5. See `control-panel-page-specs-v2.md` for the full 21-surface inventory.
+
+The 8 surfaces originally defined in the screen inventory map to the operator console
 navigation as follows:
 
 | Existing surface ID | Existing surface name | Operator console nav item | Service binding |
@@ -356,7 +358,7 @@ production backend). It currently:
   7 fixture-backed (reading from `fixtures/`)
 - Serves 15 review-only write simulation routes (log intent + return draft response,
   no persistent mutation)
-- Hosts 8 surfaces corresponding to the operator console surfaces listed in §2.4
+- Hosts 21 surfaces across 7 domain groups (expanded from the original 8 in §2.4)
 - Runs the composition engine (`lib/plan-resolver.mjs`) as a local library
 - Performs drift audit (comparing resolved plans against stored plans)
 - Performs pack integrity audit
