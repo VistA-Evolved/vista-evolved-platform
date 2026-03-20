@@ -737,7 +737,7 @@ function renderTenantsList() {
       <div class="btn-group">
         ${sourceBadge(source)}
         <button class="btn btn-primary" onclick="location.hash='#/bootstrap'">+ New Tenant Bootstrap</button>
-        <button class="btn" onclick="reviewResolvePlan()">⊕ Resolve Plan (Review)</button>
+        <button class="btn" onclick="reviewResolvePlan()">⊕ Resolve Plan</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -830,14 +830,14 @@ async function renderTenantsDetail() {
     <div class="card">
       <h3>Identity</h3>
       <dl class="kv-list">
-        <dt>Tenant ID</dt><dd><code>${escHtml(tenant.tenantId)}</code></dd>
         <dt>Display Name</dt><dd>${escHtml(tenant.displayName)}</dd>
+        <dt>Status</dt><dd>${badge(tenant.status)}</dd>
         <dt>Legal Market</dt><dd>${navLink('#/markets/detail', tenant.legalMarketId)}</dd>
         <dt>Launch Tier</dt><dd>${badge(tenant.launchTier)}</dd>
-        <dt>Status</dt><dd>${badge(tenant.status)}</dd>
         <dt>Created</dt><dd>${fmtDate(tenant.createdAt)}</dd>
         <dt>Updated</dt><dd>${fmtDate(tenant.updatedAt)}</dd>
       </dl>
+      <p class="meta-secondary" style="margin-top:4px;">Tenant ID: ${escHtml(tenant.tenantId)}</p>
     </div>
 
     <!-- Bootstrap Section -->
@@ -845,12 +845,11 @@ async function renderTenantsDetail() {
       <h3>Bootstrap Request</h3>
       ${latestBootstrap ? `
         <dl class="kv-list">
-          <dt>Request ID</dt><dd>${navLink('#/provisioning', latestBootstrap.bootstrapRequestId)}</dd>
           <dt>Status</dt><dd>${badge(latestBootstrap.status)}</dd>
-          <dt>Effective Plan</dt><dd><code>${escHtml(latestBootstrap.effectivePlanId)}</code></dd>
           <dt>Provisioning Run</dt><dd>${latestBootstrap.provisioningRunId ? navLink('#/provisioning', latestBootstrap.provisioningRunId) : '—'}</dd>
           <dt>Submitted</dt><dd>${fmtDate(latestBootstrap.createdAt)}</dd>
         </dl>
+        <p class="meta-secondary" style="margin-top:4px;">Request: ${escHtml(latestBootstrap.bootstrapRequestId)} · Plan: ${escHtml(latestBootstrap.effectivePlanId)}</p>
       ` : '<p class="empty-state">No bootstrap request found.</p>'}
     </div>
 
@@ -858,9 +857,7 @@ async function renderTenantsDetail() {
     <div class="card">
       <h3>Latest Provisioning</h3>
       ${tenant.latestProvisioningRunId ? `
-        <dl class="kv-list">
-          <dt>Run ID</dt><dd>${navLink('#/provisioning', tenant.latestProvisioningRunId)}</dd>
-        </dl>
+        <p>${navLink('#/provisioning', 'View Run')} <span class="meta-secondary">${escHtml(tenant.latestProvisioningRunId)}</span></p>
       ` : '<p>No provisioning runs.</p>'}
     </div>
 
@@ -869,13 +866,12 @@ async function renderTenantsDetail() {
       <h3>Active Packs</h3>
       ${(tenant.activePacks && tenant.activePacks.length > 0) ? `
         <table>
-          <thead><tr><th>Pack ID</th><th>Family</th><th>Display Name</th><th>Lifecycle</th></tr></thead>
+          <thead><tr><th>Pack</th><th>Family</th><th>Lifecycle</th></tr></thead>
           <tbody>
             ${tenant.activePacks.map(p => `
               <tr>
-                <td><code>${escHtml(p.packId)}</code></td>
+                <td>${escHtml(p.displayName)} <span class="meta-secondary">${escHtml(p.packId)}</span></td>
                 <td>${badge(p.packFamily)}</td>
-                <td>${escHtml(p.displayName)}</td>
                 <td>${badge(p.lifecycleState)}</td>
               </tr>
             `).join('')}
@@ -919,9 +915,7 @@ function renderTenantsBootstrap() {
       <div>${badge('T0')} ${badge('draft')} ${sourceBadge(bootstrapSource)}</div>
     </div>
 
-    <div class="posture-notice">
-      Bootstrap lifecycle: ${sourceBadge(bootstrapSource)} · Plan resolution: ${sourceBadge('contract-backed')}
-    </div>
+    <p class="meta-secondary" style="margin:8px 0;">${sourceBadge(bootstrapSource)} Bootstrap · ${sourceBadge('contract-backed')} Plan resolution</p>
 
     <!-- Market Selection -->
     <div class="card">
@@ -940,95 +934,81 @@ function renderTenantsBootstrap() {
       <textarea style="width:100%;height:60px;margin-top:4px;font-size:13px;border:1px solid var(--border);border-radius:4px;padding:8px;" placeholder="Notes for this bootstrap request…"></textarea>
     </div>
 
-    <!-- Plan Resolution -->
+    <!-- Plan Resolution Summary -->
     <div class="card">
-      <h3>Plan Resolution Result</h3>
-      <p class="section-label">Effective Plan: <code>${escHtml(plan.effectivePlanId)}</code> · Resolved at: ${fmtDate(plan.resolvedAt)}</p>
-
-      <!-- Resolved Packs -->
-      <h3 style="margin-top:12px;">Resolved Packs (${plan.resolvedPacks.length})</h3>
-      <table>
-        <thead><tr><th>Pack ID</th><th>Family</th><th>Source</th><th>Pack State</th><th>Readiness</th><th>Constraints</th></tr></thead>
-        <tbody>
-          ${plan.resolvedPacks.map(p => `
-            <tr>
-              <td><code>${escHtml(p.packId)}</code></td>
-              <td>${badge(p.packFamily)}</td>
-              <td>${badge(p.activationSource)}</td>
-              <td>${badge(p.packState)}</td>
-              <td>${badge(p.readinessState)}</td>
-              <td style="font-size:12px;">${(p.constraints || []).map(c => `<div>• ${escHtml(c)}</div>`).join('')}</td>
-            </tr>
+      <h3>Plan Resolution</h3>
+      <p style="font-size:13px;margin-bottom:8px;">
+        ${plan.resolvedPacks.length} packs resolved · ${plan.deferredItems.length} deferred ·
+        Launch tier: ${badge(plan.readinessPosture.effectiveLaunchTier)} ·
+        ${plan.readinessPosture.gatingBlockers.length} blocker${plan.readinessPosture.gatingBlockers.length !== 1 ? 's' : ''}
+      </p>
+      ${plan.readinessPosture.gatingBlockers.length > 0 ? `
+        <ul class="blocker-list">
+          ${plan.readinessPosture.gatingBlockers.map(b => `
+            <li class="warning">
+              <span class="blocker-dim">${escHtml(b.dimension)}</span>: ${escHtml(b.description)}
+            </li>
           `).join('')}
-        </tbody>
-      </table>
+        </ul>
+      ` : '<p style="font-size:13px;color:var(--success);">No gating blockers.</p>'}
 
-      <!-- Deferred Items -->
-      <h3 style="margin-top:12px;">Deferred Items (${plan.deferredItems.length})</h3>
-      ${plan.deferredItems.length > 0 ? `
+      <!-- Collapsible: Resolved Packs -->
+      <h3 class="collapsible-toggle" style="margin-top:16px;font-size:13px;" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        Resolved Packs (${plan.resolvedPacks.length})
+      </h3>
+      <div class="collapsible-body">
         <table>
-          <thead><tr><th>Pack ID</th><th>Reason</th><th>Migration Path</th><th>Target State</th></tr></thead>
+          <thead><tr><th>Pack</th><th>Family</th><th>Source</th><th>State</th><th>Readiness</th></tr></thead>
           <tbody>
-            ${plan.deferredItems.map(d => `
+            ${plan.resolvedPacks.map(p => `
               <tr>
-                <td><code>${escHtml(d.packId)}</code></td>
-                <td>${badge(d.reason)}</td>
-                <td style="font-size:12px;">${escHtml(d.migrationPath)}</td>
-                <td>${badge(d.targetState || '—')}</td>
+                <td><code style="font-size:11px;">${escHtml(p.packId)}</code></td>
+                <td>${badge(p.packFamily)}</td>
+                <td>${badge(p.activationSource)}</td>
+                <td>${badge(p.packState)}</td>
+                <td>${badge(p.readinessState)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-      ` : '<p>No deferred items.</p>'}
-    </div>
-
-    <!-- Pack Selections (eligible packs) -->
-    <div class="card">
-      <h3>Pack Selections</h3>
-      <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Eligible packs that can be added. Grayed-out packs failed eligibility and cannot be toggled.</p>
-      <div>
-        <label style="font-size:13px;opacity:0.5;cursor:not-allowed;">
-          <input type="checkbox" checked disabled> lang-fil (Filipino Language Pack) — <em>eligibility-failed: cannot toggle</em>
-        </label>
       </div>
-      <div style="margin-top:8px;">
-        <button class="btn" disabled title="Re-resolve plan after selection changes">Re-resolve Plan</button>
+
+      <!-- Collapsible: Deferred Items -->
+      ${plan.deferredItems.length > 0 ? `
+        <h3 class="collapsible-toggle" style="margin-top:12px;font-size:13px;" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+          Deferred Items (${plan.deferredItems.length})
+        </h3>
+        <div class="collapsible-body">
+          <table>
+            <thead><tr><th>Pack</th><th>Reason</th><th>Migration Path</th></tr></thead>
+            <tbody>
+              ${plan.deferredItems.map(d => `
+                <tr>
+                  <td><code style="font-size:11px;">${escHtml(d.packId)}</code></td>
+                  <td>${badge(d.reason)}</td>
+                  <td style="font-size:12px;">${escHtml(d.migrationPath)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+
+      <!-- Collapsible: Readiness Dimensions -->
+      <h3 class="collapsible-toggle" style="margin-top:12px;font-size:13px;" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        Readiness Dimensions (${plan.readinessPosture.dimensions.length})
+      </h3>
+      <div class="collapsible-body">
+        <div class="dim-grid">
+          ${plan.readinessPosture.dimensions.map(d => `
+            <div class="dim-card">
+              <div class="dim-name">${escHtml(d.dimension)}</div>
+              <div>${badge(d.state)}</div>
+              <div class="dim-scope">${escHtml(d.scopeBounds)}</div>
+            </div>
+          `).join('')}
+        </div>
       </div>
-    </div>
-
-    <!-- Readiness Posture -->
-    <div class="card">
-      <h3>Readiness Posture</h3>
-      <p style="font-size:13px;margin-bottom:8px;">Effective Launch Tier: ${badge(plan.readinessPosture.effectiveLaunchTier)}</p>
-      <div class="dim-grid">
-        ${plan.readinessPosture.dimensions.map(d => `
-          <div class="dim-card">
-            <div class="dim-name">${escHtml(d.dimension)}</div>
-            <div>${badge(d.state)}</div>
-            <div class="dim-scope">${escHtml(d.scopeBounds)}</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <!-- Gating Blockers -->
-    <div class="card">
-      <h3>Gating Blockers (${plan.readinessPosture.gatingBlockers.length})</h3>
-      <ul class="blocker-list">
-        ${plan.readinessPosture.gatingBlockers.map(b => `
-          <li class="warning">
-            <span class="blocker-dim">${escHtml(b.dimension)}</span>: ${escHtml(b.description)}
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-
-    <!-- Claim Surface -->
-    <div class="claim-surface">
-      <h4>Claim Surface — Bootstrap Readiness</h4>
-      <p style="font-size:13px;">This tenant operates in market <strong>PH</strong> at launch tier <strong>T0</strong> (draft).
-      5 gating blockers prevent advancement beyond T0. All 5 resolved packs are in draft lifecycle state.
-      No capability is currently claimable.</p>
     </div>
 
     <!-- Actions Bar -->
@@ -1036,7 +1016,7 @@ function renderTenantsBootstrap() {
       <h3>Actions</h3>
       <div class="btn-group">
         <button class="btn btn-primary" onclick="doBootstrapDraftCreate('bootstrap-actions-result')">Submit Bootstrap Draft</button>
-        <button class="btn" onclick="reviewResolvePlan()">Resolve Plan (Review)</button>
+        <button class="btn" onclick="reviewResolvePlan()">Resolve Plan</button>
         <button class="btn" onclick="location.hash='#/tenants'">Cancel</button>
       </div>
       <div id="bootstrap-actions-result" style="margin-top:8px;"></div>
@@ -1195,7 +1175,7 @@ function renderMarketsManagement() {
     <div class="surface-header">
       <h1>Market Management</h1>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="reviewCreateMarketDraft()">+ Create Market Draft (Review)</button>
+        <button class="btn btn-primary" onclick="reviewCreateMarketDraft()">+ Create Market Draft</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -1210,47 +1190,36 @@ function renderMarketsManagement() {
     <table>
       <thead>
         <tr>
-          <th>Market ID</th>
-          <th>Display Name</th>
+          <th>Market</th>
           <th>Status</th>
           <th>Launch Tier</th>
-          <th>Version</th>
-          <th>Mandated</th>
-          <th>Default-On</th>
-          <th>Eligible</th>
-          <th>Excluded</th>
+          <th>Packs</th>
           <th>Readiness</th>
         </tr>
       </thead>
       <tbody>
-        ${items.map(m => `
+        ${items.map(m => {
+          const totalPacks = m.mandatedPackCount + m.defaultOnPackCount + m.eligiblePackCount;
+          const dims = m.readinessDimensions || [];
+          const highestState = dims.length > 0 ? dims.reduce((best, d) => {
+            const order = ['declared','specified','implemented','tested','production'];
+            return order.indexOf(d.state) > order.indexOf(best) ? d.state : best;
+          }, dims[0].state) : '—';
+          return `
           <tr class="clickable" onclick="location.hash='#/markets/detail'">
-            <td><code>${escHtml(m.legalMarketId)}</code></td>
-            <td>${escHtml(m.displayName)}</td>
+            <td>${escHtml(m.displayName)} <span class="meta-secondary">(${escHtml(m.legalMarketId)})</span></td>
             <td>${badge(m.status)}</td>
             <td>${badge(m.launchTier)}</td>
-            <td>${escHtml(m.version)}</td>
-            <td>${m.mandatedPackCount}</td>
-            <td>${m.defaultOnPackCount}</td>
-            <td>${m.eligiblePackCount}</td>
-            <td>${m.excludedPackCount}</td>
-            <td>${(m.readinessDimensions || []).map(d => badge(d.state)).join(' ')}</td>
+            <td>${totalPacks} packs <span class="meta-secondary">(${m.mandatedPackCount} mandated)</span></td>
+            <td>${badge(highestState)} <span class="meta-secondary">${dims.length} dimensions</span></td>
           </tr>
-        `).join('')}
+        `}).join('')}
       </tbody>
     </table>
 
     <div class="pagination">
       <span>Showing ${items.length} of ${pg.totalItems} markets</span>
       <span>Page ${pg.page} of ${pg.totalPages}</span>
-    </div>
-
-    <!-- Claim Surface Sidebar -->
-    <div class="claim-surface">
-      <h4>Claim Surface — Market Readiness</h4>
-      <p style="font-size:13px;">PH market: 8 readiness dimensions, 6 at <em>declared</em>, 2 at <em>specified</em>.
-      No dimension has reached <em>implemented</em> or higher. Launch tier T0.
-      Market authoring write operations are contracted (Batch 3) but not yet implemented.</p>
     </div>
   `;
 }
@@ -1264,7 +1233,7 @@ function renderMarketsDetail() {
   document.getElementById('app').innerHTML = `
     <div class="breadcrumb">${navLink('#/markets', 'Market Management')} › ${escHtml(market.displayName)}</div>
     <div class="surface-header">
-      <h1>${escHtml(market.displayName)} (${escHtml(market.legalMarketId)})</h1>
+      <h1>${escHtml(market.displayName)}</h1>
       <div>${badge(market.status)} ${badge(market.launchTier)}</div>
     </div>
 
@@ -1272,45 +1241,46 @@ function renderMarketsDetail() {
     <div class="card">
       <h3>Profile Summary</h3>
       <dl class="kv-list">
-        <dt>Legal Market ID</dt><dd><code>${escHtml(market.legalMarketId)}</code></dd>
-        <dt>Display Name</dt><dd>${escHtml(market.displayName)}</dd>
-        <dt>Version</dt><dd>${escHtml(market.version)}</dd>
         <dt>Status</dt><dd>${badge(market.status)}</dd>
         <dt>Launch Tier</dt><dd>${badge(market.launchTier)}</dd>
-        <dt>Mandated Packs</dt><dd>${market.mandatedPackCount}</dd>
-        <dt>Default-On Packs</dt><dd>${market.defaultOnPackCount}</dd>
-        <dt>Eligible Packs</dt><dd>${market.eligiblePackCount}</dd>
-        <dt>Excluded Packs</dt><dd>${market.excludedPackCount}</dd>
+        <dt>Version</dt><dd>${escHtml(market.version)}</dd>
+        <dt>Total Packs</dt><dd>${market.mandatedPackCount + market.defaultOnPackCount + market.eligiblePackCount} <span class="meta-secondary">(${market.mandatedPackCount} mandated, ${market.defaultOnPackCount} default-on, ${market.eligiblePackCount} eligible)</span></dd>
       </dl>
+      <p class="meta-secondary" style="margin-top:4px;">Legal Market ID: ${escHtml(market.legalMarketId)}</p>
     </div>
 
-    <!-- Readiness Dimensions -->
+    <!-- Readiness Dimensions (collapsible) -->
     <div class="card">
-      <h3>Readiness Dimensions (${(market.readinessDimensions || []).length})</h3>
-      <div class="dim-grid">
-        ${(market.readinessDimensions || []).map(d => `
-          <div class="dim-card">
-            <div class="dim-name">${escHtml(d.dimension)}</div>
-            <div>${badge(d.state)}</div>
-            <div class="dim-scope">${escHtml(d.scopeBounds)}</div>
-          </div>
-        `).join('')}
+      <div class="collapsible-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        Readiness Dimensions (${(market.readinessDimensions || []).length})
+      </div>
+      <div class="collapsible-body">
+        <div class="dim-grid">
+          ${(market.readinessDimensions || []).map(d => `
+            <div class="dim-card">
+              <div class="dim-name">${escHtml(d.dimension)}</div>
+              <div>${badge(d.state)}</div>
+              <div class="dim-scope">${escHtml(d.scopeBounds)}</div>
+            </div>
+          `).join('')}
+        </div>
       </div>
     </div>
 
-    <!-- Mandated Packs -->
+    <!-- Pack Groups (collapsible) -->
     <div class="card">
-      <div class="pack-group">
-        <div class="pack-group-label">Mandated Packs (${(market.mandatedPacks || []).length})</div>
+      <div class="collapsible-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        Mandated Packs (${(market.mandatedPacks || []).length})
+      </div>
+      <div class="collapsible-body">
         ${(market.mandatedPacks && market.mandatedPacks.length > 0) ? `
           <table>
-            <thead><tr><th>Pack ID</th><th>Family</th><th>Display Name</th><th>Lifecycle</th></tr></thead>
+            <thead><tr><th>Pack</th><th>Family</th><th>Lifecycle</th></tr></thead>
             <tbody>
               ${market.mandatedPacks.map(p => `
                 <tr>
-                  <td><code>${escHtml(p.packId)}</code></td>
+                  <td>${escHtml(p.displayName)} <span class="meta-secondary">${escHtml(p.packId)}</span></td>
                   <td>${badge(p.packFamily)}</td>
-                  <td>${escHtml(p.displayName)}</td>
                   <td>${badge(p.lifecycleState)}</td>
                 </tr>
               `).join('')}
@@ -1320,19 +1290,19 @@ function renderMarketsDetail() {
       </div>
     </div>
 
-    <!-- Default-On Packs -->
     <div class="card">
-      <div class="pack-group">
-        <div class="pack-group-label">Default-On Packs (${(market.defaultOnPacks || []).length})</div>
+      <div class="collapsible-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        Default-On Packs (${(market.defaultOnPacks || []).length})
+      </div>
+      <div class="collapsible-body">
         ${(market.defaultOnPacks && market.defaultOnPacks.length > 0) ? `
           <table>
-            <thead><tr><th>Pack ID</th><th>Family</th><th>Display Name</th><th>Lifecycle</th></tr></thead>
+            <thead><tr><th>Pack</th><th>Family</th><th>Lifecycle</th></tr></thead>
             <tbody>
               ${market.defaultOnPacks.map(p => `
                 <tr>
-                  <td><code>${escHtml(p.packId)}</code></td>
+                  <td>${escHtml(p.displayName)} <span class="meta-secondary">${escHtml(p.packId)}</span></td>
                   <td>${badge(p.packFamily)}</td>
-                  <td>${escHtml(p.displayName)}</td>
                   <td>${badge(p.lifecycleState)}</td>
                 </tr>
               `).join('')}
@@ -1342,19 +1312,19 @@ function renderMarketsDetail() {
       </div>
     </div>
 
-    <!-- Eligible Packs -->
     <div class="card">
-      <div class="pack-group">
-        <div class="pack-group-label">Eligible Packs (${(market.eligiblePacks || []).length})</div>
+      <div class="collapsible-toggle" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        Eligible Packs (${(market.eligiblePacks || []).length})
+      </div>
+      <div class="collapsible-body">
         ${(market.eligiblePacks && market.eligiblePacks.length > 0) ? `
           <table>
-            <thead><tr><th>Pack ID</th><th>Family</th><th>Display Name</th><th>Lifecycle</th></tr></thead>
+            <thead><tr><th>Pack</th><th>Family</th><th>Lifecycle</th></tr></thead>
             <tbody>
               ${market.eligiblePacks.map(p => `
                 <tr>
-                  <td><code>${escHtml(p.packId)}</code></td>
+                  <td>${escHtml(p.displayName || '—')} <span class="meta-secondary">${escHtml(p.packId)}</span></td>
                   <td>${badge(p.packFamily)}</td>
-                  <td>${escHtml(p.displayName || '—')}</td>
                   <td>${badge(p.lifecycleState || 'draft')}</td>
                 </tr>
               `).join('')}
@@ -1364,27 +1334,17 @@ function renderMarketsDetail() {
       </div>
     </div>
 
-    <!-- Claim Surface (informational, read-only) -->
-    <div class="claim-surface">
-      <h4>Claim Surface — Market Readiness (Informational)</h4>
-      <p style="font-size:13px;">PH market is at <strong>draft</strong> status, launch tier <strong>T0</strong>.
-      6 of 8 readiness dimensions are <em>declared</em> (lowest actionable state).
-      2 dimensions (language, locale) are <em>specified</em>.
-      No dimension has reached <em>implemented</em> — this market cannot advance beyond T0.</p>
-      <p style="font-size:13px;margin-top:4px;"><em>This is an informational claim surface (read-only). No gating decisions are made on this surface.</em></p>
-    </div>
-
     <!-- Actions -->
     <div class="card" style="margin-top:16px;">
       <h3>Actions</h3>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="reviewUpdateMarketDraft('${escHtml(market.legalMarketId)}')">Update Market Draft (Review)</button>
-        <button class="btn" onclick="reviewSubmitMarketForReview('${escHtml(market.legalMarketId)}')">Submit for Review (Review)</button>
-        <button class="btn" onclick="location.hash='#/bootstrap'">Bootstrap Tenant for PH</button>
-        <button class="btn" onclick="location.hash='#/markets'">← Back to Markets</button>
+        <button class="btn btn-primary" onclick="reviewUpdateMarketDraft('${escHtml(market.legalMarketId)}')">Update Draft</button>
+        <button class="btn" onclick="reviewSubmitMarketForReview('${escHtml(market.legalMarketId)}')">Submit for Review</button>
+        <button class="btn" onclick="location.hash='#/bootstrap'">Bootstrap Tenant</button>
+        <button class="btn" onclick="location.hash='#/markets'">← Back</button>
       </div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
-        ⚠ Review-only: Update and Submit open review dialogs. No market profile is actually modified or submitted.
+        Review-only — actions open review dialogs. No market profile is modified.
       </p>
     </div>
   `;
@@ -1403,7 +1363,7 @@ function renderPacksCatalog() {
     <div class="surface-header">
       <h1>Pack Catalog</h1>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="reviewCreatePackDraft()">+ Create Pack Draft (Review)</button>
+        <button class="btn btn-primary" onclick="reviewCreatePackDraft()">+ Create Pack Draft</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
@@ -1428,8 +1388,7 @@ function renderPacksCatalog() {
     <table>
       <thead>
         <tr>
-          <th>Pack ID</th>
-          <th>Display Name</th>
+          <th>Pack</th>
           <th>Family</th>
           <th>Version</th>
           <th>Lifecycle</th>
@@ -1440,8 +1399,7 @@ function renderPacksCatalog() {
       <tbody>
         ${items.map(p => `
           <tr>
-            <td><code>${escHtml(p.packId)}</code></td>
-            <td>${escHtml(p.displayName)}</td>
+            <td>${escHtml(p.displayName)} <span class="meta-secondary">${escHtml(p.packId)}</span></td>
             <td>${badge(p.packFamily)}</td>
             <td>${escHtml(p.version)}</td>
             <td>${badge(p.lifecycleState)}</td>
@@ -1459,16 +1417,16 @@ function renderPacksCatalog() {
 
     <!-- Pack Detail Panel (show first pack) -->
     <div class="card" style="margin-top:16px;">
-      <h3>Pack Detail: ${escHtml(items[0].displayName)}</h3>
+      <h3>${escHtml(items[0].displayName)}</h3>
       <dl class="kv-list">
-        <dt>Pack ID</dt><dd><code>${escHtml(items[0].packId)}</code></dd>
         <dt>Family</dt><dd>${badge(items[0].packFamily)}</dd>
         <dt>Version</dt><dd>${escHtml(items[0].version)}</dd>
         <dt>Lifecycle</dt><dd>${badge(items[0].lifecycleState)}</dd>
         <dt>Owner</dt><dd>${escHtml(items[0].lifecycle.owner)}</dd>
-        <dt>Implementation Locus</dt><dd>${escHtml(items[0].lifecycle.implementationLocus)}</dd>
+        <dt>Implementation</dt><dd>${escHtml(items[0].lifecycle.implementationLocus)}</dd>
         <dt>Description</dt><dd style="font-size:12px;">${escHtml(items[0].description)}</dd>
       </dl>
+      <p class="meta-secondary" style="margin-top:4px;">Pack ID: ${escHtml(items[0].packId)}</p>
 
       ${(items[0].dependencies && items[0].dependencies.length > 0) ? `
         <h3 style="margin-top:12px;">Dependencies</h3>
@@ -1496,17 +1454,10 @@ function renderPacksCatalog() {
 
       <div style="margin-top:12px;">
         <div class="btn-group">
-          <button class="btn" onclick="reviewUpdatePackDraft('${escHtml(items[0].packId)}')">Update Pack Draft (Review)</button>
-          <button class="btn" onclick="reviewSubmitPackForReview('${escHtml(items[0].packId)}')">Submit for Review (Review)</button>
+          <button class="btn" onclick="reviewUpdatePackDraft('${escHtml(items[0].packId)}')">Update Draft</button>
+          <button class="btn" onclick="reviewSubmitPackForReview('${escHtml(items[0].packId)}')">Submit for Review</button>
         </div>
       </div>
-    </div>
-
-    <!-- Claim Surface -->
-    <div class="claim-surface">
-      <h4>Claim Surface — Pack Eligibility &amp; Capability</h4>
-      <p style="font-size:13px;">All ${items.length} packs are in <em>draft</em> lifecycle. No pack has reached <em>published</em> state.
-      ${caps.length} capabilities are tracked, all at <em>declared</em> or <em>specified</em> readiness. No capability is currently claimable.</p>
     </div>
   `;
 }
@@ -1559,7 +1510,7 @@ function renderSystemConfig() {
               <td>${f.enabled ? '<span style="color:var(--success);font-weight:600;">ON</span>' : '<span style="color:var(--text-muted);">OFF</span>'}</td>
               <td>${escHtml(f.scope)}</td>
               <td>${fmtDate(f.updatedAt)}</td>
-              <td><button class="btn" onclick="reviewToggleFeatureFlag('${escHtml(f.flagKey)}', ${f.enabled})">Toggle (Review)</button></td>
+              <td><button class="btn" onclick="reviewToggleFeatureFlag('${escHtml(f.flagKey)}', ${f.enabled})">Toggle</button></td>
             </tr>
           `).join('')}
         </tbody>
@@ -1581,7 +1532,7 @@ function renderSystemConfig() {
                   <td><strong>${escHtml(p.value)}</strong></td>
                   <td>${escHtml(p.defaultValue || '—')}</td>
                   <td style="font-size:12px;">${escHtml(p.description || '')}</td>
-                  <td><button class="btn" onclick="reviewUpdateSystemParameter('${escHtml(p.paramKey)}', '${escHtml(p.value)}')">Edit (Review)</button></td>
+                  <td><button class="btn" onclick="reviewUpdateSystemParameter('${escHtml(p.paramKey)}', '${escHtml(p.value)}')">Edit</button></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -1639,37 +1590,29 @@ async function boot() {
 // ---------------------------------------------------------------------------
 function renderStaticSurface(title, surfaceId, icon, description, domain, sourceOfTruth, actions) {
   const app = document.getElementById('app');
-  const actionRows = actions.map(a =>
-    `<tr><td>${escHtml(a.id)}</td><td>${escHtml(a.label)}</td><td>${badge(a.status)}</td><td style="font-size:12px;">${escHtml(a.note)}</td></tr>`
-  ).join('');
+  // Build a feature checklist from the action list
+  const featureItems = actions.map(a => {
+    const ready = a.status === 'active' || a.status === 'graduated';
+    return `<li>
+      <span class="${ready ? 'feature-check' : 'feature-pending'}">${ready ? '✓' : '○'}</span>
+      ${escHtml(a.label)}
+    </li>`;
+  }).join('');
+
   app.innerHTML = `
-    <div class="static-surface">
-      <div class="static-icon">${icon}</div>
+    <div class="deferred-surface">
+      <div class="deferred-icon">${icon}</div>
       <h2>${escHtml(title)}</h2>
-      <div class="static-desc">${escHtml(description)}</div>
-      <div class="static-envelope">
-        LOCAL REVIEW — No live data source. This surface shows the contracted information architecture only.
-        No API routes, no persistence, no real actions.
-      </div>
-      <div class="card" style="text-align:left;">
-        <h3>Surface Contract</h3>
-        <dl class="kv-list">
-          <dt>Surface ID</dt><dd><code>${escHtml(surfaceId)}</code></dd>
-          <dt>Domain Group</dt><dd>${escHtml(domain)}</dd>
-          <dt>Source of Truth</dt><dd>${escHtml(sourceOfTruth)}</dd>
-          <dt>API Status</dt><dd>${badge('deferred')}</dd>
-          <dt>Persistence</dt><dd>None (local review only)</dd>
-        </dl>
-      </div>
-      ${actionRows.length > 0 ? `
-        <div class="card" style="text-align:left;">
-          <h3>Contracted Actions</h3>
-          <table>
-            <thead><tr><th>Action</th><th>Description</th><th>Status</th><th>Notes</th></tr></thead>
-            <tbody>${actionRows}</tbody>
-          </table>
-        </div>
+      <div class="deferred-desc">${escHtml(description)}</div>
+
+      ${featureItems.length > 0 ? `
+        <h3 style="font-size:13px;text-align:left;max-width:420px;margin:0 auto 8px;color:var(--text-muted);">Planned capabilities</h3>
+        <ul class="deferred-feature-list">${featureItems}</ul>
       ` : ''}
+
+      <div class="deferred-status-bar">
+        ${sourceBadge('static-review')} This surface is designed and contracted — backend integration is pending.
+      </div>
     </div>
   `;
 }
@@ -1779,16 +1722,8 @@ function renderHome() {
       </div>
     </div>
 
-    <div class="card" style="margin-top:20px;">
-      <h3>Runtime Posture</h3>
-      <dl class="kv-list">
-        <dt>Runtime Mode</dt><dd>hybrid (real-backend + fixture fallback)</dd>
-        <dt>Total Surfaces</dt><dd>22 (5 P0 graduated, 3 contract-backed, 14 static/deferred)</dd>
-        <dt>Domains</dt><dd>8 (Home, Requests & Onboarding, Tenants, Operations, Support, Commercial, Catalogs & Governance, Platform)</dd>
-        <dt>Data Sources</dt><dd>Real backend (tenants, bootstrap, provisioning) · Contract-backed (markets, packs) · Fixture fallback · Static</dd>
-        <dt>Write Actions</dt><dd>P0 lifecycle writes proxied to real backend; non-P0 review-only</dd>
-        <dt>Auth</dt><dd>Local role simulation via X-Local-Role header</dd>
-      </dl>
+    <div style="margin-top:20px; text-align:center;">
+      <span class="meta-secondary">22 surfaces · 8 domains · ${sourceBadge(tenantSource)} real-backend + fixture fallback</span>
     </div>
   `;
 }
@@ -1880,9 +1815,7 @@ function renderOperationsCenter() {
       </div>
     </div>
 
-    <div class="posture-notice">
-      <strong>Data posture:</strong> Tenants ${sourceBadge(tenantSource)} · Runs ${sourceBadge(runSource)} · System config: fixture-backed.
-    </div>
+    <p class="meta-secondary" style="margin:8px 0;">${sourceBadge(tenantSource)} Tenants · ${sourceBadge(runSource)} Provisioning</p>
 
     <div class="stat-row">
       <div class="stat-box">
@@ -2005,14 +1938,8 @@ function renderBillingEntitlements() {
   app.innerHTML = `
     <div class="surface-header">
       <div>
-        <div class="breadcrumb">${navLink('#/home', 'Home')} / Commercial</div>
-        <h1>Billing & Entitlements Snapshot</h1>
+        <h1>Billing & Entitlements</h1>
       </div>
-    </div>
-
-    <div class="static-envelope">
-      LOCAL REVIEW — No live billing backend. Entitlement data derived from tenant fixture status.
-      No real subscription management, no real invoicing.
     </div>
 
     <div class="card">
@@ -2033,17 +1960,7 @@ function renderBillingEntitlements() {
           ${tenants.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No tenants</td></tr>' : ''}
         </tbody>
       </table>
-    </div>
-
-    <div class="card">
-      <h3>Surface Contract</h3>
-      <dl class="kv-list">
-        <dt>Surface ID</dt><dd><code>control-plane.commercial.billing</code></dd>
-        <dt>Domain</dt><dd>Commercial</dd>
-        <dt>Source of Truth</dt><dd>Commercial Service (deferred)</dd>
-        <dt>Permission</dt><dd>commerce:manage</dd>
-        <dt>API Status</dt><dd>${badge('deferred')}</dd>
-      </dl>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Entitlement data derived from tenant status. Billing backend integration pending.</p>
     </div>
   `;
 }

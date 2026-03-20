@@ -8,21 +8,20 @@
 </head>
 <body>
   <div style="display:flex;flex-direction:column;width:100%;">
-    <!-- STATIC REVIEW BANNER — always visible -->
+    <!-- REVIEW BANNER — compact posture pill -->
     <div class="review-banner">
-      LOCAL REVIEW RUNTIME — Reads: real backend with fixture fallback ·
-      Lifecycle writes: proxied to real backend when reachable ·
-      Review writes: simulation only (no persistence) ·
-      Source badges indicate data origin
+      <span class="review-pill review-pill-local">Local Review</span>
+      <span class="review-pill review-pill-reads">Reads: live + fixture fallback</span>
+      <span class="review-pill review-pill-writes">Writes: review-only</span>
       <span class="role-switcher">
-        | Role: <select id="role-selector" onchange="switchRole(this.value)">
-          <option value="platform-operator">platform-operator</option>
-          <option value="tenant-admin">tenant-admin</option>
-          <option value="clinician">clinician</option>
-          <option value="ancillary-staff">ancillary-staff</option>
-          <option value="revenue-cycle-staff">revenue-cycle-staff</option>
-          <option value="analyst">analyst</option>
-          <option value="it-integration">it-integration</option>
+        Role: <select id="role-selector" onchange="switchRole(this.value)">
+          <option value="platform-operator">Platform Operator</option>
+          <option value="tenant-admin">Tenant Admin</option>
+          <option value="clinician">Clinician</option>
+          <option value="ancillary-staff">Ancillary Staff</option>
+          <option value="revenue-cycle-staff">Revenue Cycle</option>
+          <option value="analyst">Analyst</option>
+          <option value="it-integration">IT Integration</option>
         </select>
       </span>
     </div>
