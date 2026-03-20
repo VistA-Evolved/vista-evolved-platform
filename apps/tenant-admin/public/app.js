@@ -1,12 +1,13 @@
 /**
- * Tenant Admin — Fixture-Backed Prototype SPA
+ * Tenant Admin — Dual-Mode SPA (VistA-first, fixture fallback)
  *
  * Hash-based routing with 6 render functions matching the first-slice surfaces
  * defined in tenant-admin-design-contract-v1.md.
  *
- * Implementation posture: fixture-backed prototype shell.
- * All data sourced from static fixture files via local Fastify API routes.
- * VistA grounding: not yet connected.
+ * Implementation posture: dual-mode — VistA adapter + fixture fallback.
+ * When VISTA_API_URL is configured and VistA is reachable, user data comes from
+ * VistA RPCs (ORWU NEWPERS, ORWU HASKEY). Otherwise, fixture data is used.
+ * Source badges honestly display "VistA" or "FIXTURE" per surface.
  *
  * Surfaces: Dashboard, User List, User Detail, Role Assignment,
  *           Facility List, Facility Detail
@@ -31,10 +32,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Tenant banner
   document.getElementById('tenant-name').textContent = STATE.tenantId;
-  document.getElementById('tenant-status').textContent = 'FIXTURE';
-  document.getElementById('tenant-status').style.background = '#fef3c7';
-  document.getElementById('tenant-status').style.color = '#92400e';
   document.getElementById('tenant-id-display').textContent = 'Tenant: ' + STATE.tenantId;
+
+  // Probe VistA connection and set banner status
+  fetch('/api/tenant-admin/v1/vista-status')
+    .then(r => r.json())
+    .then(res => {
+      const connected = res.vista && res.vista.ok;
+      const statusEl = document.getElementById('tenant-status');
+      const sourceEl = document.getElementById('tenant-source');
+      if (connected) {
+        statusEl.textContent = 'VistA CONNECTED';
+        statusEl.style.background = '#d1fae5';
+        statusEl.style.color = '#065f46';
+        if (sourceEl) sourceEl.textContent = 'Source: VistA';
+      } else {
+        statusEl.textContent = 'FIXTURE';
+        statusEl.style.background = '#fef3c7';
+        statusEl.style.color = '#92400e';
+        if (sourceEl) sourceEl.textContent = 'Source: fixture';
+      }
+    })
+    .catch(() => {
+      const statusEl = document.getElementById('tenant-status');
+      statusEl.textContent = 'FIXTURE';
+      statusEl.style.background = '#fef3c7';
+      statusEl.style.color = '#92400e';
+    });
 
   // Return link
   if (STATE.cpReturnUrl) {
@@ -100,6 +124,18 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/**
+ * Render a source posture badge based on the API response source field.
+ * @param {string} source - 'vista', 'fixture', or 'unavailable'
+ * @returns {string} HTML for the badge
+ */
+function sourceBadge(source) {
+  if (source === 'vista') {
+    return '<span class="source-posture vista">VistA</span>';
+  }
+  return '<span class="source-posture fixture">FIXTURE</span>';
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
@@ -107,18 +143,20 @@ async function renderDashboard(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Dashboard</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      <span class="source-posture fixture">Loading…</span>
     </div>
     <div class="loading-message">Loading dashboard…</div>`;
 
   const res = await api('dashboard');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load dashboard</div>`; return; }
   const d = res.data;
+  const badge = sourceBadge(res.source);
+  const groundingStyle = d.vistaGrounding === 'connected' ? 'color:#065f46' : '';
 
   el.innerHTML = `
     <div class="page-header">
       <h1>Dashboard</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      ${badge}
     </div>
     <div class="card-grid">
       <div class="card">
@@ -138,8 +176,8 @@ async function renderDashboard(el) {
       </div>
       <div class="card">
         <div class="card-label">VistA Grounding</div>
-        <div class="card-value" style="font-size:16px">${escapeHtml(d.vistaGrounding)}</div>
-        <div class="card-sub">Connection status</div>
+        <div class="card-value" style="font-size:16px;${groundingStyle}">${escapeHtml(d.vistaGrounding)}</div>
+        <div class="card-sub">${d.vistaUrl ? escapeHtml(d.vistaUrl) : 'No VistA API configured'}</div>
       </div>
     </div>`;
 }
@@ -151,18 +189,20 @@ async function renderUserList(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>User List</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      <span class="source-posture fixture">Loading…</span>
     </div>
     <div class="loading-message">Loading users…</div>`;
 
   const res = await api('users');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load users</div>`; return; }
   const users = res.data;
+  const badge = sourceBadge(res.source);
+  const vistaNote = res.vistaStatus ? `<span class="vista-note">(VistA: ${escapeHtml(res.vistaStatus)})</span>` : '';
 
   if (!users.length) {
     el.innerHTML = `
-      <div class="page-header"><h1>User List</h1><span class="source-posture fixture">FIXTURE</span></div>
-      <div class="empty-message">No users found for this tenant.</div>`;
+      <div class="page-header"><h1>User List</h1>${badge}</div>
+      <div class="empty-message">No users found for this tenant. ${vistaNote}</div>`;
     return;
   }
 
@@ -180,7 +220,7 @@ async function renderUserList(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>User List</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      ${badge}
     </div>
     <div class="filter-rail">
       <input type="text" id="user-search" placeholder="Search users…" />

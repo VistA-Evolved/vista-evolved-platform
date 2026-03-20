@@ -4,10 +4,11 @@
  * Fastify dev server serving the tenant-admin SPA.
  *
  *   1. Serves static assets (HTML/CSS/JS) from public/
- *   2. Exposes fixture-backed read API routes for first-slice surfaces
+ *   2. Exposes dual-mode API routes: VistA-first with fixture fallback
  *
  * Tenant-scoped: every request requires tenantId context.
- * VistA grounding is integration-pending until VistA connection adapter is wired.
+ * VistA grounding: adapter-based — uses VISTA_API_URL if configured,
+ * falls back to fixture data with honest source labeling.
  *
  * Port: 4520 (per port-registry.md pattern — control-plane=4500, API=4510, tenant-admin=4520)
  */
@@ -17,6 +18,7 @@ import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { probeVista, fetchVistaUsers } from './lib/vista-adapter.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4520', 10);
@@ -52,20 +54,52 @@ async function main() {
     prefix: '/',
   });
 
-  // ---- Fixture-backed read routes ----
+  // ---- VistA connectivity probe ----
+
+  app.get('/api/tenant-admin/v1/vista-status', async () => {
+    const probe = await probeVista();
+    return { ok: true, vista: probe };
+  });
+
+  // ---- Dual-mode user routes (VistA-first, fixture fallback) ----
 
   app.get('/api/tenant-admin/v1/users', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-    return { ok: true, source: 'fixture', tenantId, data: fixtures.users };
+
+    // Try VistA adapter first
+    const vistaResult = await fetchVistaUsers(req.query.search || '');
+    if (vistaResult.ok) {
+      return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
+    }
+
+    // Fixture fallback with honest labeling
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: fixtures.users,
+      vistaStatus: vistaResult.error || 'unavailable',
+    };
   });
 
   app.get('/api/tenant-admin/v1/users/:userId', async (req) => {
     const { userId } = req.params;
+    // Fixture lookup (VistA user-detail requires DUZ-based lookup — future slice)
     const user = fixtures.users.find(u => u.id === userId);
     if (!user) return { ok: false, error: 'user not found' };
-    return { ok: true, source: 'fixture', data: user };
+
+    // Probe VistA for source labeling
+    const probe = await probeVista();
+    return {
+      ok: true,
+      source: 'fixture',
+      data: user,
+      vistaStatus: probe.ok ? 'reachable' : 'unavailable',
+    };
   });
+
+  // ---- Fixture-backed facility routes (grounding deferred to Task 3) ----
 
   app.get('/api/tenant-admin/v1/facilities', async (req) => {
     const tenantId = req.query.tenantId;
@@ -94,6 +128,7 @@ async function main() {
       for (const f of items) { n++; if (f.children) n += countFacilities(f.children); }
       return n;
     }
+    const probe = await probeVista();
     return {
       ok: true,
       source: 'fixture',
@@ -102,7 +137,8 @@ async function main() {
         userCount: fixtures.users.length,
         facilityCount: countFacilities(fixtures.facilities),
         roleCount: fixtures.roles.length,
-        vistaGrounding: 'integration-pending',
+        vistaGrounding: probe.ok ? 'connected' : 'integration-pending',
+        vistaUrl: probe.url || null,
         moduleStatus: { enabled: 0, total: 0 }
       }
     };
