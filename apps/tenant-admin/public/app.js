@@ -1,8 +1,12 @@
 /**
- * Tenant Admin — SPA Client
+ * Tenant Admin — Fixture-Backed Prototype SPA
  *
  * Hash-based routing with 6 render functions matching the first-slice surfaces
  * defined in tenant-admin-design-contract-v1.md.
+ *
+ * Implementation posture: fixture-backed prototype shell.
+ * All data sourced from static fixture files via local Fastify API routes.
+ * VistA grounding: not yet connected.
  *
  * Surfaces: Dashboard, User List, User Detail, Role Assignment,
  *           Facility List, Facility Detail
