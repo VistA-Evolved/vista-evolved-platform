@@ -1,0 +1,29 @@
+{
+  "surfaceId": "control-plane.fleet.backup-dr",
+  "version": "0.1.0",
+  "title": "Backup / Restore / DR",
+  "status": "draft",
+  "description": "Backup status, restore operations, and disaster-recovery test tracking for all managed environments. Operator question: 'What is the backup freshness for each environment and is DR tested?' Restore requires explicit second-operator confirmation. No VistA equivalent — platform-native infrastructure governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "fleet-backup-state",
+      "sourceDomainClass": "platform-governance",
+      "description": "Backup freshness, restore history, and DR test status per managed environment."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

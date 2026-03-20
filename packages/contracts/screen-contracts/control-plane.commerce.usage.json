@@ -1,0 +1,43 @@
+{
+  "surfaceId": "control-plane.commerce.usage",
+  "version": "0.1.0",
+  "title": "Usage & Metering Explorer",
+  "status": "draft",
+  "description": "Metered usage data across all tenants: active users, API calls, storage consumption, and other billable dimensions. Read-only surface — no state-changing actions. Usage metering aggregates never contain PHI. Operator question: 'How much resource usage has each tenant consumed relative to their subscription tier?' No VistA equivalent — platform-native commercial analytics surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "commercial-usage-metrics",
+      "sourceDomainClass": "platform-governance",
+      "description": "Per-tenant metered usage: active users, API calls, storage, and other billable dimensions relative to subscription tier limits."
+    }
+  ],
+  "dataClassification": "aggregate",
+  "claimSurface": null,
+  "analyticsSurface": {
+    "analyticsType": "dashboard",
+    "derivedDataOnly": true,
+    "writeProhibited": true,
+    "refreshCadence": "on-demand",
+    "phiDisclosure": "none"
+  },
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.tenants.detail",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

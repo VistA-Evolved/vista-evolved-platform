@@ -1,0 +1,43 @@
+{
+  "surfaceId": "control-plane.packs.eligibility-simulator",
+  "version": "0.1.0",
+  "title": "Pack Eligibility Simulator",
+  "status": "draft",
+  "description": "Runs the composition resolver in preview mode: given a hypothetical market and selections, shows the effective configuration plan. Deterministic and stateless — no persistent mutation. Operator question: 'If I set up a tenant in market X with selections Y, what packs would resolve?' No VistA equivalent — platform-native composition preview surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "composition-resolver-preview",
+      "sourceDomainClass": "platform-governance",
+      "description": "Composition resolver in preview mode: resolves effective configuration for hypothetical market and selection combinations."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["pack-eligibility"],
+    "informationalOnly": true,
+    "gatingRuleRef": "capability-truth-and-claim-gating-spec §11",
+    "minimumReadinessState": "declared"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.tenants.bootstrap",
+      "contextParameters": ["simulationParameters"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

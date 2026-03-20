@@ -1,0 +1,29 @@
+{
+  "surfaceId": "control-plane.platform.runbooks",
+  "version": "0.1.0",
+  "title": "Operator Runbooks & Internal Docs Hub",
+  "status": "draft",
+  "description": "Searchable index of operator runbooks, SOPs, internal documentation, and governance references. Content sourced from docs/runbooks/ and docs/reference/. Operator question: 'What is the documented procedure for this platform operation?' Read-only with respect to documentation content — editing is a git workflow, not an in-console operation. No VistA equivalent — platform-native documentation surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "governance-runbook-index",
+      "sourceDomainClass": "platform-governance",
+      "description": "Runbook and SOP index sourced from docs/runbooks/ and docs/reference/ with search and workflow tracking."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "static"
+}

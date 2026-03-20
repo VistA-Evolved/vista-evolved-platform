@@ -1,0 +1,44 @@
+{
+  "surfaceId": "control-plane.platform.alerts",
+  "version": "0.1.0",
+  "title": "Alert Center",
+  "status": "draft",
+  "description": "System alerts, governance warnings, and threshold-breach notifications across the platform. Aggregates alerts from all services: fleet health issues, readiness degradation, commercial payment overdue, provisioning failures, audit anomalies. Operator question: 'What system alerts are currently active and what is their severity?' Mixed: acknowledge and silence are writes; all other interactions are reads. Alert silencing requires justification and is time-limited. No VistA equivalent — platform-native operational surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "operational",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "mixed",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-alert-stream",
+      "sourceDomainClass": "platform-governance",
+      "description": "Active alerts aggregated from all service domains with severity, source, and recommended action."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.platform.support",
+      "contextParameters": ["alertId"],
+      "accessReEvaluation": false
+    },
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.tenants.detail",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "polling"
+}

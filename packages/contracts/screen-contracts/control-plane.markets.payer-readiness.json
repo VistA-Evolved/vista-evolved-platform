@@ -1,0 +1,43 @@
+{
+  "surfaceId": "control-plane.markets.payer-readiness",
+  "version": "0.1.0",
+  "title": "Payer Readiness Registry",
+  "status": "draft",
+  "description": "Lists all payers across all markets with per-payer readiness state, integration mode, and connector status. Read-only view for operator assessment of payer landscape. Operator question: 'Which payers in which markets are ready for live claim submission?' No VistA equivalent — platform-native claim-readiness surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "payer-readiness-catalog",
+      "sourceDomainClass": "claim-readiness-registry",
+      "description": "Per-market payer catalog with readiness state, integration mode, and connector status."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": {
+    "claimSurfaceType": "control-plane-provisioning",
+    "claimDomains": ["payer"],
+    "informationalOnly": true,
+    "gatingRuleRef": "capability-truth-and-claim-gating-spec §11",
+    "minimumReadinessState": "declared"
+  },
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.markets.detail",
+      "contextParameters": ["legalMarketId"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

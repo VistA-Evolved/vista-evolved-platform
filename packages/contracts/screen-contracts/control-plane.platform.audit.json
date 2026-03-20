@@ -1,0 +1,29 @@
+{
+  "surfaceId": "control-plane.platform.audit",
+  "version": "0.1.0",
+  "title": "Audit Trail",
+  "status": "draft",
+  "description": "Immutable, hash-chained audit trail viewer for all platform actions across all services. Append-only — no delete, no update. Operator question: 'What actions have been taken, by whom, and is the audit chain intact?' No state-changing actions — read-only lens on the audit event stream. Chain verification detects tampering. Access to this surface is itself audit-logged. Audit data does not contain PHI (control-plane services do not handle PHI). No VistA equivalent — platform-native governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "platform-audit-stream",
+      "sourceDomainClass": "platform-governance",
+      "description": "Immutable hash-chained audit event stream from all platform service domains."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

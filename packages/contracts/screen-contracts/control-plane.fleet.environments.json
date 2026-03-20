@@ -1,0 +1,37 @@
+{
+  "surfaceId": "control-plane.fleet.environments",
+  "version": "0.1.0",
+  "title": "Feature Flags / Environments",
+  "status": "draft",
+  "description": "Lists all managed runtime environments with feature-flag state, release-channel assignments, VistA lane bindings, and tenant mapping. Operator question: 'What feature flags are active per environment, and which tenants are on which release channel?' Controlled-write: flag toggles and channel assignments are audit-logged. No VistA equivalent — platform-native fleet management surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "primary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "fleet-environment-state",
+      "sourceDomainClass": "platform-governance",
+      "description": "Runtime environments with feature-flag state, release channels, VistA lane bindings, and tenant assignments."
+    }
+  ],
+  "dataClassification": "operational",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.tenants.detail",
+      "contextParameters": ["tenantId"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "polling"
+}

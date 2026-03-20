@@ -1,0 +1,37 @@
+{
+  "surfaceId": "control-plane.platform.templates",
+  "version": "0.1.0",
+  "title": "Templates & Presets",
+  "status": "draft",
+  "description": "Manages shared bootstrap templates, configuration presets, and governance template library. Templates encode reusable market + pack-selection + config combinations for rapid bootstrap. Operator question: 'What templates and presets exist, and can I create a new bootstrap from an existing template?' Template publish requires review. Multi-dimensional pack sensitivity: template content varies by market and pack families. No VistA equivalent — platform-native governance surface.",
+  "workspaceFamily": "control-plane",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["platform-operator"],
+    "scopePosture": "platform-wide"
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "governance-template-catalog",
+      "sourceDomainClass": "platform-governance",
+      "description": "Bootstrap templates, configuration presets, and governance template library with versioning and review state."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [
+    {
+      "direction": "outgoing",
+      "targetWorkspaceFamily": "control-plane",
+      "targetSurfaceId": "control-plane.tenants.bootstrap",
+      "contextParameters": ["templateId"],
+      "accessReEvaluation": false
+    }
+  ],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}
