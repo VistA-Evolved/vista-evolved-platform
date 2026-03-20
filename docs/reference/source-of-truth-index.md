@@ -85,7 +85,7 @@
 | AI Operator Copilot subsystem | `apps/control-plane/copilot/` | Provider-neutral copilot with 8 bounded tools, operator-role enforcement, full audit. Disabled by default (`COPILOT_ENABLED=false`) |
 | Copilot API routes | `apps/control-plane/routes/copilot-routes.mjs` | Status, chat, audit endpoints at `/api/copilot/v1/*` |
 | Terminal proof-of-concept | `apps/terminal-proof/` | Terminal-first development scaffold |
-| **Tenant admin workspace** | `apps/tenant-admin/` | Fixture-backed prototype shell on port 4520. 6 first-slice surfaces (dashboard, users, roles, facilities). VistA grounding: not yet connected. See `apps/tenant-admin/README.md` |
+| **Tenant admin workspace** | `apps/tenant-admin/` | Dual-mode prototype shell on port 4520. 7 surfaces (dashboard, users, roles, facilities, guided tasks). VistA adapter wired (ORWU NEWPERS, XUS DIVISION GET, ORWU CLINLOC) with fixture fallback. Not yet proven against live VistA. See `apps/tenant-admin/README.md` |
 | Admin console shell | `apps/admin-console/` | Future admin console (README placeholder) |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
