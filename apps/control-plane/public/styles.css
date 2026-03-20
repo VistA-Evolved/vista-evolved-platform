@@ -655,3 +655,50 @@ tr.clickable:hover { background: #f0f4ff; }
 .launch-summary { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
 .launch-bar { display: flex; gap: 12px; font-size: 12px; margin-bottom: 12px; }
 .launch-bar .launch-stat { font-weight: 600; }
+
+/* ── Nav Planned/Deferred Section ──────────────────────────────────────── */
+.nav-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 8px 16px;
+}
+.nav-group-planned a.nav-planned {
+  font-size: 12px;
+  padding: 5px 16px 5px 24px;
+  opacity: 0.5;
+  color: var(--nav-text);
+}
+.nav-group-planned a.nav-planned:hover { opacity: 0.75; }
+.nav-group-planned a.nav-planned.active { opacity: 1; }
+
+/* ── Tenant Admin Handoff Card ─────────────────────────────────────────── */
+.handoff-card {
+  background: #f0f4ff;
+  border: 2px dashed #93c5fd;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+}
+.handoff-card h3 { font-size: 15px; margin-bottom: 6px; color: var(--primary); }
+.handoff-card p { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5; }
+.handoff-card .handoff-items {
+  text-align: left;
+  max-width: 360px;
+  margin: 0 auto 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.handoff-card .handoff-items li { padding: 3px 0; }
+.btn-handoff {
+  display: inline-block;
+  padding: 8px 20px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  opacity: 0.7;
+}
+.btn-handoff::after { content: ' ↗'; }

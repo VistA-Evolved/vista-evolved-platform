@@ -880,6 +880,24 @@ async function renderTenantsDetail() {
       ` : '<p>No active packs.</p>'}
     </div>
 
+    <!-- Tenant Admin Handoff -->
+    <div class="card handoff-card">
+      <h3>Tenant Operational Admin</h3>
+      <p>
+        Day-to-day tenant configuration (users, roles, facilities, VistA connections)
+        happens in the <strong>Tenant Admin</strong> workspace &mdash; a separate app
+        scoped to one tenant at a time.
+      </p>
+      <ul class="handoff-items">
+        <li>&#x2022; User &amp; role management</li>
+        <li>&#x2022; Facility topology &amp; location hierarchy</li>
+        <li>&#x2022; VistA instance connections</li>
+        <li>&#x2022; Module entitlements &amp; feature flags</li>
+      </ul>
+      <button class="btn-handoff" title="Tenant Admin workspace — not yet available">Open Tenant Admin</button>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:10px;">Workspace: <code>vista-evolved-platform/apps/tenant-admin</code> &middot; Status: planned</p>
+    </div>
+
     <!-- Actions Bar -->
     <div class="card">
       <h3>Actions</h3>
@@ -889,7 +907,6 @@ async function renderTenantsDetail() {
         <button class="btn" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/suspend', {reason:'operator-action',actor:'operator'}, 'tenant-actions-result')">Suspend Tenant</button>
         <button class="btn" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/reactivate', {actor:'operator'}, 'tenant-actions-result')">Reactivate Tenant</button>
         <button class="btn btn-danger" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/archive', {actor:'operator'}, 'tenant-actions-result')">Archive Tenant</button>
-        <button class="btn" title="Cross-workspace navigation to tenant admin">Open Tenant Admin &#8599;</button>
       </div>
       <div id="tenant-actions-result" style="margin-top:8px;"></div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
@@ -1024,6 +1041,14 @@ function renderTenantsBootstrap() {
         Bootstrap draft creation is proxied to the real backend when available.
         Plan resolution remains contract-backed (review-only).
       </p>
+    </div>
+
+    <!-- Post-Provisioning Handoff -->
+    <div class="card handoff-card" style="margin-top:16px;">
+      <h3>After Provisioning</h3>
+      <p>Once this tenant is provisioned, operational setup (users, roles, facilities, VistA connections) continues in the <strong>Tenant Admin</strong> workspace.</p>
+      <button class="btn-handoff" title="Tenant Admin workspace — not yet available">Open Tenant Admin</button>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Planned &middot; <code>apps/tenant-admin</code></p>
     </div>
   `;
 }
@@ -1720,10 +1745,18 @@ function renderHome() {
           ${nextActions.map(a => `<li><a href="${a.href}">${escHtml(a.label)} &rarr;</a></li>`).join('')}
         </ul>
       </div>
+
+      <div class="home-card handoff-card" style="grid-column: 1 / -1;">
+        <h3>Tenant Operational Admin</h3>
+        <p>After onboarding and provisioning, day-to-day tenant configuration
+        moves to the <strong>Tenant Admin</strong> workspace (users, roles, facilities, VistA connections).</p>
+        <button class="btn-handoff" title="Tenant Admin workspace — not yet available">Open Tenant Admin</button>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Planned &middot; <code>apps/tenant-admin</code></p>
+      </div>
     </div>
 
     <div style="margin-top:20px; text-align:center;">
-      <span class="meta-secondary">22 surfaces · 8 domains · ${sourceBadge(tenantSource)} real-backend + fixture fallback</span>
+      <span class="meta-secondary">22 surfaces · 8 domains · 11 real + 11 planned · ${sourceBadge(tenantSource)} real-backend + fixture fallback</span>
     </div>
   `;
 }
