@@ -63,6 +63,10 @@
 | **Operator console page priority and content model** | `docs/explanation/operator-console-page-priority-and-content-model.md` | P0/P1/P2 page priority tiers, per-domain content models for all 8 domains (main objects, views, KPIs, first drill-down, next-safe-actions, relationships), cross-domain content rules |
 | Control-plane bootstrap design handoff brief | `docs/explanation/control-plane-bootstrap-design-handoff-brief.md` | **Superseded by v2.** Design brief for 8 bootstrap screens under old IA. Retained as reference for v1 component specs. |
 | **Operator console design handoff brief v2** | `docs/explanation/operator-console-design-handoff-brief-v2.md` | Full design handoff brief for 22 surfaces under 8-domain model: Figma Make primary brief, Stitch secondary brief, live CSS token reference, component specs (9 components), per-surface design notes, cross-domain drill map, acceptance criteria (15 gates), rejection triggers (12 triggers). Supersedes v1 bootstrap handoff brief. |
+| **Tenant admin architecture and boundaries** | `docs/explanation/tenant-admin-architecture-and-boundaries.md` | Workspace identity (family #2), separation from CP, 8 concern areas with VistA grounding, boundary constraints, data flow model, implementation posture |
+| **Tenant admin VistA truth map** | `docs/explanation/tenant-admin-vista-truth-map.md` | Maps tenant-admin concerns to VistA files, globals, RPCs: Facility (File 4/44), User (File 200), Role (File 19.1/19), Site Params (File 8989.3), research priorities |
+| **Tenant admin personas, jobs, and first-slice journeys** | `docs/explanation/tenant-admin-personas-jobs-and-first-slice-journeys.md` | 3 primary personas (TA-1/2/3), 10-job catalog, 3 first-slice journeys, 6-surface first-slice inventory |
+| **Operator-to-tenant-admin handoff model** | `docs/explanation/operator-to-tenant-admin-handoff-model.md` | 3 trigger points, context transfer contract, handoff mechanism, safety constraints, references Task 0 implementations |
 
 ## Runtime apps
 
