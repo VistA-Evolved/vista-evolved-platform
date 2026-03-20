@@ -11,6 +11,8 @@
 > - `VistA-Evolved/AGENTS.md` §8 — VEHU RPC availability reference
 > - `vista-evolved-vista-distro/overlay/routines/` — overlay MUMPS routines showing File 200 patterns
 > - `docs/explanation/tenant-admin-vista-truth-map.md` — prior research targets
+> - [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md) — externally-sourced master reference (14 domains, 2,510 RPCs)
+> - [VistA Admin Domain Map](vista-admin-domain-map.md) — domain→package→file→global quick reference
 
 ---
 

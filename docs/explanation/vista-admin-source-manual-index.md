@@ -3,6 +3,10 @@
 > **Purpose:** Bibliography of every external source consulted during the VistA Admin Corpus
 > discovery research. Each entry records: what was accessed, when, what was extracted,
 > and reliability assessment. This ensures every claim in the corpus is traceable.
+>
+> **Parent:** [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md)
+>
+> **See also:** [VistA Admin Domain Map](vista-admin-domain-map.md) — quick-reference domain-to-file mapping.
 
 ---
 
@@ -14,7 +18,7 @@
 |-------|-------|
 | **URL** | `https://en.wikipedia.org/wiki/VistA` |
 | **Type** | Encyclopedia article |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | VistA overview: 180+ applications, deployment across 1700+ VA facilities, M/MUMPS architecture, package organization, history from DHCP to VistA, open-source status |
 | **Reliability** | HIGH — well-maintained Wikipedia article with 100+ citations to VA and government sources |
 | **Used in** | Corpus §1 (System Overview), §2 general context |
@@ -25,7 +29,7 @@
 |-------|-------|
 | **URL** | `https://en.wikipedia.org/wiki/VA_Kernel` |
 | **Type** | Encyclopedia article |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | Kernel infrastructure components: MenuMan, MailMan, TaskMan, Sign-on/Security, Device Handler, Alert Utility, Protocol/Event processor. Access/verify code pattern. VistA package as unit of distribution. |
 | **Reliability** | HIGH — Wikipedia article with VA citations |
 | **Used in** | Corpus §2.1 (Users), §2.2 (Keys/Menus), §2.7 (Parameters), §2.9 (Alerts) |
@@ -36,7 +40,7 @@
 |-------|-------|
 | **URL** | `https://en.wikipedia.org/wiki/FileMan` |
 | **Type** | Encyclopedia article |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | FileMan as metadata/database engine for MUMPS, data dictionary-driven architecture, public domain status, self-documenting nature of DD |
 | **Reliability** | HIGH — Wikipedia article with VA citations |
 | **Used in** | Corpus §2.8 (FileMan) |
@@ -47,7 +51,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Kernel` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | Complete VistA global file listing for Kernel: File 200 (NEW PERSON), File 19 (OPTION), File 19.1 (SECURITY KEY), File 4 (INSTITUTION), File 201 (USER CLASS), File 3.5 (DEVICE), File 49 (SERVICE-SECTION), File 7 (PROVIDER CLASS), File 8932.1 (PERSON CLASS), File 8989.2/3 (KERNEL PARAMETERS), File 8992 (ALERT), File 8994.5 (REMOTE APPLICATION), File 101 (PROTOCOL), File 9.4/9.6/9.7 (PACKAGE/BUILD/INSTALL), File 3.081/3.05 (SIGN-ON LOG/FAILED ACCESS ATTEMPTS) |
 | **Reliability** | HIGH — open-source VistA repository maintained by WorldVistA |
 | **Used in** | Corpus §2.1, §2.2, §2.3, §2.7, §2.9, Domain Map D1-D3, D7-D8 |
@@ -58,7 +62,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Registration` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 2 (PATIENT), File 40.8 (MEDICAL CENTER DIVISION), File 42 (WARD LOCATION), File 42.4 (SPECIALTY), File 43 (MAS PARAMETERS), File 405 (PATIENT MOVEMENT), File 405.4 (ROOM-BED), File 8 (ELIGIBILITY CODE), 60+ additional registration files |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.3 (Institutions), §2.5 (Wards), Domain Map D3, D5 |
@@ -69,7 +73,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Scheduling` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 44 (HOSPITAL LOCATION), File 40.7 (CLINIC STOP), File 409.1 (APPOINTMENT TYPE), File 409.2 (CANCELLATION REASONS), File 404.91 (SCHEDULING PARAMETER), File 404.51 (TEAM), File 409.67 (CLINIC GROUP), 50+ files including PCMM Team files |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.4 (Clinics), Domain Map D4 |
@@ -80,7 +84,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/RPC%20Broker` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 8994 (REMOTE PROCEDURE), File 8994.1 (RPC BROKER SITE PARAMETERS) — only 2 global files |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.10 (RPC Broker), Domain Map D2 |
@@ -91,7 +95,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Toolkit` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 8989.5 (PARAMETERS), File 8989.51 (PARAMETER DEFINITION), File 8989.518 (PARAMETER ENTITY), File 8989.52 (PARAMETER TEMPLATE), File 15 (DUPLICATE RECORD) |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.7 (Parameters), Domain Map D7 |
@@ -102,7 +106,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Order%20Entry%20Results%20Reporting` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 100 (ORDER), File 100.98 (DISPLAY GROUP), File 100.99 (ORDER PARAMETERS), File 101.41 (ORDER DIALOG), File 101.43 (ORDERABLE ITEMS), File 860.x (ORDER CHECK files) |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.6 (Order Entry), Domain Map D6 |
@@ -113,7 +117,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Lab%20Service` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 60 (LABORATORY TEST), File 62 (COLLECTION SAMPLE), File 63 (LAB DATA), File 64 (WKLD CODE), File 69 (LAB ORDER ENTRY), File 69.9 (LABORATORY SITE), 40+ files |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.12 (Lab), Domain Map D11 |
@@ -124,7 +128,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Pharmacy%20Data%20Management` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 50 (DRUG), File 50.7 (PHARMACY ORDERABLE ITEM), File 51 (MEDICATION INSTRUCTION), File 52.6 (IV ADDITIVES), File 55 (PHARMACY PATIENT), File 59.7 (PHARMACY SYSTEM) |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.13 (Pharmacy), Domain Map D12 |
@@ -135,7 +139,7 @@
 |-------|-------|
 | **URL** | `https://github.com/WorldVistA/VistA-M/tree/master/Packages/Imaging` |
 | **Type** | Source code repository (global file listing) |
-| **Access date** | 2025-07-16 |
+| **Access date** | 2026-03-20 |
 | **What was extracted** | File 2005 (IMAGE), File 2005.2 (NETWORK LOCATION), File 2006.1 (IMAGING SITE PARAMETERS), File 2006.04 (ACQUISITION DEVICE), 100+ imaging/DICOM files |
 | **Reliability** | HIGH — WorldVistA open-source repo |
 | **Used in** | Corpus §2.14 (Imaging), Domain Map D10 |
@@ -186,4 +190,4 @@
 ---
 
 *Generated: Task 1 of queue pack "VISTA ADMIN CORPUS + TERMINAL-TO-UI TRANSLATION PROGRAM"*
-*Research date: 2025-07-16*
+*Research date: 2026-03-20*

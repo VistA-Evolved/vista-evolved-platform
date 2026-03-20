@@ -5,7 +5,9 @@
 > **Type:** Explanation.
 > **Scope:** Detailed mapping of VistA FILES 200, 200.01, 19.1, and 8932.1
 > to available RPCs, globals, routines, and safe access patterns.
-> **Parent:** `tenant-admin-vista-admin-truth-discovery-pack.md`
+> **Parent:** [Tenant Admin VistA Admin Truth Discovery Pack](tenant-admin-vista-admin-truth-discovery-pack.md)
+>
+> **See also:** [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md) §2.1–2.2 (Users, Keys)
 
 ---
 

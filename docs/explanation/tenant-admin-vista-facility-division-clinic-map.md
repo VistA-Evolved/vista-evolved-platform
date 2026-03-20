@@ -5,7 +5,9 @@
 > **Type:** Explanation.
 > **Scope:** Detailed mapping of VistA Files 4, 40.8, 44, and related files
 > to available RPCs, globals, and safe access patterns.
-> **Parent:** `tenant-admin-vista-admin-truth-discovery-pack.md`
+> **Parent:** [Tenant Admin VistA Admin Truth Discovery Pack](tenant-admin-vista-admin-truth-discovery-pack.md)
+>
+> **See also:** [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md) §2.3–2.4 (Institutions, Clinics)
 
 ---
 

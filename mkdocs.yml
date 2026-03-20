@@ -23,10 +23,14 @@ nav:
     - Docs Policy: reference/docs-policy.md
     - Contract System: reference/contract-system.md
     - Contract Policy: reference/contract-policy.md
+    - Contract Mutation and Implementation Governance: reference/contract-mutation-and-implementation-governance-protocol.md
     - Boundary Policy: reference/boundary-policy.md
     - Persistence Policy: reference/persistence-policy.md
     - Data Ownership Matrix: reference/data-ownership-matrix.md
     - Port Registry: reference/port-registry.md
+    - Screen Inventory: reference/screen-inventory.md
+    - Permissions Matrix: reference/permissions-matrix.md
+    - Pack Visibility Rules: reference/pack-visibility-rules.md
     - Nx Adoption Plan: reference/nx-adoption-plan.md
     - Decision Index: reference/decision-index.yaml
     - Notion Sync Policy: reference/notion-sync-policy.md
@@ -39,9 +43,50 @@ nav:
     - Country and Payer Readiness Registry: explanation/country-and-payer-readiness-registry-spec.md
     - Specialty Content and Analytics Architecture: explanation/specialty-content-and-analytics-architecture-spec.md
     - Information Architecture and Workspace Map: explanation/information-architecture-workspace-map.md
+    - Legal-Market Composition and Resolver: explanation/legal-market-composition-and-effective-configuration-resolver-spec.md
     - AI Assist Safety Spec: explanation/ai-assist-safety-spec.md
     - Governed Build Protocol: explanation/governed-build-protocol.md
     - AI Coding Governance: explanation/ai-coding-governance-and-sdlc.md
+    - Control-Plane Service Map and Architecture: explanation/control-plane-service-map-and-operator-console-architecture.md
+    - Control-Plane Tenant Lifecycle and Orchestration: explanation/control-plane-tenant-lifecycle-and-orchestration-model.md
+    - Control-Plane Operator Bootstrap and Provisioning: explanation/control-plane-operator-bootstrap-and-provisioning-contract-map.md
+    - Control-Plane Tenant Lifecycle Contract (Batch 2): explanation/control-plane-tenant-lifecycle-and-provisioning-control-contract-map-batch-2.md
+    - Control-Plane Market Pack and System Write (Batch 3): explanation/control-plane-market-pack-and-system-write-contract-map-batch-3.md
+    - Control-Plane Local Write Review Runtime (Batch 3): explanation/control-plane-local-write-review-runtime-batch-3.md
+    - Control-Plane Local Operator Access (Wave 1): explanation/control-plane-local-operator-access-foundation-wave-1.md
+    - Control-Plane Composition Engine (Wave 2): explanation/control-plane-composition-engine-wave-2.md
+    - Control-Plane Fixture Truth Alignment (Batch 4): explanation/control-plane-fixture-truth-alignment-and-second-market-seed-batch-4.md
+    - Control-Plane Bootstrap Subsystem Pattern Scan: explanation/control-plane-bootstrap-subsystem-pattern-scan.md
+    - Control-Plane Bootstrap Journeys and Stories: explanation/control-plane-bootstrap-journeys-and-stories.md
+    - Control-Plane Bootstrap UX/IA and Wireframes: explanation/control-plane-bootstrap-ux-ia-and-wireframes.md
+    - Control-Plane Bootstrap Design Handoff Brief: explanation/control-plane-bootstrap-design-handoff-brief.md
+    - Control-Plane Static Review Prototype (Batch 2): explanation/control-plane-static-review-prototype-implementation-batch-2.md
+    - Control-Panel Surface Expansion (Batch 1): explanation/control-panel-surface-expansion-batch-1.md
+    - Control-Panel Page Specs (Batch 1): explanation/control-panel-page-specs-and-operator-manual-batch-1.md
+    - Control-Panel Page Specs v2: explanation/control-panel-page-specs-v2.md
+    - Control-Panel Action Semantics (Batch 1): explanation/control-panel-action-semantics-and-source-of-truth-binding-batch-1.md
+    - Control-Panel Action Semantics v2: explanation/control-panel-action-semantics-v2.md
+    - Control-Panel Design Contract (Batch 1): explanation/control-panel-design-contract-and-static-review-prototype-batch-1.md
+    - Control-Panel Design Contract v2: explanation/control-panel-design-contract-v2.md
+    - Control-Panel IA and Wireframe Contract v2: explanation/control-panel-information-architecture-and-wireframe-contract-v2.md
+    - Operator Console UX/IA Reset and Journey Pack: explanation/operator-console-ux-ia-reset-and-journey-pack.md
+    - Operator Console Personas Jobs and Service Map: explanation/operator-console-personas-jobs-and-service-map.md
+    - Operator Console Page Priority and Content Model: explanation/operator-console-page-priority-and-content-model.md
+    - Operator Console Design Contract v3: explanation/operator-console-design-contract-v3.md
+    - Operator Console Shell Content Model: explanation/operator-console-shell-content-model.md
+    - Operator Console Design Handoff Brief v2: explanation/operator-console-design-handoff-brief-v2.md
+    - Tenant Admin Architecture and Boundaries: explanation/tenant-admin-architecture-and-boundaries.md
+    - Tenant Admin VistA Truth Map: explanation/tenant-admin-vista-truth-map.md
+    - Tenant Admin VistA Admin Truth Discovery Pack: explanation/tenant-admin-vista-admin-truth-discovery-pack.md
+    - Tenant Admin VistA Users and Security Keys Map: explanation/tenant-admin-vista-users-and-security-keys-map.md
+    - Tenant Admin VistA Facility Division Clinic Map: explanation/tenant-admin-vista-facility-division-clinic-map.md
+    - Tenant Admin VistA Ward and Room-Bed Map: explanation/tenant-admin-vista-ward-bed-map.md
+    - Tenant Admin Personas Jobs and First-Slice Journeys: explanation/tenant-admin-personas-jobs-and-first-slice-journeys.md
+    - Operator-to-Tenant-Admin Handoff Model: explanation/operator-to-tenant-admin-handoff-model.md
+    - Tenant Admin Design Contract v1: explanation/tenant-admin-design-contract-v1.md
+    - VistA Admin Corpus Discovery Pack: explanation/vista-admin-corpus-discovery-pack.md
+    - VistA Admin Domain Map: explanation/vista-admin-domain-map.md
+    - VistA Admin Source Manual Index: explanation/vista-admin-source-manual-index.md
   - ADRs:
     - adrs/index.md
     - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md

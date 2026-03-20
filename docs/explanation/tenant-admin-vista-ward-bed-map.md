@@ -5,7 +5,9 @@
 > **Type:** Explanation.
 > **Scope:** Detailed mapping of VistA Files 42 and 405.4 to available RPCs,
 > globals, and safe access patterns for inpatient bed management.
-> **Parent:** `tenant-admin-vista-admin-truth-discovery-pack.md`
+> **Parent:** [Tenant Admin VistA Admin Truth Discovery Pack](tenant-admin-vista-admin-truth-discovery-pack.md)
+>
+> **See also:** [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md) §2.5 (Wards)
 
 ---
 

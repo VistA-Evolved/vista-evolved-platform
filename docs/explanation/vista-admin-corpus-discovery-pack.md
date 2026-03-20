@@ -555,4 +555,4 @@ Based on this corpus, the tenant admin workspace should focus on these domain pr
 ---
 
 *Generated: Task 1 of queue pack "VISTA ADMIN CORPUS + TERMINAL-TO-UI TRANSLATION PROGRAM"*
-*External research date: 2025-07-16*
+*External research date: 2026-03-20*

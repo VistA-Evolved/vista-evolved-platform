@@ -2,7 +2,9 @@
 
 > **Purpose:** Maps every tenant-admin concern domain to its governing VistA packages,
 > canonical files, globals, and RPC families. This is the quick-reference companion to
-> the full corpus discovery pack.
+> the [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md).
+>
+> **See also:** [VistA Admin Source Manual Index](vista-admin-source-manual-index.md) — bibliography of all sources.
 >
 > **Key:** Package prefix → File → Global → RPC family → Admin capability
 
