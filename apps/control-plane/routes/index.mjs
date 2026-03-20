@@ -2,6 +2,11 @@
  * Read-only API routes for the control-plane review runtime.
  *
  * Hybrid sourcing:
+ *   Real-backend proxy (P0 graduated surfaces — port 4510 with fixture fallback):
+ *     - R1: listTenants, R2: getTenant
+ *     - R5: listTenantBootstrapRequests, R6: getTenantBootstrapRequest
+ *     - R7: listProvisioningRuns, R8: getProvisioningRun
+ *
  *   Contract-backed (loaded from packages/contracts/ at startup):
  *     - R3: listLegalMarketProfiles
  *     - R4: getLegalMarketProfile
@@ -11,9 +16,6 @@
  *     - effective-plans
  *
  *   Fixture-backed (loaded from fixtures/ at startup):
- *     - R1: listTenants, R2: getTenant
- *     - R5: listTenantBootstrapRequests, R6: getTenantBootstrapRequest
- *     - R7: listProvisioningRuns, R8: getProvisioningRun
  *     - R10: getSystemConfig
  *
  * Response shapes align with the OpenAPI contract:
@@ -24,6 +26,7 @@
  */
 
 const PREFIX = '/api/control-plane/v1';
+const BACKEND_PREFIX = '/api/control-plane-admin/v1';
 
 /** Strip _provenance from fixture data before serving */
 function stripProvenance(obj) {
@@ -37,21 +40,131 @@ function stripProvenance(obj) {
   return out;
 }
 
-export default function registerRoutes(server, fixtures, contractData) {
-  // ── R1: listTenants ─────────────────────────────────────────────────────
+/**
+ * Fetch from real backend with timeout. Returns null on any failure.
+ */
+async function backendFetch(backendUrl, path) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const resp = await fetch(`${backendUrl}${path}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normalize a real-backend tenant row to the fixture-compatible shape.
+ */
+function normalizeTenant(t) {
+  return {
+    tenantId: t.id,
+    displayName: t.displayName,
+    slug: t.slug || null,
+    status: t.status,
+    legalMarketId: t.legalMarketId,
+    launchTier: null,
+    suspensionReason: t.suspensionReason || null,
+    activePacks: [],
+    bootstrapRequestId: null,
+    latestProvisioningRunId: null,
+    createdBy: t.createdBy || null,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  };
+}
+
+/**
+ * Normalize a real-backend bootstrap request row to the fixture-compatible shape.
+ */
+function normalizeBootstrapRequest(r) {
+  return {
+    bootstrapRequestId: r.id,
+    tenantName: r.tenantName,
+    legalMarketId: r.legalMarketId,
+    organization: r.organization || null,
+    status: r.status,
+    packSelections: r.packSelections || null,
+    validationResult: r.validationResult || null,
+    submittedBy: r.submittedBy || null,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  };
+}
+
+/**
+ * Normalize a real-backend provisioning run row to the fixture-compatible shape.
+ */
+function normalizeProvisioningRun(r) {
+  return {
+    provisioningRunId: r.id,
+    bootstrapRequestId: r.bootstrapRequestId || null,
+    tenantId: r.tenantId,
+    status: r.status,
+    steps: (r.steps || []).map(s => ({
+      stepId: s.id || s.stepName,
+      stepName: s.stepName,
+      status: s.status,
+      detail: s.detail || null,
+      startedAt: s.startedAt || null,
+      completedAt: s.completedAt || null,
+    })),
+    legalMarketId: null,
+    effectivePlanId: null,
+    correlationId: null,
+    blockers: [],
+    failures: [],
+    createdBy: r.createdBy || null,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    startedAt: r.createdAt,
+    completedAt: r.updatedAt,
+  };
+}
+
+export default function registerRoutes(server, fixtures, contractData, backendUrl) {
+  // ── R1: listTenants (real-backend proxy with fixture fallback) ────────
   server.get(`${PREFIX}/tenants`, async (request, reply) => {
-    return stripProvenance(fixtures['tenants']);
+    if (backendUrl) {
+      const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
+      const path = `${BACKEND_PREFIX}/tenants${qs ? '?' + qs : ''}`;
+      const data = await backendFetch(backendUrl, path);
+      if (data && data.ok) {
+        const items = (data.tenants || []).map(normalizeTenant);
+        return {
+          _source: 'real-backend',
+          items,
+          pagination: {
+            page: 1,
+            pageSize: items.length || 20,
+            totalItems: items.length,
+            totalPages: 1,
+          },
+        };
+      }
+    }
+    const fixtureData = stripProvenance(fixtures['tenants']);
+    return { ...fixtureData, _source: 'fixture-fallback' };
   });
 
-  // ── R2: getTenant ───────────────────────────────────────────────────────
+  // ── R2: getTenant (real-backend proxy with fixture fallback) ──────────
   server.get(`${PREFIX}/tenants/:tenantId`, async (request, reply) => {
     const { tenantId } = request.params;
+    if (backendUrl) {
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/tenants/${encodeURIComponent(tenantId)}`);
+      if (data && data.ok && data.tenant) {
+        return { ...normalizeTenant(data.tenant), _source: 'real-backend' };
+      }
+    }
     const tenant = fixtures['tenants'].items.find(t => t.tenantId === tenantId);
     if (!tenant) {
       reply.code(404);
       return { error: 'not_found', message: `Tenant ${tenantId} not found` };
     }
-    return stripProvenance(tenant);
+    return { ...stripProvenance(tenant), _source: 'fixture-fallback' };
   });
 
   // ── R3: listLegalMarketProfiles (contract-backed) ────────────────────────
@@ -72,14 +185,39 @@ export default function registerRoutes(server, fixtures, contractData) {
     return market;
   });
 
-  // ── R5: listTenantBootstrapRequests ─────────────────────────────────────
+  // ── R5: listTenantBootstrapRequests (real-backend proxy with fixture fallback) ──
   server.get(`${PREFIX}/tenant-bootstrap-requests`, async (request, reply) => {
-    return stripProvenance(fixtures['bootstrap-requests']);
+    if (backendUrl) {
+      const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
+      const path = `${BACKEND_PREFIX}/bootstrap/requests${qs ? '?' + qs : ''}`;
+      const data = await backendFetch(backendUrl, path);
+      if (data && data.ok) {
+        const items = (data.requests || []).map(normalizeBootstrapRequest);
+        return {
+          _source: 'real-backend',
+          items,
+          pagination: {
+            page: 1,
+            pageSize: items.length || 20,
+            totalItems: items.length,
+            totalPages: 1,
+          },
+        };
+      }
+    }
+    const fixtureData = stripProvenance(fixtures['bootstrap-requests']);
+    return { ...fixtureData, _source: 'fixture-fallback' };
   });
 
-  // ── R6: getTenantBootstrapRequest ───────────────────────────────────────
+  // ── R6: getTenantBootstrapRequest (real-backend proxy with fixture fallback) ──
   server.get(`${PREFIX}/tenant-bootstrap-requests/:bootstrapRequestId`, async (request, reply) => {
     const { bootstrapRequestId } = request.params;
+    if (backendUrl) {
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/bootstrap/requests/${encodeURIComponent(bootstrapRequestId)}`);
+      if (data && data.ok && data.request) {
+        return { ...normalizeBootstrapRequest(data.request), _source: 'real-backend' };
+      }
+    }
     const req = fixtures['bootstrap-requests'].items.find(
       b => b.bootstrapRequestId === bootstrapRequestId
     );
@@ -87,17 +225,48 @@ export default function registerRoutes(server, fixtures, contractData) {
       reply.code(404);
       return { error: 'not_found', message: `Bootstrap request ${bootstrapRequestId} not found` };
     }
-    return stripProvenance(req);
+    return { ...stripProvenance(req), _source: 'fixture-fallback' };
   });
 
-  // ── R7: listProvisioningRuns ────────────────────────────────────────────
+  // ── R7: listProvisioningRuns (real-backend proxy with fixture fallback) ──
   server.get(`${PREFIX}/provisioning-runs`, async (request, reply) => {
-    return stripProvenance(fixtures['provisioning-runs']);
+    if (backendUrl) {
+      const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
+      const path = `${BACKEND_PREFIX}/provisioning/runs${qs ? '?' + qs : ''}`;
+      const data = await backendFetch(backendUrl, path);
+      if (data && data.ok) {
+        const items = (data.runs || []).map(normalizeProvisioningRun);
+        return {
+          _source: 'real-backend',
+          items,
+          pagination: {
+            page: 1,
+            pageSize: items.length || 20,
+            totalItems: items.length,
+            totalPages: 1,
+          },
+        };
+      }
+    }
+    const fixtureData = stripProvenance(fixtures['provisioning-runs']);
+    return { ...fixtureData, _source: 'fixture-fallback' };
   });
 
-  // ── R8: getProvisioningRun ──────────────────────────────────────────────
+  // ── R8: getProvisioningRun (real-backend proxy with fixture fallback) ──
   server.get(`${PREFIX}/provisioning-runs/:provisioningRunId`, async (request, reply) => {
     const { provisioningRunId } = request.params;
+    if (backendUrl) {
+      // Try with steps first for richer data
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/provisioning/runs/${encodeURIComponent(provisioningRunId)}/steps`);
+      if (data && data.ok && data.run) {
+        return { ...normalizeProvisioningRun(data.run), _source: 'real-backend' };
+      }
+      // Fallback to basic run
+      const basic = await backendFetch(backendUrl, `${BACKEND_PREFIX}/provisioning/runs/${encodeURIComponent(provisioningRunId)}`);
+      if (basic && basic.ok && basic.run) {
+        return { ...normalizeProvisioningRun(basic.run), _source: 'real-backend' };
+      }
+    }
     const run = fixtures['provisioning-runs'].items.find(
       r => r.provisioningRunId === provisioningRunId
     );
@@ -105,7 +274,7 @@ export default function registerRoutes(server, fixtures, contractData) {
       reply.code(404);
       return { error: 'not_found', message: `Provisioning run ${provisioningRunId} not found` };
     }
-    return stripProvenance(run);
+    return { ...stripProvenance(run), _source: 'fixture-fallback' };
   });
 
   // ── R9: listPacks (contract-backed hybrid + filters) ─────────────────────

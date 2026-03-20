@@ -70,6 +70,7 @@ function switchRole(role) {
 // ---------------------------------------------------------------------------
 const API_BASE = '/api/control-plane/v1';
 const REVIEW_API_BASE = '/api/control-plane-review/v1';
+const LIFECYCLE_API_BASE = '/api/control-plane-lifecycle/v1';
 const FIXTURES = {};
 
 async function loadFixtures() {
@@ -142,6 +143,64 @@ function disabledBtn(label, reason) {
 
 function navLink(href, label) {
   return `<a href="${href}" style="color:var(--primary);text-decoration:none;">${escHtml(label)}</a>`;
+}
+
+// ---------------------------------------------------------------------------
+// Source posture label — honest data-source indicator for graduated P0 surfaces
+// ---------------------------------------------------------------------------
+function sourceBadge(source) {
+  if (source === 'real-backend') {
+    return '<span class="source-badge source-real">real backend</span>';
+  }
+  if (source === 'fixture-fallback') {
+    return '<span class="source-badge source-fixture">fixture fallback</span>';
+  }
+  if (source === 'contract-backed') {
+    return '<span class="source-badge source-contract">contract-backed</span>';
+  }
+  if (source === 'static-review') {
+    return '<span class="source-badge source-static">static review</span>';
+  }
+  return '<span class="source-badge source-unknown">unknown source</span>';
+}
+
+/**
+ * POST to the P0 lifecycle proxy (real backend writes).
+ * Returns { ok, _source, ... } or { ok: false, _source: 'backend-unreachable' }.
+ */
+async function lifecycleFetch(path, body) {
+  try {
+    const resp = await apiFetch(`${LIFECYCLE_API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return await resp.json();
+  } catch {
+    return { ok: false, _source: 'backend-unreachable', message: 'Failed to reach real backend' };
+  }
+}
+
+/**
+ * Render a lifecycle action result inline (replaces review-only dialog for P0).
+ */
+function renderLifecycleResult(containerId, result) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (result.ok) {
+    el.innerHTML = `<div class="lifecycle-result lifecycle-success">
+      ${sourceBadge(result._source)} Action completed successfully.
+    </div>`;
+  } else if (result._source === 'backend-unreachable') {
+    el.innerHTML = `<div class="lifecycle-result lifecycle-unreachable">
+      ${sourceBadge('fixture-fallback')} Real backend unreachable.
+      <span style="font-size:12px;display:block;margin-top:4px;">${escHtml(result.message || '')}</span>
+    </div>`;
+  } else {
+    el.innerHTML = `<div class="lifecycle-result lifecycle-error">
+      ${sourceBadge(result._source || 'real-backend')} Action failed: ${escHtml(result.reason || result.message || 'unknown error')}
+    </div>`;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +417,48 @@ Summary: ${escHtml(data.auditPreview.summary)}</pre>
       </div>
     </div>
   `;
+}
+
+// ---------------------------------------------------------------------------
+// Real lifecycle action handlers (P0 graduated — proxy to real backend)
+// ---------------------------------------------------------------------------
+async function doLifecycleAction(path, body, resultContainerId) {
+  const result = await lifecycleFetch(path, body);
+  renderLifecycleResult(resultContainerId, result);
+  // Refresh data after a short delay so counts update
+  if (result.ok) {
+    setTimeout(() => { loadFixtures().then(() => navigate()); }, 600);
+  }
+}
+
+async function doBootstrapDraftCreate(resultContainerId) {
+  const tenants = FIXTURES['tenants']?.items || [];
+  if (tenants.length === 0) {
+    renderLifecycleResult(resultContainerId, { ok: false, error: 'No tenants available to create a bootstrap draft for.' });
+    return;
+  }
+  // Use the first tenant as default — operator can pick from the registry
+  const tenantId = tenants[0].tenantId;
+  const result = await lifecycleFetch('/bootstrap/drafts', { tenantId, displayName: tenants[0].displayName || 'New Bootstrap' });
+  renderLifecycleResult(resultContainerId, result);
+  if (result.ok) {
+    setTimeout(() => { loadFixtures().then(() => navigate()); }, 600);
+  }
+}
+
+async function doCreateProvisioningRun(resultContainerId) {
+  const bootstrapData = FIXTURES['bootstrap-requests'] || { items: [] };
+  const approved = (bootstrapData.items || []).filter(r => r.status === 'approved');
+  if (approved.length === 0) {
+    renderLifecycleResult(resultContainerId, { ok: false, error: 'No approved bootstrap requests available. Approve a bootstrap request first.' });
+    return;
+  }
+  const req = approved[0];
+  const result = await lifecycleFetch('/provisioning/runs', { bootstrapRequestId: req.bootstrapRequestId, tenantId: req.tenantId });
+  renderLifecycleResult(resultContainerId, result);
+  if (result.ok) {
+    setTimeout(() => { loadFixtures().then(() => navigate()); }, 600);
+  }
 }
 
 // Review action openers for each surface
@@ -609,17 +710,19 @@ function navigate() {
 }
 
 // ---------------------------------------------------------------------------
-// Surface 1: Tenant Registry (control-plane.tenants.list)
+// Surface 1: Tenant Registry (control-plane.tenants.list) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 function renderTenantsList() {
   const data = FIXTURES['tenants'];
   const items = data.items;
   const pg = data.pagination;
+  const source = data._source || 'fixture-fallback';
 
   document.getElementById('app').innerHTML = `
     <div class="surface-header">
       <h1>Tenant Registry</h1>
       <div class="btn-group">
+        ${sourceBadge(source)}
         <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">+ New Tenant Bootstrap</button>
         <button class="btn" onclick="reviewResolvePlan()">⊕ Resolve Plan (Review)</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
@@ -648,7 +751,7 @@ function renderTenantsList() {
       </thead>
       <tbody>
         ${items.map(t => `
-          <tr class="clickable" onclick="location.hash='#/tenants/detail'">
+          <tr class="clickable" onclick="location.hash='#/tenants/detail?id=${encodeURIComponent(t.tenantId)}'">
             <td><code>${escHtml(t.tenantId)}</code></td>
             <td>${escHtml(t.displayName)}</td>
             <td>${badge(t.status)}</td>
@@ -668,18 +771,46 @@ function renderTenantsList() {
 }
 
 // ---------------------------------------------------------------------------
-// Surface 2: Tenant Detail (control-plane.tenants.detail)
+// Surface 2: Tenant Detail (control-plane.tenants.detail) — P0 GRADUATED
 // ---------------------------------------------------------------------------
-function renderTenantsDetail() {
-  const tenant = FIXTURES['tenants'].items[0]; // PH demo tenant
+async function renderTenantsDetail() {
+  // Extract tenant ID from URL hash query param or fall back to first fixture tenant
+  const hashParts = location.hash.split('?');
+  const params = new URLSearchParams(hashParts[1] || '');
+  const tenantId = params.get('id') || (FIXTURES['tenants'].items[0] || {}).tenantId;
+  const source = FIXTURES['tenants']._source || 'fixture-fallback';
+
+  // Try dynamic fetch from real backend for single tenant
+  let tenant = null;
+  let detailSource = source;
+  try {
+    const resp = await apiFetch(`${API_BASE}/tenants/${encodeURIComponent(tenantId)}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      tenant = data;
+      detailSource = data._source || source;
+    }
+  } catch { /* fallback below */ }
+
+  // Fallback to fixture
+  if (!tenant) {
+    tenant = FIXTURES['tenants'].items.find(t => t.tenantId === tenantId) || FIXTURES['tenants'].items[0];
+    detailSource = 'fixture-fallback';
+  }
+
+  if (!tenant) {
+    document.getElementById('app').innerHTML = `<div class="empty-state"><p>Tenant not found.</p></div>`;
+    return;
+  }
+
   const bootstrapReqs = FIXTURES['bootstrap-requests'].items.filter(b => b.tenantId === tenant.tenantId);
   const latestBootstrap = bootstrapReqs[0];
 
   document.getElementById('app').innerHTML = `
-    <div class="breadcrumb">${navLink('#/tenants', 'Tenant Registry')} › ${escHtml(tenant.displayName)}</div>
+    <div class="breadcrumb">${navLink('#/tenants', 'Tenant Registry')} &rsaquo; ${escHtml(tenant.displayName)}</div>
     <div class="surface-header">
       <h1>${escHtml(tenant.displayName)}</h1>
-      <div>${badge(tenant.status)} ${badge(tenant.launchTier)}</div>
+      <div>${badge(tenant.status)} ${badge(tenant.launchTier)} ${sourceBadge(detailSource)}</div>
     </div>
 
     <!-- Identity Section -->
@@ -746,30 +877,37 @@ function renderTenantsDetail() {
       <div class="btn-group">
         <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">Initiate Bootstrap</button>
         <button class="btn" onclick="location.hash='#/provisioning'">View Provisioning</button>
-        <button class="btn" onclick="reviewSuspendTenant('${escHtml(tenant.tenantId)}')">Suspend Tenant (Review)</button>
-        <button class="btn" onclick="reviewReactivateTenant('${escHtml(tenant.tenantId)}')">Reactivate Tenant (Review)</button>
-        <button class="btn btn-danger" onclick="reviewArchiveTenant('${escHtml(tenant.tenantId)}')">Archive Tenant (Review)</button>
-        <button class="btn" title="Cross-workspace navigation to tenant admin">Open Tenant Admin ↗</button>
+        <button class="btn" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/suspend', {reason:'operator-action',actor:'operator'}, 'tenant-actions-result')">Suspend Tenant</button>
+        <button class="btn" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/reactivate', {actor:'operator'}, 'tenant-actions-result')">Reactivate Tenant</button>
+        <button class="btn btn-danger" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/archive', {actor:'operator'}, 'tenant-actions-result')">Archive Tenant</button>
+        <button class="btn" title="Cross-workspace navigation to tenant admin">Open Tenant Admin &#8599;</button>
       </div>
+      <div id="tenant-actions-result" style="margin-top:8px;"></div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
-        Suspend / Reactivate / Archive open review-only dialogs. No real state change occurs.
+        Lifecycle actions are proxied to the real backend when available.
+        Falls back to review-only when backend is unreachable.
       </p>
     </div>
   `;
 }
 
 // ---------------------------------------------------------------------------
-// Surface 3: Tenant Bootstrap (control-plane.tenants.bootstrap)
+// Surface 3: Tenant Bootstrap (control-plane.tenants.bootstrap) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 function renderTenantsBootstrap() {
   const plan = FIXTURES['effective-plans'].plans[0];
   const markets = FIXTURES['legal-market-profiles'].items;
+  const bootstrapSource = FIXTURES['bootstrap-requests']._source || 'fixture-fallback';
 
   document.getElementById('app').innerHTML = `
     <div class="breadcrumb">${navLink('#/tenants', 'Tenant Registry')} › ${navLink('#/tenants/detail', 'Tenant Detail')} › Bootstrap</div>
     <div class="surface-header">
       <h1>Tenant Bootstrap</h1>
-      <div>${badge('T0')} ${badge('draft')}</div>
+      <div>${badge('T0')} ${badge('draft')} ${sourceBadge(bootstrapSource)}</div>
+    </div>
+
+    <div class="posture-notice">
+      Bootstrap lifecycle: ${sourceBadge(bootstrapSource)} · Plan resolution: ${sourceBadge('contract-backed')}
     </div>
 
     <!-- Market Selection -->
@@ -884,34 +1022,39 @@ function renderTenantsBootstrap() {
     <div class="card" style="margin-top:16px;">
       <h3>Actions</h3>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="reviewCreateBootstrapRequest()">Submit Bootstrap Request (Review)</button>
+        <button class="btn btn-primary" onclick="doBootstrapDraftCreate('bootstrap-actions-result')">Submit Bootstrap Draft</button>
         <button class="btn" onclick="reviewResolvePlan()">Resolve Plan (Review)</button>
         <button class="btn" onclick="location.hash='#/tenants'">Cancel</button>
       </div>
+      <div id="bootstrap-actions-result" style="margin-top:8px;"></div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
-        ⚠ Review-only: Submit opens a review dialog calling POST /tenant-bootstrap-requests. No actual request is created.
-        The plan resolver review calls POST /effective-configuration-plans:resolve. No plan is persisted.
+        Bootstrap draft creation is proxied to the real backend when available.
+        Plan resolution remains contract-backed (review-only).
       </p>
     </div>
   `;
 }
 
 // ---------------------------------------------------------------------------
-// Surface 4: Provisioning Runs (control-plane.provisioning.runs)
+// Surface 4: Provisioning Runs (control-plane.provisioning.runs) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 function renderProvisioningRuns() {
   const data = FIXTURES['provisioning-runs'];
   const items = data.items;
   const pg = data.pagination;
+  const source = data._source || 'fixture-fallback';
 
   document.getElementById('app').innerHTML = `
     <div class="surface-header">
       <h1>Provisioning Runs</h1>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="reviewCreateProvisioningRun()">+ Create Provisioning Run (Review)</button>
+        ${sourceBadge(source)}
+        <button class="btn btn-primary" onclick="doCreateProvisioningRun('provisioning-actions-result')">+ Create Provisioning Run</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
+
+    <div id="provisioning-actions-result" style="margin-bottom:12px;"></div>
 
     <div class="filter-bar">
       <label>Status</label>
@@ -1014,10 +1157,11 @@ function renderRunDetail(run) {
 
       <!-- Actions -->
       <div style="margin-top:12px;">
+        <div id="run-action-result-${escHtml(run.provisioningRunId)}" style="margin-bottom:8px;"></div>
         <div class="btn-group">
-          ${run.status === 'failed' ? `<button class="btn btn-primary" onclick="reviewCreateProvisioningRun('${escHtml(run.tenantId)}', '${escHtml(run.legalMarketId)}')">Retry Run (Review)</button>` : ''}
+          ${run.status === 'pending' ? `<button class="btn btn-primary" onclick="doLifecycleAction('/provisioning/runs/${encodeURIComponent(run.provisioningRunId)}/queue', {}, 'run-action-result-${escHtml(run.provisioningRunId)}')">Queue Run</button>` : ''}
           ${(run.status === 'queued' || run.status === 'in-progress')
-            ? `<button class="btn" onclick="reviewCancelProvisioningRun('${escHtml(run.provisioningRunId)}')">Cancel Run (Review)</button>`
+            ? `<button class="btn" onclick="doLifecycleAction('/provisioning/runs/${encodeURIComponent(run.provisioningRunId)}/cancel', {}, 'run-action-result-${escHtml(run.provisioningRunId)}')">Cancel Run</button>`
             : ''}
           <button class="btn" onclick="navigate()">↻ Refresh</button>
         </div>
@@ -1520,12 +1664,19 @@ function renderStaticSurface(title, surfaceId, icon, description, domain, source
 // ---------------------------------------------------------------------------
 // Overview (control-plane.operations.center) — Landing page
 // ---------------------------------------------------------------------------
+// Surface 0: Overview (control-plane.overview) — P0 GRADUATED
+// ---------------------------------------------------------------------------
 function renderOverview() {
   const app = document.getElementById('app');
-  const tenants = FIXTURES['tenants']?.items || [];
-  const runs = FIXTURES['provisioning-runs']?.items || [];
+  const tenantData = FIXTURES['tenants'] || { items: [] };
+  const runData = FIXTURES['provisioning-runs'] || { items: [] };
+  const tenants = tenantData.items || [];
+  const runs = runData.items || [];
   const markets = FIXTURES['legal-market-profiles']?.items || [];
   const packs = FIXTURES['packs']?.items || [];
+
+  const tenantSource = tenantData._source || 'fixture-fallback';
+  const runSource = runData._source || 'fixture-fallback';
 
   const activeTenants = tenants.filter(t => t.status === 'active').length;
   const provisioningTenants = tenants.filter(t => t.status === 'provisioning').length;
@@ -1535,13 +1686,16 @@ function renderOverview() {
     <div class="surface-header">
       <div>
         <h1>Operator Console — Overview</h1>
-        <p style="font-size:13px;color:var(--text-muted);">Platform-wide operational snapshot. Local review data only.</p>
+        <p style="font-size:13px;color:var(--text-muted);">Platform-wide operational snapshot.</p>
+      </div>
+      <div class="btn-group">
+        ${sourceBadge(tenantSource)}
       </div>
     </div>
 
-    <div class="static-envelope">
-      LOCAL REVIEW RUNTIME — All counts and data sourced from local contracts and fixtures.
-      No live backend. No real-time metrics.
+    <div class="posture-notice">
+      <strong>Data posture:</strong> Tenants ${sourceBadge(tenantSource)} · Runs ${sourceBadge(runSource)} · Markets/Packs: contract-backed.
+      Counts reflect the active data source.
     </div>
 
     <div class="stat-row">
@@ -1601,12 +1755,12 @@ function renderOverview() {
     </div>
 
     <div class="card" style="margin-top:20px;">
-      <h3>Review Runtime Status</h3>
+      <h3>Runtime Posture</h3>
       <dl class="kv-list">
-        <dt>Runtime Mode</dt><dd>local-review</dd>
-        <dt>Total Surfaces</dt><dd>21 (8 data-backed, 13 static/deferred)</dd>
-        <dt>Data Sources</dt><dd>Contract-backed (6 routes) · Fixture-backed (7 routes) · Static (13 surfaces)</dd>
-        <dt>Write Actions</dt><dd>15 review-only simulations (no persistence)</dd>
+        <dt>Runtime Mode</dt><dd>hybrid (real-backend + fixture fallback)</dd>
+        <dt>Total Surfaces</dt><dd>21 (5 P0 graduated, 3 contract-backed, 13 static/deferred)</dd>
+        <dt>Data Sources</dt><dd>Real backend (tenants, bootstrap, provisioning) · Contract-backed (markets, packs) · Fixture fallback · Static (13 surfaces)</dd>
+        <dt>Write Actions</dt><dd>P0 lifecycle writes proxied to real backend; non-P0 review-only</dd>
         <dt>Auth</dt><dd>Local role simulation via X-Local-Role header</dd>
       </dl>
     </div>
@@ -1672,11 +1826,18 @@ function renderEligibilitySimulator() {
 // ---------------------------------------------------------------------------
 // Surface: Operations Center (control-plane.operations.center)
 // ---------------------------------------------------------------------------
+// Surface: Operations Center (control-plane.operations.center) — P0 GRADUATED
+// ---------------------------------------------------------------------------
 function renderOperationsCenter() {
   const app = document.getElementById('app');
-  const tenants = FIXTURES['tenants']?.items || [];
-  const runs = FIXTURES['provisioning-runs']?.items || [];
+  const tenantData = FIXTURES['tenants'] || { items: [] };
+  const runData = FIXTURES['provisioning-runs'] || { items: [] };
+  const tenants = tenantData.items || [];
+  const runs = runData.items || [];
   const config = FIXTURES['system-config'] || {};
+
+  const tenantSource = tenantData._source || 'fixture-fallback';
+  const runSource = runData._source || 'fixture-fallback';
 
   const activeRuns = runs.filter(r => r.status === 'in-progress');
   const failedRuns = runs.filter(r => r.status === 'failed');
@@ -1688,11 +1849,13 @@ function renderOperationsCenter() {
         <div class="breadcrumb">${navLink('#/overview', 'Overview')} / Operations</div>
         <h1>Operations Center</h1>
       </div>
+      <div class="btn-group">
+        ${sourceBadge(tenantSource)}
+      </div>
     </div>
 
-    <div class="static-envelope">
-      LOCAL REVIEW — Operational data derived from local fixtures only.
-      No live health checks, no real alerting, no real provisioning status.
+    <div class="posture-notice">
+      <strong>Data posture:</strong> Tenants ${sourceBadge(tenantSource)} · Runs ${sourceBadge(runSource)} · System config: fixture-backed.
     </div>
 
     <div class="stat-row">

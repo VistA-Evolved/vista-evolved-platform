@@ -37,6 +37,9 @@ import { runDriftAudit } from './lib/drift-audit.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4500', 10);
 
+// Real backend URL for P0 lifecycle proxy (control-plane-api on port 4510)
+const REAL_BACKEND_URL = process.env.REAL_BACKEND_URL || 'http://127.0.0.1:4510';
+
 // ---------------------------------------------------------------------------
 // Load fixtures once at startup
 // ---------------------------------------------------------------------------
@@ -114,13 +117,17 @@ server.addHook('onRequest', async (request, reply) => {
   }
 });
 
-// Read-only API routes (hybrid: contract-backed + fixture-backed)
+// Read-only API routes (hybrid: contract-backed + fixture-backed + real-backend proxy)
 const { default: registerRoutes } = await import('./routes/index.mjs');
-registerRoutes(server, fixtures, contractData);
+registerRoutes(server, fixtures, contractData, REAL_BACKEND_URL);
 
 // LOCAL REVIEW-ONLY write routes (validation & preview, no persistence)
 const { default: registerReviewRoutes } = await import('./routes/review.mjs');
 registerReviewRoutes(server, contractData);
+
+// P0 lifecycle proxy routes (real backend writes for graduated surfaces)
+const { default: registerLifecycleRoutes } = await import('./routes/lifecycle.mjs');
+registerLifecycleRoutes(server, REAL_BACKEND_URL);
 
 await server.listen({ port: PORT, host: '127.0.0.1' });
 server.log.info(`Control-plane review runtime listening on http://127.0.0.1:${PORT}`);
