@@ -1,0 +1,29 @@
+/**
+ * Docker Compose for the control-plane-api PostgreSQL dependency.
+ *
+ * Usage:
+ *   docker compose -f apps/control-plane-api/docker-compose.yml up -d
+ *
+ * Connection string:
+ *   postgresql://cp_admin:cp_admin_dev@127.0.0.1:5433/control_plane
+ */
+services:
+  control-plane-db:
+    image: postgres:16-alpine
+    container_name: ve-control-plane-db
+    environment:
+      POSTGRES_DB: control_plane
+      POSTGRES_USER: cp_admin
+      POSTGRES_PASSWORD: cp_admin_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - cp-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cp_admin -d control_plane"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  cp-pgdata:

@@ -1,0 +1,209 @@
+/**
+ * Database migrations for the control-plane operator-state engine.
+ *
+ * Migrations are forward-only, idempotent (IF NOT EXISTS), and applied in order.
+ * Each migration has a version number and a description.
+ *
+ * Run: node --env-file=.env src/db/migrate.mjs
+ */
+import { query, closePool } from './pool.mjs';
+
+const migrations = [
+  {
+    version: 1,
+    description: 'Create migration tracking table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS _migrations (
+        version   INTEGER PRIMARY KEY,
+        name      TEXT NOT NULL,
+        applied   TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `,
+  },
+  {
+    version: 2,
+    description: 'Create tenant table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS tenant (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        display_name      TEXT NOT NULL,
+        slug              TEXT NOT NULL UNIQUE,
+        legal_market_id   TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'draft'
+                          CHECK (status IN ('draft','active','suspended','archived')),
+        suspension_reason TEXT,
+        created_by        TEXT NOT NULL,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_tenant_status ON tenant(status);
+      CREATE INDEX IF NOT EXISTS idx_tenant_market ON tenant(legal_market_id);
+    `,
+  },
+  {
+    version: 3,
+    description: 'Create tenant_lifecycle_transition table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS tenant_lifecycle_transition (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id   UUID NOT NULL REFERENCES tenant(id),
+        from_status TEXT,
+        to_status   TEXT NOT NULL,
+        reason      TEXT,
+        actor       TEXT NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_tlt_tenant ON tenant_lifecycle_transition(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_tlt_created ON tenant_lifecycle_transition(created_at);
+    `,
+  },
+  {
+    version: 4,
+    description: 'Create bootstrap_draft table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS bootstrap_draft (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_name      TEXT,
+        legal_market_id  TEXT,
+        organization     JSONB,
+        pack_selections  JSONB,
+        notes            TEXT,
+        status           TEXT NOT NULL DEFAULT 'draft'
+                         CHECK (status IN ('draft','validated','approval_required',
+                                           'approved','queued','superseded','cancelled')),
+        created_by       TEXT NOT NULL,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_bd_status ON bootstrap_draft(status);
+    `,
+  },
+  {
+    version: 5,
+    description: 'Create bootstrap_request table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS bootstrap_request (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        draft_id         UUID REFERENCES bootstrap_draft(id),
+        tenant_name      TEXT NOT NULL,
+        legal_market_id  TEXT NOT NULL,
+        organization     JSONB NOT NULL,
+        pack_selections  JSONB NOT NULL,
+        status           TEXT NOT NULL DEFAULT 'approval_required'
+                         CHECK (status IN ('approval_required','approved','cancelled')),
+        validation_result JSONB,
+        submitted_by     TEXT NOT NULL,
+        reviewed_by      TEXT,
+        review_reason    TEXT,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_br_status ON bootstrap_request(status);
+    `,
+  },
+  {
+    version: 6,
+    description: 'Create provisioning_run and provisioning_step tables',
+    sql: `
+      CREATE TABLE IF NOT EXISTS provisioning_run (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bootstrap_request_id UUID REFERENCES bootstrap_request(id),
+        tenant_id           UUID REFERENCES tenant(id),
+        status              TEXT NOT NULL DEFAULT 'draft'
+                            CHECK (status IN ('draft','queued','running',
+                                              'waiting_on_dependency','failed',
+                                              'cancelled','completed')),
+        created_by          TEXT NOT NULL,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_pr_status ON provisioning_run(status);
+
+      CREATE TABLE IF NOT EXISTS provisioning_step (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        run_id            UUID NOT NULL REFERENCES provisioning_run(id),
+        step_name         TEXT NOT NULL,
+        step_order        INTEGER NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending','running','completed','failed','skipped')),
+        detail            JSONB,
+        started_at        TIMESTAMPTZ,
+        completed_at      TIMESTAMPTZ,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ps_run ON provisioning_step(run_id);
+    `,
+  },
+  {
+    version: 7,
+    description: 'Create audit_event table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS audit_event (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_type  TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id   UUID,
+        actor       TEXT NOT NULL,
+        detail      JSONB,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ae_type ON audit_event(event_type);
+      CREATE INDEX IF NOT EXISTS idx_ae_entity ON audit_event(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_ae_created ON audit_event(created_at);
+    `,
+  },
+  {
+    version: 8,
+    description: 'Create outbox_event table',
+    sql: `
+      CREATE TABLE IF NOT EXISTS outbox_event (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        event_type  TEXT NOT NULL,
+        payload     JSONB NOT NULL,
+        published   BOOLEAN NOT NULL DEFAULT false,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_oe_unpublished ON outbox_event(published) WHERE NOT published;
+    `,
+  },
+];
+
+/**
+ * Apply all pending migrations.
+ * @returns {Promise<{ applied: number, total: number }>}
+ */
+export async function migrate() {
+  // Ensure migration table exists first
+  await query(migrations[0].sql);
+
+  const { rows } = await query('SELECT version FROM _migrations ORDER BY version');
+  const applied = new Set(rows.map(r => r.version));
+
+  let count = 0;
+  for (const m of migrations) {
+    if (applied.has(m.version)) continue;
+    console.log(`  Applying migration v${m.version}: ${m.description}`);
+    await query(m.sql);
+    await query(
+      'INSERT INTO _migrations (version, name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [m.version, m.description]
+    );
+    count++;
+  }
+  return { applied: count, total: migrations.length };
+}
+
+// Direct invocation: node --env-file=.env src/db/migrate.mjs
+const isDirectRun = process.argv[1]?.endsWith('migrate.mjs');
+if (isDirectRun) {
+  try {
+    console.log('Running control-plane migrations...');
+    const result = await migrate();
+    console.log(`Done. Applied ${result.applied} of ${result.total} migrations.`);
+  } catch (err) {
+    console.error('Migration failed:', err.message);
+    process.exit(1);
+  } finally {
+    await closePool();
+  }
+}

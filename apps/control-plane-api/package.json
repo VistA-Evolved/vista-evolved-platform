@@ -1,0 +1,16 @@
+{
+  "name": "@vista-evolved/control-plane-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Control-plane admin API — Postgres-backed tenant lifecycle, bootstrap, and provisioning engine",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env src/server.mjs",
+    "dev": "node --env-file=.env --watch src/server.mjs",
+    "migrate": "node --env-file=.env src/db/migrate.mjs"
+  },
+  "dependencies": {
+    "fastify": "^5.3.3",
+    "pg": "^8.13.1"
+  }
+}
