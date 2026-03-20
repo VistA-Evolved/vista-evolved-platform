@@ -1,7 +1,7 @@
 # Grounded Domain Reference — Institution, Division & Clinic Topology
 
 > **Status:** Canonical grounded domain reference.
-> **Date:** 2026-07-14.
+> **Date:** 2026-03-21.
 > **Type:** Reference.
 > **Scope:** VistA Files 4, 40.8, 44, 42, and supporting files. Covers globals, indexes,
 > field decompositions, RPC inventory (confirmed/Vivian/custom), MUMPS routines,

@@ -1,9 +1,11 @@
 # VistA Admin Grounded Domain: Users, Electronic Signatures, and Security Keys
 
-> **Purpose:** Deep grounded reference for the Users / Electronic Signatures / Security Keys
-> domain in VistA. Contains every piece of evidence from VistA files, globals, RPCs, MUMPS
-> routines, and archive implementation needed to build the first tenant-admin read workspace
-> and future guided-write workflows.
+> **Status:** Canonical grounded domain reference.
+> **Date:** 2026-03-21.
+> **Type:** Reference.
+> **Scope:** VistA Files 200, 19.1, 200.051 and supporting files. Covers globals, indexes,
+> field decompositions, RPC inventory (confirmed/unprobed/custom), MUMPS routines,
+> electronic signature mechanics, and implementation strategy.
 >
 > **Parent:** [Terminal-to-UI Translation Matrix](vista-admin-terminal-to-ui-translation-matrix.md)
 > — functions TM-USR-01 through TM-USR-08, TM-KEY-01 through TM-KEY-04, TM-MENU-01
