@@ -1,6 +1,6 @@
 /* Control-Plane Static Review Prototype — Minimal Styles */
 /* NOT a design system. NOT production CSS. Review artifact only. */
-/* Covers 21 operator-console surfaces across 7 domain groups. */
+/* Covers 22 operator-console surfaces across 8 domains. */
 
 :root {
   --bg: #f8f9fa;
@@ -55,7 +55,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   flex-shrink: 0;
 }
 .nav-sidebar h2 { padding: 16px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-.nav-sidebar .nav-overview {
+.nav-sidebar .nav-home {
   display: block;
   padding: 10px 16px;
   color: var(--nav-text);
@@ -66,8 +66,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   border-bottom: 1px solid rgba(255,255,255,0.06);
   transition: background 0.15s;
 }
-.nav-sidebar .nav-overview:hover { background: rgba(255,255,255,0.05); }
-.nav-sidebar .nav-overview.active { background: rgba(59,130,246,0.15); border-left-color: var(--nav-active); color: #fff; }
+.nav-sidebar .nav-home:hover { background: rgba(255,255,255,0.05); }
+.nav-sidebar .nav-home.active { background: rgba(59,130,246,0.15); border-left-color: var(--nav-active); color: #fff; }
 .nav-sidebar .nav-group { border-bottom: 1px solid rgba(255,255,255,0.06); }
 .nav-sidebar .nav-group-label {
   padding: 10px 16px 4px;
@@ -400,7 +400,57 @@ tr.clickable:hover { background: #f0f4ff; }
   font-weight: 600;
 }
 
-/* ── Overview Grid ─────────────────────────────────────────────────────── */
+/* ── Home Action-Center Grid ───────────────────────────────────────────── */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.home-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.home-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.home-card-title { font-size: 14px; font-weight: 700; }
+.home-card-count { font-size: 24px; font-weight: 800; line-height: 1; }
+.home-card-count.count-alert { color: var(--danger); }
+.home-card-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.home-card-source { font-size: 11px; color: var(--text-muted); margin-bottom: 12px; }
+.home-card-link {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+  margin-top: auto;
+}
+.home-card-link:hover { text-decoration: underline; }
+.home-card-actions { margin-top: auto; }
+.home-actions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.home-actions-list li {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.home-actions-list li:last-child { border-bottom: none; }
+.home-actions-list a { color: var(--primary); text-decoration: none; }
+.home-actions-list a:hover { text-decoration: underline; }
+
+/* ── Overview Grid (legacy, kept for backward compat) ──────────────────── */
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

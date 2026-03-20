@@ -1,7 +1,7 @@
 /**
  * Operator Console — Local Review Runtime
  *
- * Fastify dev server serving the operator-console SPA (21 surfaces, 7 domain groups).
+ * Fastify dev server serving the operator-console SPA (22 surfaces, 8 domains).
  *
  *   1. Serves static assets (HTML/CSS/JS) from public/
  *   2. Exposes read-only API routes — hybrid (contract-backed + fixture-backed)

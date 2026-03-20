@@ -3,7 +3,7 @@
 > **Artifact type:** Explanation / planning research — NOT implementation authorization.
 > **Repo:** `vista-evolved-platform`
 > **Date:** 2026-03-18
-> **Status:** Draft — pending human review.
+> **Status:** **Superseded by `operator-console-design-handoff-brief-v2.md`** — retained as reference for v1 component specs (8 bootstrap screens under old IA).
 > **Scope:** Design brief for translating UX/IA wireframes into production-quality visual designs. Figma Make primary brief, Stitch secondary brief, design tokens, and review/rejection criteria.
 > **Does NOT:** Produce final designs, authorize code, create screen-contract instances.
 

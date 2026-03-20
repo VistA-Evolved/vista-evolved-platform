@@ -15,11 +15,11 @@
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  *
  * This is NOT a product-wide RBAC engine. It is local enforcement metadata
- * for the operator-console review runtime (21 surfaces across 7 domain groups).
+ * for the operator-console review runtime (22 surfaces across 8 domains).
  */
 
 /**
- * All 21 operator-console surfaces require platform-operator.
+ * All 22 operator-console surfaces require platform-operator.
  * Derived from permissions-matrix.md: all surfaces assign allowed (A)
  * only to platform-operator for the current review runtime.
  */
@@ -106,40 +106,43 @@ export const ALL_ROUTES = [...READ_ROUTES, ...REVIEW_ROUTES];
 
 /**
  * The required role for all operator-console routes.
- * Derived from permissions-matrix.md: all 21 surfaces assign allowed (A)
+ * Derived from permissions-matrix.md: all 22 surfaces assign allowed (A)
  * only to platform-operator.
  */
 export const CONTROL_PLANE_REQUIRED_ROLE = 'platform-operator';
 
 /**
- * Surface-level access summary — one entry per canonical surface (21 total).
+ * Surface-level access summary — one entry per canonical surface (22 total).
  * Grouped by operator-console domain.
  */
 export const SURFACE_ACCESS = {
-  // Overview
-  'control-plane.operations.center':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  // Tenants
-  'control-plane.tenants.list':            { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.tenants.detail':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Home
+  'control-plane.home':                    { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Requests & Onboarding
   'control-plane.tenants.bootstrap':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.provisioning.runs':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.identity.invitations':    { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  // Markets & Readiness
+  // Tenants
+  'control-plane.tenants.list':            { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.tenants.detail':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Operations
+  'control-plane.operations.center':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.ops.alerts':              { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.ops.backup-dr':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.ops.environments':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Support
+  'control-plane.support.console':         { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Commercial
+  'control-plane.commercial.billing':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  'control-plane.commercial.usage':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
+  // Catalogs & Governance
   'control-plane.markets.management':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.markets.detail':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.packs.catalog':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.markets.payer-readiness': { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.markets.eligibility-sim': { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  // Operations
-  'control-plane.ops.alerts':              { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.ops.backup-dr':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.ops.environments':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  // Commercial
-  'control-plane.commercial.billing':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.commercial.usage':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   // Platform
   'control-plane.system.config':           { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
-  'control-plane.platform.support':        { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.platform.audit':          { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.platform.templates':      { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },
   'control-plane.platform.runbooks':       { allowedRoles: ALLOWED_ROLES, scopePosture: 'platform-wide' },

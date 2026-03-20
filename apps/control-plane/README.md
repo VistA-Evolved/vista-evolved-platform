@@ -1,6 +1,6 @@
 # Operator Console — Hybrid Operator Runtime
 
-> **Local dev server serving the operator console as a 21-surface SPA across 7 domain groups.**
+> **Local dev server serving the operator console as a 22-surface SPA across 8 domains.**
 > Read data is sourced from four tiers: **real-backend** (PG-backed via `apps/control-plane-api/` on port 4510, with fixture fallback), **contract-backed** (from `packages/contracts/`), **fixture-backed** (from `fixtures/`), and **static** (contracted IA only, no API).
 > P0 graduated surfaces (Tenants, Bootstrap, Provisioning) use real-backend reads and writes when `control-plane-api` is running; they fall back to fixtures transparently when it is not.
 > Review routes validate inputs and return honest envelopes — no persistence, no mutation, no fake success.
@@ -15,7 +15,7 @@ A local Fastify dev server that:
 3. Exposes **15 review-only write simulation routes** at `/api/control-plane-review/v1/*` plus a discovery endpoint
 4. Exposes **P0 lifecycle proxy routes** at `/api/control-plane-lifecycle/v1/*` — real-backend writes for graduated surfaces (Tenants, Bootstrap, Provisioning)
 5. Exposes **AI copilot routes** at `/api/copilot/v1/*` — status, chat, and audit (disabled by default)
-6. Renders **21 operator-console surfaces** across 7 domain groups with functional review dialogs for all 15 contracted write actions
+6. Renders **22 operator-console surfaces** across 8 domains with functional review dialogs for all 15 contracted write actions
 
 Route names and response shapes align with the authoritative OpenAPI contract:
 `packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml`
@@ -160,73 +160,78 @@ All 15 contracted write actions from the OpenAPI specification are exposed as **
 
 All review routes are prefixed with `/api/control-plane-review/v1`.
 
-## 21 Surfaces (7 domain groups)
+## 22 Surfaces (8 domains)
 
-### Overview (landing page)
+### Home
 
 | # | Surface | Hash Route | Surface ID | Data Source |
 |---|---------|-----------|------------|-------------|
-| 1 | Overview | `#/overview` | `control-plane.operations.center` | Semi-live (fixture aggregation) |
+| 1 | Home | `#/home` | `control-plane.home` | Semi-live (fixture aggregation) |
+
+### Requests & Onboarding
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 2 | Onboarding Requests | `#/bootstrap` | `control-plane.tenants.bootstrap` | **Hybrid** (real-backend / fixture fallback) |
+| 3 | Provisioning Runs | `#/provisioning` | `control-plane.provisioning.runs` | **Hybrid** (real-backend / fixture fallback) |
+| 4 | Identity & Invitations | `#/identity` | `control-plane.identity.invitations` | Static |
 
 ### Tenants
 
 | # | Surface | Hash Route | Surface ID | Data Source |
 |---|---------|-----------|------------|-------------|
-| 2 | Tenant Registry | `#/tenants` | `control-plane.tenants.list` | **Hybrid** (real-backend / fixture fallback) |
-| 3 | Tenant Detail | `#/tenants/detail` | `control-plane.tenants.detail` | **Hybrid** (real-backend / fixture fallback) |
-| 4 | Tenant Bootstrap | `#/tenants/bootstrap` | `control-plane.tenants.bootstrap` | **Hybrid** (real-backend / fixture fallback) |
-| 5 | Provisioning Runs | `#/provisioning` | `control-plane.provisioning.runs` | **Hybrid** (real-backend / fixture fallback) |
-| 6 | Identity & Invitations | `#/identity` | `control-plane.identity.invitations` | Static |
-
-### Markets & Readiness
-
-| # | Surface | Hash Route | Surface ID | Data Source |
-|---|---------|-----------|------------|-------------|
-| 7 | Market Management | `#/markets` | `control-plane.markets.management` | Contract |
-| 8 | Market Detail | `#/markets/detail` | `control-plane.markets.detail` | Contract |
-| 9 | Pack Catalog | `#/packs` | `control-plane.packs.catalog` | Contract |
-| 10 | Payer Readiness | `#/payer-readiness` | `control-plane.markets.payer-readiness` | Static |
-| 11 | Eligibility Simulator | `#/eligibility-sim` | `control-plane.markets.eligibility-sim` | Static |
+| 5 | Tenant Registry | `#/tenants` | `control-plane.tenants.list` | **Hybrid** (real-backend / fixture fallback) |
+| 6 | Tenant Detail | `#/tenants/detail` | `control-plane.tenants.detail` | **Hybrid** (real-backend / fixture fallback) |
 
 ### Operations
 
 | # | Surface | Hash Route | Surface ID | Data Source |
 |---|---------|-----------|------------|-------------|
-| 12 | Operations Center | `#/operations` | `control-plane.operations.center` | Semi-live (fixture) |
-| 13 | Alert Center | `#/alerts` | `control-plane.ops.alerts` | Static |
-| 14 | Backup & DR | `#/backup-dr` | `control-plane.ops.backup-dr` | Static |
-| 15 | Environments & Flags | `#/environments` | `control-plane.ops.environments` | Static |
+| 7 | Operations Center | `#/operations` | `control-plane.operations.center` | Semi-live (fixture) |
+| 8 | Alert Center | `#/alerts` | `control-plane.ops.alerts` | Static |
+| 9 | Backup & DR | `#/backup-dr` | `control-plane.ops.backup-dr` | Static |
+| 10 | Environments & Flags | `#/environments` | `control-plane.ops.environments` | Static |
+
+### Support
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 11 | Support Console | `#/support` | `control-plane.support.console` | Static |
 
 ### Commercial
 
 | # | Surface | Hash Route | Surface ID | Data Source |
 |---|---------|-----------|------------|-------------|
-| 16 | Billing & Entitlements | `#/billing` | `control-plane.commercial.billing` | Semi-live (fixture) |
-| 17 | Usage Metering | `#/usage` | `control-plane.commercial.usage` | Static |
+| 12 | Billing & Entitlements | `#/billing` | `control-plane.commercial.billing` | Semi-live (fixture) |
+| 13 | Usage Metering | `#/usage` | `control-plane.commercial.usage` | Static |
+
+### Catalogs & Governance
+
+| # | Surface | Hash Route | Surface ID | Data Source |
+|---|---------|-----------|------------|-------------|
+| 14 | Market Management | `#/markets` | `control-plane.markets.management` | Contract |
+| 15 | Market Detail | `#/markets/detail` | `control-plane.markets.detail` | Contract |
+| 16 | Pack Catalog | `#/packs` | `control-plane.packs.catalog` | Contract |
+| 17 | Payer Readiness | `#/payer-readiness` | `control-plane.markets.payer-readiness` | Static |
+| 18 | Eligibility Simulator | `#/eligibility-sim` | `control-plane.markets.eligibility-sim` | Static |
 
 ### Platform
 
 | # | Surface | Hash Route | Surface ID | Data Source |
 |---|---------|-----------|------------|-------------|
-| 18 | System Config | `#/system-config` | `control-plane.system.config` | Fixture |
-| 19 | Support Console | `#/support` | `control-plane.platform.support` | Static |
+| 19 | System Config | `#/system-config` | `control-plane.system.config` | Fixture |
 | 20 | Audit Trail | `#/audit` | `control-plane.platform.audit` | Static |
 | 21 | Templates & Presets | `#/templates` | `control-plane.platform.templates` | Static |
-
-### Runbooks (sidebar link)
-
-| # | Surface | Hash Route | Surface ID | Data Source |
-|---|---------|-----------|------------|-------------|
-| — | Runbooks Hub | `#/runbooks` | `control-plane.platform.runbooks` | Static |
+| 22 | Runbooks Hub | `#/runbooks` | `control-plane.platform.runbooks` | Static |
 
 ### Data sourcing tiers
 
 | Tier | Description | Surfaces |
 |------|-------------|----------|
-| **Real-backend (hybrid)** | PG-backed reads/writes via `control-plane-api` (port 4510), with transparent fixture fallback when backend is unavailable | Tenants (#2-5), Bootstrap (#4), Provisioning (#5) |
+| **Real-backend (hybrid)** | PG-backed reads/writes via `control-plane-api` (port 4510), with transparent fixture fallback when backend is unavailable | Tenants (#5-6), Bootstrap (#2), Provisioning (#3) |
 | **Contract-backed** | Live data loaded from `packages/contracts/` at startup | Markets, Market Detail, Packs, Capabilities, Effective Plans |
 | **Fixture-backed** | Static JSON from `fixtures/` | System Config |
-| **Semi-live** | Aggregates from existing fixture/contract data | Overview, Operations Center, Billing & Entitlements |
+| **Semi-live** | Aggregates from existing fixture/contract data | Home, Operations Center, Billing & Entitlements |
 | **Static** | Contracted IA only — no API route, no data | 13 surfaces (Identity, Payer Readiness, Eligibility Sim, Alerts, Backup & DR, Environments, Usage, Support, Audit, Templates, Runbooks) |
 
 ## Write control posture

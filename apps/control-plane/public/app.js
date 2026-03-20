@@ -1,42 +1,47 @@
 /**
  * Operator Console — Local Review Runtime — app.js
  *
- * Hash-based routing over 21 operator-console surfaces across 7 domain groups.
+ * Hash-based routing over 22 operator-console surfaces across 8 domains.
  * Data fetched from local Fastify API routes (real-backend → fixture fallback).
  * Lifecycle writes proxied to real backend when reachable.
  * Review writes are simulation-only — no persistence, no real execution.
  *
- * Domain groups and surface IDs (from control-panel-page-specs-v2.md):
+ * 8-domain model (from operator-console-design-contract-v3.md):
  *
- *   Overview
- *     control-plane.operations.center       — Operations Center (landing)
+ *   Home
+ *     control-plane.home                    — Home (action center)
+ *
+ *   Requests & Onboarding
+ *     control-plane.tenants.bootstrap       — Onboarding Requests
+ *     control-plane.provisioning.runs       — Provisioning Runs
+ *     control-plane.identity.invitations    — Identity & Invitations
  *
  *   Tenants
  *     control-plane.tenants.list            — Tenant Registry
  *     control-plane.tenants.detail          — Tenant Detail
- *     control-plane.tenants.bootstrap       — Bootstrap Wizard
- *     control-plane.provisioning.runs       — Provisioning Runs
- *     control-plane.identity.invitations    — Identity & Invitations
  *
- *   Markets & Readiness
- *     control-plane.markets.management      — Markets Registry
+ *   Operations
+ *     control-plane.operations.center       — Operations Center
+ *     control-plane.ops.alerts              — Alert Center
+ *     control-plane.ops.backup-dr           — Backup & DR
+ *     control-plane.ops.environments        — Environments & Feature Flags
+ *
+ *   Support
+ *     control-plane.support.console         — Support Console
+ *
+ *   Commercial
+ *     control-plane.commercial.billing      — Billing & Entitlements
+ *     control-plane.commercial.usage        — Usage & Metering
+ *
+ *   Catalogs & Governance
+ *     control-plane.markets.management      — Market Management
  *     control-plane.markets.detail          — Market Detail
  *     control-plane.packs.catalog           — Pack Catalog
  *     control-plane.markets.payer-readiness — Payer Readiness
  *     control-plane.markets.eligibility-sim — Eligibility Simulator
  *
- *   Operations
- *     control-plane.ops.alerts              — Alert Center
- *     control-plane.ops.backup-dr           — Backup / Restore / DR
- *     control-plane.ops.environments        — Environments & Feature Flags
- *
- *   Commercial
- *     control-plane.commercial.billing      — Billing & Entitlements Snapshot
- *     control-plane.commercial.usage        — Usage & Metering
- *
  *   Platform
  *     control-plane.system.config           — System Configuration
- *     control-plane.platform.support        — Support Console
  *     control-plane.platform.audit          — Audit Trail
  *     control-plane.platform.templates      — Templates & Presets
  *     control-plane.platform.runbooks       — Runbooks Hub
@@ -658,40 +663,45 @@ function reviewUpdateSystemParameter(paramKey, currentValue) {
 }
 
 // ---------------------------------------------------------------------------
-// Router — 21 surfaces across 7 domain groups
+// Router — 22 surfaces across 8 domains (design-contract-v3)
 // ---------------------------------------------------------------------------
 const ROUTES = {
-  // Overview
-  'overview':            renderOverview,
+  // Home
+  'home':                renderHome,
+  // Requests & Onboarding
+  'bootstrap':           renderTenantsBootstrap,
+  'provisioning':        renderProvisioningRuns,
+  'identity':            renderIdentityInvitations,
   // Tenants
   'tenants':             renderTenantsList,
   'tenants-detail':      renderTenantsDetail,
-  'tenants-bootstrap':   renderTenantsBootstrap,
-  'provisioning':        renderProvisioningRuns,
-  'identity':            renderIdentityInvitations,
-  // Markets & Readiness
-  'markets':             renderMarketsManagement,
-  'markets-detail':      renderMarketsDetail,
-  'packs':               renderPacksCatalog,
-  'payer-readiness':     renderPayerReadiness,
-  'eligibility-simulator': renderEligibilitySimulator,
   // Operations
   'operations':          renderOperationsCenter,
   'alerts':              renderAlertCenter,
   'backup-dr':           renderBackupDr,
   'environments':        renderEnvironmentsFlags,
+  // Support
+  'support':             renderSupportConsole,
   // Commercial
   'billing':             renderBillingEntitlements,
   'usage':               renderUsageMetering,
+  // Catalogs & Governance
+  'markets':             renderMarketsManagement,
+  'markets-detail':      renderMarketsDetail,
+  'packs':               renderPacksCatalog,
+  'payer-readiness':     renderPayerReadiness,
+  'eligibility-simulator': renderEligibilitySimulator,
   // Platform
   'system-config':       renderSystemConfig,
-  'support':             renderSupportConsole,
   'audit':               renderAuditTrail,
   'templates':           renderTemplatesPresets,
   'runbooks':            renderRunbooksHub,
+  // Legacy redirect
+  'overview':            () => { location.hash = '#/home'; },
+  'tenants-bootstrap':   renderTenantsBootstrap,
 };
 
-const DEFAULT_ROUTE = 'overview';
+const DEFAULT_ROUTE = 'home';
 
 function getRoute() {
   const hash = location.hash.replace('#/', '').replace(/\//g, '-') || DEFAULT_ROUTE;
@@ -726,7 +736,7 @@ function renderTenantsList() {
       <h1>Tenant Registry</h1>
       <div class="btn-group">
         ${sourceBadge(source)}
-        <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">+ New Tenant Bootstrap</button>
+        <button class="btn btn-primary" onclick="location.hash='#/bootstrap'">+ New Tenant Bootstrap</button>
         <button class="btn" onclick="reviewResolvePlan()">⊕ Resolve Plan (Review)</button>
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
@@ -878,7 +888,7 @@ async function renderTenantsDetail() {
     <div class="card">
       <h3>Actions</h3>
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">Initiate Bootstrap</button>
+        <button class="btn btn-primary" onclick="location.hash='#/bootstrap'">Initiate Bootstrap</button>
         <button class="btn" onclick="location.hash='#/provisioning'">View Provisioning</button>
         <button class="btn" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/suspend', {reason:'operator-action',actor:'operator'}, 'tenant-actions-result')">Suspend Tenant</button>
         <button class="btn" onclick="doLifecycleAction('/tenants/${escHtml(tenant.tenantId)}/reactivate', {actor:'operator'}, 'tenant-actions-result')">Reactivate Tenant</button>
@@ -1370,7 +1380,7 @@ function renderMarketsDetail() {
       <div class="btn-group">
         <button class="btn btn-primary" onclick="reviewUpdateMarketDraft('${escHtml(market.legalMarketId)}')">Update Market Draft (Review)</button>
         <button class="btn" onclick="reviewSubmitMarketForReview('${escHtml(market.legalMarketId)}')">Submit for Review (Review)</button>
-        <button class="btn" onclick="location.hash='#/tenants/bootstrap'">Bootstrap Tenant for PH</button>
+        <button class="btn" onclick="location.hash='#/bootstrap'">Bootstrap Tenant for PH</button>
         <button class="btn" onclick="location.hash='#/markets'">← Back to Markets</button>
       </div>
       <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
@@ -1594,7 +1604,7 @@ function renderEmptyState() {
     <div class="empty-state">
       <div class="empty-icon">📭</div>
       <p>No tenants found matching the current filters.</p>
-      <p style="margin-top:8px;"><button class="btn btn-primary" onclick="location.hash='#/tenants/bootstrap'">Bootstrap First Tenant</button></p>
+      <p style="margin-top:8px;"><button class="btn btn-primary" onclick="location.hash='#/bootstrap'">Bootstrap First Tenant</button></p>
     </div>
   `;
 }
@@ -1665,95 +1675,107 @@ function renderStaticSurface(title, surfaceId, icon, description, domain, source
 }
 
 // ---------------------------------------------------------------------------
-// Overview (control-plane.operations.center) — Landing page
+// Surface: Home (control-plane.home) — Action Center (design-contract-v3 §12)
 // ---------------------------------------------------------------------------
-// Surface 0: Overview (control-plane.overview) — P0 GRADUATED
-// ---------------------------------------------------------------------------
-function renderOverview() {
+function renderHome() {
   const app = document.getElementById('app');
   const tenantData = FIXTURES['tenants'] || { items: [] };
   const runData = FIXTURES['provisioning-runs'] || { items: [] };
+  const bootstrapData = FIXTURES['bootstrap-requests'] || { items: [] };
   const tenants = tenantData.items || [];
   const runs = runData.items || [];
-  const markets = FIXTURES['legal-market-profiles']?.items || [];
-  const packs = FIXTURES['packs']?.items || [];
+  const bootstrapReqs = bootstrapData.items || [];
 
   const tenantSource = tenantData._source || 'fixture-fallback';
-  const runSource = runData._source || 'fixture-fallback';
 
+  // Card: Pending Requests
+  const pendingRequests = bootstrapReqs.filter(r =>
+    ['pending', 'submitted', 'under-review'].includes(r.status)
+  );
+
+  // Card: Active Provisioning
+  const activeRuns = runs.filter(r =>
+    ['queued', 'in-progress', 'failed'].includes(r.status)
+  );
+
+  // Card: Tenant Summary
   const activeTenants = tenants.filter(t => t.status === 'active').length;
-  const provisioningTenants = tenants.filter(t => t.status === 'provisioning').length;
-  const pendingRuns = runs.filter(r => r.status === 'in-progress' || r.status === 'queued').length;
+  const suspendedTenants = tenants.filter(t => t.status === 'suspended').length;
+  const draftTenants = tenants.filter(t => t.status === 'draft' || t.status === 'bootstrap-pending').length;
+
+  // Card: Next Actions — computed from above
+  const nextActions = [];
+  if (pendingRequests.length > 0) {
+    nextActions.push({ label: `Review ${pendingRequests.length} pending request${pendingRequests.length > 1 ? 's' : ''}`, href: '#/bootstrap' });
+  }
+  if (activeRuns.filter(r => r.status === 'failed').length > 0) {
+    nextActions.push({ label: `Investigate ${activeRuns.filter(r => r.status === 'failed').length} failed run${activeRuns.filter(r => r.status === 'failed').length > 1 ? 's' : ''}`, href: '#/provisioning' });
+  }
+  if (activeRuns.filter(r => r.status === 'in-progress').length > 0) {
+    nextActions.push({ label: `Monitor ${activeRuns.filter(r => r.status === 'in-progress').length} active run${activeRuns.filter(r => r.status === 'in-progress').length > 1 ? 's' : ''}`, href: '#/provisioning' });
+  }
+  if (suspendedTenants > 0) {
+    nextActions.push({ label: `Review ${suspendedTenants} suspended tenant${suspendedTenants > 1 ? 's' : ''}`, href: '#/tenants' });
+  }
+  if (nextActions.length === 0) {
+    nextActions.push({ label: 'All clear — no urgent actions', href: '#/tenants' });
+  }
 
   app.innerHTML = `
     <div class="surface-header">
       <div>
-        <h1>Operator Console — Overview</h1>
-        <p style="font-size:13px;color:var(--text-muted);">Platform-wide operational snapshot.</p>
-      </div>
-      <div class="btn-group">
-        ${sourceBadge(tenantSource)}
+        <h1>Home</h1>
+        <p style="font-size:13px;color:var(--text-muted);">What needs my attention right now?</p>
       </div>
     </div>
 
-    <div class="posture-notice">
-      <strong>Data posture:</strong> Tenants ${sourceBadge(tenantSource)} · Runs ${sourceBadge(runSource)} · Markets/Packs: contract-backed.
-      Counts reflect the active data source.
-    </div>
+    <div class="home-grid">
+      <div class="home-card" onclick="location.hash='#/bootstrap'">
+        <div class="home-card-header">
+          <span class="home-card-title">Pending Requests</span>
+          <span class="home-card-count">${pendingRequests.length}</span>
+        </div>
+        <p class="home-card-desc">Bootstrap requests in pending, submitted, or under-review state.</p>
+        <div class="home-card-source">${sourceBadge(tenantSource)}</div>
+        <div class="home-card-link">Review ${pendingRequests.length} pending request${pendingRequests.length !== 1 ? 's' : ''} &rarr;</div>
+      </div>
 
-    <div class="stat-row">
-      <div class="stat-box">
-        <div class="stat-value">${tenants.length}</div>
-        <div class="stat-label">Total Tenants</div>
+      <div class="home-card" onclick="location.hash='#/provisioning'">
+        <div class="home-card-header">
+          <span class="home-card-title">Active Provisioning</span>
+          <span class="home-card-count ${activeRuns.some(r => r.status === 'failed') ? 'count-alert' : ''}">${activeRuns.length}</span>
+        </div>
+        <p class="home-card-desc">Provisioning runs in queued, in-progress, or failed state.</p>
+        <div class="home-card-source">${sourceBadge(tenantSource)}</div>
+        <div class="home-card-link">View provisioning &rarr;</div>
       </div>
-      <div class="stat-box">
-        <div class="stat-value">${activeTenants}</div>
-        <div class="stat-label">Active</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${provisioningTenants}</div>
-        <div class="stat-label">Provisioning</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${pendingRuns}</div>
-        <div class="stat-label">Active Runs</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${markets.length}</div>
-        <div class="stat-label">Markets</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${packs.length}</div>
-        <div class="stat-label">Pack Manifests</div>
-      </div>
-    </div>
 
-    <h2 style="font-size:16px;margin-bottom:12px;">Domain Quick Access</h2>
-    <div class="overview-grid">
-      <div class="overview-card" onclick="location.hash='#/tenants'">
-        <h3>Tenants</h3>
-        <p>Tenant registry, bootstrap, provisioning, identity</p>
-        <div class="overview-stat">${tenants.length} tenants · ${pendingRuns} active runs</div>
+      <div class="home-card" onclick="location.hash='#/alerts'">
+        <div class="home-card-header">
+          <span class="home-card-title">Recent Alerts</span>
+          <span class="home-card-count">0</span>
+        </div>
+        <p class="home-card-desc">Unresolved alerts and top severity. ${sourceBadge('static-review')}</p>
+        <div class="home-card-link">View alerts &rarr;</div>
       </div>
-      <div class="overview-card" onclick="location.hash='#/markets'">
-        <h3>Markets & Readiness</h3>
-        <p>Market profiles, pack catalog, payer readiness</p>
-        <div class="overview-stat">${markets.length} markets · ${packs.length} packs</div>
+
+      <div class="home-card" onclick="location.hash='#/tenants'">
+        <div class="home-card-header">
+          <span class="home-card-title">Tenant Summary</span>
+          <span class="home-card-count">${tenants.length}</span>
+        </div>
+        <p class="home-card-desc">${activeTenants} active · ${suspendedTenants} suspended · ${draftTenants} draft/pending</p>
+        <div class="home-card-source">${sourceBadge(tenantSource)}</div>
+        <div class="home-card-link">View tenants &rarr;</div>
       </div>
-      <div class="overview-card" onclick="location.hash='#/operations'">
-        <h3>Operations</h3>
-        <p>Operations center, alerts, backup/DR, environments</p>
-        <div class="overview-stat">Surfaces: 4 · Data: static only</div>
-      </div>
-      <div class="overview-card" onclick="location.hash='#/billing'">
-        <h3>Commercial</h3>
-        <p>Billing & entitlements, usage & metering</p>
-        <div class="overview-stat">Surfaces: 2 · Data: static only</div>
-      </div>
-      <div class="overview-card" onclick="location.hash='#/system-config'">
-        <h3>Platform</h3>
-        <p>System config, support, audit trail, templates, runbooks</p>
-        <div class="overview-stat">Surfaces: 5 · System config: live fixture</div>
+
+      <div class="home-card home-card-actions">
+        <div class="home-card-header">
+          <span class="home-card-title">Next Actions</span>
+        </div>
+        <ul class="home-actions-list">
+          ${nextActions.map(a => `<li><a href="${a.href}">${escHtml(a.label)} &rarr;</a></li>`).join('')}
+        </ul>
       </div>
     </div>
 
@@ -1761,8 +1783,9 @@ function renderOverview() {
       <h3>Runtime Posture</h3>
       <dl class="kv-list">
         <dt>Runtime Mode</dt><dd>hybrid (real-backend + fixture fallback)</dd>
-        <dt>Total Surfaces</dt><dd>21 (5 P0 graduated, 3 contract-backed, 13 static/deferred)</dd>
-        <dt>Data Sources</dt><dd>Real backend (tenants, bootstrap, provisioning) · Contract-backed (markets, packs) · Fixture fallback · Static (13 surfaces)</dd>
+        <dt>Total Surfaces</dt><dd>22 (5 P0 graduated, 3 contract-backed, 14 static/deferred)</dd>
+        <dt>Domains</dt><dd>8 (Home, Requests & Onboarding, Tenants, Operations, Support, Commercial, Catalogs & Governance, Platform)</dd>
+        <dt>Data Sources</dt><dd>Real backend (tenants, bootstrap, provisioning) · Contract-backed (markets, packs) · Fixture fallback · Static</dd>
         <dt>Write Actions</dt><dd>P0 lifecycle writes proxied to real backend; non-P0 review-only</dd>
         <dt>Auth</dt><dd>Local role simulation via X-Local-Role header</dd>
       </dl>
@@ -1779,7 +1802,7 @@ function renderIdentityInvitations() {
     'control-plane.identity.invitations',
     '🔑',
     'Operator identity directory, invitation lifecycle, and OIDC subject mappings for all tenants.',
-    'Tenants',
+    'Requests & Onboarding',
     'Platform PG — identity tables',
     [
       { id: 'R11', label: 'List operator identities', status: 'deferred', note: 'Requires identity:manage permission' },
@@ -1800,7 +1823,7 @@ function renderPayerReadiness() {
     'control-plane.markets.payer-readiness',
     '🏦',
     'Payer adapter integration status per market. Tracks which payer connectors are declared, tested, and production-eligible.',
-    'Markets & Readiness',
+    'Catalogs & Governance',
     'Platform PG — payer_connector_status',
     [
       { id: 'R16', label: 'List payer readiness by market', status: 'deferred', note: 'Read-only surface' },
@@ -1818,7 +1841,7 @@ function renderEligibilitySimulator() {
     'control-plane.markets.eligibility-sim',
     '🧮',
     'Dry-run pack eligibility evaluation. Select a market and tenant parameters to preview which packs would resolve, defer, or block.',
-    'Markets & Readiness',
+    'Catalogs & Governance',
     'Composition & Eligibility Service (Plan Resolver)',
     [
       { id: 'R18', label: 'Simulate eligibility', status: 'deferred', note: 'Uses plan-resolver in preview mode — no side effects' },
@@ -1849,7 +1872,7 @@ function renderOperationsCenter() {
   app.innerHTML = `
     <div class="surface-header">
       <div>
-        <div class="breadcrumb">${navLink('#/overview', 'Overview')} / Operations</div>
+        <div class="breadcrumb">${navLink('#/home', 'Home')} / Operations</div>
         <h1>Operations Center</h1>
       </div>
       <div class="btn-group">
@@ -1982,7 +2005,7 @@ function renderBillingEntitlements() {
   app.innerHTML = `
     <div class="surface-header">
       <div>
-        <div class="breadcrumb">${navLink('#/overview', 'Overview')} / Commercial</div>
+        <div class="breadcrumb">${navLink('#/home', 'Home')} / Commercial</div>
         <h1>Billing & Entitlements Snapshot</h1>
       </div>
     </div>
@@ -2044,15 +2067,15 @@ function renderUsageMetering() {
 }
 
 // ---------------------------------------------------------------------------
-// Surface: Support Console (control-plane.platform.support)
+// Surface: Support Console (control-plane.support.console)
 // ---------------------------------------------------------------------------
 function renderSupportConsole() {
   renderStaticSurface(
     'Support Console',
-    'control-plane.platform.support',
+    'control-plane.support.console',
     '🎧',
     'Support ticket lifecycle for operator-reported and system-detected issues. Links tickets to tenants, provisioning runs, and incidents.',
-    'Platform',
+    'Support',
     'Support/Incident Service (deferred)',
     [
       { id: 'R31', label: 'List support tickets', status: 'deferred', note: 'Filterable by tenant, severity, status' },
