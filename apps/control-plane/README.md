@@ -301,8 +301,8 @@ profiles, capabilities, and effective plans resolve to actual manifests. Warning
 
 ## What this is NOT
 
-- Not a production runtime — hybrid contract/fixture/static-backed, no real data store.
+- Not a production runtime — graduated hybrid posture: P0 lifecycle surfaces backed by real PG backend; remaining surfaces contract/fixture/static-backed.
 - Not a design mockup — layout follows the screen-contract spec, not visual design.
-- Not persistent — form inputs reset on navigation. Write routes are review-only (local simulation, no persistence).
+- Not fully persistent — form inputs reset on navigation. Review write routes are simulation-only (no persistence). Lifecycle writes are real backend mutations when reachable.
 - Not auth — role switcher is local operator-access enforcement only, not a real IAM system.
 - Not real authentication — the local operator-access layer simulates role enforcement via request header, not SSO/OIDC/JWT.

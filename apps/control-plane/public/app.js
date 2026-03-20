@@ -2,8 +2,9 @@
  * Operator Console — Local Review Runtime — app.js
  *
  * Hash-based routing over 21 operator-console surfaces across 7 domain groups.
- * Data fetched from local Fastify API routes (contract-backed + fixture-backed).
- * Write actions open LOCAL REVIEW-ONLY dialogs — no persistence, no real execution.
+ * Data fetched from local Fastify API routes (real-backend → fixture fallback).
+ * Lifecycle writes proxied to real backend when reachable.
+ * Review writes are simulation-only — no persistence, no real execution.
  *
  * Domain groups and surface IDs (from control-panel-page-specs-v2.md):
  *
@@ -694,7 +695,9 @@ const DEFAULT_ROUTE = 'overview';
 
 function getRoute() {
   const hash = location.hash.replace('#/', '').replace(/\//g, '-') || DEFAULT_ROUTE;
-  for (const key of Object.keys(ROUTES)) {
+  // Sort keys longest-first so "tenants-detail" matches before "tenants"
+  const keys = Object.keys(ROUTES).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
     if (hash === key || hash.startsWith(key)) return key;
   }
   return DEFAULT_ROUTE;

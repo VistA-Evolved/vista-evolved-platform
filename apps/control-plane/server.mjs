@@ -7,10 +7,12 @@
  *   2. Exposes read-only API routes — hybrid (contract-backed + fixture-backed)
  *   3. Exposes LOCAL REVIEW-ONLY write routes for command simulation
  *
- * Data sourcing tiers:
+ * Data sourcing tiers (graduated):
+ *   Real-backend (from control-plane-api via REAL_BACKEND_URL):
+ *     - tenants, bootstrap-requests, provisioning-runs (preferred)
  *   Contract-backed (from packages/contracts/):
  *     - legal-market-profiles, capabilities, effective-plans, packs
- *   Fixture-backed (from fixtures/):
+ *   Fixture-backed (from fixtures/ — fallback when backend unreachable):
  *     - tenants, bootstrap-requests, provisioning-runs, system-config
  *   Static (no API):
  *     - 13 surfaces render contracted IA only (identity, payer-readiness,
@@ -18,8 +20,11 @@
  *       support, audit, templates, runbooks, overview)
  *
  * Review-only routes: /api/control-plane-review/v1/* — validation & preview only.
+ * Lifecycle routes:  /api/control-plane-lifecycle/v1/* — proxied to real backend.
  *
- * No persistence, no real writes. Local operator-access enforcement (not real auth).
+ * Graduated posture: lifecycle writes are REAL when backend is reachable;
+ * review writes are simulation-only (no persistence). Reads prefer real backend
+ * with honest fixture fallback. Local operator-access enforcement (not real auth).
  * Route names and response shapes align with:
  *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
  */

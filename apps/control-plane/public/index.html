@@ -10,9 +10,10 @@
   <div style="display:flex;flex-direction:column;width:100%;">
     <!-- STATIC REVIEW BANNER — always visible -->
     <div class="review-banner">
-      LOCAL REVIEW RUNTIME — No persistence · No real writes · No live backend ·
-      Read data sourced from contracts + local fixtures ·
-      Write actions open review-only simulation dialogs
+      LOCAL REVIEW RUNTIME — Reads: real backend with fixture fallback ·
+      Lifecycle writes: proxied to real backend when reachable ·
+      Review writes: simulation only (no persistence) ·
+      Source badges indicate data origin
       <span class="role-switcher">
         | Role: <select id="role-selector" onchange="switchRole(this.value)">
           <option value="platform-operator">platform-operator</option>
