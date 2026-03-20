@@ -172,7 +172,7 @@ const migrations = [
  * Apply all pending migrations.
  * @returns {Promise<{ applied: number, total: number }>}
  */
-export async function migrate() {
+export async function runMigrations() {
   // Ensure migration table exists first
   await query(migrations[0].sql);
 

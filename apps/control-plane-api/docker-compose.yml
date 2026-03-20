@@ -1,12 +1,10 @@
-/**
- * Docker Compose for the control-plane-api PostgreSQL dependency.
- *
- * Usage:
- *   docker compose -f apps/control-plane-api/docker-compose.yml up -d
- *
- * Connection string:
- *   postgresql://cp_admin:cp_admin_dev@127.0.0.1:5433/control_plane
- */
+# Docker Compose for the control-plane-api PostgreSQL dependency.
+#
+# Usage:
+#   docker compose -f apps/control-plane-api/docker-compose.yml up -d
+#
+# Connection string:
+#   postgresql://cp_admin:cp_admin_dev@127.0.0.1:5433/control_plane
 services:
   control-plane-db:
     image: postgres:16-alpine

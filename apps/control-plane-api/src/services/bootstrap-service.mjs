@@ -160,7 +160,7 @@ export async function approveRequest(requestId, { actor, reason }) {
   const request = await bootstrapRepo.getRequestById(requestId);
   if (!request) return { ok: false, reason: 'Request not found' };
 
-  if (request.status !== 'pending') {
+  if (request.status !== 'approval_required') {
     return { ok: false, reason: `Cannot approve request in status: ${request.status}` };
   }
 
@@ -200,7 +200,7 @@ export async function cancelRequest(requestId, { actor, reason }) {
   const request = await bootstrapRepo.getRequestById(requestId);
   if (!request) return { ok: false, reason: 'Request not found' };
 
-  if (request.status !== 'pending') {
+  if (request.status !== 'approval_required') {
     return { ok: false, reason: `Cannot cancel request in status: ${request.status}` };
   }
 
