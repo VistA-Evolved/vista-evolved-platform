@@ -1,0 +1,40 @@
+{
+  "surfaceId": "tenant-admin.facilities.detail",
+  "version": "0.1.0",
+  "title": "Facility Detail",
+  "status": "draft",
+  "description": "Detail view for a single facility within a tenant. Displays institution identity, division, child locations (clinics, wards), and VistA grounding status. VistA File 4 (INSTITUTION) and File 44 (HOSPITAL LOCATION) are the source of truth. Read-only mirror with platform governance overlay.",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "local",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["tenant-admin"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId", "facilityId"]
+  },
+  "readWritePosture": "read-only",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "vista-file-4",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA institution record from File 4 — name, type, parent, status."
+    },
+    {
+      "sourceId": "vista-file-44",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA hospital location records from File 44 — child clinics, wards, rooms. RPCs: ORWU CLINLOC, ORWU HOSPLOC."
+    },
+    {
+      "sourceId": "platform-tenant-facility-mapping",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform tenant-to-facility association and configuration."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

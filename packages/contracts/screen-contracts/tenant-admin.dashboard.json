@@ -1,9 +1,9 @@
 {
-  "surfaceId": "tenant-admin.users.list",
-  "version": "0.2.0",
-  "title": "User List",
+  "surfaceId": "tenant-admin.dashboard",
+  "version": "0.1.0",
+  "title": "Tenant Dashboard",
   "status": "draft",
-  "description": "Tenant-scoped user directory. Lists all users assigned to this tenant with name, role, status, and VistA DUZ grounding posture. Primary data from platform PG; VistA grounding from File 200 via XUS GET USER INFO RPC when connection is available. Drill target to tenant-admin.users.detail.",
+  "description": "Tenant-scoped summary dashboard. Displays user count, facility count, module status, and VistA grounding posture. Entry point after cross-workspace transition from operator console. No VistA equivalent — aggregates platform PG tenant state.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "primary",
   "surfaceType": "admin",
@@ -16,14 +16,19 @@
   "directWriteAllowed": false,
   "dataSources": [
     {
-      "sourceId": "platform-user-registry",
+      "sourceId": "platform-tenant-registry",
       "sourceDomainClass": "platform-governance",
-      "description": "User records — name, username, title, assigned roles, lifecycle status."
+      "description": "Tenant identity, lifecycle status, configuration summary."
     },
     {
-      "sourceId": "vista-file-200",
-      "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA New Person file grounding — DUZ, person class, electronic signature status. RPCs: XUS GET USER INFO, ORWU NEWPERS."
+      "sourceId": "platform-user-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "User count and role distribution for this tenant."
+    },
+    {
+      "sourceId": "platform-facility-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Facility count and hierarchy summary for this tenant."
     }
   ],
   "dataClassification": "configuration",
@@ -34,7 +39,7 @@
       "direction": "incoming",
       "targetWorkspaceFamily": "control-plane",
       "targetSurfaceId": "control-plane.tenants.detail",
-      "contextParameters": ["tenantId"],
+      "contextParameters": ["tenantId", "operatorId"],
       "accessReEvaluation": true
     }
   ],

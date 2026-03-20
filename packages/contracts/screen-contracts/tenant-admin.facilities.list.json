@@ -1,29 +1,29 @@
 {
   "surfaceId": "tenant-admin.facilities.list",
-  "version": "0.1.0",
-  "title": "Facility List and Configuration",
+  "version": "0.2.0",
+  "title": "Facility List",
   "status": "draft",
-  "description": "Facility list bridging VistA institutional files and platform tenant configuration. VistA File 4 (INSTITUTION) and File 40.8 (MEDICAL CENTER DIVISION) are the source of truth for facility data. Platform holds the tenant-to-facility mapping. Initial posture is read-only mirror; facility creation requires research into VistA File 4 write authority.",
+  "description": "Facility list showing institution hierarchy (Institution → Division → Location). VistA File 4 (INSTITUTION) and File 40.8 (MEDICAL CENTER DIVISION) are the source of truth. Platform PG holds tenant-to-facility mapping. Read-only mirror of VistA data with platform governance overlay.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "primary",
   "surfaceType": "admin",
   "accessRequirements": {
-    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "allowedRoles": ["tenant-admin"],
     "scopePosture": "tenant-scoped",
     "entityContextRequired": ["tenantId"]
   },
-  "readWritePosture": "mixed",
+  "readWritePosture": "read-only",
   "directWriteAllowed": false,
   "dataSources": [
     {
-      "sourceId": "VistA File 4 (INSTITUTION)",
+      "sourceId": "vista-file-4",
       "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA institution records — read-only mirror."
+      "description": "VistA institution records from File 4 — read-only mirror."
     },
     {
-      "sourceId": "VistA File 40.8 (MEDICAL CENTER DIVISION)",
+      "sourceId": "vista-file-40-8",
       "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA medical center division records — read-only mirror."
+      "description": "VistA medical center division records from File 40.8 — read-only mirror."
     },
     {
       "sourceId": "platform-tenant-facility-mapping",

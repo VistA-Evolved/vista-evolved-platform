@@ -1,32 +1,32 @@
 {
   "surfaceId": "tenant-admin.users.detail",
-  "version": "0.1.0",
-  "title": "User Detail and Setup",
+  "version": "0.2.0",
+  "title": "User Detail",
   "status": "draft",
-  "description": "Detail view for a single user within a tenant. Displays platform identity data and VistA File 200 attributes (keys, menu options, person class, security keys). VistA user attributes are read-only from platform perspective. Role/key assignment posture requires research into which VistA RPCs support programmatic key assignment.",
+  "description": "Detail view for a single user within a tenant. Displays platform identity and VistA File 200 attributes (keys, menu options, person class). VistA attributes are read-only. Role/key assignment posture requires VistA RPC research for programmatic key assignment.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "local",
   "surfaceType": "admin",
   "accessRequirements": {
-    "allowedRoles": ["platform-operator", "tenant-admin", "it-integration"],
+    "allowedRoles": ["tenant-admin"],
     "scopePosture": "tenant-scoped",
     "entityContextRequired": ["tenantId", "userId"]
   },
-  "readWritePosture": "mixed",
+  "readWritePosture": "read-only",
   "directWriteAllowed": false,
   "dataSources": [
     {
-      "sourceId": "VistA File 200 (NEW PERSON)",
-      "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA user record detail — keys, menu options, person class. Read-only mirror."
+      "sourceId": "platform-user-registry",
+      "sourceDomainClass": "platform-governance",
+      "description": "Platform identity — name, username, title, assigned roles, lifecycle status."
     },
     {
-      "sourceId": "platform-identity-bridge",
-      "sourceDomainClass": "platform-governance",
-      "description": "Platform identity attributes and role assignments."
+      "sourceId": "vista-file-200",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "VistA user record detail — DUZ, keys, menu options, person class. Read-only mirror."
     }
   ],
-  "dataClassification": "operational",
+  "dataClassification": "configuration",
   "claimSurface": null,
   "analyticsSurface": null,
   "crossWorkspaceTransitions": [],

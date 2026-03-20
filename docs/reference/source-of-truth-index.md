@@ -67,6 +67,7 @@
 | **Tenant admin VistA truth map** | `docs/explanation/tenant-admin-vista-truth-map.md` | Maps tenant-admin concerns to VistA files, globals, RPCs: Facility (File 4/44), User (File 200), Role (File 19.1/19), Site Params (File 8989.3), research priorities |
 | **Tenant admin personas, jobs, and first-slice journeys** | `docs/explanation/tenant-admin-personas-jobs-and-first-slice-journeys.md` | 3 primary personas (TA-1/2/3), 10-job catalog, 3 first-slice journeys, 6-surface first-slice inventory |
 | **Operator-to-tenant-admin handoff model** | `docs/explanation/operator-to-tenant-admin-handoff-model.md` | 3 trigger points, context transfer contract, handoff mechanism, safety constraints, references Task 0 implementations |
+| **Tenant admin design contract v1** | `docs/explanation/tenant-admin-design-contract-v1.md` | Shell anatomy, concern-area nav, page header rules, VistA grounding display, per-surface reject/ready checklists, review checklist (15 gates) |
 
 ## Runtime apps
 
