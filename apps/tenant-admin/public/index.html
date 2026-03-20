@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tenant Admin — VistA Evolved</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="tenant-admin-root">
+    <!-- TENANT BANNER -->
+    <div class="tenant-banner">
+      <span class="tenant-banner-name" id="tenant-name">Tenant Admin</span>
+      <span class="tenant-banner-status" id="tenant-status"></span>
+      <span class="tenant-banner-source">Source: fixture</span>
+    </div>
+
+    <div class="shell">
+      <!-- Left navigation — concern-area groups (design-contract-v1 §3) -->
+      <nav class="left-nav" id="left-nav">
+        <a href="#/dashboard" data-surface="dashboard" class="nav-link active">Dashboard</a>
+
+        <div class="nav-group-label">USERS &amp; ROLES</div>
+        <a href="#/users" data-surface="users-list" class="nav-link">User List</a>
+        <a href="#/roles" data-surface="roles-assignment" class="nav-link">Role Assignment</a>
+
+        <div class="nav-group-label">FACILITIES</div>
+        <a href="#/facilities" data-surface="facilities-list" class="nav-link">Facility List</a>
+
+        <div class="nav-group-label nav-group-planned">PLANNED</div>
+        <a href="#/modules" data-surface="modules" class="nav-link nav-planned">Module Entitlements</a>
+        <a href="#/connections" data-surface="connections" class="nav-link nav-planned">VistA Connections</a>
+        <a href="#/site-params" data-surface="site-params" class="nav-link nav-planned">Site Parameters</a>
+
+        <div class="nav-role-badge" id="role-badge">Role: Tenant Admin</div>
+      </nav>
+
+      <!-- Main content area -->
+      <main class="content-area" id="content-area">
+        <!-- Rendered by app.js based on route -->
+      </main>
+    </div>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+      <span id="tenant-id-display"></span>
+      <a href="#" id="return-to-cp" class="return-link" style="display:none">← Return to Operator Console</a>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

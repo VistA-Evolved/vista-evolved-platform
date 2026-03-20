@@ -1,0 +1,54 @@
+[
+  {
+    "id": "user-001",
+    "name": "PROVIDER,CLYDE WV",
+    "username": "PROVCLYDE",
+    "title": "Staff Physician",
+    "status": "active",
+    "roles": ["PROVIDER", "ORES"],
+    "vistaGrounding": {
+      "duz": 87,
+      "file200Status": "grounded",
+      "personClass": "Physician"
+    }
+  },
+  {
+    "id": "user-002",
+    "name": "PHARMACIST,LINDA WV",
+    "username": "PHARMLINDA",
+    "title": "Clinical Pharmacist",
+    "status": "active",
+    "roles": ["PSJ RPHARM"],
+    "vistaGrounding": {
+      "duz": 88,
+      "file200Status": "grounded",
+      "personClass": "Pharmacist"
+    }
+  },
+  {
+    "id": "user-003",
+    "name": "NURSE,HELEN WV",
+    "username": "NURSEHELEN",
+    "title": "Registered Nurse",
+    "status": "active",
+    "roles": ["ORELSE"],
+    "vistaGrounding": {
+      "duz": 89,
+      "file200Status": "grounded",
+      "personClass": "Registered Nurse"
+    }
+  },
+  {
+    "id": "user-004",
+    "name": "ADMIN,TENANT WV",
+    "username": "ADMINTENANT",
+    "title": "Site Administrator",
+    "status": "active",
+    "roles": ["XUMGR", "XUPROGMODE"],
+    "vistaGrounding": {
+      "duz": null,
+      "file200Status": "ungrounded",
+      "personClass": null
+    }
+  }
+]

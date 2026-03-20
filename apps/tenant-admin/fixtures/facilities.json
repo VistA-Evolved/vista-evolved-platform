@@ -1,0 +1,25 @@
+[
+  {
+    "id": "fac-001",
+    "name": "WorldVistA Medical Center",
+    "type": "Institution",
+    "status": "active",
+    "vistaGrounding": {
+      "file4Ien": 1,
+      "status": "grounded"
+    },
+    "children": [
+      {
+        "id": "fac-002",
+        "name": "Main Division",
+        "type": "Division",
+        "vistaGrounding": { "file40_8Ien": 1, "status": "grounded" },
+        "children": [
+          { "id": "loc-001", "name": "General Medicine Clinic", "type": "Clinic", "vistaGrounding": { "file44Ien": 1, "status": "grounded" } },
+          { "id": "loc-002", "name": "Primary Care Clinic", "type": "Clinic", "vistaGrounding": { "file44Ien": 2, "status": "grounded" } },
+          { "id": "loc-003", "name": "Surgery Clinic", "type": "Clinic", "vistaGrounding": { "file44Ien": 3, "status": "grounded" } }
+        ]
+      }
+    ]
+  }
+]

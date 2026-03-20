@@ -138,6 +138,13 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Tenant Admin handoff — opens the tenant-admin workspace with context
+function openTenantAdmin(tenantId) {
+  const tid = tenantId || 'default-tenant';
+  const cpReturn = encodeURIComponent(window.location.href);
+  window.open(`http://127.0.0.1:4520/?tenantId=${encodeURIComponent(tid)}&cpReturnUrl=${cpReturn}#/dashboard`, '_blank', 'noopener');
+}
+
 function fmtDate(iso) {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
@@ -894,8 +901,8 @@ async function renderTenantsDetail() {
         <li>&#x2022; VistA instance connections</li>
         <li>&#x2022; Module entitlements &amp; feature flags</li>
       </ul>
-      <button class="btn-handoff" title="Tenant Admin workspace — not yet available">Open Tenant Admin</button>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:10px;">Workspace: <code>vista-evolved-platform/apps/tenant-admin</code> &middot; Status: planned</p>
+      <button class="btn-handoff" onclick="openTenantAdmin('${t.id}')" title="Open Tenant Admin workspace for this tenant">Open Tenant Admin ↗</button>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:10px;">Workspace: <code>vista-evolved-platform/apps/tenant-admin</code> &middot; Port 4520</p>
     </div>
 
     <!-- Actions Bar -->
@@ -1047,8 +1054,8 @@ function renderTenantsBootstrap() {
     <div class="card handoff-card" style="margin-top:16px;">
       <h3>After Provisioning</h3>
       <p>Once this tenant is provisioned, operational setup (users, roles, facilities, VistA connections) continues in the <strong>Tenant Admin</strong> workspace.</p>
-      <button class="btn-handoff" title="Tenant Admin workspace — not yet available">Open Tenant Admin</button>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Planned &middot; <code>apps/tenant-admin</code></p>
+      <button class="btn-handoff" onclick="openTenantAdmin('${t.id}')" title="Open Tenant Admin workspace for this tenant">Open Tenant Admin ↗</button>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Port 4520 &middot; <code>apps/tenant-admin</code></p>
     </div>
   `;
 }
@@ -1750,8 +1757,8 @@ function renderHome() {
         <h3>Tenant Operational Admin</h3>
         <p>After onboarding and provisioning, day-to-day tenant configuration
         moves to the <strong>Tenant Admin</strong> workspace (users, roles, facilities, VistA connections).</p>
-        <button class="btn-handoff" title="Tenant Admin workspace — not yet available">Open Tenant Admin</button>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Planned &middot; <code>apps/tenant-admin</code></p>
+        <button class="btn-handoff" onclick="openTenantAdmin()" title="Open Tenant Admin workspace">Open Tenant Admin ↗</button>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Port 4520 &middot; <code>apps/tenant-admin</code></p>
       </div>
     </div>
 

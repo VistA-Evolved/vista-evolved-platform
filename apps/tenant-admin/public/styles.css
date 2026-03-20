@@ -1,0 +1,279 @@
+/* VistA Evolved — Tenant Admin — Styles
+   Design contract: docs/explanation/tenant-admin-design-contract-v1.md */
+
+:root {
+  --color-bg:           #f4f5f7;
+  --color-surface:      #ffffff;
+  --color-border:       #e0e1e6;
+  --color-text:         #1a1a2e;
+  --color-text-muted:   #6b7280;
+  --color-primary:      #2563eb;
+  --color-primary-bg:   #eff6ff;
+  --color-success:      #059669;
+  --color-warning:      #d97706;
+  --color-error:        #dc2626;
+  --color-banner:       #1e293b;
+  --color-nav-bg:       #1a1a2e;
+  --color-nav-text:     #cbd5e1;
+  --color-nav-active:   #ffffff;
+  --radius:             6px;
+  --font-mono:          'Cascadia Code', 'Fira Code', monospace;
+  --font-sans:          system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+/* TENANT BANNER */
+.tenant-banner {
+  background: var(--color-banner);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.tenant-banner-name { font-weight: 700; font-size: 14px; }
+.tenant-banner-status {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.tenant-banner-source {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* SHELL LAYOUT */
+.shell {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: calc(100vh - 74px); /* banner 34px + status-bar 40px */
+}
+
+/* LEFT NAV */
+.left-nav {
+  background: var(--color-nav-bg);
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+}
+.nav-link {
+  color: var(--color-nav-text);
+  text-decoration: none;
+  padding: 8px 16px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.nav-link:hover { background: rgba(255,255,255,0.08); }
+.nav-link.active {
+  color: var(--color-nav-active);
+  font-weight: 600;
+  background: rgba(255,255,255,0.12);
+  border-left: 3px solid var(--color-primary);
+  padding-left: 13px;
+}
+.nav-group-label {
+  padding: 16px 16px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+.nav-group-planned { margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; }
+.nav-planned { opacity: 0.45; font-size: 12px; cursor: default; }
+.nav-role-badge {
+  margin-top: auto;
+  padding: 8px 16px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  font-family: var(--font-mono);
+}
+
+/* CONTENT AREA */
+.content-area { padding: 24px; overflow-y: auto; }
+
+/* STATUS BAR */
+.status-bar {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.return-link {
+  margin-left: auto;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+.return-link:hover { text-decoration: underline; }
+
+/* PAGE HEADER */
+.page-header {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.page-header h1 {
+  font-size: 20px;
+  font-weight: 700;
+}
+.page-header .source-posture {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.source-posture.fixture     { background: #fef3c7; color: #92400e; }
+.source-posture.real        { background: #d1fae5; color: #065f46; }
+.source-posture.pending     { background: #fee2e2; color: #991b1b; }
+
+/* CARDS */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.card-label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.card-value {
+  font-size: 28px;
+  font-weight: 700;
+}
+.card-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+/* TABLES */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid var(--color-border);
+}
+.data-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.data-table tr:hover { background: var(--color-primary-bg); }
+.data-table a {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+.data-table a:hover { text-decoration: underline; }
+
+/* BADGES */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-active   { background: #d1fae5; color: #065f46; }
+.badge-inactive { background: #f3f4f6; color: #6b7280; }
+.badge-grounded { background: #dbeafe; color: #1e40af; }
+.badge-ungrounded { background: #fee2e2; color: #991b1b; }
+.badge-key      { background: #f3f4f6; color: #374151; font-family: var(--font-mono); font-size: 10px; }
+
+/* DETAIL VIEW */
+.detail-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.detail-section h2 {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.detail-row {
+  display: flex;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.detail-row dt {
+  width: 160px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.detail-row dd { flex: 1; }
+
+/* TREE */
+.facility-tree { list-style: none; }
+.facility-tree li { padding: 4px 0; }
+.facility-tree .tree-indent-1 { padding-left: 16px; }
+.facility-tree .tree-indent-2 { padding-left: 32px; }
+.tree-type {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #f3f4f6;
+  color: #6b7280;
+  margin-left: 8px;
+}
+
+/* LOADING / EMPTY / ERROR */
+.loading-message, .empty-message, .error-message {
+  padding: 32px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+.error-message { color: var(--color-error); }
+
+/* BREADCRUMB */
+.breadcrumb {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.breadcrumb a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+.breadcrumb a:hover { text-decoration: underline; }
