@@ -103,6 +103,8 @@ function route() {
     renderFacilityList(content);
   } else if (hash === '#/roles') {
     renderRoleAssignment(content);
+  } else if (hash === '#/guided-tasks') {
+    renderGuidedTasks(content);
   } else {
     renderDashboard(content);
   }
@@ -512,5 +514,140 @@ async function renderFacilityDetail(el, facId) {
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Read-only in first slice</div>
         </div>
       </aside>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Guided Write Workflows
+// ---------------------------------------------------------------------------
+async function renderGuidedTasks(el) {
+  const workflows = [
+    {
+      id: 'add-user',
+      title: 'Add New User',
+      description: 'Create a new user in VistA File 200 with proper access/verify codes, person class, and division assignment.',
+      vistaTarget: 'File 200 via UPDATE^DIE or ^VA(200)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal (SSH or Docker exec)',
+        'Navigate: EVE > User Management > Add a New User',
+        'Enter user demographics (name, SSN, DOB)',
+        'Assign ACCESS CODE and VERIFY CODE',
+        'Set PERSON CLASS and SERVICE/SECTION',
+        'Assign DIVISION(s) via File 200 node "DIV"',
+        'Allocate required security keys (PROVIDER, ORES, etc.)',
+        'Verify creation: D ^XUP or check File 200 B-index',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'VistA user creation requires multi-file coordination (200, 200.01, 8930.3) with MUMPS triggers. No safe write RPC exists for full user provisioning.',
+    },
+    {
+      id: 'edit-user',
+      title: 'Edit User Properties',
+      description: 'Modify an existing user\'s status, division assignment, person class, or service/section.',
+      vistaTarget: 'File 200 via ^DIE or VA Kernel menus',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > User Management > Edit an Existing User',
+        'Select user by name or DUZ',
+        'Modify target field(s)',
+        'Verify changes: read back from File 200',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'User field edits involve FileMan cross-references and triggers that must execute within the MUMPS environment.',
+    },
+    {
+      id: 'allocate-key',
+      title: 'Allocate Security Key',
+      description: 'Grant or revoke a security key (File 19.1) for a user. Keys control access to VistA menu options and RPCs.',
+      vistaTarget: 'File 19.1 holders via ^XUSEC',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Menu Management > Key Management > Allocation',
+        'Select key name (e.g., PROVIDER, ORES, XUMGR)',
+        'Select user to grant/revoke',
+        'Confirm allocation',
+        'Verify: check ^XUSEC(keyName,DUZ) exists',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Key allocation writes to the ^XUSEC global with FileMan-managed cross-references. Direct RPC writes risk index corruption.',
+    },
+    {
+      id: 'manage-division',
+      title: 'Manage Division Configuration',
+      description: 'Add or modify a Medical Center Division (File 40.8) and link it to an Institution (File 4).',
+      vistaTarget: 'File 40.8 via ^DG(40.8)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Systems Manager > Site Parameters',
+        'Edit Medical Center Division file',
+        'Set division name, institution pointer, facility number',
+        'Verify: XUS DIVISION GET returns updated data',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Division configuration affects system-wide routing and is tightly coupled to Kernel site parameters.',
+    },
+    {
+      id: 'manage-clinic',
+      title: 'Add/Edit Clinic Location',
+      description: 'Create or modify a Hospital Location (File 44) clinic entry with scheduling parameters.',
+      vistaTarget: 'File 44 via ^SC',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Scheduling > Set Up Clinic',
+        'Enter clinic name, abbreviation, type (C=Clinic)',
+        'Set division pointer, stop codes, default slot length',
+        'Configure availability (optional)',
+        'Verify: ORWU CLINLOC returns the new clinic',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
+    },
+  ];
+
+  const riskColor = { high: '#dc2626', medium: '#d97706', low: '#059669' };
+
+  const cards = workflows.map(w => `
+    <div class="guided-task-card">
+      <div class="guided-task-header">
+        <h3>${escapeHtml(w.title)}</h3>
+        <span class="risk-badge" style="background:${riskColor[w.riskLevel]};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase">${escapeHtml(w.riskLevel)} risk</span>
+      </div>
+      <p class="guided-task-desc">${escapeHtml(w.description)}</p>
+      <div class="guided-task-target">
+        <strong>VistA target:</strong> ${escapeHtml(w.vistaTarget)}
+      </div>
+      <div class="guided-task-steps">
+        <strong>Steps:</strong>
+        <ol>${w.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+      </div>
+      <div class="guided-task-terminal">
+        <strong>Terminal entry point:</strong>
+        <code class="terminal-cmd">${escapeHtml(w.terminalCommand)}</code>
+      </div>
+      <div class="guided-task-rationale">
+        <em>${escapeHtml(w.whyTerminal)}</em>
+      </div>
+    </div>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Guided Write Workflows</h1>
+      <span class="source-posture terminal">TERMINAL</span>
+    </div>
+    <div class="guided-tasks-intro">
+      <p><strong>VistA writes require terminal access.</strong> Direct web-based writes to VistA
+      globals risk index corruption, missed cross-references, and audit gaps. These guided
+      workflows document the exact terminal steps for each admin operation.</p>
+      <p>Each card below shows: what VistA files are affected, the step-by-step terminal
+      procedure, the Docker command to start, and why terminal-only is the safe path.</p>
+    </div>
+    <div class="guided-tasks-grid">
+      ${cards}
     </div>`;
 }
