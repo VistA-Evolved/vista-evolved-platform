@@ -2204,7 +2204,7 @@ async function sendCopilotMessage() {
       return;
     }
     const data = await resp.json();
-    const reply = data.reply || data.message || '(no response)';
+    const reply = data.content || '(no response)';
     addCopilotMessage('assistant', reply);
     copilotHistory.push({ role: 'assistant', content: reply });
   } catch (e) {
