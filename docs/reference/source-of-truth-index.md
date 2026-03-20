@@ -75,6 +75,8 @@
 | **VistA admin corpus discovery pack** | `docs/explanation/vista-admin-corpus-discovery-pack.md` | Externally-sourced master reference: 14 admin domains, file/global/RPC tables, confidence classifications (EXT-CONFIRMED, VIVIAN-LOCAL, NEEDS-LIVE-PROOF), 2,510 admin-relevant RPCs, source provenance |
 | **VistA admin domain map** | `docs/explanation/vista-admin-domain-map.md` | Quick-reference: concern→package→file→global→RPC family mapping for 12 domains (D1–D12 + D-DDR), global-to-file lookup |
 | **VistA admin source manual index** | `docs/explanation/vista-admin-source-manual-index.md` | Bibliography: 12 external sources (Wikipedia, WorldVistA GitHub), 3 local sources (Vivian), 4 failed sources, reliability assessments, research date |
+| **VistA admin terminal-to-UI translation matrix** | `docs/explanation/vista-admin-terminal-to-ui-translation-matrix.md` | Anti-miss matrix: 49 admin functions across 13 domains, 5 UI translation modes (A–E), column set includes menu path/option/files/globals/RPCs/mode/confidence/verification plan, summary mode distribution |
+| **VistA admin slice ranking and mode selection** | `docs/explanation/vista-admin-slice-ranking-and-mode-selection.md` | Ranked top 25 admin functions (composite scoring × 4 dimensions), first 2 slice candidates with justification: Slice 1 = user/key read workspace (Mode A), Slice 2 = user/key guided writes (Mode B) |
 
 ## Runtime apps
 

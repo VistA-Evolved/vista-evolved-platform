@@ -87,6 +87,8 @@ nav:
     - VistA Admin Corpus Discovery Pack: explanation/vista-admin-corpus-discovery-pack.md
     - VistA Admin Domain Map: explanation/vista-admin-domain-map.md
     - VistA Admin Source Manual Index: explanation/vista-admin-source-manual-index.md
+    - VistA Admin Terminal-to-UI Translation Matrix: explanation/vista-admin-terminal-to-ui-translation-matrix.md
+    - VistA Admin Slice Ranking and Mode Selection: explanation/vista-admin-slice-ranking-and-mode-selection.md
   - ADRs:
     - adrs/index.md
     - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md
