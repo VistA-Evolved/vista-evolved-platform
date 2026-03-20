@@ -79,6 +79,7 @@
 | **VistA admin slice ranking and mode selection** | `docs/explanation/vista-admin-slice-ranking-and-mode-selection.md` | Ranked top 25 admin functions (composite scoring × 4 dimensions), first 2 slice candidates with justification: Slice 1 = user/key read workspace (Mode A), Slice 2 = user/key guided writes (Mode B) |
 | **VistA admin grounded domain: users, keys, signatures** | `docs/explanation/vista-admin-grounded-domain-users-keys-signatures.md` | Deep grounded domain reference: File 200/19.1/200.051 field maps, 3-tier RPC inventory (10 VEHU-confirmed, 7 XUS IAM unprobed, 9 custom VE*), MUMPS write patterns, data shape evidence, electronic signature mechanics, implementation strategy decision tree, Slice 1/2 scope specifications, 11 probing requirements |
 | **VistA admin grounded domain: institution, division, clinic** | `docs/explanation/vista-admin-grounded-domain-institution-division-clinic.md` | Deep grounded domain reference: File 4/40.8/44/42 hierarchy, 16 VEHU-confirmed RPCs + 8 custom VE* + 14 SDES/SDEC (absent from VEHU), ZVEFAC.m patterns, 12 custom RPCs needed, SDES/SDEC gap analysis, screen contracts, 6 probe requirements, topology assembly pattern |
+| **VistA admin guided write workflows** | `docs/explanation/vista-admin-guided-write-workflows.md` | Complete guided write catalog: 19 GW-* workflows (10 Mode B, 6 Mode C), 6-step canonical pattern, VistA EVE menu tree map, write safety patterns, 10 custom write RPCs across ZVEUSER/ZVECLIN/ZVEFAC, implementation readiness assessment, 5 SPA guided task cards |
 
 ## Runtime apps
 
