@@ -277,3 +277,77 @@ body {
   text-decoration: none;
 }
 .breadcrumb a:hover { text-decoration: underline; }
+
+/* FILTER RAIL */
+.filter-rail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.filter-rail input[type="text"] {
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 13px;
+  flex: 0 0 200px;
+  font-family: var(--font-sans);
+}
+.filter-rail select {
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+}
+.filter-rail .result-count {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* CONTEXT RAIL (detail pages) */
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 16px;
+}
+.context-rail {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+}
+.context-rail .card {
+  font-size: 13px;
+}
+.context-rail .context-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+.context-rail .context-value {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.context-rail .context-divider {
+  border-top: 1px solid var(--color-border);
+  margin: 8px 0;
+}
+
+/* PAGINATION */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+}

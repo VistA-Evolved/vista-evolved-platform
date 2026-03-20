@@ -162,26 +162,63 @@ async function renderUserList(el) {
     return;
   }
 
-  const rows = users.map(u => `
-    <tr>
-      <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
-      <td>${escapeHtml(u.title || '—')}</td>
-      <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
-      <td>${u.roles.map(r => `<span class="badge badge-key">${escapeHtml(r)}</span>`).join(' ')}</td>
-      <td><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></td>
-    </tr>`).join('');
+  function renderUserRows(list) {
+    return list.map(u => `
+      <tr>
+        <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
+        <td>${escapeHtml(u.title || '—')}</td>
+        <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
+        <td>${u.roles.map(r => `<span class="badge badge-key">${escapeHtml(r)}</span>`).join(' ')}</td>
+        <td><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></td>
+      </tr>`).join('');
+  }
 
   el.innerHTML = `
     <div class="page-header">
       <h1>User List</h1>
       <span class="source-posture fixture">FIXTURE</span>
     </div>
+    <div class="filter-rail">
+      <input type="text" id="user-search" placeholder="Search users…" />
+      <select id="user-status-filter">
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+      <select id="user-grounding-filter">
+        <option value="">All grounding</option>
+        <option value="grounded">Grounded</option>
+        <option value="ungrounded">Ungrounded</option>
+      </select>
+      <span class="result-count" id="user-count">Showing ${users.length} of ${users.length}</span>
+    </div>
     <table class="data-table">
       <thead><tr>
         <th>Name</th><th>Title</th><th>Status</th><th>Keys</th><th>VistA</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+      <tbody id="user-tbody">${renderUserRows(users)}</tbody>
+    </table>
+    <div class="pagination-bar">
+      <span>Showing ${users.length} of ${users.length} users</span>
+    </div>`;
+
+  // Wire filter handlers
+  const filterUsers = () => {
+    const q = (document.getElementById('user-search').value || '').toLowerCase();
+    const statusF = document.getElementById('user-status-filter').value;
+    const groundF = document.getElementById('user-grounding-filter').value;
+    const filtered = users.filter(u => {
+      if (q && !u.name.toLowerCase().includes(q) && !(u.title || '').toLowerCase().includes(q)) return false;
+      if (statusF && u.status !== statusF) return false;
+      if (groundF && u.vistaGrounding.file200Status !== groundF) return false;
+      return true;
+    });
+    document.getElementById('user-tbody').innerHTML = renderUserRows(filtered);
+    document.getElementById('user-count').textContent = `Showing ${filtered.length} of ${users.length}`;
+  };
+  document.getElementById('user-search').addEventListener('input', filterUsers);
+  document.getElementById('user-status-filter').addEventListener('change', filterUsers);
+  document.getElementById('user-grounding-filter').addEventListener('change', filterUsers);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +226,7 @@ async function renderUserList(el) {
 // ---------------------------------------------------------------------------
 async function renderUserDetail(el, userId) {
   el.innerHTML = `
-    <div class="breadcrumb"><a href="#/users">Users</a> › Detail</div>
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/users">User List</a> › Detail</div>
     <div class="loading-message">Loading user…</div>`;
 
   const res = await api(`users/${encodeURIComponent(userId)}`);
@@ -197,33 +234,54 @@ async function renderUserDetail(el, userId) {
   const u = res.data;
 
   el.innerHTML = `
-    <div class="breadcrumb"><a href="#/users">Users</a> › ${escapeHtml(u.name)}</div>
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/users">User List</a> › ${escapeHtml(u.name)}</div>
     <div class="page-header">
       <h1>${escapeHtml(u.name)}</h1>
       <span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span>
     </div>
 
-    <div class="detail-section">
-      <h2>Identity</h2>
-      <dl>
-        <div class="detail-row"><dt>Username</dt><dd>${escapeHtml(u.username)}</dd></div>
-        <div class="detail-row"><dt>Title</dt><dd>${escapeHtml(u.title || '—')}</dd></div>
-        <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(u.status)}</dd></div>
-      </dl>
-    </div>
+    <div class="detail-layout">
+      <div class="detail-main">
+        <div class="detail-section">
+          <h2>Identity</h2>
+          <dl>
+            <div class="detail-row"><dt>Username</dt><dd>${escapeHtml(u.username)}</dd></div>
+            <div class="detail-row"><dt>Title</dt><dd>${escapeHtml(u.title || '—')}</dd></div>
+            <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(u.status)}</dd></div>
+          </dl>
+        </div>
 
-    <div class="detail-section">
-      <h2>VistA Grounding</h2>
-      <dl>
-        <div class="detail-row"><dt>DUZ (File 200)</dt><dd>${u.vistaGrounding.duz ?? '—'}</dd></div>
-        <div class="detail-row"><dt>Grounding Status</dt><dd><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></dd></div>
-        <div class="detail-row"><dt>Person Class</dt><dd>${escapeHtml(u.vistaGrounding.personClass || '—')}</dd></div>
-      </dl>
-    </div>
+        <div class="detail-section">
+          <h2>VistA Grounding</h2>
+          <dl>
+            <div class="detail-row"><dt>DUZ (File 200)</dt><dd>${u.vistaGrounding.duz ?? '—'}</dd></div>
+            <div class="detail-row"><dt>Grounding Status</dt><dd><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></dd></div>
+            <div class="detail-row"><dt>Person Class</dt><dd>${escapeHtml(u.vistaGrounding.personClass || '—')}</dd></div>
+          </dl>
+        </div>
 
-    <div class="detail-section">
-      <h2>Security Keys</h2>
-      <div>${u.roles.map(r => `<span class="badge badge-key" style="margin:2px">${escapeHtml(r)}</span>`).join(' ')}</div>
+        <div class="detail-section">
+          <h2>Security Keys</h2>
+          <div>${u.roles.map(r => `<span class="badge badge-key" style="margin:2px">${escapeHtml(r)}</span>`).join(' ')}</div>
+        </div>
+      </div>
+
+      <aside class="context-rail">
+        <div class="card">
+          <div class="context-label">User</div>
+          <div class="context-value">${escapeHtml(u.name)}</div>
+          <div class="context-label">Status</div>
+          <div class="context-value"><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></div>
+          <div class="context-divider"></div>
+          <div class="context-label">VistA DUZ</div>
+          <div class="context-value">${u.vistaGrounding.duz ?? '—'}</div>
+          <div class="context-label">Grounding</div>
+          <div class="context-value"><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></div>
+          <div class="context-divider"></div>
+          <div class="context-label">Actions</div>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Read-only in first slice</div>
+        </div>
+      </aside>
     </div>`;
 }
 
@@ -278,9 +336,17 @@ async function renderFacilityList(el) {
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load facilities</div>`; return; }
   const facilities = res.data;
 
+  // Flatten for counting
+  function countAll(items) {
+    let n = 0;
+    for (const f of items) { n++; if (f.children) n += countAll(f.children); }
+    return n;
+  }
+  const totalCount = countAll(facilities);
+
   function renderTree(items, indent) {
     return items.map(f => {
-      const indentClass = indent > 0 ? ` tree-indent-${indent}` : '';
+      const indentClass = indent > 0 ? ` tree-indent-${Math.min(indent, 2)}` : '';
       const childHtml = f.children && f.children.length ? renderTree(f.children, indent + 1) : '';
       return `
         <li class="${indentClass}">
@@ -297,9 +363,19 @@ async function renderFacilityList(el) {
       <h1>Facility List</h1>
       <span class="source-posture fixture">FIXTURE</span>
     </div>
+    <div class="filter-rail">
+      <input type="text" id="fac-search" placeholder="Search facilities…" />
+      <select id="fac-type-filter">
+        <option value="">All types</option>
+        <option value="Institution">Institution</option>
+        <option value="Division">Division</option>
+        <option value="Clinic">Clinic</option>
+      </select>
+      <span class="result-count">${totalCount} facilities</span>
+    </div>
     <div class="detail-section">
       <h2>Facility Hierarchy</h2>
-      <ul class="facility-tree">
+      <ul class="facility-tree" id="fac-tree">
         ${renderTree(facilities, 0)}
       </ul>
     </div>`;
@@ -310,7 +386,7 @@ async function renderFacilityList(el) {
 // ---------------------------------------------------------------------------
 async function renderFacilityDetail(el, facId) {
   el.innerHTML = `
-    <div class="breadcrumb"><a href="#/facilities">Facilities</a> › Detail</div>
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/facilities">Facility List</a> › Detail</div>
     <div class="loading-message">Loading facility…</div>`;
 
   // Facilities may be nested — search recursively
@@ -345,24 +421,45 @@ async function renderFacilityDetail(el, facId) {
     : '';
 
   el.innerHTML = `
-    <div class="breadcrumb"><a href="#/facilities">Facilities</a> › ${escapeHtml(f.name)}</div>
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/facilities">Facility List</a> › ${escapeHtml(f.name)}</div>
     <div class="page-header">
       <h1>${escapeHtml(f.name)}</h1>
       <span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(f.status)}</span>
     </div>
 
-    <div class="detail-section">
-      <h2>Identity</h2>
-      <dl>
-        <div class="detail-row"><dt>Type</dt><dd>${escapeHtml(f.type)}</dd></div>
-        <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(f.status)}</dd></div>
-      </dl>
-    </div>
+    <div class="detail-layout">
+      <div class="detail-main">
+        <div class="detail-section">
+          <h2>Identity</h2>
+          <dl>
+            <div class="detail-row"><dt>Type</dt><dd>${escapeHtml(f.type)}</dd></div>
+            <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(f.status)}</dd></div>
+          </dl>
+        </div>
 
-    <div class="detail-section">
-      <h2>VistA Grounding</h2>
-      <dl>${groundingRows}</dl>
-    </div>
+        <div class="detail-section">
+          <h2>VistA Grounding</h2>
+          <dl>${groundingRows}</dl>
+        </div>
 
-    ${childrenHtml}`;
+        ${childrenHtml}
+      </div>
+
+      <aside class="context-rail">
+        <div class="card">
+          <div class="context-label">Facility</div>
+          <div class="context-value">${escapeHtml(f.name)}</div>
+          <div class="context-label">Type</div>
+          <div class="context-value">${escapeHtml(f.type)}</div>
+          <div class="context-label">Status</div>
+          <div class="context-value"><span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(f.status)}</span></div>
+          <div class="context-divider"></div>
+          <div class="context-label">VistA Grounding</div>
+          <div class="context-value"><span class="badge ${(f.vistaGrounding || {}).status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml((f.vistaGrounding || {}).status || 'unknown')}</span></div>
+          <div class="context-divider"></div>
+          <div class="context-label">Actions</div>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Read-only in first slice</div>
+        </div>
+      </aside>
+    </div>`;
 }

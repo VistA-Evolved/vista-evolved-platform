@@ -89,13 +89,18 @@ async function main() {
   app.get('/api/tenant-admin/v1/dashboard', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
+    function countFacilities(items) {
+      let n = 0;
+      for (const f of items) { n++; if (f.children) n += countFacilities(f.children); }
+      return n;
+    }
     return {
       ok: true,
       source: 'fixture',
       tenantId,
       data: {
         userCount: fixtures.users.length,
-        facilityCount: fixtures.facilities.length,
+        facilityCount: countFacilities(fixtures.facilities),
         roleCount: fixtures.roles.length,
         vistaGrounding: 'integration-pending',
         moduleStatus: { enabled: 0, total: 0 }
