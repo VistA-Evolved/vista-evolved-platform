@@ -35,17 +35,17 @@ document.addEventListener('DOMContentLoaded', () => {
         statusEl.style.color = '#065f46';
         if (sourceEl) sourceEl.textContent = 'Source: VistA';
       } else {
-        statusEl.textContent = 'FIXTURE';
-        statusEl.style.background = '#fef3c7';
-        statusEl.style.color = '#92400e';
-        if (sourceEl) sourceEl.textContent = 'Source: fixture';
+        statusEl.textContent = 'VistA DISCONNECTED';
+        statusEl.style.background = '#fee2e2';
+        statusEl.style.color = '#991b1b';
+        if (sourceEl) sourceEl.textContent = 'Source: error — VistA unreachable';
       }
     })
     .catch(() => {
       const statusEl = document.getElementById('tenant-status');
-      statusEl.textContent = 'FIXTURE';
-      statusEl.style.background = '#fef3c7';
-      statusEl.style.color = '#92400e';
+      statusEl.textContent = 'VistA DISCONNECTED';
+      statusEl.style.background = '#fee2e2';
+      statusEl.style.color = '#991b1b';
     });
 
   if (STATE.cpReturnUrl) {
@@ -222,7 +222,8 @@ function sourceBadge(source) {
   if (source === 'vista') return '<span class="source-posture vista">VistA</span>';
   if (source === 'catalog') return '<span class="source-posture catalog">CATALOG</span>';
   if (source === 'integration-pending') return '<span class="source-posture pending">INTEGRATION-PENDING</span>';
-  return '<span class="source-posture fixture">FIXTURE</span>';
+  if (source === 'error') return '<span class="source-posture error">ERROR</span>';
+  return '<span class="source-posture error">UNKNOWN</span>';
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +276,7 @@ function renderIntegrationPending(el, title, domain, backHref, covMapId, termina
 // ---------------------------------------------------------------------------
 async function renderDashboard(el) {
   el.innerHTML = `
-    <div class="page-header"><h1>Dashboard</h1><span class="source-posture fixture">Loading…</span></div>
+    <div class="page-header"><h1>Dashboard</h1><span class="source-posture pending">Loading…</span></div>
     <div class="loading-message">Loading dashboard…</div>`;
   const res = await api('dashboard');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load dashboard</div>`; return; }
@@ -371,7 +372,7 @@ async function renderDashboard(el) {
 async function renderUserList(el) {
   el.innerHTML = `
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Users &amp; Access › User List</div>
-    <div class="page-header"><h1>User List</h1><span class="source-posture fixture">Loading…</span></div>
+    <div class="page-header"><h1>User List</h1><span class="source-posture pending">Loading…</span></div>
     <div class="loading-message">Loading users from VistA…</div>`;
   const res = await api('users');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load users</div>`; return; }
@@ -2025,7 +2026,7 @@ async function renderMonitoringStatus(el) {
 
   el.innerHTML = `
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Monitoring › System Status</div>
-    <div class="page-header"><h1>System Status</h1>${connected ? '<span class="source-posture vista">CONNECTED</span>' : '<span class="source-posture fixture">DISCONNECTED</span>'}</div>
+    <div class="page-header"><h1>System Status</h1>${connected ? '<span class="source-posture vista">CONNECTED</span>' : '<span class="source-posture error">DISCONNECTED</span>'}</div>
     <div class="explanation-header">
       <strong>System Health Monitoring</strong> — 7 indicators per VistA admin blueprint.
       VistA connection, RPC broker, active users, error trap, TaskMan, MailMan, and disk/DB status.

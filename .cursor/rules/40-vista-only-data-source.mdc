@@ -1,0 +1,41 @@
+# VistA-Only Data Source Policy (NON-NEGOTIABLE)
+
+## Rule
+
+Every tenant-admin route MUST read from and write to the live VistA system.
+There are NO fixture files, NO JSON fallbacks, NO alternate data sources.
+
+If VistA is unreachable, routes MUST return:
+```json
+{ "ok": false, "source": "error", "error": "VistA unreachable" }
+```
+
+## Prohibited patterns
+
+These patterns are FORBIDDEN in any tenant-admin code:
+
+1. **No `readFile` for JSON data.** Never load JSON files as data sources.
+2. **No `source: 'fixture'`.** This label must never appear in any API response.
+3. **No fixture fallback logic.** Never write `if (!vistaResult.ok) { return fixtureData }`.
+4. **No `fixtures/` directory.** This directory was deleted and must never be recreated.
+5. **No hardcoded data arrays.** Never embed user/facility/role data directly in code.
+6. **No degraded-mode data.** If VistA is down, show an error, not stale data.
+
+## Required patterns
+
+1. Every route starts with VistA connectivity check or RPC call.
+2. If VistA returns data, return it with `source: 'vista'`.
+3. If VistA fails, return `{ ok: false, source: 'error', error: '<specific message>' }`.
+4. The UI shows a red ERROR badge when source is 'error'.
+5. DDR family RPCs (DDR LISTER, DDR GETS, DDR FILER, DDR VALIDATOR) are the primary
+   mechanism for reading/writing VistA FileMan data.
+
+## Why this exists
+
+Fixtures created a false sense of functionality. Routes appeared to "work" but
+returned stale JSON data instead of real VistA state. This masked integration
+gaps and prevented detection of broken VistA communication paths. Users could
+not tell if their changes were actually reaching VistA or just being displayed
+from cached JSON files. This was a patient safety and data integrity risk.
+
+All fixture files and fallback logic were permanently removed on 2026-03-21.

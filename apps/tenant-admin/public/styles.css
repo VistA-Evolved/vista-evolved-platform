@@ -221,7 +221,7 @@ body {
 }
 
 /* SOURCE POSTURE BADGES */
-.source-posture.fixture     { background: #fef3c7; color: #92400e; }
+.source-posture.error       { background: #fee2e2; color: #991b1b; }
 .source-posture.vista       { background: #d1fae5; color: #065f46; }
 .source-posture.real        { background: #d1fae5; color: #065f46; }
 .source-posture.catalog     { background: #dbeafe; color: #1e40af; }

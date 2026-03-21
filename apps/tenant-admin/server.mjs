@@ -1,15 +1,18 @@
 /**
- * Tenant Admin — VistA-First Operational Shell
+ * Tenant Admin — VistA-Only Operational Shell
  *
  * Fastify dev server serving the tenant-admin SPA.
  *
  *   1. Serves static assets (HTML/CSS/JS) from public/
- *   2. Exposes VistA-first API routes with fixture fallback for degraded mode
+ *   2. Exposes VistA-only API routes — NO fixture/JSON fallbacks
  *
  * Tenant-scoped: every request requires tenantId context.
  * VistA grounding: direct XWB RPC broker connection via lib/xwb-client.mjs.
  * Env vars: VISTA_HOST, VISTA_PORT, VISTA_ACCESS_CODE, VISTA_VERIFY_CODE, VISTA_CONTEXT.
- * Falls back to fixture data with honest source labeling when VistA is unreachable.
+ *
+ * RULE: Every route reads from and writes to the live VistA system.
+ * If VistA is unreachable, routes return {ok: false, error: ...}.
+ * There are NO fixture files, NO JSON fallbacks, NO alternate data sources.
  *
  * Port: 4520 (per port-registry.md pattern — control-plane=4500, API=4510, tenant-admin=4520)
  */
@@ -18,7 +21,6 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readFile } from 'node:fs/promises';
 import {
   probeVista,
   fetchVistaUsers,
@@ -52,28 +54,9 @@ function zveOutcome(z) {
 }
 
 // ---------------------------------------------------------------------------
-// Load fixtures once at startup
-// ---------------------------------------------------------------------------
-async function loadFixtures() {
-  const fixtureDir = join(__dirname, 'fixtures');
-  const files = ['users', 'facilities', 'roles'];
-  const fixtures = {};
-  for (const f of files) {
-    try {
-      const raw = await readFile(join(fixtureDir, `${f}.json`), 'utf8');
-      fixtures[f] = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
-    } catch {
-      fixtures[f] = [];
-    }
-  }
-  return fixtures;
-}
-
-// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 async function main() {
-  const fixtures = await loadFixtures();
   const app = Fastify({ logger: false });
 
   // Static files
@@ -95,26 +78,16 @@ async function main() {
     };
   });
 
-  // ---- Dual-mode user routes (VistA-first, fixture fallback) ----
+  // ---- User routes (VistA-only) ----
 
   app.get('/api/tenant-admin/v1/users', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-
-    // Try VistA adapter first
     const vistaResult = await fetchVistaUsers(req.query.search || '');
     if (vistaResult.ok) {
       return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
     }
-
-    // Fixture fallback with honest labeling
-    return {
-      ok: true,
-      source: 'fixture',
-      tenantId,
-      data: fixtures.users,
-      vistaStatus: vistaResult.error || 'unavailable',
-    };
+    return { ok: false, source: 'error', tenantId, error: vistaResult.error || 'VistA unreachable' };
   });
 
   app.get('/api/tenant-admin/v1/users/:userId', async (req) => {
@@ -223,78 +196,42 @@ async function main() {
           };
         }
       }
-    } catch (_) { /* fixture */ }
+    } catch (_) { /* VistA fallback exhausted */ }
 
-    const user = fixtures.users.find(u => u.id === userId);
-    if (user) {
-      return { ok: true, source: 'fixture', data: user, vistaStatus: 'unavailable' };
-    }
-
-    return { ok: false, error: 'user not found' };
+    return { ok: false, source: 'error', error: 'User not found in VistA (File 200)' };
   });
 
-  // ---- Dual-mode facility routes (VistA-first, fixture fallback) ----
+  // ---- Facility routes (VistA-only) ----
 
   app.get('/api/tenant-admin/v1/facilities', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-
-    // Try VistA adapter: divisions + clinics → assemble topology
-    // Sequential calls — XWB broker has no mutex, concurrent RPCs corrupt responses
     const divResult = await fetchVistaDivisions();
     const clinicResult = await fetchVistaClinics(req.query.search || '');
-
-    if (divResult.ok || clinicResult.ok) {
-      // Build topology from VistA data
-      const divisions = (divResult.data || []).map(d => ({
-        id: `div-${d.ien || d.id || 'unknown'}`,
-        name: d.name || d.divisionName || 'Unknown Division',
-        type: 'Division',
-        status: 'active',
-        vistaGrounding: { file40_8Ien: d.ien || d.id, status: 'grounded' },
-        institutionIen: d.institutionIen || null,
-        stationNumber: d.stationNumber || null,
-        children: [],
-      }));
-
-      const clinics = clinicResult.ok ? (clinicResult.data || []).map(c => ({
-        id: `loc-${c.ien || c.id || 'unknown'}`,
-        name: c.name || c.locationName || 'Unknown Clinic',
-        type: 'Clinic',
-        status: 'active',
-        vistaGrounding: { file44Ien: c.ien || c.id, status: 'grounded' },
-      })) : [];
-
-      let facilities;
-      if (divisions.length === 1) {
-        divisions[0].children = clinics;
-        facilities = divisions;
-      } else if (divisions.length > 1) {
-        facilities = [...divisions, ...clinics];
-      } else {
-        // No divisions returned (single-division sandbox) — return clinics directly
-        facilities = clinics;
-      }
-
-      return {
-        ok: true,
-        source: 'vista',
-        tenantId,
-        data: facilities,
-        vistaNote: clinicResult.ok
-          ? 'Divisions via XUS DIVISION GET, clinics via ORWU CLINLOC'
-          : 'Divisions via XUS DIVISION GET (clinics unavailable)',
-      };
+    if (!divResult.ok && !clinicResult.ok) {
+      return { ok: false, source: 'error', tenantId, error: divResult.error || clinicResult.error || 'VistA unreachable' };
     }
-
-    // Fixture fallback with honest labeling
-    return {
-      ok: true,
-      source: 'fixture',
-      tenantId,
-      data: fixtures.facilities,
-      vistaStatus: divResult.error || 'unavailable',
-    };
+    const divisions = (divResult.data || []).map(d => ({
+      id: `div-${d.ien || d.id || 'unknown'}`,
+      name: d.name || d.divisionName || 'Unknown Division',
+      type: 'Division', status: 'active',
+      vistaGrounding: { file40_8Ien: d.ien || d.id, status: 'grounded' },
+      institutionIen: d.institutionIen || null,
+      stationNumber: d.stationNumber || null,
+      children: [],
+    }));
+    const clinics = clinicResult.ok ? (clinicResult.data || []).map(c => ({
+      id: `loc-${c.ien || c.id || 'unknown'}`,
+      name: c.name || c.locationName || 'Unknown Clinic',
+      type: 'Clinic', status: 'active',
+      vistaGrounding: { file44Ien: c.ien || c.id, status: 'grounded' },
+    })) : [];
+    let facilities;
+    if (divisions.length === 1) { divisions[0].children = clinics; facilities = divisions; }
+    else if (divisions.length > 1) { facilities = [...divisions, ...clinics]; }
+    else { facilities = clinics; }
+    return { ok: true, source: 'vista', tenantId, data: facilities,
+      vistaNote: 'Divisions via XUS DIVISION GET, clinics via ORWU CLINLOC' };
   });
 
   app.get('/api/tenant-admin/v1/facilities/:facilityId', async (req) => {
@@ -327,29 +264,9 @@ async function main() {
             }, vistaStatus: 'reachable'
           };
         }
-      } catch (_) { /* VistA unavailable — fall through to fixture */ }
+      } catch (_) { /* VistA unavailable */ }
     }
-
-    // Fixture fallback
-    function findFacility(items, id) {
-      for (const f of items) {
-        if (f.id === id) return f;
-        if (f.children) {
-          const found = findFacility(f.children, id);
-          if (found) return found;
-        }
-      }
-      return null;
-    }
-    const facility = findFacility(fixtures.facilities, facilityId);
-    if (!facility) return { ok: false, error: 'facility not found' };
-
-    return {
-      ok: true,
-      source: 'fixture',
-      data: facility,
-      vistaStatus: 'unavailable',
-    };
+    return { ok: false, source: 'error', error: `Facility ${facilityId} not found in VistA` };
   });
 
   app.get('/api/tenant-admin/v1/roles', async (req) => {
@@ -375,136 +292,31 @@ async function main() {
       };
     }
 
-    const enrichedRoles = fixtures.roles.map(r => ({
-      ...r,
-      assignedUsers: (r.assignedUsers || []).map(uid => {
-        const user = fixtures.users.find(u => u.id === uid);
-        return user ? { id: user.id, name: user.name } : { id: uid, name: uid };
-      }),
-    }));
-    return {
-      ok: true,
-      source: 'fixture',
-      sourceStatus: keysRes.error ? 'ddr-unavailable' : 'integration-pending',
-      tenantId,
-      data: enrichedRoles,
-      vistaNote: keysRes.error || null,
-      integrationNote:
-        'DDR LISTER on File 19.1 is the preferred key catalog. When VistA is unreachable, fixture roles are shown.',
-    };
+    return { ok: false, source: 'error', tenantId, error: keysRes.error || 'VistA security keys unavailable' };
   });
 
-  // ---- Clinic list: extract clinics from facility hierarchy ----
+  // ---- Clinic list (VistA-only) ----
 
   app.get('/api/tenant-admin/v1/clinics', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-    const typeFilter = req.query.type || '';
-
-    // Try VistA adapter first
     const vistaResult = await fetchVistaClinics(req.query.search || '');
     if (vistaResult.ok) {
       return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
     }
-
-    // Fixture fallback: extract clinics from facility hierarchy
-    function extractClinics(items, parentDivision) {
-      let clinics = [];
-      for (const f of items) {
-        if (f.type === 'Clinic' && (!typeFilter || (f.vistaGrounding || {}).locationType === typeFilter)) {
-          const vg = f.vistaGrounding || {};
-          clinics.push({
-            ...f,
-            abbreviation: vg.abbreviation || null,
-            stopCode: vg.stopCode || null,
-            defaultSlotLength: vg.defaultSlotLength || null,
-            file44Ien: vg.file44Ien || null,
-            ien: vg.file44Ien || null,
-            parentDivision: parentDivision || null,
-          });
-        }
-        if (f.children) {
-          const divName = f.type === 'Division' ? f.name : parentDivision;
-          clinics = clinics.concat(extractClinics(f.children, divName));
-        }
-      }
-      return clinics;
-    }
-    const clinics = extractClinics(fixtures.facilities, null);
-
-    return {
-      ok: true,
-      source: 'fixture',
-      tenantId,
-      data: clinics,
-      summary: {
-        totalClinics: clinics.length,
-        withStopCode: clinics.filter(c => c.vistaGrounding.stopCode).length,
-        avgSlotLength: clinics.length
-          ? Math.round(clinics.reduce((s, c) => s + (c.vistaGrounding.defaultSlotLength || 0), 0) / clinics.length)
-          : 0,
-      },
-      vistaGrounding: {
-        readRpc: 'ORWU CLINLOC',
-        file: 'File 44 (HOSPITAL LOCATION)',
-        typeIndex: '^SC("AC","C",IEN)',
-        note: 'Type C = Clinic. Division linkage via field 0 piece 4 → File 40.8.',
-      },
-      vistaStatus: vistaResult.error || 'unavailable',
-    };
+    return { ok: false, source: 'error', tenantId, error: vistaResult.error || 'VistA unreachable' };
   });
 
-  // ---- Ward list: extract wards from facility hierarchy ----
+  // ---- Ward list (VistA-only) ----
 
   app.get('/api/tenant-admin/v1/wards', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-
-    // Try VistA adapter first
     const vistaResult = await fetchVistaWards();
     if (vistaResult.ok) {
       return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
     }
-
-    // Fixture fallback: wards are at institution level
-    const wards = [];
-    for (const inst of fixtures.facilities) {
-      if (inst.wards) {
-        for (const w of inst.wards) {
-          const vg = w.vistaGrounding || {};
-          wards.push({
-            ...w,
-            parentInstitution: inst.name,
-            specialty: vg.specialty ? (typeof vg.specialty === 'object' ? vg.specialty.name : vg.specialty) : null,
-            file42Ien: vg.file42Ien || null,
-            bedCount: w.beds ? w.beds.length : 0,
-            availableBeds: w.beds ? w.beds.filter(b => b.status === 'available').length : 0,
-            occupiedBeds: w.beds ? w.beds.filter(b => b.status === 'occupied').length : 0,
-          });
-        }
-      }
-    }
-
-    return {
-      ok: true,
-      source: 'fixture',
-      tenantId,
-      data: wards,
-      summary: {
-        totalWards: wards.length,
-        totalBeds: wards.reduce((s, w) => s + w.bedCount, 0),
-        availableBeds: wards.reduce((s, w) => s + w.availableBeds, 0),
-        occupiedBeds: wards.reduce((s, w) => s + w.occupiedBeds, 0),
-      },
-      vistaGrounding: {
-        readRpc: 'ORQPT WARDS',
-        file: 'File 42 (WARD LOCATION)',
-        file44Type: 'W',
-        bedFile: 'File 405.4 (ROOM-BED)',
-        note: 'Wards map to File 44 type=W and File 42. Room-beds in File 405.4.',
-      },
-      vistaStatus: vistaResult.error || 'unavailable',
-    };
+    return { ok: false, source: 'error', tenantId, error: vistaResult.error || 'VistA unreachable' };
   });
 
   // ---- Facility topology: summary hierarchy ----
@@ -556,35 +368,8 @@ async function main() {
           },
         };
       }
-    } catch (_) { /* VistA unavailable — fall through to fixture */ }
-
-    // Fixture fallback
-    const topology = fixtures.facilities.map(inst => {
-      const divisions = (inst.children || []).filter(c => c.type === 'Division');
-      return {
-        id: inst.id, name: inst.name, type: inst.type,
-        stationNumber: (inst.vistaGrounding || {}).stationNumber || null,
-        divisionCount: divisions.length,
-        clinicCount: divisions.reduce((s, d) => s + (d.children || []).filter(c => c.type === 'Clinic').length, 0),
-        wardCount: (inst.wards || []).length,
-        divisions: divisions.map(d => ({
-          id: d.id, name: d.name,
-          clinicCount: (d.children || []).filter(c => c.type === 'Clinic').length,
-        })),
-      };
-    });
-
-    return {
-      ok: true,
-      source: 'fixture',
-      tenantId,
-      data: topology,
-      integrationNote: 'VistA broker unavailable — showing fixture topology as fallback.',
-      vistaGrounding: {
-        hierarchy: 'Institution (File 4) → Division (File 40.8) → Clinic (File 44 type=C) / Ward (File 42 + File 44 type=W)',
-        rpcs: ['XUS DIVISION GET', 'ORWU CLINLOC', 'ORQPT WARDS'],
-      },
-    };
+    } catch (_) { /* VistA unavailable */ }
+    return { ok: false, source: 'error', tenantId, error: 'VistA unreachable — cannot build topology' };
   });
 
   // ---- Key inventory: cross-reference keys to holders ----
@@ -623,42 +408,7 @@ async function main() {
       };
     }
 
-    const inventory = fixtures.roles
-      .filter(r => !category || r.category === category)
-      .map(role => {
-        const holders = fixtures.users.filter(u => u.roles.includes(role.name));
-        return {
-          keyName: role.name,
-          vistaKey: role.vistaKey,
-          description: role.description,
-          category: role.category || 'uncategorized',
-          holderCount: holders.length,
-          holders: holders.map(h => ({
-            id: h.id,
-            name: h.name,
-            duz: h.vistaGrounding.duz,
-            status: h.status,
-          })),
-          vistaGrounding: role.vistaGrounding,
-        };
-      });
-
-    return {
-      ok: true,
-      source: 'fixture',
-      sourceStatus: keysRes.error ? 'ddr-unavailable' : 'integration-pending',
-      tenantId,
-      data: inventory,
-      vistaNote: keysRes.error || null,
-      summary: {
-        totalKeys: inventory.length,
-        clinicalKeys: inventory.filter(k => k.category === 'clinical').length,
-        adminKeys: inventory.filter(k => k.category === 'administrative').length,
-        unassignedKeys: inventory.filter(k => k.holderCount === 0).length,
-      },
-      integrationNote:
-        'Prefer DDR LISTER(File 19.1). Fixture shown when DDR is unavailable.',
-    };
+    return { ok: false, source: 'error', tenantId, error: keysRes.error || 'VistA security keys unavailable (DDR LISTER File 19.1)' };
   });
 
   // ---- E-signature status summary ----
@@ -705,39 +455,7 @@ async function main() {
       }
     }
 
-    const summary = fixtures.users.map(u => ({
-      id: u.id,
-      name: u.name,
-      duz: u.vistaGrounding.duz,
-      status: u.status,
-      esigStatus: u.vistaGrounding.electronicSignature
-        ? u.vistaGrounding.electronicSignature.status
-        : 'unknown',
-      hasCode: u.vistaGrounding.electronicSignature
-        ? u.vistaGrounding.electronicSignature.hasCode
-        : false,
-    }));
-
-    return {
-      ok: true,
-      source: 'fixture',
-      sourceStatus: 'integration-pending',
-      tenantId,
-      data: summary,
-      aggregates: {
-        total: summary.length,
-        active: summary.filter(u => u.esigStatus === 'active').length,
-        notConfigured: summary.filter(u => u.esigStatus === 'not-configured').length,
-        revoked: summary.filter(u => u.esigStatus === 'revoked').length,
-      },
-      integrationNote:
-        'Live path: ORWU NEWPERS + per-user DDR GETS (20.2-20.4). Fixture shown when VistA/DDR unavailable.',
-      vistaGrounding: {
-        readRpc: 'DDR GETS ENTRY DATA',
-        field: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
-        note: 'E-sig codes are hashed in VistA and never retrievable. Presence check only.',
-      },
-    };
+    return { ok: false, source: 'error', tenantId, error: 'VistA e-signature data unavailable (DDR GETS 200, fields 20.2-20.4)' };
   });
 
   // ---- VistA DDR family probe (no terminal; RPC-only) ----
@@ -1194,89 +912,44 @@ async function main() {
   app.get('/api/tenant-admin/v1/dashboard', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-
     const probe = await probeVista();
-    let source = 'fixture';
-
-    // Try VistA-first for counts
-    let userCount = fixtures.users.length;
-    let activeUserCount = fixtures.users.filter(u => u.status === 'active').length;
-    let clinicCount = 0;
-    let wardCount = 0;
-    let facilityCount = 0;
-    let bedCount = 0;
-    let roleCount = fixtures.roles.length;
-    let deviceCount = 0;
-    let esigActiveCount = 0;
-
-    if (probe.ok) {
-      try {
-        const usersRes = await fetchVistaUsers('');
-        const clinicsRes = await fetchVistaClinics('');
-        const wardsRes = await fetchVistaWards();
-        const keysRes = await ddrListerSecurityKeys();
-        if (usersRes.ok) { userCount = usersRes.data.length; activeUserCount = userCount; source = 'vista'; }
-        if (clinicsRes.ok) { clinicCount = clinicsRes.data.length; facilityCount = clinicsRes.data.length; }
-        if (wardsRes.ok) { wardCount = wardsRes.data.length; }
-        if (keysRes.ok) { roleCount = keysRes.data.length; }
-        try {
-          const devRows = await lockedRpc(async () => {
-            const broker = await getBroker();
-            const lines = await broker.callRpcWithList('DDR LISTER', [
-              { type: 'list', value: { FILE: '3.5', FIELDS: '.01', FLAGS: 'IP', MAX: '999' } },
-            ]);
-            const parsed = parseDdrListerResponse(lines);
-            return parsed.ok ? parsed.data.length : 0;
-          });
-          deviceCount = devRows;
-        } catch (_) { /* ignore */ }
-        if (usersRes.ok) {
-          const es = await fetchVistaEsigStatusForUsers(usersRes.data, 120);
-          if (es.ok) { esigActiveCount = es.data.filter(u => u.hasCode).length; }
-        }
-      } catch (_) { /* fall back to fixture counts */ }
-    } else {
-      function countFacilities(items) {
-        let n = 0;
-        for (const f of items) { n++; if (f.children) n += countFacilities(f.children); }
-        return n;
-      }
-      function countClinics(items) {
-        let n = 0;
-        for (const f of items) {
-          if (f.type === 'Clinic') n++;
-          if (f.children) n += countClinics(f.children);
-        }
-        return n;
-      }
-      facilityCount = countFacilities(fixtures.facilities);
-      clinicCount = countClinics(fixtures.facilities);
-      wardCount = fixtures.facilities.reduce((s, inst) => s + (inst.wards || []).length, 0);
-      bedCount = fixtures.facilities.reduce((s, inst) =>
-        s + (inst.wards || []).reduce((ws, w) => ws + (w.beds || []).length, 0), 0);
-      esigActiveCount = fixtures.users.filter(u =>
-        u.vistaGrounding.electronicSignature && u.vistaGrounding.electronicSignature.status === 'active'
-      ).length;
+    if (!probe.ok) {
+      return { ok: false, source: 'error', tenantId, error: probe.error || 'VistA unreachable — dashboard requires live VistA connection' };
     }
-
-    return {
-      ok: true,
-      source,
-      tenantId,
-      data: {
-        userCount,
-        activeUserCount,
-        facilityCount,
-        clinicCount,
-        wardCount,
-        bedCount,
-        roleCount,
-        esigActiveCount,
-        deviceCount,
-        vistaGrounding: probe.ok ? 'connected' : 'integration-pending',
-        vistaUrl: probe.url || null,
-        moduleStatus: { enabled: 0, total: 0 }
+    let userCount = 0, activeUserCount = 0, clinicCount = 0, wardCount = 0;
+    let facilityCount = 0, bedCount = 0, roleCount = 0, deviceCount = 0, esigActiveCount = 0;
+    try {
+      const usersRes = await fetchVistaUsers('');
+      const clinicsRes = await fetchVistaClinics('');
+      const wardsRes = await fetchVistaWards();
+      const keysRes = await ddrListerSecurityKeys();
+      if (usersRes.ok) { userCount = usersRes.data.length; activeUserCount = userCount; }
+      if (clinicsRes.ok) { clinicCount = clinicsRes.data.length; facilityCount = clinicsRes.data.length; }
+      if (wardsRes.ok) { wardCount = wardsRes.data.length; }
+      if (keysRes.ok) { roleCount = keysRes.data.length; }
+      try {
+        const devRows = await lockedRpc(async () => {
+          const broker = await getBroker();
+          const lines = await broker.callRpcWithList('DDR LISTER', [
+            { type: 'list', value: { FILE: '3.5', FIELDS: '.01', FLAGS: 'IP', MAX: '999' } },
+          ]);
+          const parsed = parseDdrListerResponse(lines);
+          return parsed.ok ? parsed.data.length : 0;
+        });
+        deviceCount = devRows;
+      } catch (_) { /* device count unavailable */ }
+      if (usersRes.ok) {
+        const es = await fetchVistaEsigStatusForUsers(usersRes.data, 120);
+        if (es.ok) { esigActiveCount = es.data.filter(u => u.hasCode).length; }
       }
+    } catch (e) {
+      return { ok: false, source: 'error', tenantId, error: `VistA dashboard data fetch failed: ${e.message}` };
+    }
+    return {
+      ok: true, source: 'vista', tenantId,
+      data: { userCount, activeUserCount, facilityCount, clinicCount, wardCount, bedCount,
+        roleCount, esigActiveCount, deviceCount,
+        vistaGrounding: 'connected', vistaUrl: probe.url || null, moduleStatus: { enabled: 0, total: 0 } },
     };
   });
 

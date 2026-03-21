@@ -26,6 +26,7 @@
 5. **Terminal-first.** VistA Evolved is terminal-first. Do not build broad control-plane GUI or speculative product UI unless explicitly instructed.
 6. **Repo files are the source of truth, not model memory.** Force alignment through files, contracts, CI, and merge gates.
 7. **No documentation sprawl.** Only approved doc categories. See rule 2 below.
+8. **VistA-only data for tenant-admin.** Every tenant-admin route reads from and writes to the live VistA system exclusively. No fixture files, no JSON fallbacks, no alternate data sources. If VistA is unreachable, return `{ok: false, source: "error"}`. See `.cursor/rules/40-vista-only-data-source.mdc`.
 
 ---
 

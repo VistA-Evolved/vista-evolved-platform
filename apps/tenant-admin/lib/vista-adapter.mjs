@@ -7,7 +7,7 @@
  * Behavior:
  *   - If VISTA_ACCESS_CODE + VISTA_VERIFY_CODE are set: connects to broker directly
  *   - If not configured or unreachable: returns { ok: false, source: 'unavailable' }
- *   - Caller is responsible for fixture fallback
+ *   - NO fallbacks of any kind. VistA is the only data source.
  *
  * This adapter never fakes success. If VistA is unreachable, it says so.
  */

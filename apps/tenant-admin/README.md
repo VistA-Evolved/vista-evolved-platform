@@ -1,9 +1,9 @@
-# Tenant Admin — VistA-First Operational Shell
+# Tenant Admin — VistA-Only Operational Shell
 
-> **Implementation posture:** VistA-first with fixture fallback for degraded mode.
+> **Implementation posture:** VistA-ONLY. No fixture files, no JSON fallbacks, no alternate data sources.
 > **VistA grounding:** Direct XWB RPC broker connection via `lib/xwb-client.mjs`.
-> All VistA-owned data surfaces connect to the live broker first; fixture data
-> serves only as fallback when VistA is unreachable, with honest `source` labeling.
+> Every route reads from and writes to the live VistA system exclusively.
+> If VistA is unreachable, routes return `{ok: false, source: "error"}`.
 > **Proven against:** `local-vista-utf8` distro lane (port 9434) — 118 users,
 > 44 clinics, 29 wards returned from live VistA RPCs.
 > **Runtime:** Standalone Fastify + SPA on port 4520.
@@ -12,37 +12,49 @@
 
 ## What this is
 
-A working **VistA-first operational shell** for tenant-scoped administration.
-It serves 15 API surfaces (13 with dedicated UI renders) with layout, navigation, filter rails, context rails,
-breadcrumbs, and a badge vocabulary that dynamically reflects the actual data source.
+A working **VistA-only operational shell** for tenant-scoped administration.
+It serves 20+ API surfaces with layout, navigation, filter rails, context rails,
+breadcrumbs, and a badge vocabulary that reflects the actual data source.
 
 The XWB broker client (`lib/xwb-client.mjs`) connects directly to the VistA
 RPC broker using the XWB protocol (TCP, cipher pad authentication, context
-negotiation). Routes attempt VistA-first reads and fall back to fixture data
-when VistA is unreachable. Every response includes an honest `source` field
-(`"vista"`, `"fixture"`, or `"catalog"`) displayed as a badge in the UI.
+negotiation). Every response includes an honest `source` field
+(`"vista"`, `"catalog"`, or `"error"`) displayed as a badge in the UI.
+
+**RULE: There are NO fixture files, NO JSON fallbacks, NO alternate data sources.
+VistA is the sole source of truth. If VistA is unreachable, the UI shows an
+explicit error state — never fake or cached data.**
 
 ### Surfaces
 
-| Surface | Route | Primary source | Fallback | Status |
-|---------|-------|---------------|----------|--------|
-| Dashboard | `#/dashboard` | VistA (aggregated counts) | Fixture counts | ✅ VistA-first |
-| VistA Status | `#/` (status bar) | VistA broker probe | Error state | ✅ VistA-direct |
-| User List | `#/users` | `ORWU NEWPERS` | `fixtures/users.json` | ✅ VistA-first |
-| User Detail | `#/users/:id` | `DDR GETS` File 200 / `ORWU NEWPERS` | `fixtures/users.json` | ✅ VistA-first |
-| Topology | `#/topology` | `XUS DIVISION GET` + `ORWU CLINLOC` + `ORQPT WARDS` | `fixtures/facilities.json` | ✅ VistA-first |
-| Facility List | `#/facilities` | `XUS DIVISION GET` + `ORWU CLINLOC` | `fixtures/facilities.json` | ✅ VistA-first |
-| Facility Detail | `#/facilities/:id` | `ORWU CLINLOC` / `ORQPT WARDS` (by IEN) | `fixtures/facilities.json` | ✅ VistA-first |
-| Clinic List | `#/clinics` | `ORWU CLINLOC` | `fixtures/facilities.json` | ✅ VistA-first |
-| Ward List | `#/wards` | `ORQPT WARDS` | `fixtures/facilities.json` | ✅ VistA-first |
-| Role Assignment | `#/roles` | `DDR LISTER` File 19.1 | `fixtures/roles.json` | ✅ VistA-first |
-| Key Inventory | `#/key-inventory` | `DDR LISTER` File 19.1 | `fixtures/roles.json` | ✅ VistA-first |
-| E-Sig Status | `#/esig-status` | `ORWU NEWPERS` + `DDR GETS` 20.2-20.4 | `fixtures/users.json` | ✅ VistA-first |
-| VistA tools | `#/vista-tools` | DDR probe + direct-write posture | `GET /vista/ddr-probe` | ✅ Platform-owned |
-| Devices | `#/devices` | `DDR LISTER` File 3.5 | — | ✅ VistA-direct |
-| Kernel params | `#/params/kernel` | `DDR GETS` File 8989.3 | — | ✅ VistA-direct |
+| Surface | Route | VistA source | Status |
+|---------|-------|-------------|--------|
+| Dashboard | `#/dashboard` | VistA (aggregated counts from all RPCs) | VistA-only |
+| VistA Status | `#/` (status bar) | VistA broker probe | VistA-direct |
+| User List | `#/users` | `ORWU NEWPERS` | VistA-only |
+| User Detail | `#/users/:id` | `DDR GETS` File 200 / `ORWU NEWPERS` | VistA-only |
+| Topology | `#/topology` | `XUS DIVISION GET` + `ORWU CLINLOC` + `ORQPT WARDS` | VistA-only |
+| Facility List | `#/facilities` | `XUS DIVISION GET` + `ORWU CLINLOC` | VistA-only |
+| Facility Detail | `#/facilities/:id` | `ORWU CLINLOC` / `ORQPT WARDS` (by IEN) | VistA-only |
+| Clinic List | `#/clinics` | `ORWU CLINLOC` | VistA-only |
+| Clinic Detail | `#/clinics/:ien` | `DDR GETS` File 44 | VistA-only |
+| Ward List | `#/wards` | `ORQPT WARDS` | VistA-only |
+| Role Assignment | `#/roles` | `DDR LISTER` File 19.1 | VistA-only |
+| Key Inventory | `#/key-inventory` | `DDR LISTER` File 19.1 | VistA-only |
+| E-Sig Status | `#/esig-status` | `ORWU NEWPERS` + `DDR GETS` 20.2-20.4 | VistA-only |
+| Devices | `#/devices` | `DDR LISTER` File 3.5 | VistA-only |
+| Kernel params | `#/params/kernel` | `DDR GETS` File 8989.3 | VistA-only |
+| Treating Specialties | `#/treating-specialties` | `DDR LISTER` File 45.7 | VistA-only |
+| Room-Beds | `#/room-beds` | `DDR LISTER` File 405.4 | VistA-only |
+| Installed Packages | `#/packages` | `DDR LISTER` File 9.4 | VistA-only |
+| Scheduling Config | `#/scheduling-config` | `DDR LISTER` File 409.1 | VistA-only |
+| Drug Formulary | `#/pharmacy-config` | `DDR LISTER` File 50 | VistA-only |
+| Lab Tests | `#/lab-config` | `DDR LISTER` File 60 | VistA-only |
+| TaskMan | `#/taskman` | `DDR LISTER` File 14.4 | VistA-only |
+| Titles | `#/titles` | `DDR LISTER` File 3.1 | VistA-only |
+| VistA tools | `#/vista-tools` | DDR probe + direct-write posture | Platform-owned |
 
-### VistA adapter (lib/vista-adapter.mjs → lib/xwb-client.mjs)
+### VistA adapter (lib/vista-adapter.mjs -> lib/xwb-client.mjs)
 
 | Function | RPC | Purpose |
 |----------|-----|---------|
@@ -61,61 +73,40 @@ when VistA is unreachable. Every response includes an honest `source` field
 | `callZveRpc(name, params)` | Any `ZVE*` RPC | Call distro overlay RPC |
 | `probeDdrRpcFamily()` | DDR family probe | Check DDR RPC availability |
 | `fetchVistaEsigStatusForUsers(users)` | `DDR GETS ENTRY DATA` | Bulk e-sig status (fields 20.2-20.4) |
+| `parseDdrListerResponse(lines)` | (parser) | Parse DDR LISTER raw output |
 
 ### Partially integrated surfaces
 
 Holder-count cross-referencing for keys/roles requires reading `^XUSEC(KEY,DUZ)`
-or File 200 field 51 — not yet wired in this slice. When VistA DDR LISTER
+or File 200 field 51 -- not yet wired in this slice. When VistA DDR LISTER
 returns keys but holder lookup fails, `holderCount: 0` is shown with an
 integration note.
-
-### Fixture files (degraded-mode fallback only)
-
-Fixture files in `fixtures/` are **not the source of truth** for VistA-owned data.
-They exist solely as degraded-mode fallback when VistA is unreachable. Each file
-contains a `_meta` object documenting its classification and truth ownership.
-See `docs/explanation/fixture-inventory-and-truth-ownership-audit.md` for the
-full inventory and classification.
-
-| File | Class | Truth owner | Happy-path role |
-|------|-------|-------------|-----------------|
-| `users.json` | C (degraded-mode) | VistA File 200 | Fallback only |
-| `roles.json` | C (degraded-mode) | VistA File 19.1 | Fallback + integration-pending |
-| `facilities.json` | C (degraded-mode) | VistA Files 4/40.8/44/42 | Fallback only |
 
 ---
 
 ## Running
 
-### With VistA broker (recommended)
+### With VistA broker (REQUIRED)
+
+VistA must be running and reachable. There is no fallback mode.
 
 ```bash
 cd apps/tenant-admin
+node --env-file=.env.local server.mjs    # port 4520
+```
 
-# Set broker connection env vars
+Or set env vars directly:
+
+```bash
 export VISTA_HOST=127.0.0.1
 export VISTA_PORT=9434
 export VISTA_ACCESS_CODE=PRO1234
 export VISTA_VERIFY_CODE="PRO1234!!"
 export VISTA_CONTEXT="OR CPRS GUI CHART"
-
-node server.mjs    # port 4520
-```
-
-Or use the `.env.local` file:
-
-```bash
-node --env-file=.env.local server.mjs
+node server.mjs
 ```
 
 Open: `http://127.0.0.1:4520/?tenantId=tenant-ph-001#/dashboard`
-
-### Without VistA (fixture-only mode)
-
-```bash
-cd apps/tenant-admin
-node server.mjs    # all surfaces fall back to fixture data
-```
 
 ### From operator console
 
@@ -126,7 +117,7 @@ The `tenantId` and `cpReturnUrl` are passed as query parameters.
 
 | Lane | Container | Broker port | Credentials | Status |
 |------|-----------|-------------|-------------|--------|
-| UTF-8 distro | `local-vista-utf8` | 9434 | PRO1234 / PRO1234!! | ✅ Proven |
+| UTF-8 distro | `local-vista-utf8` | 9434 | PRO1234 / PRO1234!! | Proven |
 | VEHU sandbox | `vehu` | 9431 | PRO1234 / PRO1234!! | Compatible |
 | Legacy | `wv` | 9430 | PROV123 / PROV123!! | Compatible |
 
@@ -137,8 +128,7 @@ The `tenantId` and `cpReturnUrl` are passed as query parameters.
 | Doc | Purpose |
 |-----|---------|
 | `docs/explanation/tenant-admin-architecture-and-boundaries.md` | Workspace identity, concern areas, boundaries |
-| `docs/explanation/fixture-inventory-and-truth-ownership-audit.md` | Fixture classification and truth ownership |
-| `docs/explanation/tenant-admin-happy-path-source-map.md` | Per-surface data source map (13 surfaces) |
+| `docs/explanation/tenant-admin-happy-path-source-map.md` | Per-surface data source map |
 | `docs/explanation/live-broker-canonical-path.md` | Proven XWB broker connection path |
 | `docs/explanation/tenant-admin-vista-truth-map.md` | VistA file/RPC grounding targets |
 | `docs/explanation/tenant-admin-vista-admin-truth-discovery-pack.md` | 7-family VistA truth discovery |
@@ -156,8 +146,22 @@ The `tenantId` and `cpReturnUrl` are passed as query parameters.
 - **Single-socket XWB broker:** The XWB client maintains one TCP socket. Concurrent RPC calls must be serialized (no `Promise.all`). All multi-RPC routes use sequential calls.
 - **No tenant-scoped session auth:** `tenantId` is passed as a query parameter, not enforced by session.
 - **Direct writes require distro RPCs:** Key assignment and some user ops need `INSTALL^ZVEUSMG` on the target instance. See `vista-evolved-vista-distro/docs/how-to/zveusmg-overlay-install.md`.
-- **User detail by IEN:** Uses `ORWU NEWPERS` empty search then filters by IEN. Users not in the first page of results may fall through to fixture.
+- **User detail by IEN:** Uses `ORWU NEWPERS` empty search then filters by IEN. Users not in the first page of results will return an error.
 - **Kernel params:** `GET/PUT /params/kernel` (allow-listed fields on File 8989.3).
+
+## Data source policy
+
+**NO FIXTURE FILES. NO JSON FALLBACKS. NO ALTERNATE DATA SOURCES.**
+
+Every route in this application reads from and writes to the live VistA system.
+If VistA is unreachable, the route returns `{ok: false, source: "error", error: "..."}`.
+The UI displays an error badge and message — never fake or stale data.
+
+This policy is enforced by:
+1. Server header comment in `server.mjs`
+2. This README
+3. Cursor rule `.cursor/rules/vista-only-data-source.mdc`
+4. Code review: any `readFile` of JSON data files or `source: 'fixture'` is a rejection-worthy violation.
 
 ## Next steps
 
