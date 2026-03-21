@@ -278,7 +278,7 @@ export async function probeDdrRpcFamily() {
   };
 
   await tryRpc('DDR GETS ENTRY DATA', [
-    { type: 'list', value: { FILE: '200', IENS: `${duz},`, FIELDS: '.01' } },
+    { type: 'list', value: { FILE: '200', IENS: `${duz},`, FIELDS: '.01', FLAGS: 'IE' } },
   ]);
 
   await tryRpc('DDR VALIDATOR', [
@@ -326,8 +326,12 @@ export async function probeDdrRpcFamily() {
  * @param {string} fields - Semicolon-separated field numbers (e.g. ".01;1;4;8;20.2;20.3;20.4")
  */
 function parseDdrGetsLines(lines) {
-  // DDR GETS response: fileNum^iens^fieldNum^externalValue^internalValue
+  // DDR GETS response with FLAGS=IE: fileNum^iens^fieldNum^internalValue^externalValue
+  // With FLAGS=I: fileNum^iens^fieldNum^internalValue
+  // With FLAGS=E: fileNum^iens^fieldNum^^externalValue
+  // Prefer external value (human-readable) over internal value.
   const fieldsOut = {};
+  const fieldsInternal = {};
   const allLines = [];
   for (const line of lines) {
     allLines.push(line);
@@ -336,25 +340,25 @@ function parseDdrGetsLines(lines) {
     if (parts.length < 3) continue;
     const fieldNum = parts[2];
     if (!fieldNum || fieldNum === '') continue;
-    const extVal = parts[3] || '';
-    const intVal = parts[4] || '';
+    const intVal = parts[3] || '';
+    const extVal = parts[4] || '';
     fieldsOut[fieldNum] = extVal || intVal;
+    fieldsInternal[fieldNum] = intVal;
   }
   const hasError = allLines.some(l => l === '[ERROR]' || l.startsWith('[ERROR]'));
-  return { fieldsOut, allLines, hasError };
+  return { fieldsOut, fieldsInternal, allLines, hasError };
 }
 
 /**
  * Generic DDR GETS ENTRY DATA with field-by-field fallback.
  * Many VistA instances return [ERROR] for multi-field requests but succeed per-field.
  */
-export async function ddrGetsEntry(file, ien, fields) {
+export async function ddrGetsEntry(file, ien, fields, flags = 'IE') {
   return lockedRpc(async () => {
     try {
       const broker = await getBroker();
-      // First try all fields at once
       const lines = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
-        { type: 'list', value: { FILE: String(file), IENS: `${ien},`, FIELDS: fields } },
+        { type: 'list', value: { FILE: String(file), IENS: `${ien},`, FIELDS: fields, FLAGS: flags } },
       ]);
       const result = parseDdrGetsLines(lines);
       if (!result.hasError && Object.keys(result.fieldsOut).length > 0) {
@@ -367,7 +371,7 @@ export async function ddrGetsEntry(file, ien, fields) {
       for (const f of fieldList) {
         try {
           const fl = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
-            { type: 'list', value: { FILE: String(file), IENS: `${ien},`, FIELDS: f } },
+            { type: 'list', value: { FILE: String(file), IENS: `${ien},`, FIELDS: f, FLAGS: flags } },
           ]);
           const r = parseDdrGetsLines(fl);
           if (!r.hasError) Object.assign(fieldsOut, r.fieldsOut);
