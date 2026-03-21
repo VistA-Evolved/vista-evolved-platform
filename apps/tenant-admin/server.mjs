@@ -190,7 +190,14 @@ async function main() {
   app.get('/api/tenant-admin/v1/roles', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-    return { ok: true, source: 'fixture', tenantId, data: fixtures.roles };
+    const enrichedRoles = fixtures.roles.map(r => ({
+      ...r,
+      assignedUsers: (r.assignedUsers || []).map(uid => {
+        const user = fixtures.users.find(u => u.id === uid);
+        return user ? { id: user.id, name: user.name } : { id: uid, name: uid };
+      }),
+    }));
+    return { ok: true, source: 'fixture', tenantId, data: enrichedRoles };
   });
 
   // ---- Clinic list: extract clinics from facility hierarchy ----
@@ -210,8 +217,17 @@ async function main() {
     function extractClinics(items, parentDivision) {
       let clinics = [];
       for (const f of items) {
-        if (f.type === 'Clinic' && (!typeFilter || f.vistaGrounding.locationType === typeFilter)) {
-          clinics.push({ ...f, parentDivision: parentDivision || null });
+        if (f.type === 'Clinic' && (!typeFilter || (f.vistaGrounding || {}).locationType === typeFilter)) {
+          const vg = f.vistaGrounding || {};
+          clinics.push({
+            ...f,
+            abbreviation: vg.abbreviation || null,
+            stopCode: vg.stopCode || null,
+            defaultSlotLength: vg.defaultSlotLength || null,
+            file44Ien: vg.file44Ien || null,
+            ien: vg.file44Ien || null,
+            parentDivision: parentDivision || null,
+          });
         }
         if (f.children) {
           const divName = f.type === 'Division' ? f.name : parentDivision;
@@ -261,9 +277,12 @@ async function main() {
     for (const inst of fixtures.facilities) {
       if (inst.wards) {
         for (const w of inst.wards) {
+          const vg = w.vistaGrounding || {};
           wards.push({
             ...w,
             parentInstitution: inst.name,
+            specialty: vg.specialty ? (typeof vg.specialty === 'object' ? vg.specialty.name : vg.specialty) : null,
+            file42Ien: vg.file42Ien || null,
             bedCount: w.beds ? w.beds.length : 0,
             availableBeds: w.beds ? w.beds.filter(b => b.status === 'available').length : 0,
             occupiedBeds: w.beds ? w.beds.filter(b => b.status === 'occupied').length : 0,

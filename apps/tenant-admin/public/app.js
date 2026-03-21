@@ -1,16 +1,18 @@
 /**
  * Tenant Admin — Dual-Mode SPA (VistA-first, fixture fallback)
  *
- * Hash-based routing with 6 render functions matching the first-slice surfaces
- * defined in tenant-admin-design-contract-v1.md.
+ * Hash-based routing with 11 render functions matching the tenant-admin surfaces
+ * defined in tenant-admin-design-contract-v1.md (plus later-slice additions).
  *
  * Implementation posture: dual-mode — VistA adapter + fixture fallback.
- * When VISTA_API_URL is configured and VistA is reachable, user data comes from
- * VistA RPCs (ORWU NEWPERS, ORWU HASKEY). Otherwise, fixture data is used.
- * Source badges honestly display "VistA" or "FIXTURE" per surface.
+ * When VISTA_API_URL is configured and VistA is reachable, data comes from
+ * VistA RPCs (ORWU NEWPERS, ORWU HASKEY, XUS DIVISION GET, ORWU CLINLOC,
+ * ORQPT WARDS). Otherwise, fixture data is used.
+ * Source badges honestly display "VistA", "FIXTURE", or "TERMINAL" per surface.
  *
  * Surfaces: Dashboard, User List, User Detail, Role Assignment,
- *           Facility List, Facility Detail
+ *           Facility List, Facility Detail, Clinic List, Ward List,
+ *           Key Inventory, E-Sig Status, Guided Write Workflows
  */
 
 // ---------------------------------------------------------------------------
@@ -113,6 +115,8 @@ function route() {
     renderWardList(content);
   } else if (hash === '#/guided-tasks') {
     renderGuidedTasks(content);
+  } else if (hash === '#/modules' || hash === '#/connections' || hash === '#/site-params') {
+    content.innerHTML = `<div class="page-header"><h1>Coming Soon</h1><span class="source-posture pending">PLANNED</span></div><div class="empty-message">This surface is planned for a future slice. <a href="#/dashboard">Return to dashboard \u2192</a></div>`;
   } else {
     renderDashboard(content);
   }
@@ -413,7 +417,7 @@ async function renderRoleAssignment(el) {
       <td><span class="badge badge-key">${escapeHtml(r.name)}</span></td>
       <td>${escapeHtml(r.description)}</td>
       <td>${r.vistaGrounding.file19_1Ien ? 'IEN ' + r.vistaGrounding.file19_1Ien : '—'}</td>
-      <td>${r.assignedUsers.length ? r.assignedUsers.map(u => escapeHtml(u)).join(', ') : '<span style="color:var(--color-text-muted)">None</span>'}</td>
+      <td>${r.assignedUsers.length ? r.assignedUsers.map(u => typeof u === 'object' ? '<a href="#/users/' + encodeURIComponent(u.id) + '">' + escapeHtml(u.name) + '</a>' : escapeHtml(u)).join(', ') : '<span style="color:var(--color-text-muted)">None</span>'}</td>
     </tr>`).join('');
 
   el.innerHTML = `
