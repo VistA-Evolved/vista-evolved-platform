@@ -140,12 +140,18 @@ function escapeHtml(str) {
 
 /**
  * Render a source posture badge based on the API response source field.
- * @param {string} source - 'vista', 'fixture', or 'unavailable'
+ * @param {string} source - 'vista', 'fixture', 'catalog', 'integration-pending', etc.
  * @returns {string} HTML for the badge
  */
 function sourceBadge(source) {
   if (source === 'vista') {
     return '<span class="source-posture vista">VistA</span>';
+  }
+  if (source === 'catalog') {
+    return '<span class="source-posture catalog">CATALOG</span>';
+  }
+  if (source === 'integration-pending') {
+    return '<span class="source-posture pending">INTEGRATION-PENDING</span>';
   }
   return '<span class="source-posture fixture">FIXTURE</span>';
 }
@@ -164,7 +170,7 @@ async function renderDashboard(el) {
   const res = await api('dashboard');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load dashboard</div>`; return; }
   const d = res.data;
-  const badge = sourceBadge(res.source);
+  const badge = sourceBadge(res.sourceStatus || res.source);
   const groundingStyle = d.vistaGrounding === 'connected' ? 'color:#065f46' : '';
 
   el.innerHTML = `
@@ -225,7 +231,7 @@ async function renderUserList(el) {
   const res = await api('users');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load users</div>`; return; }
   const users = res.data;
-  const badge = sourceBadge(res.source);
+  const badge = sourceBadge(res.sourceStatus || res.source);
   const vistaNote = res.vistaStatus ? `<span class="vista-note">(VistA: ${escapeHtml(res.vistaStatus)})</span>` : '';
 
   if (!users.length) {
@@ -330,7 +336,7 @@ async function renderUserDetail(el, userId) {
       <h1>${escapeHtml(u.name)}</h1>
       <span class="badge ${userStatus === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(userStatus)}</span>
       ${vg.disuser ? '<span class="badge badge-inactive">DISUSER</span>' : ''}
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
 
     <div class="detail-layout">
@@ -398,7 +404,7 @@ async function renderUserDetail(el, userId) {
           <div class="context-label">Grounding</div>
           <div class="context-value"><span class="badge ${groundingStatus === 'grounded' || groundingStatus === 'vista-ien' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(groundingStatus)}</span></div>
           <div class="context-label">Source</div>
-          <div class="context-value">${sourceBadge(res.source)}</div>
+          <div class="context-value">${sourceBadge(res.sourceStatus || res.source)}</div>
           <div class="context-divider"></div>
           <div class="context-label">Write Actions</div>
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">
@@ -423,13 +429,16 @@ async function renderRoleAssignment(el) {
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load roles</div>`; return; }
   const roles = res.data;
 
-  const rows = roles.map(r => `
+  const rows = roles.map(r => {
+    const vg = r.vistaGrounding || {};
+    return `
     <tr>
       <td><span class="badge badge-key">${escapeHtml(r.name)}</span></td>
       <td>${escapeHtml(r.description)}</td>
-      <td>${r.vistaGrounding.file19_1Ien ? 'IEN ' + r.vistaGrounding.file19_1Ien : '—'}</td>
+      <td>${vg.file19_1Ien ? 'IEN ' + vg.file19_1Ien : '—'}</td>
       <td>${r.assignedUsers.length ? r.assignedUsers.map(u => typeof u === 'object' ? '<a href="#/users/' + encodeURIComponent(u.id) + '">' + escapeHtml(u.name) + '</a>' : escapeHtml(u)).join(', ') : '<span style="color:var(--color-text-muted)">None</span>'}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   const noteHtml = res.integrationNote
     ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
@@ -440,7 +449,7 @@ async function renderRoleAssignment(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Role Assignment</h1>
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
     ${noteHtml}
     <table class="data-table">
@@ -498,7 +507,7 @@ async function renderFacilityList(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Facility List</h1>
-      ${sourceBadge(res.source)}${vistaNote}
+      ${sourceBadge(res.sourceStatus || res.source)}${vistaNote}
     </div>
     <div class="filter-rail">
       <input type="text" id="fac-search" placeholder="Search facilities…" />
@@ -516,6 +525,31 @@ async function renderFacilityList(el) {
         ${renderTree(facilities, 0)}
       </ul>
     </div>`;
+
+  // Wire facility filter controls
+  const searchInput = el.querySelector('#fac-search');
+  const typeFilter = el.querySelector('#fac-type-filter');
+  const countSpan = el.querySelector('.result-count');
+  const treeEl = el.querySelector('#fac-tree');
+
+  function applyFilters() {
+    const q = (searchInput.value || '').toLowerCase();
+    const t = typeFilter.value;
+    const items = treeEl.querySelectorAll('li');
+    let visible = 0;
+    items.forEach(li => {
+      const name = (li.querySelector('a') || {}).textContent || '';
+      const type = (li.querySelector('.tree-type') || {}).textContent || '';
+      const matchName = !q || name.toLowerCase().includes(q);
+      const matchType = !t || type === t;
+      li.style.display = (matchName && matchType) ? '' : 'none';
+      if (matchName && matchType) visible++;
+    });
+    countSpan.textContent = visible + ' facilities';
+  }
+
+  if (searchInput) searchInput.addEventListener('input', applyFilters);
+  if (typeFilter) typeFilter.addEventListener('change', applyFilters);
 }
 
 // ---------------------------------------------------------------------------
@@ -605,7 +639,7 @@ async function renderFacilityDetail(el, facId) {
     <div class="page-header">
       <h1>${escapeHtml(f.name)}</h1>
       <span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(f.status)}</span>
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
 
     <div class="detail-layout">
@@ -639,7 +673,7 @@ async function renderFacilityDetail(el, facId) {
           <div class="context-value"><span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(f.status)}</span></div>
           <div class="context-divider"></div>
           <div class="context-label">Source</div>
-          <div class="context-value">${sourceBadge(res.source)}</div>
+          <div class="context-value">${sourceBadge(res.sourceStatus || res.source)}</div>
           <div class="context-label">VistA Grounding</div>
           <div class="context-value"><span class="badge ${(f.vistaGrounding || {}).status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml((f.vistaGrounding || {}).status || 'unknown')}</span></div>
           <div class="context-divider"></div>
@@ -684,7 +718,7 @@ async function renderClinicList(el) {
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Clinic List</div>
     <div class="page-header">
       <h1>Clinic List</h1>
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
     <div class="card-grid" style="margin-bottom:1rem;">
       <div class="card"><div class="card-label">Total Clinics</div><div class="card-value">${summary.totalClinics ?? clinics.length}</div></div>
@@ -747,7 +781,7 @@ async function renderWardList(el) {
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Ward List</div>
     <div class="page-header">
       <h1>Ward List</h1>
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
     <div class="card-grid" style="margin-bottom:1rem;">
       <div class="card"><div class="card-label">Total Wards</div><div class="card-value">${summary.totalWards ?? wards.length}</div></div>
@@ -817,7 +851,7 @@ async function renderKeyInventory(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Key Inventory</h1>
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
     <div class="card-grid" style="margin-bottom:20px">
       <div class="card">
@@ -890,7 +924,7 @@ async function renderEsigStatus(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Electronic Signature Status</h1>
-      ${sourceBadge(res.source)}
+      ${sourceBadge(res.sourceStatus || res.source)}
     </div>
     <div class="card-grid" style="margin-bottom:20px">
       <div class="card">
@@ -951,7 +985,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read user list: check new user appears in File 200 B-index',
       verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'VistA user creation requires multi-file coordination (200, 200.01, 8930.3) with MUMPS triggers. No safe write RPC exists for full user provisioning.',
     },
     {
@@ -968,7 +1002,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read user detail: confirm changed fields reflect new values',
       verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'User field edits involve FileMan cross-references and triggers that must execute within the MUMPS environment.',
     },
     {
@@ -987,7 +1021,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read user detail: confirm status shows inactive/DISUSER=YES',
       verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'User deactivation involves DISUSER flag plus potential key revocation and signature code clearing. Multiple cross-referenced fields must be coordinated.',
     },
     {
@@ -1006,7 +1040,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read user detail: confirm status active, DISUSER=NO',
       verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Reactivation requires clearing DISUSER, possibly resetting verify code, and re-allocating keys — all FileMan-coordinated operations.',
     },
     {
@@ -1024,7 +1058,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read e-sig status: confirm user shows esigStatus=active',
       verifyRoute: '#/esig-status',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'E-sig codes are hashed by ENCRYP^XUSRB1 and must be entered interactively. Cannot be set via RPC — VistA security design constraint.',
     },
     // --- KEY MANAGEMENT ---
@@ -1043,7 +1077,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read key inventory: confirm holder count increased for this key',
       verifyRoute: '#/key-inventory',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Key allocation writes to ^XUSEC global with FileMan-managed cross-references. Direct writes risk index corruption.',
     },
     {
@@ -1061,7 +1095,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read key inventory: confirm holder count decreased for this key',
       verifyRoute: '#/key-inventory',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Key de-allocation must update ^XUSEC cross-references atomically within FileMan.',
     },
     // --- DIVISION MANAGEMENT ---
@@ -1079,7 +1113,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read facilities: confirm XUS DIVISION GET returns updated data',
       verifyRoute: '#/facilities',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Division configuration affects system-wide routing and is tightly coupled to Kernel site parameters.',
     },
     {
@@ -1097,7 +1131,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Confirm service appears in user edit picklist',
       verifyRoute: '#/facilities',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Service/Section entries in File 49 are referenced by user records, workload, and bed control. FileMan cross-references must be maintained.',
     },
     {
@@ -1114,7 +1148,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Confirm updated parameters via terminal re-read',
       verifyRoute: '#/facilities',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Kernel parameters are foundational infrastructure. Changes cascade to login behavior, RPC context, and site identification.',
     },
     // --- CLINIC MANAGEMENT ---
@@ -1133,7 +1167,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read clinic list: confirm ORWU CLINLOC returns the new/changed clinic',
       verifyRoute: '#/clinics',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
     },
     {
@@ -1150,7 +1184,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read clinic list: confirm changed fields reflect new values',
       verifyRoute: '#/clinics',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Stop code and scheduling fields have associated cross-references in File 44 that FileMan must maintain.',
     },
     {
@@ -1167,7 +1201,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read clinic list: confirm clinic status changed',
       verifyRoute: '#/clinics',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Inactivation date changes trigger scheduling cross-reference updates in File 44.',
     },
     // --- WARD MANAGEMENT ---
@@ -1187,7 +1221,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read ward list: confirm ORQPT WARDS returns the new/changed ward',
       verifyRoute: '#/wards',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Ward creation requires coordinated entries in File 42, File 44, and File 405.4. MUMPS cross-references link bed status to ADT movements.',
     },
     {
@@ -1205,7 +1239,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read ward list: confirm bed counts updated',
       verifyRoute: '#/wards',
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Room-bed changes in File 405.4 update bed tracking and ADT census cross-references. DDR FILER could write but risks data integrity.',
     },
     // --- ORDERING / CPRS CONFIG ---
@@ -1224,7 +1258,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Confirm quick order appears in CPRS ordering dialog (requires CPRS login)',
       verifyRoute: null,
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Quick order creation involves File 101.41 with complex sub-file structures. No safe write RPC exists for full order dialog provisioning.',
     },
     {
@@ -1241,7 +1275,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Re-read via ORQ3 LOADALL: confirm updated settings',
       verifyRoute: null,
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'While ORQ3 SAVEALL exists as a write RPC, notification parameter structures are complex. Terminal verification recommended after RPC write.',
     },
     // --- MENU / PCMM ---
@@ -1260,7 +1294,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Confirm via terminal: menu tree shows updated structure',
       verifyRoute: null,
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'Menu trees in File 19 have recursive sub-file structures with security key linkages. No write RPC exists.',
     },
     {
@@ -1278,7 +1312,7 @@ async function renderGuidedTasks(el) {
       ],
       verifyStep: 'Confirm via terminal: team roster shows updated assignments',
       verifyRoute: null,
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
       whyTerminal: 'PCMM team/patient assignment involves multiple cross-referenced files. No safe write RPC exists for team management.',
     },
   ];

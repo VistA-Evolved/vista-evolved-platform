@@ -17,7 +17,7 @@ Public `main` is not a blank scaffold. It currently contains:
 
 - `apps/control-plane/` - operator console review runtime
 - `apps/control-plane-api/` - PG-backed control-plane backend
-- `apps/tenant-admin/` - dual-mode tenant-admin prototype shell with VistA adapter wiring and honest fixture fallback
+- `apps/tenant-admin/` - VistA-first tenant-admin prototype shell with live XWB broker adapter and honest fixture fallback
 - `apps/admin-console/` - placeholder only
 
-What it does **not** yet contain is a live-proven tenant-admin happy path against running VistA. See `docs/reference/source-of-truth-index.md`, `docs/explanation/public-main-reality-reconciliation.md`, and `docs/explanation/governed-build-protocol.md`.
+What it does **not** yet contain is full write-path coverage for all tenant-admin surfaces. Read paths for users, facilities, clinics, and wards are live-proven against the UTF-8 VistA distro via XWB broker. See `docs/reference/source-of-truth-index.md`, `docs/explanation/public-main-reality-reconciliation.md`, and `docs/explanation/governed-build-protocol.md`.

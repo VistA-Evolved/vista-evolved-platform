@@ -82,6 +82,9 @@
 | **VistA admin grounded domain: institution, division, clinic** | `docs/explanation/vista-admin-grounded-domain-institution-division-clinic.md` | Deep grounded domain reference: File 4/40.8/44/42 hierarchy, 16 VEHU-confirmed RPCs + 8 custom VE* + 14 SDES/SDEC (absent from VEHU), ZVEFAC.m patterns, 12 custom RPCs needed, SDES/SDEC gap analysis, screen contracts, 6 probe requirements, topology assembly pattern |
 | **VistA admin guided write workflows** | `docs/explanation/vista-admin-guided-write-workflows.md` | Complete guided write catalog: 19 GW-* workflows (10 Mode B, 6 Mode C), 6-step canonical pattern, VistA EVE menu tree map, write safety patterns, 10 custom write RPCs across ZVEUSER/ZVECLIN/ZVEFAC, implementation readiness assessment, 5 SPA guided task cards |
 | **VistA admin repo gap analysis** | `docs/explanation/vista-admin-repo-gap-analysis.md` | Domain-by-domain audit of platform and distro repos against the Domain Map and Translation Matrix: grounding status for all D1-D10 domains, backend API gap analysis, 4-tier gap classification (near-term / medium-term / integration-plane / deferred), placement matrix, sequenced next steps |
+| **Fixture inventory and truth ownership audit** | `docs/explanation/fixture-inventory-and-truth-ownership-audit.md` | Canonical audit: every fixture JSON in tenant-admin classified by truth ownership (VistA-owned, catalog-owned, terminal-workflow), with purge/replace/keep disposition and VistA grounding evidence |
+| **Tenant admin happy-path source map** | `docs/explanation/tenant-admin-happy-path-source-map.md` | Per-surface source-of-truth map: which screens read VistA live, which fall back to fixture, what the expected source badge is, and what RPCs are wired |
+| **Live broker canonical path** | `docs/explanation/live-broker-canonical-path.md` | Canonical reference for the XWB broker direct-connection path: adapter architecture, connection lifecycle, RPC call flow, credential handling, and VistA-first data sourcing pattern |
 
 ## Runtime apps
 
@@ -95,7 +98,7 @@
 | AI Operator Copilot subsystem | `apps/control-plane/copilot/` | Provider-neutral copilot with 8 bounded tools, operator-role enforcement, full audit. Disabled by default (`COPILOT_ENABLED=false`) |
 | Copilot API routes | `apps/control-plane/routes/copilot-routes.mjs` | Status, chat, audit endpoints at `/api/copilot/v1/*` |
 | Terminal proof-of-concept | `apps/terminal-proof/` | Terminal-first development scaffold |
-| **Tenant admin workspace** | `apps/tenant-admin/` | Dual-mode prototype shell on port 4520. 7 surfaces (dashboard, users, roles, facilities, guided tasks). VistA adapter wired (ORWU NEWPERS, XUS DIVISION GET, ORWU CLINLOC) with fixture fallback. Not yet proven against live VistA. See `apps/tenant-admin/README.md` |
+| **Tenant admin workspace** | `apps/tenant-admin/` | VistA-first prototype shell on port 4520. 11 surfaces (dashboard, users, roles, facilities, clinics, wards, key inventory, e-sig status, guided tasks). Live XWB broker adapter (ORWU NEWPERS, XUS DIVISION GET, ORWU CLINLOC, ORQPT WARDS) with fixture fallback. Read paths proven against UTF-8 VistA distro. See `apps/tenant-admin/README.md` |
 | Admin console shell | `apps/admin-console/` | Reserved placeholder only. Do not treat this path as the active tenant-admin runtime while `apps/tenant-admin/` exists on public `main`. |
 | Tenant-admin first live slice decision | `docs/explanation/tenant-admin-first-live-slice-decision.md` | Canonical Task 2 decision for the first truthful live tenant-admin slice after distro probe findings |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
