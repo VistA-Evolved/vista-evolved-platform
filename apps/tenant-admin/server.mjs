@@ -19,7 +19,7 @@ import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { probeVista, fetchVistaUsers, fetchVistaDivisions, fetchVistaClinics, fetchVistaWards, fetchVistaCurrentUser } from './lib/vista-adapter.mjs';
+import { probeVista, fetchVistaUsers, checkVistaKey, fetchVistaDivisions, fetchVistaClinics, fetchVistaWards, fetchVistaCurrentUser } from './lib/vista-adapter.mjs';
 import { disconnectBroker } from './lib/xwb-client.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -651,6 +651,105 @@ async function main() {
         vistaUrl: probe.url || null,
         moduleStatus: { enabled: 0, total: 0 }
       }
+    };
+  });
+
+  // ---- Guided-write: Key allocation (GW-KEY-01) ----
+  // Mode B: API validates + generates M command → operator executes in terminal → API reads back.
+
+  app.post('/api/tenant-admin/v1/guided-write/key-check', async (req) => {
+    const { tenantId, keyName } = req.body || {};
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    if (!keyName || typeof keyName !== 'string') return { ok: false, error: 'keyName required (string)' };
+
+    // Sanitize: key names are uppercase alphanumeric + spaces only in VistA
+    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+    if (sanitized !== keyName.toUpperCase()) {
+      return { ok: false, error: 'Invalid key name — only A-Z, 0-9, and spaces allowed' };
+    }
+
+    const probe = await probeVista();
+    if (!probe.ok) {
+      return {
+        ok: false,
+        source: 'integration-pending',
+        error: 'VistA broker unavailable',
+        note: 'Guided-write requires live VistA connection for pre-check and read-back.',
+      };
+    }
+
+    // Pre-check: does the authenticated user (DUZ) hold this key?
+    const keyResult = await checkVistaKey(sanitized);
+    if (!keyResult.ok) {
+      return { ok: false, source: 'unavailable', error: keyResult.error };
+    }
+
+    return {
+      ok: true,
+      source: 'vista',
+      gwId: 'GW-KEY-01',
+      mode: 'B',
+      tenantId,
+      preCheck: {
+        duz: probe.duz,
+        userName: probe.userName,
+        keyName: sanitized,
+        currentlyHeld: keyResult.hasKey,
+        rpcUsed: 'ORWU HASKEY',
+      },
+      guidedAction: keyResult.hasKey
+        ? {
+            description: `User ${probe.userName} (DUZ=${probe.duz}) already holds key ${sanitized}.`,
+            mCommand: null,
+            status: 'no-action-needed',
+          }
+        : {
+            description: `User ${probe.userName} (DUZ=${probe.duz}) does NOT hold key ${sanitized}. To allocate:`,
+            mCommand: `S ^XUSEC("${sanitized}",${probe.duz})=""`,
+            undoCommand: `K ^XUSEC("${sanitized}",${probe.duz})`,
+            vistaFile: 'Global ^XUSEC (security key index)',
+            risk: 'medium',
+            note: 'Execute in VistA programmer mode (SSH or docker exec). Then call /guided-write/key-verify to confirm.',
+          },
+    };
+  });
+
+  app.post('/api/tenant-admin/v1/guided-write/key-verify', async (req) => {
+    const { tenantId, keyName, expectedState } = req.body || {};
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    if (!keyName || typeof keyName !== 'string') return { ok: false, error: 'keyName required (string)' };
+
+    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+
+    const probe = await probeVista();
+    if (!probe.ok) {
+      return { ok: false, source: 'integration-pending', error: 'VistA broker unavailable' };
+    }
+
+    const keyResult = await checkVistaKey(sanitized);
+    if (!keyResult.ok) {
+      return { ok: false, source: 'unavailable', error: keyResult.error };
+    }
+
+    const verified = expectedState !== undefined
+      ? keyResult.hasKey === (expectedState === true || expectedState === 'held')
+      : true;
+
+    return {
+      ok: true,
+      source: 'vista',
+      gwId: 'GW-KEY-01',
+      tenantId,
+      verification: {
+        duz: probe.duz,
+        userName: probe.userName,
+        keyName: sanitized,
+        currentlyHeld: keyResult.hasKey,
+        expectedState: expectedState ?? 'not-specified',
+        verified,
+        rpcUsed: 'ORWU HASKEY',
+        timestamp: new Date().toISOString(),
+      },
     };
   });
 

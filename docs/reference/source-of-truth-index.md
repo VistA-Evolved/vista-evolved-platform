@@ -24,7 +24,16 @@
 | Verification standard | `migrated-process-assets/verification-standard.md` | Evidence bar |
 | Mutation & implementation governance | `docs/reference/contract-mutation-and-implementation-governance-protocol.md` | Change classification, stop rules, definition of done, merge-blocking conditions |
 | Notion sync policy | `docs/reference/notion-sync-policy.md` | Repo canonical, Notion is mirror |
-| Public main reality reconciliation | `docs/explanation/public-main-reality-reconciliation.md` | Canonical reconciliation of public `main` repo state vs stale docs or prior task claims |
+| Public main reality reconciliation (v1) | `docs/explanation/public-main-reality-reconciliation.md` | **Superseded by v2.** Retained as reference. |
+| **Public main and three-repo reality reconciliation v2** | `docs/explanation/public-main-and-three-repo-reality-reconciliation-v2.md` | Canonical three-repo reconciliation: what is publicly real, prototype, fixture-backed, missing. Supersedes v1. |
+| **Tenant admin blocker ledger** | `docs/explanation/tenant-admin-blocker-ledger.md` | Canonical blocker ledger for tenant-admin PASS-LIVE readiness: 10 tracked blockers with severity, resolution paths, and task mapping |
+| **VistA admin deep use-case audit** | `docs/explanation/vista-admin-deep-use-case-audit.md` | Role-oriented audit of 70 real VistA admin use-cases across 12 role clusters, with translation dispositions and confidence classifications |
+| **Translation matrix v2** | `docs/explanation/vista-admin-terminal-to-ui-translation-matrix-v2.md` | 70-function matrix with role cluster, blocker, dependency, archive ref, sandbox, overlay, and pass class columns. Supersedes v1. |
+| **Coverage ledger and gap map** | `docs/explanation/vista-admin-coverage-ledger-and-gap-map.md` | Single-page coverage summary: 7 at PASS-CONTRACT, 63 at PASS-DOC, gap analysis, blocker impact, first-slice candidates |
+| **Fixture purge and happy-path red-line** | `docs/explanation/fixture-purge-and-happy-path-redline.md` | 84-file audit: 75 canonical (class A), 4 degraded-mode (class B), 5 fabricated (class C), 0 dead (class D). Conversion plans per file. |
+| **Broker canonicalization proof** | `docs/explanation/broker-canonicalization-proof.md` | PASS-LIVE proof: XWB broker connect, auth, 6 RPCs, restart persistence. Resolves B-PERSIST-001, B-RPC-001/002/003. |
+| **Tenant-admin PASS-LIVE proof** | `docs/explanation/tenant-admin-pass-live-proof.md` | PASS-LIVE proof: tenant-admin server exercised against live VistA. 6/11 endpoints return source:vista with real data. No code changes required. |
+| **Guided-write PASS-LIVE proof** | `docs/explanation/guided-write-pass-live-proof.md` | PASS-LIVE proof: GW-KEY-01 guided key allocation. 7-step cycle (pre-check → allocate → read-back → undo → restore). 7/7 PASS. Resolves B-WRITE-001. |
 
 ## Architecture and decisions
 
