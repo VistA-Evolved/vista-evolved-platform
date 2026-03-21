@@ -885,9 +885,12 @@ async function renderEsigStatus(el) {
 // Guided Write Workflows
 // ---------------------------------------------------------------------------
 async function renderGuidedTasks(el) {
+  // 19 guided write workflows from the canonical catalog (GW-* IDs)
+  // Mode A = Live Read (auto-verify), Mode B = Guided Terminal Write, Mode C = Terminal-Only
   const workflows = [
+    // --- USER MANAGEMENT ---
     {
-      id: 'add-user',
+      id: 'GW-USR-01', category: 'User Management', mode: 'B',
       title: 'Add New User',
       description: 'Create a new user in VistA File 200 with proper access/verify codes, person class, and division assignment.',
       vistaTarget: 'File 200 via UPDATE^DIE or ^VA(200)',
@@ -900,13 +903,14 @@ async function renderGuidedTasks(el) {
         'Set PERSON CLASS and SERVICE/SECTION',
         'Assign DIVISION(s) via File 200 node "DIV"',
         'Allocate required security keys (PROVIDER, ORES, etc.)',
-        'Verify creation: D ^XUP or check File 200 B-index',
       ],
+      verifyStep: 'Re-read user list: check new user appears in File 200 B-index',
+      verifyRoute: '#/users',
       terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
       whyTerminal: 'VistA user creation requires multi-file coordination (200, 200.01, 8930.3) with MUMPS triggers. No safe write RPC exists for full user provisioning.',
     },
     {
-      id: 'edit-user',
+      id: 'GW-USR-02', category: 'User Management', mode: 'B',
       title: 'Edit User Properties',
       description: 'Modify an existing user\'s status, division assignment, person class, or service/section.',
       vistaTarget: 'File 200 via ^DIE or VA Kernel menus',
@@ -916,98 +920,14 @@ async function renderGuidedTasks(el) {
         'Navigate: EVE > User Management > Edit an Existing User',
         'Select user by name or DUZ',
         'Modify target field(s)',
-        'Verify changes: read back from File 200',
       ],
+      verifyStep: 'Re-read user detail: confirm changed fields reflect new values',
+      verifyRoute: '#/users',
       terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
       whyTerminal: 'User field edits involve FileMan cross-references and triggers that must execute within the MUMPS environment.',
     },
     {
-      id: 'allocate-key',
-      title: 'Allocate Security Key',
-      description: 'Grant or revoke a security key (File 19.1) for a user. Keys control access to VistA menu options and RPCs.',
-      vistaTarget: 'File 19.1 holders via ^XUSEC',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Menu Management > Key Management > Allocation',
-        'Select key name (e.g., PROVIDER, ORES, XUMGR)',
-        'Select user to grant/revoke',
-        'Confirm allocation',
-        'Verify: check ^XUSEC(keyName,DUZ) exists',
-      ],
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
-      whyTerminal: 'Key allocation writes to the ^XUSEC global with FileMan-managed cross-references. Direct RPC writes risk index corruption.',
-    },
-    {
-      id: 'manage-division',
-      title: 'Manage Division Configuration',
-      description: 'Add or modify a Medical Center Division (File 40.8) and link it to an Institution (File 4).',
-      vistaTarget: 'File 40.8 via ^DG(40.8)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Systems Manager > Site Parameters',
-        'Edit Medical Center Division file',
-        'Set division name, institution pointer, facility number',
-        'Verify: XUS DIVISION GET returns updated data',
-      ],
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
-      whyTerminal: 'Division configuration affects system-wide routing and is tightly coupled to Kernel site parameters.',
-    },
-    {
-      id: 'manage-clinic',
-      title: 'Add/Edit Clinic Location',
-      description: 'Create or modify a Hospital Location (File 44) clinic entry with scheduling parameters.',
-      vistaTarget: 'File 44 via ^SC',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Scheduling > Set Up Clinic',
-        'Enter clinic name, abbreviation, type (C=Clinic)',
-        'Set division pointer, stop codes, default slot length',
-        'Configure availability (optional)',
-        'Verify: ORWU CLINLOC returns the new clinic',
-      ],
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
-      whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
-    },
-    {
-      id: 'manage-ward',
-      title: 'Add/Edit Ward Location',
-      description: 'Create or modify a Ward Location (File 42) with room-bed inventory (File 405.4) and link to Hospital Location (File 44 type=W).',
-      vistaTarget: 'File 42 via ^DIC(42) + File 405.4 via ^DG(405.4)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > ADT Manager > Ward Definition',
-        'Enter ward name, specialty, service',
-        'Set corresponding Hospital Location (File 44 type=W)',
-        'Define room-bed inventory in File 405.4',
-        'Assign operating beds and out-of-service beds',
-        'Verify: ORQPT WARDS returns the new ward',
-      ],
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
-      whyTerminal: 'Ward creation requires coordinated entries in File 42 (ward master), File 44 (hospital location), and File 405.4 (room-bed). MUMPS cross-references link bed status to ADT movements.',
-    },
-    {
-      id: 'setup-esig',
-      title: 'Set Up Electronic Signature',
-      description: 'Configure or reset a user\'s electronic signature code in File 200 field 20.4. E-sig is required for signing orders and notes.',
-      vistaTarget: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal (SSH or Docker exec)',
-        'Navigate: EVE > User Management > Electronic Signature',
-        'Select user by name or DUZ',
-        'User enters new signature code (interactive, not scriptable)',
-        'VistA hashes and stores in File 200 field 20.4',
-        'Verify: ORWU VALIDSIG returns confirmation for the user',
-      ],
-      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
-      whyTerminal: 'Electronic signature codes are hashed by VistA Kernel (ENCRYP^XUSRB1) and stored in File 200 field 20.4. The code must be entered interactively — it cannot be set via RPC. This is a VistA security design constraint.',
-    },
-    {
-      id: 'deactivate-user',
+      id: 'GW-USR-03', category: 'User Management', mode: 'B',
       title: 'Deactivate User (DISUSER)',
       description: 'Set DISUSER flag (File 200 field 4) to prevent a user from logging into VistA. Does not delete the record.',
       vistaTarget: 'File 200 field 4 (DISUSER)',
@@ -1019,52 +939,460 @@ async function renderGuidedTasks(el) {
         'Set DISUSER field to YES',
         'Optionally remove security keys to prevent residual access',
         'Optionally clear electronic signature code',
-        'Verify: user cannot authenticate via XUS SIGNON SETUP',
       ],
+      verifyStep: 'Re-read user detail: confirm status shows inactive/DISUSER=YES',
+      verifyRoute: '#/users',
       terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
-      whyTerminal: 'User deactivation involves DISUSER flag plus potential key revocation and signature code clearing. Multiple cross-referenced fields must be coordinated within VistA\'s FileMan transaction model.',
+      whyTerminal: 'User deactivation involves DISUSER flag plus potential key revocation and signature code clearing. Multiple cross-referenced fields must be coordinated.',
+    },
+    {
+      id: 'GW-USR-04', category: 'User Management', mode: 'B',
+      title: 'Reactivate User',
+      description: 'Clear the DISUSER flag and restore access for a previously deactivated user. May need to re-assign keys and verify codes.',
+      vistaTarget: 'File 200 field 4 (DISUSER) + field 2/11 (verify code)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > User Management > Edit an Existing User',
+        'Select user by name or DUZ',
+        'Set DISUSER field to NO',
+        'Verify ACCESS CODE and VERIFY CODE are still valid',
+        'Re-allocate security keys if previously revoked',
+      ],
+      verifyStep: 'Re-read user detail: confirm status active, DISUSER=NO',
+      verifyRoute: '#/users',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Reactivation requires clearing DISUSER, possibly resetting verify code, and re-allocating keys — all FileMan-coordinated operations.',
+    },
+    {
+      id: 'GW-USR-05', category: 'User Management', mode: 'C',
+      title: 'Set Up Electronic Signature',
+      description: 'Configure or reset a user\'s electronic signature code in File 200 field 20.4. E-sig is required for signing orders and notes.',
+      vistaTarget: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal (SSH or Docker exec)',
+        'Navigate: EVE > User Management > Electronic Signature',
+        'Select user by name or DUZ',
+        'User enters new signature code (interactive, not scriptable)',
+        'VistA hashes and stores in File 200 field 20.4',
+      ],
+      verifyStep: 'Re-read e-sig status: confirm user shows esigStatus=active',
+      verifyRoute: '#/esig-status',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'E-sig codes are hashed by ENCRYP^XUSRB1 and must be entered interactively. Cannot be set via RPC — VistA security design constraint.',
+    },
+    // --- KEY MANAGEMENT ---
+    {
+      id: 'GW-KEY-01', category: 'Key Management', mode: 'B',
+      title: 'Allocate Security Key',
+      description: 'Grant a security key (File 19.1) to a user. Keys control access to VistA menu options and RPCs.',
+      vistaTarget: 'File 19.1 holders via ^XUSEC',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Menu Management > Key Management > Allocation',
+        'Select key name (e.g., PROVIDER, ORES, XUMGR)',
+        'Select user to grant key to',
+        'Confirm allocation',
+      ],
+      verifyStep: 'Re-read key inventory: confirm holder count increased for this key',
+      verifyRoute: '#/key-inventory',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Key allocation writes to ^XUSEC global with FileMan-managed cross-references. Direct writes risk index corruption.',
+    },
+    {
+      id: 'GW-KEY-02', category: 'Key Management', mode: 'B',
+      title: 'Remove Security Key',
+      description: 'Revoke a security key from a user. The key record remains in File 19.1 but the user is removed from the holder list.',
+      vistaTarget: 'File 19.1 holders via ^XUSEC',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Menu Management > Key Management > De-Allocation',
+        'Select key name',
+        'Select user to revoke key from',
+        'Confirm de-allocation',
+      ],
+      verifyStep: 'Re-read key inventory: confirm holder count decreased for this key',
+      verifyRoute: '#/key-inventory',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Key de-allocation must update ^XUSEC cross-references atomically within FileMan.',
+    },
+    // --- DIVISION MANAGEMENT ---
+    {
+      id: 'GW-DIV-01', category: 'Division Management', mode: 'C',
+      title: 'Manage Division Configuration',
+      description: 'Add or modify a Medical Center Division (File 40.8) and link it to an Institution (File 4).',
+      vistaTarget: 'File 40.8 via ^DG(40.8)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Systems Manager > Site Parameters',
+        'Edit Medical Center Division file',
+        'Set division name, institution pointer, facility number',
+      ],
+      verifyStep: 'Re-read facilities: confirm XUS DIVISION GET returns updated data',
+      verifyRoute: '#/facilities',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Division configuration affects system-wide routing and is tightly coupled to Kernel site parameters.',
+    },
+    {
+      id: 'GW-DIV-02', category: 'Division Management', mode: 'B',
+      title: 'Manage Service/Section',
+      description: 'Create or edit a Service/Section entry used for user assignment and workload reporting.',
+      vistaTarget: 'File 49 (SERVICE/SECTION) via ^DIC(49)',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Systems Manager > MAS Parameter Entry/Edit',
+        'Select Service/Section file',
+        'Enter or edit service name, abbreviation, chief',
+        'Link to appropriate division',
+      ],
+      verifyStep: 'Confirm service appears in user edit picklist',
+      verifyRoute: '#/facilities',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Service/Section entries in File 49 are referenced by user records, workload, and bed control. FileMan cross-references must be maintained.',
+    },
+    {
+      id: 'GW-DIV-03', category: 'Division Management', mode: 'B',
+      title: 'View/Edit Kernel Site Parameters',
+      description: 'View and modify Kernel System Parameters (File 8989.3) including site name, domain, and production account flag.',
+      vistaTarget: 'File 8989.3 (KERNEL SYSTEM PARAMETERS)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Systems Manager > Kernel System Parameters',
+        'Review current site name, domain, production flag',
+        'Edit parameters as needed (requires XUMGR key)',
+      ],
+      verifyStep: 'Confirm updated parameters via terminal re-read',
+      verifyRoute: '#/facilities',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Kernel parameters are foundational infrastructure. Changes cascade to login behavior, RPC context, and site identification.',
+    },
+    // --- CLINIC MANAGEMENT ---
+    {
+      id: 'GW-CLIN-01', category: 'Clinic Management', mode: 'B',
+      title: 'Add/Edit Clinic Location',
+      description: 'Create or modify a Hospital Location (File 44) clinic entry with scheduling parameters.',
+      vistaTarget: 'File 44 via ^SC',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Scheduling > Set Up Clinic',
+        'Enter clinic name, abbreviation, type (C=Clinic)',
+        'Set division pointer, stop codes, default slot length',
+        'Configure availability (optional)',
+      ],
+      verifyStep: 'Re-read clinic list: confirm ORWU CLINLOC returns the new/changed clinic',
+      verifyRoute: '#/clinics',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
+    },
+    {
+      id: 'GW-CLIN-02', category: 'Clinic Management', mode: 'B',
+      title: 'Edit Clinic Fields',
+      description: 'Modify clinic properties: stop code, slot length, display name, abbreviation, or inactivation date.',
+      vistaTarget: 'File 44 fields via ^SC',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Scheduling > Set Up Clinic',
+        'Select existing clinic by name',
+        'Edit target field(s) — stop code, slot length, abbreviation',
+      ],
+      verifyStep: 'Re-read clinic list: confirm changed fields reflect new values',
+      verifyRoute: '#/clinics',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Stop code and scheduling fields have associated cross-references in File 44 that FileMan must maintain.',
+    },
+    {
+      id: 'GW-CLIN-03', category: 'Clinic Management', mode: 'B',
+      title: 'Inactivate/Reactivate Clinic',
+      description: 'Set or clear the inactivation date on a File 44 clinic entry. Inactive clinics are excluded from scheduling.',
+      vistaTarget: 'File 44 INACTIVATION DATE field',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Scheduling > Set Up Clinic',
+        'Select clinic by name',
+        'Set INACTIVATION DATE to today (inactivate) or clear it (reactivate)',
+      ],
+      verifyStep: 'Re-read clinic list: confirm clinic status changed',
+      verifyRoute: '#/clinics',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Inactivation date changes trigger scheduling cross-reference updates in File 44.',
+    },
+    // --- WARD MANAGEMENT ---
+    {
+      id: 'GW-WARD-01', category: 'Ward Management', mode: 'B',
+      title: 'Add/Edit Ward Location',
+      description: 'Create or modify a Ward Location (File 42) with room-bed inventory and link to File 44 type=W.',
+      vistaTarget: 'File 42 via ^DIC(42) + File 405.4 via ^DG(405.4)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > ADT Manager > Ward Definition',
+        'Enter ward name, specialty, service',
+        'Set corresponding Hospital Location (File 44 type=W)',
+        'Define room-bed inventory in File 405.4',
+        'Assign operating beds and out-of-service beds',
+      ],
+      verifyStep: 'Re-read ward list: confirm ORQPT WARDS returns the new/changed ward',
+      verifyRoute: '#/wards',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Ward creation requires coordinated entries in File 42, File 44, and File 405.4. MUMPS cross-references link bed status to ADT movements.',
+    },
+    {
+      id: 'GW-WARD-02', category: 'Ward Management', mode: 'C',
+      title: 'Room-Bed Setup',
+      description: 'Add, modify, or decommission room-bed entries in File 405.4 for an existing ward.',
+      vistaTarget: 'File 405.4 (ROOM-BED) via ^DG(405.4)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > ADT Manager > Bed Control',
+        'Select ward',
+        'Add/edit/decommission beds',
+        'Set bed status (available, out-of-service)',
+      ],
+      verifyStep: 'Re-read ward list: confirm bed counts updated',
+      verifyRoute: '#/wards',
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Room-bed changes in File 405.4 update bed tracking and ADT census cross-references. DDR FILER could write but risks data integrity.',
+    },
+    // --- ORDERING / CPRS CONFIG ---
+    {
+      id: 'GW-ORD-01', category: 'Ordering Configuration', mode: 'C',
+      title: 'Quick Order Management',
+      description: 'Create or edit quick orders used by CPRS for streamlined ordering. Quick orders reference order dialogs and pre-populated fields.',
+      vistaTarget: 'File 101.41 (ORDER DIALOG) via CPRS setup menus',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > CPRS Manager > Quick Order Management',
+        'Select order dialog type (meds, labs, consults)',
+        'Enter quick order name and pre-populated fields',
+        'Assign to target clinic or provider',
+      ],
+      verifyStep: 'Confirm quick order appears in CPRS ordering dialog (requires CPRS login)',
+      verifyRoute: null,
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Quick order creation involves File 101.41 with complex sub-file structures. No safe write RPC exists for full order dialog provisioning.',
+    },
+    {
+      id: 'GW-ORD-02', category: 'Ordering Configuration', mode: 'A',
+      title: 'Configure CPRS Notifications',
+      description: 'View and modify CPRS notification settings. Uses ORQ3 LOADALL/SAVEALL RPCs for read and write.',
+      vistaTarget: 'Notification parameters via ORQ3 LOADALL / ORQ3 SAVEALL',
+      riskLevel: 'medium',
+      steps: [
+        'Review current notification settings via ORQ3 LOADALL RPC',
+        'Identify notifications to enable/disable',
+        'Compose updated settings payload',
+        'Submit via ORQ3 SAVEALL RPC (if available in sandbox)',
+      ],
+      verifyStep: 'Re-read via ORQ3 LOADALL: confirm updated settings',
+      verifyRoute: null,
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'While ORQ3 SAVEALL exists as a write RPC, notification parameter structures are complex. Terminal verification recommended after RPC write.',
+    },
+    // --- MENU / PCMM ---
+    {
+      id: 'GW-MENU-01', category: 'System Configuration', mode: 'C',
+      title: 'View/Edit Menu Trees',
+      description: 'View and modify VistA menu option trees (File 19). Controls user navigation and feature access.',
+      vistaTarget: 'File 19 (OPTION) via ^DIC(19)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Menu Management > Edit Options',
+        'Select option by name',
+        'Add/remove sub-options or modify properties',
+        'Verify menu tree reflects changes',
+      ],
+      verifyStep: 'Confirm via terminal: menu tree shows updated structure',
+      verifyRoute: null,
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Menu trees in File 19 have recursive sub-file structures with security key linkages. No write RPC exists.',
+    },
+    {
+      id: 'GW-PCMM-01', category: 'System Configuration', mode: 'C',
+      title: 'PCMM Team Management',
+      description: 'Create or modify Patient Care Management Module (PCMM) team assignments linking providers to patient panels.',
+      vistaTarget: 'PCMM files via SD PCMM menus',
+      riskLevel: 'medium',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > Scheduling > PCMM Manager',
+        'Select team or create new team',
+        'Assign providers and define roles',
+        'Link patients to primary care team',
+      ],
+      verifyStep: 'Confirm via terminal: team roster shows updated assignments',
+      verifyRoute: null,
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'PCMM team/patient assignment involves multiple cross-referenced files. No safe write RPC exists for team management.',
     },
   ];
 
   const riskColor = { high: '#dc2626', medium: '#d97706', low: '#059669' };
+  const modeLabel = { A: 'Mode A — Live Read', B: 'Mode B — Guided Terminal', C: 'Mode C — Terminal Only' };
+  const modeColor = { A: '#059669', B: '#2563eb', C: '#7c3aed' };
 
-  const cards = workflows.map(w => `
-    <div class="guided-task-card">
+  // Group by category
+  const categories = [];
+  const catMap = {};
+  for (const w of workflows) {
+    if (!catMap[w.category]) { catMap[w.category] = []; categories.push(w.category); }
+    catMap[w.category].push(w);
+  }
+
+  function renderCard(w) {
+    const stepsHtml = w.steps.map((s, i) => `
+      <li>
+        <label class="step-check">
+          <input type="checkbox" data-wf="${w.id}" data-step="${i}" />
+          <span>${escapeHtml(s)}</span>
+        </label>
+      </li>`).join('');
+
+    const verifyHtml = w.verifyRoute
+      ? `<div class="guided-task-verify">
+           <strong>Verify:</strong> ${escapeHtml(w.verifyStep)}
+           <a href="${w.verifyRoute}" class="verify-link">Open verify surface →</a>
+         </div>`
+      : `<div class="guided-task-verify">
+           <strong>Verify:</strong> ${escapeHtml(w.verifyStep || 'Manual terminal verification required')}
+         </div>`;
+
+    return `
+    <div class="guided-task-card" id="wf-${w.id}">
       <div class="guided-task-header">
         <h3>${escapeHtml(w.title)}</h3>
-        <span class="risk-badge" style="background:${riskColor[w.riskLevel]};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase">${escapeHtml(w.riskLevel)} risk</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="mode-badge" style="background:${modeColor[w.mode]};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">${w.mode}</span>
+          <span class="risk-badge" style="background:${riskColor[w.riskLevel]};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase">${escapeHtml(w.riskLevel)}</span>
+        </div>
       </div>
+      <div style="font-size:11px;color:var(--color-text-muted);margin-bottom:4px;">${escapeHtml(w.id)} · ${escapeHtml(modeLabel[w.mode])}</div>
       <p class="guided-task-desc">${escapeHtml(w.description)}</p>
       <div class="guided-task-target">
         <strong>VistA target:</strong> ${escapeHtml(w.vistaTarget)}
       </div>
       <div class="guided-task-steps">
         <strong>Steps:</strong>
-        <ol>${w.steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+        <ol>${stepsHtml}</ol>
       </div>
       <div class="guided-task-terminal">
         <strong>Terminal entry point:</strong>
         <code class="terminal-cmd">${escapeHtml(w.terminalCommand)}</code>
       </div>
+      ${verifyHtml}
+      <details class="evidence-section">
+        <summary>Evidence capture</summary>
+        <textarea class="evidence-input" data-wf="${w.id}" rows="4" placeholder="Paste terminal output or describe what you observed…"></textarea>
+        <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">Evidence is stored locally in browser only · not sent to server</div>
+      </details>
       <div class="guided-task-rationale">
         <em>${escapeHtml(w.whyTerminal)}</em>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }
+
+  const categoryBlocks = categories.map(cat => `
+    <div class="guided-category">
+      <h2 class="guided-category-title">${escapeHtml(cat)}</h2>
+      <div class="guided-tasks-grid">
+        ${catMap[cat].map(w => renderCard(w)).join('')}
+      </div>
+    </div>`).join('');
+
+  // Summary counts
+  const total = workflows.length;
+  const modeACnt = workflows.filter(w => w.mode === 'A').length;
+  const modeBCnt = workflows.filter(w => w.mode === 'B').length;
+  const modeCCnt = workflows.filter(w => w.mode === 'C').length;
+  const highRisk = workflows.filter(w => w.riskLevel === 'high').length;
 
   el.innerHTML = `
     <div class="page-header">
       <h1>Guided Write Workflows</h1>
       <span class="source-posture terminal">TERMINAL</span>
     </div>
+    <div class="card-grid" style="margin-bottom:1rem;">
+      <div class="card"><div class="card-label">Total Workflows</div><div class="card-value">${total}</div></div>
+      <div class="card"><div class="card-label">Mode A (Live)</div><div class="card-value" style="color:${modeColor.A}">${modeACnt}</div></div>
+      <div class="card"><div class="card-label">Mode B (Guided)</div><div class="card-value" style="color:${modeColor.B}">${modeBCnt}</div></div>
+      <div class="card"><div class="card-label">Mode C (Terminal)</div><div class="card-value" style="color:${modeColor.C}">${modeCCnt}</div></div>
+      <div class="card"><div class="card-label">High Risk</div><div class="card-value" style="color:${riskColor.high}">${highRisk}</div></div>
+    </div>
     <div class="guided-tasks-intro">
       <p><strong>VistA writes require terminal access.</strong> Direct web-based writes to VistA
-      globals risk index corruption, missed cross-references, and audit gaps. These guided
-      workflows document the exact terminal steps for each admin operation.</p>
-      <p>Each card below shows: what VistA files are affected, the step-by-step terminal
-      procedure, the Docker command to start, and why terminal-only is the safe path.</p>
+      globals risk index corruption, missed cross-references, and audit gaps.</p>
+      <p>Each workflow follows the 6-step canonical pattern: <strong>Display → Compose → Attempt → Fallback → Evidence → Verify.</strong>
+      Check off steps as you complete them. Paste terminal output in the evidence section. Use the verify link to re-read VistA state and confirm your change took effect.</p>
+      <p style="font-size:12px;color:var(--color-text-muted);">
+        <strong>Mode A</strong> = live read/write via confirmed RPCs ·
+        <strong>Mode B</strong> = guided terminal write with browser verification ·
+        <strong>Mode C</strong> = terminal-only, no browser writeback
+      </p>
     </div>
-    <div class="guided-tasks-grid">
-      ${cards}
-    </div>`;
+    ${categoryBlocks}`;
+
+  // --- Step tracking persistence (localStorage) ---
+  const STEP_KEY = 've-guided-steps';
+  const EVIDENCE_KEY = 've-guided-evidence';
+
+  function loadSteps() {
+    try { return JSON.parse(localStorage.getItem(STEP_KEY)) || {}; } catch { return {}; }
+  }
+  function saveSteps(data) { localStorage.setItem(STEP_KEY, JSON.stringify(data)); }
+  function loadEvidence() {
+    try { return JSON.parse(localStorage.getItem(EVIDENCE_KEY)) || {}; } catch { return {}; }
+  }
+  function saveEvidence(data) { localStorage.setItem(EVIDENCE_KEY, JSON.stringify(data)); }
+
+  // Restore saved step state
+  const stepState = loadSteps();
+  el.querySelectorAll('input[data-wf][data-step]').forEach(cb => {
+    const key = cb.dataset.wf + ':' + cb.dataset.step;
+    if (stepState[key]) {
+      cb.checked = true;
+      cb.closest('label').querySelector('span').classList.add('step-done');
+    }
+  });
+
+  // Restore saved evidence
+  const evidState = loadEvidence();
+  el.querySelectorAll('textarea.evidence-input').forEach(ta => {
+    if (evidState[ta.dataset.wf]) ta.value = evidState[ta.dataset.wf];
+  });
+
+  // Step checkbox handler
+  el.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[data-wf][data-step]');
+    if (!cb) return;
+    const key = cb.dataset.wf + ':' + cb.dataset.step;
+    const data = loadSteps();
+    data[key] = cb.checked;
+    saveSteps(data);
+    const span = cb.closest('label').querySelector('span');
+    span.classList.toggle('step-done', cb.checked);
+  });
+
+  // Evidence textarea handler (debounced save)
+  let evidTimer = null;
+  el.addEventListener('input', (e) => {
+    const ta = e.target.closest('textarea.evidence-input');
+    if (!ta) return;
+    clearTimeout(evidTimer);
+    evidTimer = setTimeout(() => {
+      const data = loadEvidence();
+      data[ta.dataset.wf] = ta.value;
+      saveEvidence(data);
+    }, 400);
+  });
 }

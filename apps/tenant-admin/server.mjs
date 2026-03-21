@@ -427,6 +427,53 @@ async function main() {
     };
   });
 
+  // ---- Guided write workflow catalog ----
+
+  app.get('/api/tenant-admin/v1/guided-tasks', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const probe = await probeVista();
+    const vistaConnected = probe.ok;
+
+    // Workflow catalog (server-side source of truth for GW-* IDs)
+    const workflowCatalog = [
+      { gwId: 'GW-USR-01', title: 'Add New User', category: 'User Management', mode: 'B', risk: 'high', vistaTarget: 'File 200' },
+      { gwId: 'GW-USR-02', title: 'Edit User Properties', category: 'User Management', mode: 'B', risk: 'medium', vistaTarget: 'File 200' },
+      { gwId: 'GW-USR-03', title: 'Deactivate User (DISUSER)', category: 'User Management', mode: 'B', risk: 'high', vistaTarget: 'File 200' },
+      { gwId: 'GW-USR-04', title: 'Reactivate User', category: 'User Management', mode: 'B', risk: 'high', vistaTarget: 'File 200' },
+      { gwId: 'GW-USR-05', title: 'Set Up Electronic Signature', category: 'User Management', mode: 'C', risk: 'high', vistaTarget: 'File 200 field 20.4' },
+      { gwId: 'GW-KEY-01', title: 'Allocate Security Key', category: 'Key Management', mode: 'B', risk: 'high', vistaTarget: 'File 19.1' },
+      { gwId: 'GW-KEY-02', title: 'Remove Security Key', category: 'Key Management', mode: 'B', risk: 'high', vistaTarget: 'File 19.1' },
+      { gwId: 'GW-DIV-01', title: 'Manage Division Configuration', category: 'Division Management', mode: 'C', risk: 'high', vistaTarget: 'File 40.8' },
+      { gwId: 'GW-DIV-02', title: 'Manage Service/Section', category: 'Division Management', mode: 'B', risk: 'medium', vistaTarget: 'File 49' },
+      { gwId: 'GW-DIV-03', title: 'View/Edit Kernel Site Parameters', category: 'Division Management', mode: 'B', risk: 'high', vistaTarget: 'File 8989.3' },
+      { gwId: 'GW-CLIN-01', title: 'Add/Edit Clinic Location', category: 'Clinic Management', mode: 'B', risk: 'medium', vistaTarget: 'File 44' },
+      { gwId: 'GW-CLIN-02', title: 'Edit Clinic Fields', category: 'Clinic Management', mode: 'B', risk: 'medium', vistaTarget: 'File 44' },
+      { gwId: 'GW-CLIN-03', title: 'Inactivate/Reactivate Clinic', category: 'Clinic Management', mode: 'B', risk: 'medium', vistaTarget: 'File 44' },
+      { gwId: 'GW-WARD-01', title: 'Add/Edit Ward Location', category: 'Ward Management', mode: 'B', risk: 'high', vistaTarget: 'File 42 + File 405.4' },
+      { gwId: 'GW-WARD-02', title: 'Room-Bed Setup', category: 'Ward Management', mode: 'C', risk: 'high', vistaTarget: 'File 405.4' },
+      { gwId: 'GW-ORD-01', title: 'Quick Order Management', category: 'Ordering Configuration', mode: 'C', risk: 'medium', vistaTarget: 'File 101.41' },
+      { gwId: 'GW-ORD-02', title: 'Configure CPRS Notifications', category: 'Ordering Configuration', mode: 'A', risk: 'medium', vistaTarget: 'ORQ3 LOADALL/SAVEALL' },
+      { gwId: 'GW-MENU-01', title: 'View/Edit Menu Trees', category: 'System Configuration', mode: 'C', risk: 'high', vistaTarget: 'File 19' },
+      { gwId: 'GW-PCMM-01', title: 'PCMM Team Management', category: 'System Configuration', mode: 'C', risk: 'medium', vistaTarget: 'SD PCMM files' },
+    ];
+
+    return {
+      ok: true,
+      source: 'catalog',
+      tenantId,
+      data: workflowCatalog,
+      summary: {
+        total: workflowCatalog.length,
+        modeA: workflowCatalog.filter(w => w.mode === 'A').length,
+        modeB: workflowCatalog.filter(w => w.mode === 'B').length,
+        modeC: workflowCatalog.filter(w => w.mode === 'C').length,
+        highRisk: workflowCatalog.filter(w => w.risk === 'high').length,
+      },
+      vistaStatus: vistaConnected ? 'connected' : 'integration-pending',
+    };
+  });
+
   app.get('/api/tenant-admin/v1/dashboard', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
