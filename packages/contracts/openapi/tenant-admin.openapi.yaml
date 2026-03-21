@@ -1,0 +1,434 @@
+openapi: 3.0.3
+info:
+  title: Tenant Admin API (VistA-first shell)
+  version: 0.3.0
+  description: |
+    Served by `apps/tenant-admin/server.mjs` under `/api/tenant-admin/v1`.
+    All routes accept `tenantId` query parameter (required).
+    Writes use DDR VALIDATOR/FILER or distro overlay RPCs (ZVE*).
+servers:
+  - url: http://127.0.0.1:4520/api/tenant-admin/v1
+paths:
+  /vista-status:
+    get:
+      summary: Broker connectivity + current user
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /vista/ddr-probe:
+    get:
+      summary: DDR RPC family probe (read-safe)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /dashboard:
+    get:
+      summary: Dashboard counts and VistA grounding status
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /users:
+    get:
+      summary: List users (ORWU NEWPERS or fixture)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create user (ZVE USMG ADD when registered)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                accessCode: { type: string }
+                verifyCode: { type: string }
+      responses:
+        '200':
+          description: Created
+        '501':
+          description: RPC not registered
+  /users/{ien}:
+    get:
+      summary: User detail (DDR GETS File 200 preferred)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: ien
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Allow-listed File 200 contact field update (DDR VALIDATOR + DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: ien
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, value]
+              properties:
+                field: { type: string, enum: ['.132', '.133', '.134', '.151'] }
+                value: { type: string }
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Validation failed or field not allow-listed
+        '503':
+          description: VistA unavailable
+  /users/{targetDuz}/keys:
+    post:
+      summary: Assign key (ZVE USMG KEYS)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: targetDuz
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keyName]
+              properties:
+                keyName: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /users/{targetDuz}/keys/{keyId}:
+    delete:
+      summary: Remove key (ZVE USMG KEYS DEL)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: targetDuz
+          in: path
+          required: true
+          schema: { type: string }
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /users/{duz}/esig:
+    post:
+      summary: Set e-sig (ZVE USMG ESIG)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: duz
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /users/{duz}/credentials:
+    put:
+      summary: Set access/verify (ZVE USMG CRED)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: duz
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessCode, verifyCode]
+              properties:
+                accessCode: { type: string }
+                verifyCode: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /users/{duz}/deactivate:
+    post:
+      summary: Deactivate (ZVE USMG DEACT)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: duz
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /users/{duz}/reactivate:
+    post:
+      summary: Reactivate (ZVE USMG REACT)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: duz
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /facilities:
+    get:
+      summary: Facility list (divisions + clinics from VistA or fixture)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /facilities/{facilityId}:
+    get:
+      summary: Facility detail by ID
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: facilityId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /topology:
+    get:
+      summary: Facility topology hierarchy
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /roles:
+    get:
+      summary: Role/key list (DDR LISTER File 19.1 or fixture)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /clinics:
+    get:
+      summary: Clinic list (ORWU CLINLOC or fixture)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create clinic (ZVE CLNM ADD)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: Created
+        '501':
+          description: RPC not registered
+  /clinics/{ien}:
+    put:
+      summary: Edit clinic name (ZVE CLNM EDIT)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: ien
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /wards:
+    get:
+      summary: Ward list (ORQPT WARDS or fixture)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /wards/{ien}:
+    put:
+      summary: Edit ward name (ZVE WRDM EDIT)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: ien
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: OK
+        '501':
+          description: RPC not registered
+  /key-inventory:
+    get:
+      summary: Key inventory with holder counts
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /esig-status:
+    get:
+      summary: E-signature status summary
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+  /devices:
+    get:
+      summary: Device list (DDR LISTER File 3.5)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create device (DDR FILER ADD File 3.5)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: Created
+        '400':
+          description: Validation failed
+  /devices/{ien}:
+    put:
+      summary: Rename device (DDR FILER EDIT .01)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - name: ien
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Validation failed
+  /params/kernel:
+    get:
+      summary: Kernel site parameters (DDR GETS File 8989.3)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Allow-listed kernel param (DDR VALIDATOR + DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, value]
+              properties:
+                field: { type: string, enum: ['.01', '.02', '.03', '.04', '.05'] }
+                value: { type: string }
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Validation failed or field not allow-listed
+        '503':
+          description: VistA unavailable
+components:
+  parameters:
+    tenantId:
+      name: tenantId
+      in: query
+      required: true
+      schema: { type: string }

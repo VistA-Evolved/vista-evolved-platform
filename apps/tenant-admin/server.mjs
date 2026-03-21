@@ -19,11 +19,35 @@ import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { probeVista, fetchVistaUsers, checkVistaKey, fetchVistaDivisions, fetchVistaClinics, fetchVistaWards, fetchVistaCurrentUser } from './lib/vista-adapter.mjs';
-import { disconnectBroker } from './lib/xwb-client.mjs';
+import {
+  probeVista,
+  fetchVistaUsers,
+  fetchVistaDivisions,
+  fetchVistaClinics,
+  fetchVistaWards,
+  fetchVistaCurrentUser,
+  probeDdrRpcFamily,
+  ddrGetsFile200,
+  ddrListerSecurityKeys,
+  ddrValidateField,
+  ddrFilerEdit,
+  ddrFilerAdd,
+  callZveRpc,
+  isRpcMissingError,
+  fetchVistaEsigStatusForUsers,
+  parseDdrListerResponse,
+} from './lib/vista-adapter.mjs';
+import { disconnectBroker, getBroker, lockedRpc } from './lib/xwb-client.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4520', 10);
+
+function zveOutcome(z) {
+  if (z.ok) return { kind: 'ok' };
+  const msg = z.error || z.line0 || '';
+  if (isRpcMissingError(msg)) return { kind: 'missing', msg };
+  return { kind: 'fail', msg };
+}
 
 // ---------------------------------------------------------------------------
 // Load fixtures once at startup
@@ -94,24 +118,59 @@ async function main() {
   app.get('/api/tenant-admin/v1/users/:userId', async (req) => {
     const { userId } = req.params;
 
-    // VistA-first: try broker lookup by IEN
+    // VistA-first: DDR GETS ENTRY DATA on File 200 (full field read path)
+    try {
+      const ddr = await ddrGetsFile200(userId);
+      if (ddr.ok && (ddr.rawLines?.length > 0 || Object.keys(ddr.data).length > 0)) {
+        const d = ddr.data;
+        const name =
+          d['.01'] ||
+          d['200,.01'] ||
+          (ddr.rawLines.find(l => l.includes('200') && l.includes('.01')) || '').split('^').pop() ||
+          `User ${userId}`;
+        return {
+          ok: true,
+          source: 'vista',
+          data: {
+            id: userId,
+            ien: userId,
+            name: String(name).trim() || `User ${userId}`,
+            username: String(name).trim(),
+            status: 'active',
+            roles: [],
+            vistaFields: ddr.data,
+            ddrRawLines: ddr.rawLines,
+            vistaGrounding: { duz: userId, file200Status: 'ddr-gets', rpcUsed: ddr.rpcUsed },
+          },
+          vistaStatus: 'reachable',
+        };
+      }
+    } catch (_) { /* fall through */ }
+
+    // Fallback: broker user list by IEN only
     try {
       const usersRes = await fetchVistaUsers('');
       if (usersRes.ok) {
         const vistaUser = usersRes.data.find(u => String(u.ien) === String(userId));
         if (vistaUser) {
           return {
-            ok: true, source: 'vista', data: {
-              id: vistaUser.ien, name: vistaUser.name, ien: vistaUser.ien,
-              username: vistaUser.name, status: 'active', roles: [],
-              vistaGrounding: { duz: vistaUser.ien, file200Status: 'vista-ien' }
-            }, vistaStatus: 'reachable'
+            ok: true,
+            source: 'vista',
+            data: {
+              id: vistaUser.ien,
+              name: vistaUser.name,
+              ien: vistaUser.ien,
+              username: vistaUser.name,
+              status: 'active',
+              roles: [],
+              vistaGrounding: { duz: vistaUser.ien, file200Status: 'orwu-newpers-only' },
+            },
+            vistaStatus: 'reachable',
           };
         }
       }
-    } catch (_) { /* VistA unavailable — fall through to fixture */ }
+    } catch (_) { /* fixture */ }
 
-    // Fixture fallback
     const user = fixtures.users.find(u => u.id === userId);
     if (user) {
       return { ok: true, source: 'fixture', data: user, vistaStatus: 'unavailable' };
@@ -242,6 +301,26 @@ async function main() {
   app.get('/api/tenant-admin/v1/roles', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
+
+    const keysRes = await ddrListerSecurityKeys();
+    if (keysRes.ok && keysRes.data.length > 0) {
+      return {
+        ok: true,
+        source: 'vista',
+        tenantId,
+        data: keysRes.data.map(k => ({
+          id: k.ien || k.name,
+          name: k.name,
+          vistaKey: k.name,
+          description: k.description || '',
+          category: 'security-key',
+          assignedUsers: [],
+          vistaGrounding: { file19_1Ien: k.ien, rpcUsed: keysRes.rpcUsed },
+        })),
+        rpcUsed: keysRes.rpcUsed,
+      };
+    }
+
     const enrichedRoles = fixtures.roles.map(r => ({
       ...r,
       assignedUsers: (r.assignedUsers || []).map(uid => {
@@ -252,10 +331,12 @@ async function main() {
     return {
       ok: true,
       source: 'fixture',
-      sourceStatus: 'integration-pending',
+      sourceStatus: keysRes.error ? 'ddr-unavailable' : 'integration-pending',
       tenantId,
       data: enrichedRoles,
-      integrationNote: 'No VistA RPC enumerates File 19.1 security keys in bulk. ORWU HASKEY checks one user+key at a time. Full key inventory requires DDR FILE ENTRIES or a custom M routine scanning ^DIC(19.1).',
+      vistaNote: keysRes.error || null,
+      integrationNote:
+        'DDR LISTER on File 19.1 is the preferred key catalog. When VistA is unreachable, fixture roles are shown.',
     };
   });
 
@@ -459,7 +540,35 @@ async function main() {
     if (!tenantId) return { ok: false, error: 'tenantId required' };
     const category = req.query.category || '';
 
-    // Build inventory from fixtures with holder cross-reference
+    const keysRes = await ddrListerSecurityKeys();
+    if (keysRes.ok && keysRes.data.length > 0) {
+      const inventory = keysRes.data
+        .filter(k => !category || (k.description || '').toLowerCase().includes(category.toLowerCase()))
+        .map(k => ({
+          keyName: k.name,
+          vistaKey: k.name,
+          description: k.description || '',
+          category: 'security-key',
+          holderCount: 0,
+          holders: [],
+          vistaGrounding: { file19_1Ien: k.ien, rpcUsed: keysRes.rpcUsed },
+        }));
+      return {
+        ok: true,
+        source: 'vista',
+        tenantId,
+        data: inventory,
+        summary: {
+          totalKeys: inventory.length,
+          clinicalKeys: 0,
+          adminKeys: inventory.length,
+          unassignedKeys: inventory.length,
+        },
+        integrationNote:
+          'Holder lists require a follow-on DDR read of File 200 field 51 or ^XUSEC — not yet wired in this slice.',
+      };
+    }
+
     const inventory = fixtures.roles
       .filter(r => !category || r.category === category)
       .map(role => {
@@ -483,16 +592,18 @@ async function main() {
     return {
       ok: true,
       source: 'fixture',
-      sourceStatus: 'integration-pending',
+      sourceStatus: keysRes.error ? 'ddr-unavailable' : 'integration-pending',
       tenantId,
       data: inventory,
+      vistaNote: keysRes.error || null,
       summary: {
         totalKeys: inventory.length,
         clinicalKeys: inventory.filter(k => k.category === 'clinical').length,
         adminKeys: inventory.filter(k => k.category === 'administrative').length,
         unassignedKeys: inventory.filter(k => k.holderCount === 0).length,
       },
-      integrationNote: 'Key-to-holder mapping is fixture-based. ORWU HASKEY can verify individual assignments but cannot enumerate all holders of a given key. Requires DDR global read of ^XUSEC(key) or a custom M routine.',
+      integrationNote:
+        'Prefer DDR LISTER(File 19.1). Fixture shown when DDR is unavailable.',
     };
   });
 
@@ -501,6 +612,44 @@ async function main() {
   app.get('/api/tenant-admin/v1/esig-status', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
+
+    const usersRes = await fetchVistaUsers('');
+    if (usersRes.ok && usersRes.data.length > 0) {
+      const es = await fetchVistaEsigStatusForUsers(usersRes.data, 120);
+      if (es.ok) {
+        const summary = es.data.map(row => ({
+          id: row.ien,
+          name: row.name,
+          duz: row.ien,
+          status: 'active',
+          esigStatus: row.hasCode ? 'active' : 'not-configured',
+          hasCode: row.hasCode,
+          sigBlockName: row.sigBlockName,
+          sigBlockTitle: row.sigBlockTitle,
+          initials: row.initials || '',
+          source: row.source,
+        }));
+        return {
+          ok: true,
+          source: 'vista',
+          tenantId,
+          data: summary,
+          aggregates: {
+            total: summary.length,
+            active: summary.filter(u => u.hasCode).length,
+            notConfigured: summary.filter(u => !u.hasCode).length,
+            revoked: 0,
+          },
+          rpcUsed: es.rpcUsed,
+          probedUsers: es.probed,
+          vistaGrounding: {
+            readRpc: 'DDR GETS ENTRY DATA',
+            fields: '20.2;20.3;20.4',
+            note: 'Field 20.4 is hashed; response indicates presence only.',
+          },
+        };
+      }
+    }
 
     const summary = fixtures.users.map(u => ({
       id: u.id,
@@ -527,60 +676,408 @@ async function main() {
         notConfigured: summary.filter(u => u.esigStatus === 'not-configured').length,
         revoked: summary.filter(u => u.esigStatus === 'revoked').length,
       },
-      integrationNote: 'ORWU VALIDSIG validates one e-sig at a time but no RPC exposes bulk e-sig status across all users. Fixture data reflects design-time assumptions, not live VistA state. Requires per-user ORWU VALIDSIG probing or DDR read of File 200 field 20.4 hash presence.',
+      integrationNote:
+        'Live path: ORWU NEWPERS + per-user DDR GETS (20.2-20.4). Fixture shown when VistA/DDR unavailable.',
       vistaGrounding: {
-        validationRpc: 'ORWU VALIDSIG',
+        readRpc: 'DDR GETS ENTRY DATA',
         field: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
         note: 'E-sig codes are hashed in VistA and never retrievable. Presence check only.',
       },
     };
   });
 
-  // ---- Guided write workflow catalog ----
+  // ---- VistA DDR family probe (no terminal; RPC-only) ----
 
-  app.get('/api/tenant-admin/v1/guided-tasks', async (req) => {
+  app.get('/api/tenant-admin/v1/vista/ddr-probe', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
     const probe = await probeVista();
-    const vistaConnected = probe.ok;
+    if (!probe.ok) {
+      return {
+        ok: false,
+        tenantId,
+        source: 'integration-pending',
+        error: probe.error || 'VistA unreachable',
+      };
+    }
+    try {
+      const ddr = await probeDdrRpcFamily();
+      return { ok: true, tenantId, source: 'vista', ...ddr };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
 
-    // Workflow catalog (server-side source of truth for GW-* IDs)
-    const workflowCatalog = [
-      { gwId: 'GW-USR-01', title: 'Add New User', category: 'User Management', mode: 'B', risk: 'high', vistaTarget: 'File 200' },
-      { gwId: 'GW-USR-02', title: 'Edit User Properties', category: 'User Management', mode: 'B', risk: 'medium', vistaTarget: 'File 200' },
-      { gwId: 'GW-USR-03', title: 'Deactivate User (DISUSER)', category: 'User Management', mode: 'B', risk: 'high', vistaTarget: 'File 200' },
-      { gwId: 'GW-USR-04', title: 'Reactivate User', category: 'User Management', mode: 'B', risk: 'high', vistaTarget: 'File 200' },
-      { gwId: 'GW-USR-05', title: 'Set Up Electronic Signature', category: 'User Management', mode: 'C', risk: 'high', vistaTarget: 'File 200 field 20.4' },
-      { gwId: 'GW-KEY-01', title: 'Allocate Security Key', category: 'Key Management', mode: 'B', risk: 'high', vistaTarget: 'File 19.1' },
-      { gwId: 'GW-KEY-02', title: 'Remove Security Key', category: 'Key Management', mode: 'B', risk: 'high', vistaTarget: 'File 19.1' },
-      { gwId: 'GW-DIV-01', title: 'Manage Division Configuration', category: 'Division Management', mode: 'C', risk: 'high', vistaTarget: 'File 40.8' },
-      { gwId: 'GW-DIV-02', title: 'Manage Service/Section', category: 'Division Management', mode: 'B', risk: 'medium', vistaTarget: 'File 49' },
-      { gwId: 'GW-DIV-03', title: 'View/Edit Kernel Site Parameters', category: 'Division Management', mode: 'B', risk: 'high', vistaTarget: 'File 8989.3' },
-      { gwId: 'GW-CLIN-01', title: 'Add/Edit Clinic Location', category: 'Clinic Management', mode: 'B', risk: 'medium', vistaTarget: 'File 44' },
-      { gwId: 'GW-CLIN-02', title: 'Edit Clinic Fields', category: 'Clinic Management', mode: 'B', risk: 'medium', vistaTarget: 'File 44' },
-      { gwId: 'GW-CLIN-03', title: 'Inactivate/Reactivate Clinic', category: 'Clinic Management', mode: 'B', risk: 'medium', vistaTarget: 'File 44' },
-      { gwId: 'GW-WARD-01', title: 'Add/Edit Ward Location', category: 'Ward Management', mode: 'B', risk: 'high', vistaTarget: 'File 42 + File 405.4' },
-      { gwId: 'GW-WARD-02', title: 'Room-Bed Setup', category: 'Ward Management', mode: 'C', risk: 'high', vistaTarget: 'File 405.4' },
-      { gwId: 'GW-ORD-01', title: 'Quick Order Management', category: 'Ordering Configuration', mode: 'C', risk: 'medium', vistaTarget: 'File 101.41' },
-      { gwId: 'GW-ORD-02', title: 'Configure CPRS Notifications', category: 'Ordering Configuration', mode: 'A', risk: 'medium', vistaTarget: 'ORQ3 LOADALL/SAVEALL' },
-      { gwId: 'GW-MENU-01', title: 'View/Edit Menu Trees', category: 'System Configuration', mode: 'C', risk: 'high', vistaTarget: 'File 19' },
-      { gwId: 'GW-PCMM-01', title: 'PCMM Team Management', category: 'System Configuration', mode: 'C', risk: 'medium', vistaTarget: 'SD PCMM files' },
-    ];
-
+  /** Direct write: update allow-listed File 200 contact fields via DDR VALIDATOR + DDR FILER */
+  app.put('/api/tenant-admin/v1/users/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { ien } = req.params;
+    const body = req.body || {};
+    const field = body.field;
+    const value = body.value;
+    const ALLOW = {
+      '.132': 'OFFICE PHONE',
+      '.133': 'VOICE PAGER',
+      '.134': 'DIGITAL PAGER',
+      '.151': 'MAIL CODE',
+    };
+    if (!field || value === undefined || !ALLOW[field]) {
+      return reply.code(400).send({
+        ok: false,
+        error: 'field and value required; field must be an allow-listed contact field',
+        allowedFields: Object.keys(ALLOW),
+        labels: ALLOW,
+      });
+    }
+    const p = await probeVista();
+    if (!p.ok) {
+      return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    }
+    const iens = `${ien},`;
+    const valRes = await ddrValidateField(200, iens, field, String(value));
+    if (!valRes.ok) {
+      return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+    }
+    const filer = await ddrFilerEdit(200, iens, field, String(value), 'E');
+    if (!filer.ok) {
+      return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error, rpcUsed: filer.rpcUsed });
+    }
     return {
       ok: true,
-      source: 'catalog',
+      source: 'vista',
       tenantId,
-      data: workflowCatalog,
-      summary: {
-        total: workflowCatalog.length,
-        modeA: workflowCatalog.filter(w => w.mode === 'A').length,
-        modeB: workflowCatalog.filter(w => w.mode === 'B').length,
-        modeC: workflowCatalog.filter(w => w.mode === 'C').length,
-        highRisk: workflowCatalog.filter(w => w.risk === 'high').length,
-      },
-      vistaStatus: vistaConnected ? 'connected' : 'integration-pending',
+      ien,
+      field,
+      rpcUsed: ['DDR VALIDATOR', filer.rpcUsed],
+      filerLines: filer.lines,
+      validatorLines: valRes.lines,
     };
+  });
+
+  /** Assign security key — ZVE USMG KEYS (overlay). */
+  app.post('/api/tenant-admin/v1/users/:targetDuz/keys', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const keyName = (req.body || {}).keyName;
+    if (!keyName || typeof keyName !== 'string') {
+      return reply.code(400).send({ ok: false, error: 'keyName required in JSON body' });
+    }
+    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
+    if (!sanitized) return reply.code(400).send({ ok: false, error: 'keyName empty after sanitize' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG KEYS', ['ADD', String(req.params.targetDuz), sanitized]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE USMG KEYS not registered. Run INSTALL^ZVEUSMG in VistA (distro overlay).',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') {
+      return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
+    }
+    return { ok: true, tenantId, targetDuz: req.params.targetDuz, keyName: sanitized, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.delete('/api/tenant-admin/v1/users/:targetDuz/keys/:keyId', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const keyName = String(req.params.keyId || '').toUpperCase().replace(/\+/g, ' ').replace(/%20/g, ' ');
+    if (!keyName.trim()) return reply.code(400).send({ ok: false, error: 'keyId (key name) required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG KEYS', ['DEL', String(req.params.targetDuz), keyName.trim()]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE USMG KEYS not registered. Run INSTALL^ZVEUSMG in VistA.',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') {
+      return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
+    }
+    return { ok: true, tenantId, targetDuz: req.params.targetDuz, keyName: keyName.trim(), rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  /** Create File 200 user (minimal) — ZVE USMG ADD */
+  app.post('/api/tenant-admin/v1/users', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const name = body.name;
+    if (!name || typeof name !== 'string') {
+      return reply.code(400).send({ ok: false, error: 'name required' });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG ADD', [name, body.accessCode || '', body.verifyCode || '']);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE USMG ADD not registered. Run INSTALL^ZVEUSMG in VistA.',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    const newIen = (z.line0 || '').split('^')[1] || null;
+    return { ok: true, tenantId, newIen, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.post('/api/tenant-admin/v1/users/:duz/esig', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const code = (req.body || {}).code;
+    if (!code || typeof code !== 'string') return reply.code(400).send({ ok: false, error: 'code required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG ESIG', [String(req.params.duz), code]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG ESIG not registered.', detail: o.msg });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.put('/api/tenant-admin/v1/users/:duz/credentials', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    if (!body.accessCode || !body.verifyCode) {
+      return reply.code(400).send({ ok: false, error: 'accessCode and verifyCode required' });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG CRED', [String(req.params.duz), String(body.accessCode), String(body.verifyCode)]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG CRED not registered.', detail: o.msg });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.post('/api/tenant-admin/v1/users/:duz/deactivate', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG DEACT', [String(req.params.duz)]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG DEACT not registered.', detail: o.msg });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.post('/api/tenant-admin/v1/users/:duz/reactivate', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG REACT', [String(req.params.duz)]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG REACT not registered.', detail: o.msg });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  /** Device list (File 3.5) via DDR LISTER */
+  app.get('/api/tenant-admin/v1/devices', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) {
+      return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    }
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '3.5', FIELDS: '.01;1;2;3', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            ien,
+            name: a[1]?.trim(),
+            dollarI: a[2]?.trim(),
+            type: a[3]?.trim(),
+            subtype: a[4]?.trim(),
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '3.5', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  /** Kernel site parameters (File 8989.3) — first entry */
+  app.get('/api/tenant-admin/v1/params/kernel', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    try {
+      const lines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpcWithList('DDR GETS ENTRY DATA', [
+          { type: 'list', value: { FILE: '8989.3', IENS: '1,', FIELDS: '.01;.02;.03;.04;.05' } },
+        ]);
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '8989.3', rawLines: lines };
+    } catch (e) {
+      return { ok: false, tenantId, error: e.message, note: 'File 8989.3 IEN may differ per site.' };
+    }
+  });
+
+  const KERNEL8989_ALLOW = {
+    '.01': 'SITE NAME',
+    '.02': 'DOMAIN NAME',
+    '.03': 'DEFAULT INSTITUTION',
+    '.04': 'DEFAULT AUTO MENU',
+    '.05': 'DEFAULT LANGUAGE',
+  };
+
+  app.put('/api/tenant-admin/v1/params/kernel', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const field = body.field;
+    const value = body.value;
+    if (!field || value === undefined || !KERNEL8989_ALLOW[field]) {
+      return reply.code(400).send({
+        ok: false,
+        error: 'field and value required; field must be allow-listed',
+        allowedFields: Object.keys(KERNEL8989_ALLOW),
+      });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const iens = '1,';
+    const valRes = await ddrValidateField(8989.3, iens, field, String(value));
+    if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+    const filer = await ddrFilerEdit(8989.3, iens, field, String(value), 'E');
+    if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error });
+    return {
+      ok: true,
+      tenantId,
+      field,
+      rpcUsed: ['DDR VALIDATOR', 'DDR FILER'],
+      filerLines: filer.lines,
+    };
+  });
+
+  /** Create clinic (File 44) — ZVE CLNM ADD */
+  app.post('/api/tenant-admin/v1/clinics', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const name = (req.body || {}).name;
+    if (!name || typeof name !== 'string') return reply.code(400).send({ ok: false, error: 'name required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE CLNM ADD', [name]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE CLNM ADD not registered. Run INSTALL^ZVECLNM in VistA.',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    const newIen = (z.line0 || '').split('^')[1] || null;
+    return { ok: true, tenantId, newIen, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.put('/api/tenant-admin/v1/clinics/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const name = (req.body || {}).name;
+    if (!name || typeof name !== 'string') return reply.code(400).send({ ok: false, error: 'name required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE CLNM EDIT', [String(req.params.ien), name]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE CLNM EDIT not registered. Run INSTALL^ZVECLNM in VistA.',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, ien: req.params.ien, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  app.put('/api/tenant-admin/v1/wards/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const name = (req.body || {}).name;
+    if (!name || typeof name !== 'string') return reply.code(400).send({ ok: false, error: 'name required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE WRDM EDIT', [String(req.params.ien), name]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE WRDM EDIT not registered. Run INSTALL^ZVEWRDM in VistA.',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, ien: req.params.ien, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  /** Create device File 3.5 — DDR FILER ADD .01 */
+  app.post('/api/tenant-admin/v1/devices', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const nm = (req.body || {}).name;
+    if (!nm || typeof nm !== 'string') return reply.code(400).send({ ok: false, error: 'name required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const valRes = await ddrValidateField(3.5, '+1,', '.01', nm);
+    if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+    const filer = await ddrFilerAdd(3.5, '.01', '+1,', nm, 'E');
+    if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER ADD', error: filer.error });
+    return { ok: true, tenantId, rpcUsed: filer.rpcUsed, lines: filer.lines };
+  });
+
+  app.put('/api/tenant-admin/v1/devices/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const nm = (req.body || {}).name;
+    if (!nm || typeof nm !== 'string') return reply.code(400).send({ ok: false, error: 'name required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const iens = `${req.params.ien},`;
+    const valRes = await ddrValidateField(3.5, iens, '.01', nm);
+    if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+    const filer = await ddrFilerEdit(3.5, iens, '.01', nm, 'E');
+    if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error });
+    return { ok: true, tenantId, ien: req.params.ien, rpcUsed: ['DDR VALIDATOR', 'DDR FILER'], lines: filer.lines };
   });
 
   app.get('/api/tenant-admin/v1/dashboard', async (req) => {
@@ -602,13 +1099,18 @@ async function main() {
 
     if (probe.ok) {
       try {
-        // Sequential calls — XWB broker has no mutex, concurrent RPCs corrupt responses
         const usersRes = await fetchVistaUsers('');
         const clinicsRes = await fetchVistaClinics('');
         const wardsRes = await fetchVistaWards();
+        const keysRes = await ddrListerSecurityKeys();
         if (usersRes.ok) { userCount = usersRes.data.length; activeUserCount = userCount; source = 'vista'; }
         if (clinicsRes.ok) { clinicCount = clinicsRes.data.length; facilityCount = clinicsRes.data.length; }
         if (wardsRes.ok) { wardCount = wardsRes.data.length; }
+        if (keysRes.ok) { roleCount = keysRes.data.length; }
+        if (usersRes.ok) {
+          const es = await fetchVistaEsigStatusForUsers(usersRes.data, 120);
+          if (es.ok) { esigActiveCount = es.data.filter(u => u.hasCode).length; }
+        }
       } catch (_) { /* fall back to fixture counts */ }
     } else {
       function countFacilities(items) {
@@ -651,105 +1153,6 @@ async function main() {
         vistaUrl: probe.url || null,
         moduleStatus: { enabled: 0, total: 0 }
       }
-    };
-  });
-
-  // ---- Guided-write: Key allocation (GW-KEY-01) ----
-  // Mode B: API validates + generates M command → operator executes in terminal → API reads back.
-
-  app.post('/api/tenant-admin/v1/guided-write/key-check', async (req) => {
-    const { tenantId, keyName } = req.body || {};
-    if (!tenantId) return { ok: false, error: 'tenantId required' };
-    if (!keyName || typeof keyName !== 'string') return { ok: false, error: 'keyName required (string)' };
-
-    // Sanitize: key names are uppercase alphanumeric + spaces only in VistA
-    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '');
-    if (sanitized !== keyName.toUpperCase()) {
-      return { ok: false, error: 'Invalid key name — only A-Z, 0-9, and spaces allowed' };
-    }
-
-    const probe = await probeVista();
-    if (!probe.ok) {
-      return {
-        ok: false,
-        source: 'integration-pending',
-        error: 'VistA broker unavailable',
-        note: 'Guided-write requires live VistA connection for pre-check and read-back.',
-      };
-    }
-
-    // Pre-check: does the authenticated user (DUZ) hold this key?
-    const keyResult = await checkVistaKey(sanitized);
-    if (!keyResult.ok) {
-      return { ok: false, source: 'unavailable', error: keyResult.error };
-    }
-
-    return {
-      ok: true,
-      source: 'vista',
-      gwId: 'GW-KEY-01',
-      mode: 'B',
-      tenantId,
-      preCheck: {
-        duz: probe.duz,
-        userName: probe.userName,
-        keyName: sanitized,
-        currentlyHeld: keyResult.hasKey,
-        rpcUsed: 'ORWU HASKEY',
-      },
-      guidedAction: keyResult.hasKey
-        ? {
-            description: `User ${probe.userName} (DUZ=${probe.duz}) already holds key ${sanitized}.`,
-            mCommand: null,
-            status: 'no-action-needed',
-          }
-        : {
-            description: `User ${probe.userName} (DUZ=${probe.duz}) does NOT hold key ${sanitized}. To allocate:`,
-            mCommand: `S ^XUSEC("${sanitized}",${probe.duz})=""`,
-            undoCommand: `K ^XUSEC("${sanitized}",${probe.duz})`,
-            vistaFile: 'Global ^XUSEC (security key index)',
-            risk: 'medium',
-            note: 'Execute in VistA programmer mode (SSH or docker exec). Then call /guided-write/key-verify to confirm.',
-          },
-    };
-  });
-
-  app.post('/api/tenant-admin/v1/guided-write/key-verify', async (req) => {
-    const { tenantId, keyName, expectedState } = req.body || {};
-    if (!tenantId) return { ok: false, error: 'tenantId required' };
-    if (!keyName || typeof keyName !== 'string') return { ok: false, error: 'keyName required (string)' };
-
-    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '');
-
-    const probe = await probeVista();
-    if (!probe.ok) {
-      return { ok: false, source: 'integration-pending', error: 'VistA broker unavailable' };
-    }
-
-    const keyResult = await checkVistaKey(sanitized);
-    if (!keyResult.ok) {
-      return { ok: false, source: 'unavailable', error: keyResult.error };
-    }
-
-    const verified = expectedState !== undefined
-      ? keyResult.hasKey === (expectedState === true || expectedState === 'held')
-      : true;
-
-    return {
-      ok: true,
-      source: 'vista',
-      gwId: 'GW-KEY-01',
-      tenantId,
-      verification: {
-        duz: probe.duz,
-        userName: probe.userName,
-        keyName: sanitized,
-        currentlyHeld: keyResult.hasKey,
-        expectedState: expectedState ?? 'not-specified',
-        verified,
-        rpcUsed: 'ORWU HASKEY',
-        timestamp: new Date().toISOString(),
-      },
     };
   });
 

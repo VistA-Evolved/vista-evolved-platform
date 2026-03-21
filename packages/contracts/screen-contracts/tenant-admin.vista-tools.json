@@ -1,0 +1,30 @@
+{
+  "surfaceId": "tenant-admin.vista-tools",
+  "version": "0.1.0",
+  "title": "VistA Tools",
+  "status": "draft",
+  "description": "DDR RPC family probe and direct-write posture documentation. Replaces legacy guided terminal / Mode B catalog. All admin writes go through DDR VALIDATOR/FILER or distro overlay RPCs (ZVEUSMG, ZVECLNM, ZVEWRDM).",
+  "workspaceFamily": "tenant-admin",
+  "navigationLevel": "secondary",
+  "surfaceType": "admin",
+  "accessRequirements": {
+    "allowedRoles": ["tenant-admin"],
+    "scopePosture": "tenant-scoped",
+    "entityContextRequired": ["tenantId"]
+  },
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": false,
+  "dataSources": [
+    {
+      "sourceId": "vista-ddr-probe",
+      "sourceDomainClass": "vista-operational-truth",
+      "description": "Live DDR GETS / VALIDATOR / LISTER probe plus integration notes for DDR FILER."
+    }
+  ],
+  "dataClassification": "configuration",
+  "claimSurface": null,
+  "analyticsSurface": null,
+  "crossWorkspaceTransitions": [],
+  "readinessDependencies": [],
+  "refreshBehavior": "on-demand"
+}

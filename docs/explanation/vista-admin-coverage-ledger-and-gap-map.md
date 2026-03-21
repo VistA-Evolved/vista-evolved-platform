@@ -6,8 +6,10 @@
 > **Governed by:** AGENTS.md, VE-PLAT-ADR-0003.
 >
 > **Purpose:** Single-page summary of what is covered, what is missing, and what blocks
-> progress from PASS-DOC → PASS-LIVE across all 70 terminal-to-UI functions.
+> progress from PASS-DOC → PASS-LIVE across all 70 terminal-to-ui functions.
 > Companion to `vista-admin-terminal-to-ui-translation-matrix-v2.md`.
+>
+> **Write-path note (2026-03-21):** Tenant-admin now ships **direct** writes (DDR + `ZVE*`). Rows below that say “guided write” / “no write path” reflect the **original** PASS-DOC snapshot; refresh counts when re-auditing against `tenant-admin.openapi.yaml`.
 
 ---
 
@@ -53,7 +55,7 @@
 |-----|-------------|--------|-----------------|------------|
 | G-LIVE-01 | No live Docker verification done | All | Start VistA Docker, run API, call endpoints, capture evidence | B-PROOF-001 |
 | G-LIVE-02 | Broker restart persistence unproven | All | Prove broker survives restart and reconnects | B-PERSIST-001 |
-| G-LIVE-03 | No write paths proven | 19 guided-write functions | Probe write RPCs, capture terminal → RPC → read-back evidence | B-WRITE-001 |
+| G-LIVE-03 | ~~No write paths proven~~ **Partially addressed** | Core tenant-admin writes | Prove each surface live: `scripts/ddr-tenant-admin-proof.mjs` + distro `INSTALL^ZVE*` | B-WRITE-001 |
 
 ---
 
@@ -63,7 +65,7 @@
 |-----------|---------|---------------------------|----------|
 | B-PROOF-001 | No live proof package exists | All 70 functions | P0 — total |
 | B-AUTH-001 | No session/auth wired | All 70 functions | P0 — total |
-| B-WRITE-001 | No write path implemented | 19 guided-write functions | P1 — blocks writes |
+| B-WRITE-001 | ~~No write path~~ **Direct path exists** (scope: tenant-admin OpenAPI) | Remaining 70-function matrix rows | P2 — expand coverage audit |
 | B-RPC-001 | XUS ALLKEYS unprobed | TM-KEY-01 (key catalog) | P2 — blocks key reads |
 | B-RPC-002 | Bulk e-sig validation absent | TM-USR-06 (e-sig status) | P2 — blocks e-sig reads |
 | B-RPC-003 | Site parameter RPC absent | TM-PARAM-01, TM-INST-04 | P2 — blocks param reads |

@@ -1,5 +1,7 @@
 # VistA Admin — Slice Ranking and Mode Selection
 
+> **Posture update (2026-03-21):** Tenant-admin **writes** are implemented as **direct API** (DDR + overlay `ZVE*`). The **Mode B** / “guided write” column in the table below is **legacy labeling** from the original ranking; prefer `packages/contracts/openapi/tenant-admin.openapi.yaml` and `docs/explanation/guided-write-pass-live-proof.md` for the current contract.
+>
 > **Purpose:** Ranks the first 15–25 candidate admin functions by business importance,
 > safety, truth availability, and UI feasibility. Selects the first three slice candidates
 > with explicit justification.

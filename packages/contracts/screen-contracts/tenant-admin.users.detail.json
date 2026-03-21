@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "title": "User Detail",
   "status": "draft",
-  "description": "Detail view for a single user within a tenant. Displays platform identity and VistA File 200 attributes: DUZ, initials, person class, service/section, division, primary menu option, DISUSER flag, electronic signature status (field 20.4), and security key assignments. VistA attributes are read-only. Key assignment and e-sig setup require guided terminal workflows.",
+  "description": "Detail view for a single user within a tenant. Displays platform identity and VistA File 200 attributes: DUZ, initials, person class, service/section, division, primary menu option, DISUSER flag, electronic signature status (field 20.4), and security key assignments. Writes use controlled APIs: DDR VALIDATOR/FILER for allow-listed contact fields; distro RPCs ZVE USMG KEYS/ESIG/CRED/DEACT/REACT for keys, e-sig, credentials, and termination date when installed.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "local",
   "surfaceType": "admin",
@@ -12,8 +12,8 @@
     "scopePosture": "tenant-scoped",
     "entityContextRequired": ["tenantId", "userId"]
   },
-  "readWritePosture": "read-only",
-  "directWriteAllowed": false,
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": true,
   "dataSources": [
     {
       "sourceId": "platform-user-registry",

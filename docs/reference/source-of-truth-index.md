@@ -33,7 +33,7 @@
 | **Fixture purge and happy-path red-line** | `docs/explanation/fixture-purge-and-happy-path-redline.md` | 84-file audit: 75 canonical (class A), 4 degraded-mode (class B), 5 fabricated (class C), 0 dead (class D). Conversion plans per file. |
 | **Broker canonicalization proof** | `docs/explanation/broker-canonicalization-proof.md` | PASS-LIVE proof: XWB broker connect, auth, 6 RPCs, restart persistence. Resolves B-PERSIST-001, B-RPC-001/002/003. |
 | **Tenant-admin PASS-LIVE proof** | `docs/explanation/tenant-admin-pass-live-proof.md` | PASS-LIVE proof: tenant-admin server exercised against live VistA. 6/11 endpoints return source:vista with real data. No code changes required. |
-| **Guided-write PASS-LIVE proof** | `docs/explanation/guided-write-pass-live-proof.md` | PASS-LIVE proof: GW-KEY-01 guided key allocation. 7-step cycle (pre-check → allocate → read-back → undo → restore). 7/7 PASS. Resolves B-WRITE-001. |
+| **DDR / direct-write proof (tenant-admin)** | `docs/explanation/guided-write-pass-live-proof.md` | DDR + overlay write path: `scripts/ddr-tenant-admin-proof.mjs`, OpenAPI `packages/contracts/openapi/tenant-admin.openapi.yaml`. Guided terminal Mode B **retired**. |
 
 ## Architecture and decisions
 
@@ -75,7 +75,7 @@
 | **Operator console design handoff brief v2** | `docs/explanation/operator-console-design-handoff-brief-v2.md` | Full design handoff brief for 22 surfaces under 8-domain model: Figma Make primary brief, Stitch secondary brief, live CSS token reference, component specs (9 components), per-surface design notes, cross-domain drill map, acceptance criteria (15 gates), rejection triggers (12 triggers). Supersedes v1 bootstrap handoff brief. |
 | **Tenant admin architecture and boundaries** | `docs/explanation/tenant-admin-architecture-and-boundaries.md` | Workspace identity (family #2), separation from CP, 8 concern areas with VistA grounding, boundary constraints, data flow model, implementation posture |
 | **Tenant admin VistA truth map** | `docs/explanation/tenant-admin-vista-truth-map.md` | Maps tenant-admin concerns to VistA files, globals, RPCs: Facility (File 4/44), User (File 200), Role (File 19.1/19), Site Params (File 8989.3), research priorities |
-| **Tenant admin VistA admin truth discovery pack** | `docs/explanation/tenant-admin-vista-admin-truth-discovery-pack.md` | Comprehensive discovery: 7 object families (Files 200, 19.1, 4, 40.8, 44, 42, 8989.3), RPC availability with IENs, confidence classifications, safe read paths, guided-write boundaries |
+| **Tenant admin VistA admin truth discovery pack** | `docs/explanation/tenant-admin-vista-admin-truth-discovery-pack.md` | Comprehensive discovery: 7 object families (Files 200, 19.1, 4, 40.8, 44, 42, 8989.3), RPC availability with IENs, confidence classifications, safe read paths. **Writes:** DDR + overlay `ZVE*` (terminal-guided Mode B retired for tenant-admin). |
 | **Tenant admin VistA users & security keys map** | `docs/explanation/tenant-admin-vista-users-and-security-keys-map.md` | Deep map: File 200 nodes, display-safe vs security-sensitive fields, ORWU NEWPERS/USERINFO/HASKEY patterns, ZVECREUSER.m evidence, File 19.1 key inventory |
 | **Tenant admin VistA facility/division/clinic map** | `docs/explanation/tenant-admin-vista-facility-division-clinic-map.md` | Deep map: Files 4/40.8/44 hierarchy, XUS DIVISION GET/ORWU CLINLOC patterns, topology assembly, first-slice simplification |
 | **Tenant admin VistA ward & room-bed map** | `docs/explanation/tenant-admin-vista-ward-bed-map.md` | Deep map: Files 42/405.4 structure, patient-oriented vs admin-oriented RPCs, global read paths, P3 priority assessment |
@@ -86,10 +86,10 @@
 | **VistA admin domain map** | `docs/explanation/vista-admin-domain-map.md` | Quick-reference: concern→package→file→global→RPC family mapping for 12 domains (D1–D12 + D-DDR), global-to-file lookup |
 | **VistA admin source manual index** | `docs/explanation/vista-admin-source-manual-index.md` | Bibliography: 12 external sources (Wikipedia, WorldVistA GitHub), 3 local sources (Vivian), 4 failed sources, reliability assessments, research date |
 | **VistA admin terminal-to-UI translation matrix** | `docs/explanation/vista-admin-terminal-to-ui-translation-matrix.md` | Anti-miss matrix: 49 admin functions across 13 domains, 5 UI translation modes (A–E), column set includes menu path/option/files/globals/RPCs/mode/confidence/verification plan, summary mode distribution |
-| **VistA admin slice ranking and mode selection** | `docs/explanation/vista-admin-slice-ranking-and-mode-selection.md` | Ranked top 25 admin functions (composite scoring × 4 dimensions), first 3 slice candidates with justification: Slice 1 = user/key read workspace (Mode A), Slice 2 = user/key guided writes (Mode B), Slice 3 = facility topology read workspace (Mode A) |
+| **VistA admin slice ranking and mode selection** | `docs/explanation/vista-admin-slice-ranking-and-mode-selection.md` | Historical ranking doc. **Current posture:** tenant-admin writes are **direct API** (DDR + `ZVEUSMG`/`ZVECLNM`/`ZVEWRDM`); treat former “Mode B” rows as **legacy labeling** unless refreshed. |
 | **VistA admin grounded domain: users, keys, signatures** | `docs/explanation/vista-admin-grounded-domain-users-keys-signatures.md` | Deep grounded domain reference: File 200/19.1/200.051 field maps, 3-tier RPC inventory (10 VEHU-confirmed, 7 XUS IAM unprobed, 9 custom VE*), MUMPS write patterns, data shape evidence, electronic signature mechanics, implementation strategy decision tree, Slice 1/2 scope specifications, 11 probing requirements |
 | **VistA admin grounded domain: institution, division, clinic** | `docs/explanation/vista-admin-grounded-domain-institution-division-clinic.md` | Deep grounded domain reference: File 4/40.8/44/42 hierarchy, 16 VEHU-confirmed RPCs + 8 custom VE* + 14 SDES/SDEC (absent from VEHU), ZVEFAC.m patterns, 12 custom RPCs needed, SDES/SDEC gap analysis, screen contracts, 6 probe requirements, topology assembly pattern |
-| **VistA admin guided write workflows** | `docs/explanation/vista-admin-guided-write-workflows.md` | Complete guided write catalog: 19 GW-* workflows (10 Mode B, 6 Mode C), 6-step canonical pattern, VistA EVE menu tree map, write safety patterns, 10 custom write RPCs across ZVEUSER/ZVECLIN/ZVEFAC, implementation readiness assessment, 5 SPA guided task cards |
+| **VistA admin guided write workflows** | `docs/explanation/vista-admin-guided-write-workflows.md` | **Legacy / historical:** GW-* terminal-guided catalog. **Superseded for tenant-admin** by DDR + overlay RPCs; SPA no longer ships a guided-task catalog. Retained for menu-path research. |
 | **VistA admin repo gap analysis** | `docs/explanation/vista-admin-repo-gap-analysis.md` | Domain-by-domain audit of platform and distro repos against the Domain Map and Translation Matrix: grounding status for all D1-D10 domains, backend API gap analysis, 4-tier gap classification (near-term / medium-term / integration-plane / deferred), placement matrix, sequenced next steps |
 | **Fixture inventory and truth ownership audit** | `docs/explanation/fixture-inventory-and-truth-ownership-audit.md` | Canonical audit: every fixture JSON in tenant-admin classified by truth ownership (VistA-owned, catalog-owned, terminal-workflow), with purge/replace/keep disposition and VistA grounding evidence |
 | **Tenant admin happy-path source map** | `docs/explanation/tenant-admin-happy-path-source-map.md` | Per-surface source-of-truth map: which screens read VistA live, which fall back to fixture, what the expected source badge is, and what RPCs are wired |
@@ -107,7 +107,7 @@
 | AI Operator Copilot subsystem | `apps/control-plane/copilot/` | Provider-neutral copilot with 8 bounded tools, operator-role enforcement, full audit. Disabled by default (`COPILOT_ENABLED=false`) |
 | Copilot API routes | `apps/control-plane/routes/copilot-routes.mjs` | Status, chat, audit endpoints at `/api/copilot/v1/*` |
 | Terminal proof-of-concept | `apps/terminal-proof/` | Terminal-first development scaffold |
-| **Tenant admin workspace** | `apps/tenant-admin/` | VistA-first prototype shell on port 4520. 11 surfaces (dashboard, users, roles, facilities, clinics, wards, key inventory, e-sig status, guided tasks). Live XWB broker adapter (ORWU NEWPERS, XUS DIVISION GET, ORWU CLINLOC, ORQPT WARDS) with fixture fallback. Read paths proven against UTF-8 VistA distro. See `apps/tenant-admin/README.md` |
+| **Tenant admin workspace** | `apps/tenant-admin/` | VistA-first prototype shell on port 4520. Surfaces include dashboard, users, roles, facilities, clinics, wards, key inventory, e-sig status, **VistA tools (DDR probe)**, devices, kernel params. Direct writes: DDR + `ZVE*`. See `apps/tenant-admin/README.md` |
 | Admin console shell | `apps/admin-console/` | Reserved placeholder only. Do not treat this path as the active tenant-admin runtime while `apps/tenant-admin/` exists on public `main`. |
 | Tenant-admin first live slice decision | `docs/explanation/tenant-admin-first-live-slice-decision.md` | Canonical Task 2 decision for the first truthful live tenant-admin slice after distro probe findings |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
@@ -138,6 +138,19 @@
 | Contract policy | `docs/reference/contract-policy.md` | Rules for contract usage |
 | Contract system | `docs/reference/contract-system.md` | Contract layer architecture |
 | Ports / endpoints | `docs/reference/port-registry.md`, `packages/config/ports/` | Single config source |
+
+## VistA RPC reference data
+
+| Concern | Canonical location | Notes |
+|---------|-------------------|-------|
+| **VistA RPC reference index** | `docs/reference/vista-rpc-reference-data.md` | Master index of all RPC reference material across all repos |
+| **VistA admin coverage map** | `docs/reference/vista-admin-coverage-map.md` | Maps every VistA terminal admin function to tenant-admin UI status. ~132 functions tracked: ~9% DONE, ~5% PARTIAL, ~86% MISSING. Priority roadmap for new site setup. |
+| Vivian RPC index (3,747) | VistA-Evolved (frozen): `data/vista/vivian/rpc_index.json` | Normalized flat RPC list |
+| Full File 8994 catalog | VistA-Evolved (frozen): `data/vista/rpcs/rpc-catalog.json` | ~4,500 RPCs with params |
+| Domain admin specs (15) | VistA-Evolved (frozen): `data/vista/admin-specs/*.json` | Per-domain RPC specs |
+| CPRS Delphi RPCs (975) | VistA-Evolved (frozen): `design/contracts/cprs/v1/rpc_catalog.json` | Call-site references |
+| Instance comparison | VistA-Evolved (frozen): `data/vista/vista_instance/rpc_present.json` | 2,508 RPCs in VEHU |
+| RPC coverage cross-ref | VistA-Evolved (frozen): `docs/vista-alignment/rpc-coverage.json` | CPRS + Vivian + API |
 
 ## Cross-repo truth references
 

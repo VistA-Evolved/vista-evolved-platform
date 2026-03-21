@@ -23,7 +23,7 @@ slice may be classified as **PASS-LIVE**. Items are sourced from:
 ## Blocker categories
 
 - **B-PROOF** — Missing live proof package (terminal → API → browser end-to-end evidence).
-- **B-WRITE** — Missing write path (real or guided with read-back verification).
+- **B-WRITE** — ~~Missing write path~~ **Superseded:** direct API writes (DDR + `ZVE*` overlay RPCs); proof via `scripts/ddr-tenant-admin-proof.mjs`.
 - **B-AUTH** — Missing session/auth enforcement.
 - **B-RPC** — Missing VistA RPC or custom routine needed for a surface.
 - **B-PERSIST** — Missing restart-safe configuration or canonical runtime setup.
@@ -45,9 +45,9 @@ slice may be classified as **PASS-LIVE**. Items are sourced from:
 ### B-WRITE-001: No write path exists — **RESOLVED**
 
 - **Severity:** ~~BLOCKER for any write-side PASS-LIVE claim.~~ **RESOLVED 2026-03-21.**
-- **Description:** No tenant-admin surface performs a VistA write or a guided-write workflow with evidence capture. The guided-tasks surface is informational only (hardcoded catalog).
-- **Resolution path:** Implement at least one guided-write workflow (e.g., guided key assignment, guided user setup) with read-back verification. Or implement a real safe write (e.g., site parameter update) if provably safe.
-- **Resolution:** Task 6 implemented GW-KEY-01 (guided key allocation, Mode B). Two routes added to server.mjs: `POST /guided-write/key-check` (pre-check + M command generation via `ORWU HASKEY`) and `POST /guided-write/key-verify` (read-back verification). Full 7-step proof cycle executed: pre-check → allocate → read-back → undo → restore-verify. 7/7 PASS. Evidence at `artifacts/guided-write-proof-evidence.json`. Proof at `docs/explanation/guided-write-pass-live-proof.md`.
+- **Description:** ~~No tenant-admin surface performed a VistA write.~~ **Superseded:** Mode B guided terminal routes removed. Writes are **direct API**: DDR VALIDATOR/FILER for allow-listed fields and distro RPCs `ZVE USMG *` / `ZVE CLNM *` / `ZVE WRDM *` when installed (`overlay/routines/`).
+- **Resolution path:** Run `INSTALL^ZVEUSMG` (etc.) on target VistA; use `scripts/ddr-tenant-admin-proof.mjs` and tenant-admin UI forms for evidence.
+- **Resolution:** Direct-write path implemented in `apps/tenant-admin/server.mjs` (`PUT /users/:ien`, `POST/DELETE .../keys`, `POST .../esig`, `PUT .../credentials`, deactivate/reactivate, clinics/wards/devices/params). OpenAPI: `packages/contracts/openapi/tenant-admin.openapi.yaml`. Proof harness: `scripts/ddr-tenant-admin-proof.mjs`. Historical guided-write artifacts are **not** the current contract.
 - **Source:** v2 reconciliation §6, tenant-admin README "Known limitations".
 
 ### B-AUTH-001: No tenant-scoped session auth
@@ -121,7 +121,7 @@ slice may be classified as **PASS-LIVE**. Items are sourced from:
 |----|-------------|------------|------|
 | B-PERSIST-001 | Broker connection not restart-safe | Hot-patched entrypoint template + proved restart persistence (Task 4) | 2026-03-21 |
 | B-PROOF-001 | No public live proof package | 6/11 endpoints proved live via tenant-admin server against UTF-8 VistA (Task 5) | 2026-03-21 |
-| B-WRITE-001 | No write path exists | GW-KEY-01 guided-write: 7-step allocate→verify→undo→verify cycle, 7/7 PASS (Task 6) | 2026-03-21 |
+| B-WRITE-001 | No write path exists | DDR + ZVE* direct writes + proof script `ddr-tenant-admin-proof.mjs` (Mode B retired) | 2026-03-21 |
 
 ---
 
@@ -130,7 +130,7 @@ slice may be classified as **PASS-LIVE**. Items are sourced from:
 | Blocker | Required before task |
 |---------|---------------------|
 | B-PROOF-001 | Task 5 (first PASS-LIVE slice) — **RESOLVED 2026-03-21** |
-| B-WRITE-001 | Task 6 (first write/guided-write path) — **RESOLVED 2026-03-21** |
+| B-WRITE-001 | Task 6 (first **direct** write path: DDR + ZVE*) — **RESOLVED 2026-03-21** |
 | B-AUTH-001 | Not blocking dev/proof PASS-LIVE; blocking production readiness |
 | B-RPC-001 | Unblocking role/key surfaces beyond integration-pending |
 | B-RPC-002 | Unblocking e-sig surface beyond integration-pending |
@@ -151,5 +151,5 @@ slice may be classified as **PASS-LIVE**. Items are sourced from:
 | Happy-path source map | `docs/explanation/tenant-admin-happy-path-source-map.md` |
 | Live broker canonical path | `docs/explanation/live-broker-canonical-path.md` |
 | Broker canonicalization proof | `docs/explanation/broker-canonicalization-proof.md` |
-| Guided-write PASS-LIVE proof | `docs/explanation/guided-write-pass-live-proof.md` |
+| DDR / direct-write proof (tenant-admin) | `docs/explanation/guided-write-pass-live-proof.md` (filename retained; content is DDR path) |
 | Tenant-admin README | `apps/tenant-admin/README.md` |

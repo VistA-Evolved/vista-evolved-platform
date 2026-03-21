@@ -340,4 +340,45 @@ export default function registerRoutes(server, fixtures, contractData, backendUr
   server.get(`${PREFIX}/effective-plans`, async (request, reply) => {
     return contractData.effectivePlans;
   });
+
+  // ── Audit events (real-backend proxy) ───────────────────────────────────
+  server.get(`${PREFIX}/audit/events`, async (request, reply) => {
+    if (backendUrl) {
+      const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
+      const path = `${BACKEND_PREFIX}/audit/events${qs ? '?' + qs : ''}`;
+      const data = await backendFetch(backendUrl, path);
+      if (data && data.ok) {
+        return { ...data, _source: 'real-backend' };
+      }
+    }
+    return {
+      ok: true,
+      events: [],
+      _source: 'fixture-fallback',
+      message: 'Start control-plane-api (4510) for live audit_event rows.',
+    };
+  });
+
+  // ── Operator surfaces (read proxy to control-plane-api) ────────────────
+  function opProxy(suffix, emptyPayload) {
+    server.get(`${PREFIX}${suffix}`, async (request, reply) => {
+      if (backendUrl) {
+        const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
+        const path = `${BACKEND_PREFIX}${suffix}${qs ? '?' + qs : ''}`;
+        const data = await backendFetch(backendUrl, path);
+        if (data && data.ok) return { ...data, _source: 'real-backend' };
+      }
+      return {
+        ok: true,
+        ...emptyPayload,
+        _source: 'fixture-fallback',
+        message: 'Start control-plane-api for live PG-backed operator data.',
+      };
+    });
+  }
+  opProxy('/operator/invitations', { invitations: [] });
+  opProxy('/operator/alerts', { alerts: [] });
+  opProxy('/operator/usage-events', { events: [] });
+  opProxy('/operator/entitlements', { entitlements: [] });
+  opProxy('/operator/feature-flags', { flags: [] });
 }

@@ -13,7 +13,13 @@
 > - [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md) — RPC evidence base
 > - [Grounded Domain: Users, Keys, Signatures](vista-admin-grounded-domain-users-keys-signatures.md) — Slice 1/2 reference
 > - [Grounded Domain: Institution, Division, Clinic](vista-admin-grounded-domain-institution-division-clinic.md) — Slice 3 reference
-> - [Guided Write Workflows](vista-admin-guided-write-workflows.md) — Mode B/C workflow catalog
+> - [Guided Write Workflows](vista-admin-guided-write-workflows.md) — **Historical** terminal workflow catalog (tenant-admin uses DDR + `ZVE*` direct writes now)
+
+---
+
+## 0. Posture update (2026-03-21)
+
+Tenant-admin implements **direct writes** (`PUT/POST/DELETE` routes in `apps/tenant-admin/server.mjs`, OpenAPI `packages/contracts/openapi/tenant-admin.openapi.yaml`). Distro overlay supplies `ZVEUSMG` / `ZVECLNM` / `ZVEWRDM`. Sections below that still say “Mode B” or “guided write” describe the **pre-change** gap state unless explicitly refreshed.
 
 ---
 
@@ -185,17 +191,17 @@ These can be implemented now using existing documentation, confirmed RPCs, and k
 
 ### Tier 2: Medium-Term Guided Write / Wrapper Projects
 
-These require Mode B guided write workflows or custom RPC wrappers. Documented in `vista-admin-guided-write-workflows.md` but not wired.
+These historically assumed Mode B or custom RPC wrappers. **Now:** many are covered by DDR + `ZVE*` in tenant-admin; re-audit each function against OpenAPI.
 
 | Gap | Functions | What's Needed | Depends On |
 |-----|-----------|---------------|------------|
 | **User provisioning workflows (Slice 2)** | TM-USR-01, TM-USR-02, TM-USR-04 | Guided write UI + optional VE CUSROM RPCs or terminal fallback. Write safety: signature validation, audit trail. | Slice 1 reads proven |
-| **Key assignment workflows** | TM-KEY-02, TM-KEY-03 | XUS SEND KEYS (Vivian) needs probing. Fallback: guided terminal. | Slice 1 + user detail |
+| **Key assignment workflows** | TM-KEY-02, TM-KEY-03 | Prefer `ZVE USMG KEYS` when installed; else probe XUS SEND KEYS in target instance. | User detail + distro install |
 | **Clinic create/edit workflows** | TM-CLIN-03, TM-CLIN-04, TM-CLIN-05 | SDES2 CREATE/EDIT/INACTIVATE CLINIC absent in VEHU. Guided terminal. | Slice 3 reads proven |
 | **Institution/division management** | TM-INST-03 | Custom VE SVC wrapper RPCs needed. Archive has ZVEFAC.m patterns. | Slice 3 + distro overlay |
-| **Parameter management** | TM-PARAM-01 | File 8989.3 DDR reads + guided writes. No standard parameter RPC. | Backend API + DDR FILER |
+| **Parameter management** | TM-PARAM-01 | File 8989.3: `GET/PUT .../params/kernel` (allow-listed) + DDR FILER expansion. | Backend API + DDR FILER |
 
-**Key constraint:** Most writes are Mode B (browser reads, guides the write, captures evidence) because standard Kernel RPCs for these operations either don't exist or aren't registered in VEHU.
+**Key constraint:** Standard Kernel RPCs for many admin writes are missing or unregistered in sandboxes; **DDR FILER** and **overlay `ZVE*`** are the supported direct-write path (not terminal-guided Mode B).
 
 ### Tier 3: Integration-Plane Projects
 
@@ -225,10 +231,10 @@ These belong outside tenant-admin, in the integration or interop plane. They req
 | Concern | Correct Placement | Rationale |
 |---------|-------------------|-----------|
 | User listing, detail, key inventory | **Tenant admin** | Core admin function. Every site admin needs this daily. |
-| User create/edit/deactivate | **Tenant admin** (guided write) | Admin-owned with audit trail. Browser guides, VistA executes. |
-| Key assign/remove | **Tenant admin** (guided write) | Access governance. Admin-owned. |
+| User create/edit/deactivate | **Tenant admin** (direct API) | Admin-owned; XWB → DDR / `ZVE USMG *`. |
+| Key assign/remove | **Tenant admin** (direct API) | `ZVE USMG KEYS` + read-back. |
 | Institution/division/clinic reads | **Tenant admin** | Facility topology is admin reference data. |
-| Clinic create/edit/inactivate | **Tenant admin** (guided write) | ADPAC-owned workflow. |
+| Clinic create/edit/inactivate | **Tenant admin** (direct API) | `ZVE CLNM *` + DDR where applicable. |
 | Ward/room-bed reads | **Tenant admin** | Admin reference data. |
 | Site parameter management | **Tenant admin** | System configuration is admin-owned. |
 | Tenant lifecycle (create/bootstrap/provision) | **Control plane** | Already correctly placed. Operator-level, not tenant-level. |
@@ -265,7 +271,7 @@ The distro repo provides building blocks that the platform can consume:
 
 1. **Fixture shell** — 6 working UI surfaces with honest source labeling
 2. **Screen contracts** — 12 contracts defining target VistA sources and field mappings
-3. **Research corpus** — 8 deep reference docs covering 2,510 RPCs, 10 domains, 49 matrix functions, 19 guided write workflows, 2 grounded domain field maps
+3. **Research corpus** — 8 deep reference docs covering 2,510 RPCs, 10 domains, 49 matrix functions, historical guided-write catalog (see `vista-admin-guided-write-workflows.md`), 2 grounded domain field maps
 4. **Adapter signatures** — Correct HTTP paths for 4 VistA read operations (unproven)
 5. **Slice planning** — 3 slices defined with justification, sequencing, and risk assessment
 
@@ -293,7 +299,7 @@ The distro repo provides building blocks that the platform can consume:
 ### What needs an ADR before proceeding
 
 1. **VistA connectivity architecture** — How does the platform connect to VistA? Direct RPC broker? HTTP proxy via distro? Shared library? This determines the implementation path for all read and write slices.
-2. **Guided write persistence** — Should the platform persist guided-write evidence/checklists? If so, where? Platform PG? Separate audit store?
+2. **Write audit persistence** — Immutable audit for direct writes (PG vs VistA-native) — separate from retired guided-write checklists.
 
 ---
 
@@ -302,9 +308,9 @@ The distro repo provides building blocks that the platform can consume:
 1. **Resolve the backend API gap** — Decide on VistA connectivity architecture (ADR). This unblocks all grounded slices.
 2. **Implement Slice 1 (User/Key Read Workspace)** — Pure Mode A reads. Zero write risk. Proves the VistA connection works.
 3. **Implement user detail + key check** — Extends Slice 1 with DUZ-based lookup and File 19.1 reads.
-4. **Wire guided write UI for Slice 2** — Mode B workflows for user create/edit/deactivate and key assign/remove.
+4. **Harden direct-write UI for Slice 2** — Expand allow-lists, field validation, and live proof for user/key flows (already started).
 5. **Implement Slice 3 (Facility Topology Reads)** — Clinic/ward/institution reads.
-6. **Wire guided write UI for clinic workflows** — Mode B workflows for clinic create/edit.
+6. **Harden clinic direct-write UI** — `ZVE CLNM` + DDR; live proof per OpenAPI.
 7. **Evaluate SDES/SDEC availability** — Probe for modern scheduling RPCs to determine if clinic writes can go Mode A.
 
 ---

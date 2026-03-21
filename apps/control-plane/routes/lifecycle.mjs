@@ -163,4 +163,48 @@ export default function registerLifecycleRoutes(server, backendUrl) {
     );
     return reply.code(status).send(data);
   });
+
+  // ── Operator surfaces (PG-backed control-plane-api) ─────────────────────
+
+  server.post(`${PREFIX}/operator/invitations`, async (request, reply) => {
+    const { status, data } = await proxyToBackend(
+      backendUrl, 'POST', `${BACKEND_PREFIX}/operator/invitations`, request.body
+    );
+    return reply.code(status).send(data);
+  });
+
+  server.post(`${PREFIX}/operator/alerts`, async (request, reply) => {
+    const { status, data } = await proxyToBackend(
+      backendUrl, 'POST', `${BACKEND_PREFIX}/operator/alerts`, request.body
+    );
+    return reply.code(status).send(data);
+  });
+
+  server.post(`${PREFIX}/operator/alerts/:id/ack`, async (request, reply) => {
+    const { status, data } = await proxyToBackend(
+      backendUrl, 'POST', `${BACKEND_PREFIX}/operator/alerts/${encodeURIComponent(request.params.id)}/ack`, request.body
+    );
+    return reply.code(status).send(data);
+  });
+
+  server.post(`${PREFIX}/operator/usage-events`, async (request, reply) => {
+    const { status, data } = await proxyToBackend(
+      backendUrl, 'POST', `${BACKEND_PREFIX}/operator/usage-events`, request.body
+    );
+    return reply.code(status).send(data);
+  });
+
+  server.post(`${PREFIX}/operator/entitlements`, async (request, reply) => {
+    const { status, data } = await proxyToBackend(
+      backendUrl, 'POST', `${BACKEND_PREFIX}/operator/entitlements`, request.body
+    );
+    return reply.code(status).send(data);
+  });
+
+  server.put(`${PREFIX}/operator/feature-flags`, async (request, reply) => {
+    const { status, data } = await proxyToBackend(
+      backendUrl, 'PUT', `${BACKEND_PREFIX}/operator/feature-flags`, request.body
+    );
+    return reply.code(status).send(data);
+  });
 }

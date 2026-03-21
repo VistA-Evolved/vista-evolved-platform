@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "title": "Printer and Device Defaults",
   "status": "draft",
-  "description": "Printer and device defaults management surface. VistA File 3.5 (DEVICE) is the canonical source of truth. Reading device records is straightforward; write posture requires research. Terminal environments use devices for output routing.",
+  "description": "Printer and device management surface. VistA File 3.5 (DEVICE) is the canonical source of truth. Read via DDR LISTER; create via DDR FILER ADD; rename via DDR FILER EDIT (.01 field). Terminal environments use devices for output routing.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "primary",
   "surfaceType": "admin",
@@ -12,8 +12,8 @@
     "scopePosture": "facility-scoped",
     "entityContextRequired": ["tenantId", "facilityId"]
   },
-  "readWritePosture": "read-only",
-  "directWriteAllowed": false,
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": true,
   "dataSources": [
     {
       "sourceId": "VistA File 3.5 (DEVICE)",

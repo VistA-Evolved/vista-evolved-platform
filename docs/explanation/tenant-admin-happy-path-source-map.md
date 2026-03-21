@@ -138,12 +138,12 @@
 - **Acceptable:** **Yes — corrected.** VistA-first assembly, fixture fallback.
 - **Required correction:** ~~Build topology from VistA data.~~ Done.
 
-#### 13. Guided Write Workflows (`/api/tenant-admin/v1/guided-tasks`)
+#### 13. VistA tools — DDR probe (`GET /api/tenant-admin/v1/vista/ddr-probe`)
 
-- **Current primary:** Hardcoded server catalog of 20 workflow definitions
-- **Current fallback:** None
-- **Acceptable:** **Yes.** The guided-write catalog is platform-owned metadata (workflow definitions, not VistA runtime data). The `vistaTarget` field on each workflow is informational metadata.
-- **Required correction:** None
+- **Current primary:** Live XWB calls probing **DDR GETS ENTRY DATA**, **DDR VALIDATOR**, **DDR LISTER**, **DDR FIND1** (plus `not_probed` placeholders for filer/delete/lock family members that need real file context)
+- **Current fallback:** Returns `integration-pending` when VistA is unreachable
+- **Acceptable:** **Yes.** Replaces the retired `/guided-tasks` catalog; surfaces real RPC availability for direct-write architecture.
+- **Required correction:** None (re-audit when expanding write coverage)
 
 ---
 
@@ -185,4 +185,4 @@ All 6 surfaces that previously required correction have been fixed:
 
 ### Surfaces already correct — no changes needed
 
-Dashboard, VistA status, user list, facility list, clinic list, ward list, guided workflows, and all control-plane surfaces.
+Dashboard, VistA status, user list, facility list, clinic list, ward list, VistA tools (DDR probe), devices/kernel params where wired, and all control-plane surfaces.

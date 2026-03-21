@@ -726,7 +726,10 @@ function navigate() {
     a.classList.toggle('active', a.dataset.route === route);
   });
   const fn = ROUTES[route];
-  if (fn) fn();
+  if (fn) {
+    const out = fn();
+    if (out && typeof out.then === 'function') out.catch(e => console.error(e));
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1771,23 +1774,70 @@ function renderHome() {
 // ---------------------------------------------------------------------------
 // Surface: Identity & Invitations (control-plane.identity.invitations)
 // ---------------------------------------------------------------------------
-function renderIdentityInvitations() {
-  renderStaticSurface(
-    'Identity & Invitations',
-    'control-plane.identity.invitations',
-    '🔑',
-    'Operator identity directory, invitation lifecycle, and OIDC subject mappings for all tenants.',
-    'Requests & Onboarding',
-    'Platform PG — identity tables',
-    [
-      { id: 'R11', label: 'List operator identities', status: 'deferred', note: 'Requires identity:manage permission' },
-      { id: 'R12', label: 'List pending invitations', status: 'deferred', note: 'Invitation lifecycle tracking' },
-      { id: 'W17', label: 'Create invitation', status: 'deferred', note: 'Review-only when implemented' },
-      { id: 'W18', label: 'Revoke invitation', status: 'deferred', note: 'Review-only when implemented' },
-      { id: 'W19', label: 'Suspend operator identity', status: 'deferred', note: 'Review-only when implemented' },
-    ]
-  );
+async function renderIdentityInvitations() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading invitations…</p>';
+  let invitations = [];
+  let source = 'fixture-fallback';
+  try {
+    const r = await apiFetch(`${API_BASE}/operator/invitations`);
+    if (r.ok) {
+      const d = await r.json();
+      invitations = d.invitations || [];
+      source = d._source || 'real-backend';
+    }
+  } catch (_) { /* keep empty */ }
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <div class="breadcrumb">${navLink('#/home', 'Home')} / Identity</div>
+        <h1>Identity & Invitations</h1>
+      </div>
+      <div class="btn-group">${sourceBadge(source)}</div>
+    </div>
+    <p class="meta-secondary">PG-backed via control-plane-api <code>operator_invitation</code>. Create uses lifecycle proxy (shows token once).</p>
+    <div class="card">
+      <h3>Pending / recent invitations</h3>
+      <table>
+        <thead><tr><th>Email</th><th>Status</th><th>Invited by</th><th>Created</th></tr></thead>
+        <tbody>
+          ${invitations.length ? invitations.map(i => `
+            <tr>
+              <td>${escHtml(i.email)}</td>
+              <td>${badge(i.status)}</td>
+              <td>${escHtml(i.invitedBy || '—')}</td>
+              <td>${fmtDate(i.createdAt)}</td>
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No rows (start API + migrate v9)</td></tr>'}
+        </tbody>
+      </table>
+      <p style="margin-top:12px;">
+        <button class="btn btn-primary" type="button" onclick="cpCreateInvitationPrompt()">+ Create invitation (demo)</button>
+      </p>
+    </div>`;
 }
+
+window.cpCreateInvitationPrompt = async function () {
+  const email = window.prompt('Operator email to invite');
+  if (!email) return;
+  try {
+    const resp = await apiFetch(`${LIFECYCLE_API_BASE}/operator/invitations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), invitedBy: getActiveRole() }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      window.alert(data.message || data.error || 'Request failed');
+      return;
+    }
+    if (data.plainToken) {
+      window.alert('Invitation created. One-time token (save now): ' + data.plainToken);
+    }
+    navigate();
+  } catch (e) {
+    window.alert('Network error');
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Surface: Payer Readiness (control-plane.markets.payer-readiness)
@@ -1910,23 +1960,86 @@ function renderOperationsCenter() {
 // ---------------------------------------------------------------------------
 // Surface: Alert Center (control-plane.ops.alerts)
 // ---------------------------------------------------------------------------
-function renderAlertCenter() {
-  renderStaticSurface(
-    'Alert Center',
-    'control-plane.ops.alerts',
-    '🔔',
-    'Platform-wide alert rules, active alerts, and notification channels. Configurable thresholds for provisioning failures, adapter health, and capacity.',
-    'Operations',
-    'Platform PG — alert_rules, alert_events',
-    [
-      { id: 'R25', label: 'List active alerts', status: 'deferred', note: 'Requires alerts:manage permission' },
-      { id: 'R26', label: 'List alert rules', status: 'deferred', note: 'Rule definitions + thresholds' },
-      { id: 'W30', label: 'Create alert rule', status: 'deferred', note: 'Review-only when implemented' },
-      { id: 'W31', label: 'Acknowledge alert', status: 'deferred', note: 'Review-only when implemented' },
-      { id: 'W32', label: 'Silence alert', status: 'deferred', note: 'Time-bounded silence with reason' },
-    ]
-  );
+async function renderAlertCenter() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading alerts…</p>';
+  let alerts = [];
+  let source = 'fixture-fallback';
+  try {
+    const r = await apiFetch(`${API_BASE}/operator/alerts?openOnly=1`);
+    if (r.ok) {
+      const d = await r.json();
+      alerts = d.alerts || [];
+      source = d._source || 'real-backend';
+    }
+  } catch (_) { /* empty */ }
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <div class="breadcrumb">${navLink('#/home', 'Home')} / Operations</div>
+        <h1>Alert Center</h1>
+      </div>
+      <div class="btn-group">${sourceBadge(source)}</div>
+    </div>
+    <p class="meta-secondary">Open alerts from <code>operator_alert</code> (migration v9).</p>
+    <div class="card">
+      <h3>Open alerts</h3>
+      <table>
+        <thead><tr><th>Severity</th><th>Title</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+          ${alerts.length ? alerts.map(a => `
+            <tr>
+              <td>${escHtml(a.severity)}</td>
+              <td>${escHtml(a.title)}</td>
+              <td>${fmtDate(a.createdAt)}</td>
+              <td><button class="btn" type="button" onclick="cpAckAlert('${a.id}')">Ack</button></td>
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No open alerts</td></tr>'}
+        </tbody>
+      </table>
+      <p style="margin-top:12px;">
+        <button class="btn btn-primary" type="button" onclick="cpCreateAlertPrompt()">+ Create alert (demo)</button>
+      </p>
+    </div>`;
 }
+
+window.cpAckAlert = async function (id) {
+  try {
+    const resp = await apiFetch(`${LIFECYCLE_API_BASE}/operator/alerts/${encodeURIComponent(id)}/ack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor: getActiveRole() }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      window.alert(data.error || 'Ack failed');
+      return;
+    }
+    navigate();
+  } catch (_) {
+    window.alert('Network error');
+  }
+};
+
+window.cpCreateAlertPrompt = async function () {
+  const title = window.prompt('Alert title');
+  if (!title) return;
+  const severity = window.prompt('Severity (info|warning|error|critical)', 'warning') || 'warning';
+  try {
+    const resp = await apiFetch(`${LIFECYCLE_API_BASE}/operator/alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, severity, actor: getActiveRole() }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      window.alert(data.error || 'Create failed');
+      return;
+    }
+    navigate();
+  } catch (_) {
+    window.alert('Network error');
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Surface: Backup / Restore / DR (control-plane.ops.backup-dr)
@@ -1951,35 +2064,107 @@ function renderBackupDr() {
 // ---------------------------------------------------------------------------
 // Surface: Environments & Feature Flags (control-plane.ops.environments)
 // ---------------------------------------------------------------------------
-function renderEnvironmentsFlags() {
-  renderStaticSurface(
-    'Environments & Feature Flags',
-    'control-plane.ops.environments',
-    '🏗️',
-    'Fleet environment inventory (dev, staging, production), feature flag management with per-environment and per-tenant overrides.',
-    'Operations',
-    'Platform PG — environments, feature_flags',
-    [
-      { id: 'R21', label: 'List environments', status: 'deferred', note: 'Fleet topology view' },
-      { id: 'R22', label: 'List feature flags', status: 'deferred', note: 'Flag definitions + override tree' },
-      { id: 'W27', label: 'Toggle flag for environment', status: 'deferred', note: 'Review-only when implemented' },
-      { id: 'W28', label: 'Create environment', status: 'deferred', note: 'Review-only when implemented' },
-    ]
-  );
+async function renderEnvironmentsFlags() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading feature flags…</p>';
+  let flags = [];
+  let source = 'fixture-fallback';
+  try {
+    const r = await apiFetch(`${API_BASE}/operator/feature-flags`);
+    if (r.ok) {
+      const d = await r.json();
+      flags = d.flags || [];
+      source = d._source || 'real-backend';
+    }
+  } catch (_) { /* empty */ }
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <div class="breadcrumb">${navLink('#/home', 'Home')} / Operations</div>
+        <h1>Environments & Feature Flags</h1>
+      </div>
+      <div class="btn-group">${sourceBadge(source)}</div>
+    </div>
+    <div class="card">
+      <h3>Flags (<code>environment_feature_flag</code>)</h3>
+      <table>
+        <thead><tr><th>Key</th><th>Environment</th><th>Enabled</th></tr></thead>
+        <tbody>
+          ${flags.length ? flags.map(f => `
+            <tr>
+              <td><code>${escHtml(f.flagKey)}</code></td>
+              <td>${escHtml(f.environment)}</td>
+              <td>${f.enabled ? 'yes' : 'no'}</td>
+            </tr>`).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No flags yet</td></tr>'}
+        </tbody>
+      </table>
+      <p style="margin-top:12px;font-size:12px;color:var(--text-muted);">
+        Upsert demo: <button class="btn" type="button" onclick="cpUpsertFlagPrompt()">Set flag</button>
+      </p>
+    </div>`;
 }
+
+window.cpUpsertFlagPrompt = async function () {
+  const flagKey = window.prompt('flagKey');
+  if (!flagKey) return;
+  const environment = window.prompt('environment', 'default') || 'default';
+  const enabled = window.confirm('Enable this flag?');
+  try {
+    const resp = await apiFetch(`${LIFECYCLE_API_BASE}/operator/feature-flags`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flagKey, environment, enabled, actor: getActiveRole() }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      window.alert(data.error || 'Upsert failed');
+      return;
+    }
+    navigate();
+  } catch (_) {
+    window.alert('Network error');
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Surface: Billing & Entitlements (control-plane.commercial.billing)
 // ---------------------------------------------------------------------------
-function renderBillingEntitlements() {
+async function renderBillingEntitlements() {
   const app = document.getElementById('app');
   const tenants = FIXTURES['tenants']?.items || [];
+  let entitlements = [];
+  let entSource = 'fixture-fallback';
+  try {
+    const r = await apiFetch(`${API_BASE}/operator/entitlements`);
+    if (r.ok) {
+      const d = await r.json();
+      entitlements = d.entitlements || [];
+      entSource = d._source || 'real-backend';
+    }
+  } catch (_) { /* ignore */ }
 
   app.innerHTML = `
     <div class="surface-header">
       <div>
         <h1>Billing & Entitlements</h1>
       </div>
+      <div class="btn-group">${sourceBadge(entSource)}</div>
+    </div>
+
+    <div class="card">
+      <h3>Commercial entitlements (stub)</h3>
+      <table>
+        <thead><tr><th>Tenant</th><th>SKU</th><th>Status</th><th>Provider</th></tr></thead>
+        <tbody>
+          ${entitlements.length ? entitlements.map(e => `
+            <tr>
+              <td><code>${escHtml(String(e.tenant_id || e.tenantId || '—'))}</code></td>
+              <td>${escHtml(e.sku || '—')}</td>
+              <td>${badge(e.status || 'stub')}</td>
+              <td>${escHtml(e.billing_provider || e.billingProvider || '—')}</td>
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No entitlement rows</td></tr>'}
+        </tbody>
+      </table>
     </div>
 
     <div class="card">
@@ -1994,13 +2179,13 @@ function renderBillingEntitlements() {
               <td>${escHtml(t.legalMarketId || '—')}</td>
               <td>${badge(t.effectiveLaunchTier || 'T0')}</td>
               <td>${(t.activePacks || []).length}</td>
-              <td>${badge('not-connected')}</td>
+              <td>${badge('stripe-pending')}</td>
             </tr>
           `).join('')}
           ${tenants.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No tenants</td></tr>' : ''}
         </tbody>
       </table>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Entitlement data derived from tenant status. Billing backend integration pending.</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Stripe/Paddle integration is research-only; PG table <code>commercial_entitlement</code> holds stubs.</p>
     </div>
   `;
 }
@@ -2008,20 +2193,66 @@ function renderBillingEntitlements() {
 // ---------------------------------------------------------------------------
 // Surface: Usage & Metering (control-plane.commercial.usage)
 // ---------------------------------------------------------------------------
-function renderUsageMetering() {
-  renderStaticSurface(
-    'Usage & Metering',
-    'control-plane.commercial.usage',
-    '📊',
-    'Per-tenant resource consumption metrics: API calls, storage, active users, concurrent sessions. Feeds billing calculations.',
-    'Commercial',
-    'Commercial Service — usage_metrics (deferred)',
-    [
-      { id: 'R29', label: 'List tenant usage summaries', status: 'deferred', note: 'Read-only — commerce:manage permission' },
-      { id: 'R30', label: 'Get tenant usage detail', status: 'deferred', note: 'Time-series breakdown by metric' },
-    ]
-  );
+async function renderUsageMetering() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading usage events…</p>';
+  let events = [];
+  let source = 'fixture-fallback';
+  try {
+    const r = await apiFetch(`${API_BASE}/operator/usage-events`);
+    if (r.ok) {
+      const d = await r.json();
+      events = d.events || [];
+      source = d._source || 'real-backend';
+    }
+  } catch (_) { /* empty */ }
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <h1>Usage & Metering</h1>
+      </div>
+      <div class="btn-group">${sourceBadge(source)}</div>
+    </div>
+    <div class="card">
+      <h3>Recent meter events (<code>usage_meter_event</code>)</h3>
+      <table>
+        <thead><tr><th>Metric</th><th>Qty</th><th>Tenant</th><th>Recorded</th></tr></thead>
+        <tbody>
+          ${events.length ? events.map(ev => `
+            <tr>
+              <td>${escHtml(ev.metricName || ev.metric_name || '—')}</td>
+              <td>${escHtml(String(ev.quantity ?? '—'))}</td>
+              <td><code>${escHtml(String(ev.tenantId || ev.tenant_id || '—'))}</code></td>
+              <td>${fmtDate(ev.recordedAt || ev.recorded_at)}</td>
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No usage rows</td></tr>'}
+        </tbody>
+      </table>
+      <p style="margin-top:12px;">
+        <button class="btn" type="button" onclick="cpRecordUsagePrompt()">+ Record demo event</button>
+      </p>
+    </div>`;
 }
+
+window.cpRecordUsagePrompt = async function () {
+  const metricName = window.prompt('metric_name');
+  if (!metricName) return;
+  const quantity = window.prompt('quantity', '1') || '1';
+  try {
+    const resp = await apiFetch(`${LIFECYCLE_API_BASE}/operator/usage-events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metricName, quantity: Number(quantity) || 1 }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      window.alert(data.error || 'Record failed');
+      return;
+    }
+    navigate();
+  } catch (_) {
+    window.alert('Network error');
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Surface: Support Console (control-plane.support.console)
@@ -2047,20 +2278,43 @@ function renderSupportConsole() {
 // ---------------------------------------------------------------------------
 // Surface: Audit Trail (control-plane.platform.audit)
 // ---------------------------------------------------------------------------
-function renderAuditTrail() {
-  renderStaticSurface(
-    'Audit Trail',
-    'control-plane.platform.audit',
-    '📋',
-    'Immutable, hash-chained audit log of all operator actions across the control plane. Supports compliance export and integrity verification.',
-    'Platform',
-    'Platform PG — immutable_audit_log',
-    [
-      { id: 'R33', label: 'List audit entries', status: 'deferred', note: 'Paginated, filterable by actor/action/tenant/date' },
-      { id: 'R34', label: 'Verify chain integrity', status: 'deferred', note: 'SHA-256 hash chain verification' },
-      { id: 'R35', label: 'Export audit range', status: 'deferred', note: 'Requires audit:export permission' },
-    ]
-  );
+async function renderAuditTrail() {
+  const app = document.getElementById('app');
+  app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading audit events…</p>';
+  let events = [];
+  let source = 'fixture-fallback';
+  try {
+    const r = await apiFetch(`${API_BASE}/audit/events?limit=75`);
+    if (r.ok) {
+      const d = await r.json();
+      events = d.events || [];
+      source = d._source || 'real-backend';
+    }
+  } catch (_) { /* empty */ }
+  app.innerHTML = `
+    <div class="surface-header">
+      <div>
+        <div class="breadcrumb">${navLink('#/home', 'Home')} / Platform</div>
+        <h1>Audit Trail</h1>
+      </div>
+      <div class="btn-group">${sourceBadge(source)}</div>
+    </div>
+    <p class="meta-secondary">Rows from <code>audit_event</code> (append-only). Hash-chained export is future work.</p>
+    <div class="card">
+      <table>
+        <thead><tr><th>Time</th><th>Type</th><th>Actor</th><th>Entity</th><th>Detail</th></tr></thead>
+        <tbody>
+          ${events.length ? events.map(ev => `
+            <tr>
+              <td style="font-size:11px;">${fmtDate(ev.createdAt)}</td>
+              <td><code>${escHtml(ev.eventType || '—')}</code></td>
+              <td>${escHtml(ev.actor || '—')}</td>
+              <td>${escHtml(ev.entityType || '—')} ${ev.entityId ? `<code>${escHtml(String(ev.entityId).slice(0, 8))}</code>` : ''}</td>
+              <td style="font-size:11px;max-width:240px;overflow:hidden;text-overflow:ellipsis;">${escHtml(ev.detail ? JSON.stringify(ev.detail) : '—')}</td>
+            </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No audit rows</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 // ---------------------------------------------------------------------------

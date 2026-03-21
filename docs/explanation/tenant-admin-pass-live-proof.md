@@ -32,14 +32,14 @@ VistA data with honest `source: "vista"` labeling across all wired endpoints.
 | 5 | `/facilities` | **vista** | 44 | XUS DIVISION GET, ORWU CLINLOC | **PASS** |
 | 6 | `/topology` | **vista** | 1 site (44 clinics + 29 wards) | XUS DIVISION GET, ORWU CLINLOC, ORQPT WARDS | **PASS** |
 | 7 | `/dashboard` | **vista** | 118 users, 44 clinics, 29 wards | ORWU NEWPERS, ORWU CLINLOC, ORQPT WARDS | **PASS** |
-| 8 | `/guided-tasks` | catalog | 19 workflows | — | PASS (catalog) |
+| 8 | `/vista/ddr-probe` | **vista** / integration | DDR family probe | DDR GETS, VALIDATOR, LISTER | **PASS** (replaces retired `/guided-tasks` catalog) |
 | 9 | `/roles` | fixture | 7 | — | PASS (fixture, integration-pending) |
 | 10 | `/key-inventory` | fixture | 7 | — | PASS (fixture, integration-pending) |
 | 11 | `/esig-status` | fixture | 6 | — | PASS (fixture, integration-pending) |
 
 **Summary:** 6 of 11 endpoints return `source: "vista"` with real VistA data.
 3 endpoints return `source: "fixture"` with honest `integration-pending` labeling.
-1 endpoint returns `source: "catalog"` (server-side workflow catalog, no VistA data needed).
+DDR probe endpoint replaces the old guided-task catalog (`#/vista-tools` in the SPA).
 1 endpoint is a probe (no `source` field — returns connection status).
 
 ## RPCs Exercised

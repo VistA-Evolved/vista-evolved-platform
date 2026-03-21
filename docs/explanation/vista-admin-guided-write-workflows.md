@@ -1,6 +1,8 @@
 # VistA Admin — Guided Write Workflow Catalog
 
-> **Status:** Canonical reference — Task 5 of queue pack.
+> **Superseded for tenant-admin (2026-03-21):** The platform **no longer** implements Mode B guided terminal workflows in the SPA. Configuration writes use **DDR VALIDATOR / DDR FILER** and distro overlay RPCs (`ZVEUSMG`, `ZVECLNM`, `ZVEWRDM`). This document remains a **historical** menu-path and safety-pattern reference; do not treat GW-* steps as the live UI contract.
+>
+> **Status:** Canonical reference — Task 5 of queue pack (historical).
 > **Date:** 2026-03-21.
 > **Type:** Explanation / Reference.
 > **Scope:** All terminal-guided write workflows for VistA administration, grounded in

@@ -46,7 +46,7 @@
 | Mode | Label | Definition |
 |------|-------|-----------|
 | **A** | Live read + live write | Safe RPC-backed read and write from browser |
-| **B** | Live read + guided write | RPC-backed reads; writes require guided-terminal workflow |
+| **B** | ~~Live read + guided write~~ **Retired (tenant-admin)** | **Was:** RPC reads + terminal-guided writes. **Now:** same writes go through **DDR / `ZVE*`** from the API (see tenant-admin OpenAPI). |
 | **C** | Guided terminal workflow | Both read and write are terminal-backed |
 | **D** | Wrapper / adapter project | No existing RPC surface; requires new MUMPS routine |
 | **E** | Informational / deferred | Too specialized, risky, or low-value for current scope |
@@ -178,7 +178,7 @@
 | PASS-LIVE | 0 | No function proven end-to-end against live VistA |
 | PASS-SHELL | 0 | No function has a working UI shell wired to live data |
 | PASS-CONTRACT | 7 | Screen contract exists + RPC is VEHU-confirmed: TM-USR-03, TM-KEY-04, TM-INST-01, TM-INST-02, TM-CLIN-01, TM-WARD-01, TM-WARD-05 |
-| PASS-DOC | 63 | Research, design, and/or guided write workflow documented |
+| PASS-DOC | 63 | Research, design, and/or direct-write / legacy guided-write docs |
 | **Total** | **70** | |
 
 ---

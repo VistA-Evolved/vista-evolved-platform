@@ -1,18 +1,19 @@
 /**
  * Tenant Admin — VistA-First SPA (direct XWB broker, fixture fallback)
  *
- * Hash-based routing with 11 render functions matching the tenant-admin surfaces
- * defined in tenant-admin-design-contract-v1.md (plus later-slice additions).
+ * Hash-based routing with 13 render functions matching the tenant-admin surfaces
+ * defined in tenant-admin-design-contract-v1.md and the direct-write architecture.
  *
  * Implementation posture: VistA-first — direct XWB RPC broker connection via
  * lib/xwb-client.mjs. When VISTA_HOST/PORT/ACCESS_CODE/VERIFY_CODE are configured,
  * data comes from live VistA RPCs (ORWU NEWPERS, ORWU HASKEY, XUS DIVISION GET,
- * ORWU CLINLOC, ORQPT WARDS). Otherwise, fixture data is used.
- * Source badges honestly display "VistA", "FIXTURE", or "TERMINAL" per surface.
+ * ORWU CLINLOC, ORQPT WARDS, DDR family). Otherwise, fixture data is used.
+ * Source badges display "VistA", "FIXTURE", or "INTEGRATION-PENDING" per surface.
  *
  * Surfaces: Dashboard, User List, User Detail, Role Assignment,
  *           Facility List, Facility Detail, Clinic List, Ward List,
- *           Key Inventory, E-Sig Status, Guided Write Workflows
+ *           Key Inventory, E-Sig Status, VistA Tools (DDR probe),
+ *           Devices, Kernel Parameters
  */
 
 // ---------------------------------------------------------------------------
@@ -113,10 +114,50 @@ function route() {
     renderClinicList(content);
   } else if (hash === '#/wards') {
     renderWardList(content);
-  } else if (hash === '#/guided-tasks') {
-    renderGuidedTasks(content);
-  } else if (hash === '#/modules' || hash === '#/connections' || hash === '#/site-params') {
-    content.innerHTML = `<div class="page-header"><h1>Coming Soon</h1><span class="source-posture pending">PLANNED</span></div><div class="empty-message">This surface is planned for a future slice. <a href="#/dashboard">Return to dashboard \u2192</a></div>`;
+  } else if (hash === '#/vista-tools') {
+    renderVistaTools(content);
+  } else if (hash === '#/devices') {
+    renderDeviceList(content);
+  } else if (hash === '#/params/kernel') {
+    renderParamsKernel(content);
+  } else if (hash === '#/modules') {
+    content.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Module Entitlements</div>
+    <div class="page-header"><h1>Module Entitlements</h1><span class="source-posture pending">PLANNED</span></div>
+    <div class="detail-section" style="padding:16px;font-size:13px;">
+      <p>Module entitlements control which VistA features are enabled for this tenant. This includes:</p>
+      <ul style="margin:8px 0 0 20px;">
+        <li><strong>Clinical modules</strong> — CPRS, order entry, notes, pharmacy, lab, radiology</li>
+        <li><strong>Administrative modules</strong> — scheduling, registration, billing, ADT</li>
+        <li><strong>Infrastructure modules</strong> — imaging (DICOM), telehealth, analytics, interop (HL7)</li>
+      </ul>
+      <p style="margin-top:12px;">This surface will be implemented in a future slice. <a href="#/dashboard">Return to dashboard &rarr;</a></p>
+    </div>`;
+  } else if (hash === '#/connections') {
+    content.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › VistA Connections</div>
+    <div class="page-header"><h1>VistA Connections</h1><span class="source-posture pending">PLANNED</span></div>
+    <div class="detail-section" style="padding:16px;font-size:13px;">
+      <p>VistA connection management allows configuring and monitoring the XWB broker connection to the VistA instance. This includes:</p>
+      <ul style="margin:8px 0 0 20px;">
+        <li><strong>Broker host/port</strong> — connection parameters</li>
+        <li><strong>Health monitoring</strong> — connection state, latency, reconnect history</li>
+        <li><strong>RPC context</strong> — active context (OR CPRS GUI CHART), registered RPCs</li>
+        <li><strong>Failover</strong> — backup VistA instances, automatic reconnection</li>
+      </ul>
+      <p style="margin-top:12px;">This surface will be implemented in a future slice. <a href="#/dashboard">Return to dashboard &rarr;</a></p>
+    </div>`;
+  } else if (hash === '#/site-params') {
+    content.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Site Parameters</div>
+    <div class="page-header"><h1>Site Parameters</h1><span class="source-posture pending">PLANNED</span></div>
+    <div class="detail-section" style="padding:16px;font-size:13px;">
+      <p>Extended site parameters beyond the kernel basics. This includes:</p>
+      <ul style="margin:8px 0 0 20px;">
+        <li><strong>CPRS parameters</strong> — File 8989.51 (OR PARAMETERS), order defaults, timeout settings</li>
+        <li><strong>Scheduling parameters</strong> — appointment types, clinic defaults, slot lengths</li>
+        <li><strong>Pharmacy parameters</strong> — dispensing rules, refill limits, drug interaction levels</li>
+        <li><strong>Lab parameters</strong> — collection defaults, result notification rules</li>
+      </ul>
+      <p style="margin-top:12px;">For basic kernel parameters, see <a href="#/params/kernel">Kernel Params</a>. <a href="#/dashboard">Return to dashboard &rarr;</a></p>
+    </div>`;
   } else {
     renderDashboard(content);
   }
@@ -129,6 +170,35 @@ async function api(path) {
   const sep = path.includes('?') ? '&' : '?';
   const url = `/api/tenant-admin/v1/${path}${sep}tenantId=${encodeURIComponent(STATE.tenantId)}`;
   const res = await fetch(url);
+  return res.json();
+}
+
+async function apiPut(path, body) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `/api/tenant-admin/v1/${path}${sep}tenantId=${encodeURIComponent(STATE.tenantId)}`;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  return res.json();
+}
+
+async function apiPost(path, body) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `/api/tenant-admin/v1/${path}${sep}tenantId=${encodeURIComponent(STATE.tenantId)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  return res.json();
+}
+
+async function apiDelete(path) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `/api/tenant-admin/v1/${path}${sep}tenantId=${encodeURIComponent(STATE.tenantId)}`;
+  const res = await fetch(url, { method: 'DELETE' });
   return res.json();
 }
 
@@ -222,11 +292,12 @@ async function renderDashboard(el) {
 // ---------------------------------------------------------------------------
 async function renderUserList(el) {
   el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › User List</div>
     <div class="page-header">
       <h1>User List</h1>
       <span class="source-posture fixture">Loading…</span>
     </div>
-    <div class="loading-message">Loading users…</div>`;
+    <div class="loading-message">Loading users from VistA…</div>`;
 
   const res = await api('users');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load users</div>`; return; }
@@ -236,6 +307,7 @@ async function renderUserList(el) {
 
   if (!users.length) {
     el.innerHTML = `
+      <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › User List</div>
       <div class="page-header"><h1>User List</h1>${badge}</div>
       <div class="empty-message">No users found for this tenant. ${vistaNote}</div>`;
     return;
@@ -263,6 +335,7 @@ async function renderUserList(el) {
   }
 
   el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › User List</div>
     <div class="page-header">
       <h1>User List</h1>
       ${badge}
@@ -289,6 +362,17 @@ async function renderUserList(el) {
     </table>
     <div class="pagination-bar">
       <span>Showing ${users.length} of ${users.length} users</span>
+    </div>
+    <div class="detail-section" style="margin-top:16px;">
+      <h2>Add User</h2>
+      <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">Creates a new user in VistA File 200 via <code>ZVE USMG ADD</code> RPC. The user will need access/verify codes set and security keys assigned after creation.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+        <label>Name (LAST,FIRST)<br/><input type="text" id="user-add-name" placeholder="e.g. DOE,JOHN" style="min-width:180px;" /></label>
+        <label>Access Code<br/><input type="text" id="user-add-ac" placeholder="Access code" style="min-width:120px;" /></label>
+        <label>Verify Code<br/><input type="password" id="user-add-vc" placeholder="Verify code" style="min-width:120px;" /></label>
+        <button type="button" class="btn-primary" id="user-add-btn">Create User</button>
+      </div>
+      <div id="user-add-msg" style="margin-top:8px;font-size:12px;"></div>
     </div>`;
 
   // Wire filter handlers
@@ -309,6 +393,29 @@ async function renderUserList(el) {
   document.getElementById('user-search').addEventListener('input', filterUsers);
   document.getElementById('user-status-filter').addEventListener('change', filterUsers);
   document.getElementById('user-grounding-filter').addEventListener('change', filterUsers);
+
+  const userAddBtn = document.getElementById('user-add-btn');
+  if (userAddBtn) {
+    userAddBtn.addEventListener('click', async () => {
+      const name = (document.getElementById('user-add-name') || {}).value || '';
+      const ac = (document.getElementById('user-add-ac') || {}).value || '';
+      const vc = (document.getElementById('user-add-vc') || {}).value || '';
+      const msg = document.getElementById('user-add-msg');
+      if (!name.trim()) { msg.textContent = 'Name is required (LAST,FIRST format).'; msg.style.color = '#b91c1c'; return; }
+      if (!confirm('Create user "' + name.trim() + '" in VistA? This writes to File 200.')) return;
+      msg.textContent = 'Creating user in VistA…';
+      msg.style.color = '';
+      const out = await apiPost('users', { name: name.trim(), accessCode: ac, verifyCode: vc });
+      if (out.ok) {
+        msg.textContent = 'User created (IEN: ' + (out.newIen || 'pending') + '). Refreshing…';
+        msg.style.color = '#166534';
+        setTimeout(() => renderUserList(el), 1500);
+      } else {
+        msg.textContent = out.error || JSON.stringify(out);
+        msg.style.color = '#b91c1c';
+      }
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -368,22 +475,78 @@ async function renderUserDetail(el, userId) {
           <h2>Electronic Signature</h2>
           <dl>
             <div class="detail-row"><dt>E-Sig Status</dt><dd><span class="badge ${eSigBadgeClass}">${escapeHtml(eSig.status || 'unknown')}</span></dd></div>
-            <div class="detail-row"><dt>Has Code (Field 20.4)</dt><dd>${eSig.hasCode ? 'Yes (hashed in VistA)' : 'No'}</dd></div>
+            <div class="detail-row"><dt>Has Code (Field 20.4)</dt><dd>${eSig.hasCode ? 'Yes (hashed in VistA)' : 'No — needs to be set'}</dd></div>
             <div class="detail-row"><dt>Validation RPC</dt><dd><code>ORWU VALIDSIG</code></dd></div>
           </dl>
-          <div style="margin-top:8px;padding:8px 12px;background:#fffbeb;border-radius:4px;font-size:12px;color:#92400e;">
-            E-signature codes are hashed in VistA File 200 field 20.4 and cannot be retrieved.
-            Validation is presence-check only via ORWU VALIDSIG. Setup/reset is terminal-only.
+          <div style="margin-top:8px;padding:10px 14px;background:#eff6ff;border-radius:4px;font-size:12px;color:#1e40af;">
+            <strong>VistA e-signature is a typed text code</strong> — like a secondary password, NOT a graphical/handwritten signature.
+            When this user signs clinical documents (notes, orders), they will be prompted to type their e-sig code.
+            VistA hashes and verifies it against the stored hash in File 200 field 20.4.
+            The code itself is never retrievable — only presence can be checked.
           </div>
         </div>
 
         <div class="detail-section">
           <h2>Security Keys</h2>
-          <div>${roles.length ? roles.map(r => '<span class="badge badge-key" style="margin:2px">' + escapeHtml(r) + '</span>').join(' ') : '<span style="color:var(--color-text-muted)">No keys assigned</span>'}</div>
+          <div>${roles.length ? roles.map(r => '<span class="badge badge-key" style="margin:2px">' + escapeHtml(r) + '</span>').join(' ') : '<span style="color:var(--color-text-muted)">No keys listed on this user (use Key Inventory + future assign API)</span>'}</div>
           <div style="margin-top:8px;font-size:12px;color:var(--color-text-muted);">
-            Keys are verified via <code>ORWU HASKEY</code> RPC. Assignment/revocation is terminal-only
-            (<a href="#/guided-tasks">guided workflow →</a>).
+            Key catalog: <a href="#/key-inventory">DDR LISTER (File 19.1)</a>. Assignment: <code>POST .../users/:duz/keys</code> (pending <code>ZVEUSMG</code>).
           </div>
+        </div>
+
+        ${u.vistaFields && Object.keys(u.vistaFields).length ? `
+        <div class="detail-section">
+          <h2>DDR GETS (raw fields)</h2>
+          <pre style="font-size:11px;overflow:auto;max-height:200px;background:#f8fafc;padding:8px;border-radius:4px;">${escapeHtml(JSON.stringify(u.vistaFields, null, 2))}</pre>
+        </div>` : ''}
+
+        <div class="detail-section">
+          <h2>Direct field update</h2>
+          <p style="font-size:12px;color:var(--color-text-muted);">Allow-listed File 200 contact fields via <code>DDR VALIDATOR</code> + <code>DDR FILER</code> (EDIT).</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px;">
+            <label>Field<br/><select id="ta-uf-field" style="min-width:160px">
+              <option value=".132">.132 Office phone</option>
+              <option value=".133">.133 Voice pager</option>
+              <option value=".134">.134 Digital pager</option>
+              <option value=".151">.151 Mail code</option>
+            </select></label>
+            <label>Value<br/><input type="text" id="ta-uf-value" style="min-width:200px" placeholder="New value" /></label>
+            <button type="button" id="ta-uf-save" class="btn-primary">Save to VistA</button>
+          </div>
+          <div id="ta-uf-msg" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+
+        <div class="detail-section">
+          <h2>Security key (direct RPC)</h2>
+          <p style="font-size:12px;color:var(--color-text-muted);">Calls <code>ZVE USMG KEYS</code> when installed in VistA (distro <code>ZVEUSMG.m</code>).</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:8px;">
+            <label>Key name<br/><input type="text" id="ta-key-name" style="min-width:180px" placeholder="e.g. XUPROGMODE" /></label>
+            <button type="button" id="ta-key-add" class="btn-primary">Assign key</button>
+            <button type="button" id="ta-key-del" class="btn">Remove key</button>
+          </div>
+          <div id="ta-key-msg" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+
+        <div class="detail-section">
+          <h2>Electronic signature</h2>
+          <input type="password" id="ta-esig-code" placeholder="New e-sig code" style="min-width:200px;margin-right:8px;" />
+          <button type="button" id="ta-esig-save" class="btn-primary">Set e-sig</button>
+          <div id="ta-esig-msg" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+
+        <div class="detail-section">
+          <h2>Access / Verify codes</h2>
+          <input type="text" id="ta-ac" placeholder="Access" style="min-width:120px;margin-right:4px;" />
+          <input type="password" id="ta-vc" placeholder="Verify" style="min-width:120px;margin-right:8px;" />
+          <button type="button" id="ta-cred-save" class="btn-primary">Update credentials</button>
+          <div id="ta-cred-msg" style="margin-top:8px;font-size:12px;"></div>
+        </div>
+
+        <div class="detail-section">
+          <h2>User lifecycle</h2>
+          <button type="button" id="ta-deact" class="btn">Deactivate (set term date)</button>
+          <button type="button" id="ta-react" class="btn" style="margin-left:8px;">Reactivate (clear term date)</button>
+          <div id="ta-life-msg" style="margin-top:8px;font-size:12px;"></div>
         </div>
       </div>
 
@@ -406,13 +569,119 @@ async function renderUserDetail(el, userId) {
           <div class="context-label">Source</div>
           <div class="context-value">${sourceBadge(res.sourceStatus || res.source)}</div>
           <div class="context-divider"></div>
-          <div class="context-label">Write Actions</div>
+          <div class="context-label">VistA tools</div>
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">
-            <a href="#/guided-tasks">Guided terminal workflows →</a>
+            <a href="#/vista-tools">DDR probe + write path status →</a>
           </div>
         </div>
       </aside>
     </div>`;
+
+  const saveBtn = document.getElementById('ta-uf-save');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const field = document.getElementById('ta-uf-field').value;
+      const value = document.getElementById('ta-uf-value').value;
+      const msg = document.getElementById('ta-uf-msg');
+      msg.textContent = 'Saving…';
+      const out = await apiPut(`users/${encodeURIComponent(userId)}`, { field, value });
+      if (out.ok) {
+        msg.textContent = 'Saved. RPC: ' + (Array.isArray(out.rpcUsed) ? out.rpcUsed.join(', ') : out.rpcUsed || 'DDR FILER');
+        msg.style.color = '#166534';
+      } else {
+        msg.textContent = out.error || JSON.stringify(out);
+        msg.style.color = '#b91c1c';
+      }
+    });
+  }
+
+  const keyAdd = document.getElementById('ta-key-add');
+  const keyDel = document.getElementById('ta-key-del');
+  const keyMsg = document.getElementById('ta-key-msg');
+  if (keyAdd && keyDel) {
+    keyAdd.addEventListener('click', async () => {
+      const keyName = (document.getElementById('ta-key-name') || {}).value || '';
+      keyMsg.textContent = 'Saving…';
+      const out = await apiPost(`users/${encodeURIComponent(userId)}/keys`, { keyName });
+      if (out.ok) {
+        keyMsg.textContent = 'Key assigned. ' + (out.rpcUsed || '');
+        keyMsg.style.color = '#166534';
+      } else {
+        keyMsg.textContent = out.error || out.message || JSON.stringify(out);
+        keyMsg.style.color = '#b91c1c';
+      }
+    });
+    keyDel.addEventListener('click', async () => {
+      const keyName = (document.getElementById('ta-key-name') || {}).value || '';
+      if (!keyName.trim()) { keyMsg.textContent = 'Enter key name to remove'; keyMsg.style.color = '#b91c1c'; return; }
+      if (!confirm('Remove security key "' + keyName.trim() + '" from this user? This revokes their access to features gated by this key.')) return;
+      keyMsg.textContent = 'Removing…';
+      const enc = encodeURIComponent(keyName.trim().replace(/\s/g, '+'));
+      const out = await apiDelete(`users/${encodeURIComponent(userId)}/keys/${enc}`);
+      if (out.ok) {
+        keyMsg.textContent = 'Key removed.';
+        keyMsg.style.color = '#166534';
+      } else {
+        keyMsg.textContent = out.error || JSON.stringify(out);
+        keyMsg.style.color = '#b91c1c';
+      }
+    });
+  }
+
+  const esigBtn = document.getElementById('ta-esig-save');
+  if (esigBtn) {
+    esigBtn.addEventListener('click', async () => {
+      const code = (document.getElementById('ta-esig-code') || {}).value || '';
+      const msg = document.getElementById('ta-esig-msg');
+      msg.textContent = 'Saving…';
+      const out = await apiPost(`users/${encodeURIComponent(userId)}/esig`, { code });
+      if (out.ok) {
+        msg.textContent = 'E-sig updated.';
+        msg.style.color = '#166534';
+      } else {
+        msg.textContent = out.error || JSON.stringify(out);
+        msg.style.color = '#b91c1c';
+      }
+    });
+  }
+
+  const credBtn = document.getElementById('ta-cred-save');
+  if (credBtn) {
+    credBtn.addEventListener('click', async () => {
+      const accessCode = (document.getElementById('ta-ac') || {}).value || '';
+      const verifyCode = (document.getElementById('ta-vc') || {}).value || '';
+      const msg = document.getElementById('ta-cred-msg');
+      msg.textContent = 'Saving…';
+      const out = await apiPut(`users/${encodeURIComponent(userId)}/credentials`, { accessCode, verifyCode });
+      if (out.ok) {
+        msg.textContent = 'Credentials updated (hashed in VistA).';
+        msg.style.color = '#166534';
+      } else {
+        msg.textContent = out.error || JSON.stringify(out);
+        msg.style.color = '#b91c1c';
+      }
+    });
+  }
+
+  const deact = document.getElementById('ta-deact');
+  const react = document.getElementById('ta-react');
+  const lifeMsg = document.getElementById('ta-life-msg');
+  if (deact && react) {
+    deact.addEventListener('click', async () => {
+      if (!confirm('Deactivate this user? This sets a termination date in VistA File 200. The user will no longer be able to log in.')) return;
+      lifeMsg.textContent = 'Deactivating…';
+      const out = await apiPost(`users/${encodeURIComponent(userId)}/deactivate`, {});
+      lifeMsg.textContent = out.ok ? 'Deactivated. User can no longer sign in.' : (out.error || JSON.stringify(out));
+      lifeMsg.style.color = out.ok ? '#166534' : '#b91c1c';
+    });
+    react.addEventListener('click', async () => {
+      if (!confirm('Reactivate this user? This clears the termination date in VistA File 200.')) return;
+      lifeMsg.textContent = 'Reactivating…';
+      const out = await apiPost(`users/${encodeURIComponent(userId)}/reactivate`, {});
+      lifeMsg.textContent = out.ok ? 'Reactivated.' : (out.error || JSON.stringify(out));
+      lifeMsg.style.color = out.ok ? '#166534' : '#b91c1c';
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -420,25 +689,27 @@ async function renderUserDetail(el, userId) {
 // ---------------------------------------------------------------------------
 async function renderRoleAssignment(el) {
   el.innerHTML = `
-    <div class="page-header">
-      <h1>Role Assignment</h1>
-    </div>
-    <div class="loading-message">Loading roles…</div>`;
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Security Keys (Roles)</div>
+    <div class="page-header"><h1>Security Keys (Roles)</h1></div>
+    <div class="loading-message">Loading security keys from VistA…</div>`;
 
   const res = await api('roles');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load roles</div>`; return; }
   const roles = res.data;
 
-  const rows = roles.map(r => {
-    const vg = r.vistaGrounding || {};
-    return `
-    <tr>
-      <td><span class="badge badge-key">${escapeHtml(r.name)}</span></td>
-      <td>${escapeHtml(r.description)}</td>
-      <td>${vg.file19_1Ien ? 'IEN ' + vg.file19_1Ien : '—'}</td>
-      <td>${r.assignedUsers.length ? r.assignedUsers.map(u => typeof u === 'object' ? '<a href="#/users/' + encodeURIComponent(u.id) + '">' + escapeHtml(u.name) + '</a>' : escapeHtml(u)).join(', ') : '<span style="color:var(--color-text-muted)">None</span>'}</td>
-    </tr>`;
-  }).join('');
+  function renderRoleRows(list) {
+    if (!list.length) return '<tr><td colspan="4" style="text-align:center;color:var(--color-text-muted)">No matching keys</td></tr>';
+    return list.map(r => {
+      const vg = r.vistaGrounding || {};
+      return `
+      <tr>
+        <td><span class="badge badge-key">${escapeHtml(r.name)}</span></td>
+        <td>${escapeHtml(r.description || '—')}</td>
+        <td>${vg.file19_1Ien ? 'IEN ' + vg.file19_1Ien : '—'}</td>
+        <td>${(r.assignedUsers || []).length ? r.assignedUsers.map(u => typeof u === 'object' ? '<a href="#/users/' + encodeURIComponent(u.id) + '">' + escapeHtml(u.name) + '</a>' : escapeHtml(u)).join(', ') : '<span style="color:var(--color-text-muted)">—</span>'}</td>
+      </tr>`;
+    }).join('');
+  }
 
   const noteHtml = res.integrationNote
     ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
@@ -447,17 +718,37 @@ async function renderRoleAssignment(el) {
     : '';
 
   el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Security Keys (Roles)</div>
     <div class="page-header">
-      <h1>Role Assignment</h1>
+      <h1>Security Keys (Roles)</h1>
       ${sourceBadge(res.sourceStatus || res.source)}
     </div>
     ${noteHtml}
+    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-primary)">
+      <strong>What are security keys?</strong> In VistA, security keys (File 19.1) control access to menu options, RPCs, and features.
+      Keys are assigned to users in File 200 field 51 and checked via <code>^XUSEC(keyName,DUZ)</code>.
+      Common keys: <code>PROVIDER</code>, <code>ORES</code> (order entry), <code>XUPROGMODE</code> (programmer mode).
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="role-search" placeholder="Search keys…" />
+      <span class="result-count" id="role-count">Showing ${roles.length} of ${roles.length}</span>
+    </div>
     <table class="data-table">
       <thead><tr>
-        <th>Key</th><th>Description</th><th>File 19.1</th><th>Assigned Users</th>
+        <th>Key Name</th><th>Description</th><th>File 19.1</th><th>Assigned Users</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody id="role-tbody">${renderRoleRows(roles)}</tbody>
     </table>`;
+
+  const searchInput = document.getElementById('role-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = (searchInput.value || '').toLowerCase();
+      const filtered = roles.filter(r => r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q));
+      document.getElementById('role-tbody').innerHTML = renderRoleRows(filtered);
+      document.getElementById('role-count').textContent = `Showing ${filtered.length} of ${roles.length}`;
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -725,11 +1016,24 @@ async function renderClinicList(el) {
       <div class="card"><div class="card-label">With Stop Code</div><div class="card-value">${summary.withStopCode ?? '—'}</div></div>
       <div class="card"><div class="card-label">Avg Slot Length</div><div class="card-value">${summary.avgSlotLength ? summary.avgSlotLength + ' min' : '—'}</div></div>
     </div>
+    <div class="filter-rail">
+      <input type="text" id="clinic-search" placeholder="Search clinics…" />
+      <span class="result-count" id="clinic-count">Showing ${clinics.length} of ${clinics.length}</span>
+    </div>
     <div class="detail-section">
       <table>
         <thead><tr><th>Clinic Name</th><th>Abbreviation</th><th>Stop Code</th><th>Slot Length</th><th>Status</th><th>VistA Reference</th></tr></thead>
         <tbody id="clinic-tbody">${clinicRows(clinics)}</tbody>
       </table>
+    </div>
+    <div class="detail-section" style="margin-top:16px;">
+      <h2>Add Clinic</h2>
+      <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">Creates a new clinic location in File 44 via <code>ZVE CLNM ADD</code> RPC.</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <label>Clinic Name<br/><input type="text" id="clinic-add-name" placeholder="e.g. CARDIOLOGY" style="min-width:220px;" /></label>
+        <button type="button" class="btn-primary" id="clinic-add-btn">Add Clinic</button>
+      </div>
+      <div id="clinic-add-msg" style="margin-top:8px;font-size:12px;"></div>
     </div>
     <div class="detail-section">
       <h2>VistA Grounding</h2>
@@ -740,6 +1044,36 @@ async function renderClinicList(el) {
         <div class="detail-row"><dt>Type Index</dt><dd>${escapeHtml(grounding.typeIndex || '"C" index in ^SC("TYPE","C",')}</dd></div>
       </dl>
     </div>`;
+
+  const clinicSearch = document.getElementById('clinic-search');
+  if (clinicSearch) {
+    clinicSearch.addEventListener('input', () => {
+      const q = (clinicSearch.value || '').toLowerCase();
+      const filtered = clinics.filter(c => c.name.toLowerCase().includes(q));
+      document.getElementById('clinic-tbody').innerHTML = clinicRows(filtered);
+      document.getElementById('clinic-count').textContent = `Showing ${filtered.length} of ${clinics.length}`;
+    });
+  }
+
+  const clinicAddBtn = document.getElementById('clinic-add-btn');
+  if (clinicAddBtn) {
+    clinicAddBtn.addEventListener('click', async () => {
+      const name = (document.getElementById('clinic-add-name') || {}).value || '';
+      const msg = document.getElementById('clinic-add-msg');
+      if (!name.trim()) { msg.textContent = 'Clinic name is required.'; msg.style.color = '#b91c1c'; return; }
+      msg.textContent = 'Creating clinic in VistA…';
+      msg.style.color = '';
+      const out = await apiPost('clinics', { name: name.trim() });
+      if (out.ok) {
+        msg.textContent = 'Clinic created. Refreshing list…';
+        msg.style.color = '#166534';
+        setTimeout(() => renderClinicList(el), 1000);
+      } else {
+        msg.textContent = out.error || JSON.stringify(out);
+        msg.style.color = '#b91c1c';
+      }
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -795,6 +1129,10 @@ async function renderWardList(el) {
         <tbody id="ward-tbody">${wardRows(wards)}</tbody>
       </table>
     </div>
+    <div class="filter-rail">
+      <input type="text" id="ward-search" placeholder="Search wards…" />
+      <span class="result-count" id="ward-count">Showing ${wards.length} of ${wards.length}</span>
+    </div>
     <div class="detail-section">
       <h2>VistA Grounding</h2>
       <dl>
@@ -804,6 +1142,16 @@ async function renderWardList(el) {
         <div class="detail-row"><dt>Bed File</dt><dd>${escapeHtml(grounding.bedFile || 'File 405.4 (Room-Bed)')}</dd></div>
       </dl>
     </div>`;
+
+  const wardSearch = document.getElementById('ward-search');
+  if (wardSearch) {
+    wardSearch.addEventListener('input', () => {
+      const q = (wardSearch.value || '').toLowerCase();
+      const filtered = wards.filter(w => w.name.toLowerCase().includes(q) || (w.specialty || '').toLowerCase().includes(q));
+      document.getElementById('ward-tbody').innerHTML = wardRows(filtered);
+      document.getElementById('ward-count').textContent = `Showing ${filtered.length} of ${wards.length}`;
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -811,44 +1159,37 @@ async function renderWardList(el) {
 // ---------------------------------------------------------------------------
 async function renderKeyInventory(el) {
   el.innerHTML = `
-    <div class="page-header">
-      <h1>Key Inventory</h1>
-    </div>
-    <div class="loading-message">Loading key inventory…</div>`;
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Key Inventory</div>
+    <div class="page-header"><h1>Key Inventory</h1></div>
+    <div class="loading-message">Loading key inventory from VistA…</div>`;
 
   const res = await api('key-inventory');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load key inventory</div>`; return; }
   const keys = res.data;
   const summary = res.summary;
 
-  const rows = keys.map(k => {
-    const catBadge = k.category === 'clinical'
-      ? '<span class="badge" style="background:#dbeafe;color:#1e40af">clinical</span>'
-      : k.category === 'administrative'
-      ? '<span class="badge" style="background:#fef3c7;color:#92400e">admin</span>'
-      : '<span class="badge badge-inactive">other</span>';
-    const holderList = k.holders.length
-      ? k.holders.map(h => '<a href="#/users/' + encodeURIComponent(h.id) + '">' + escapeHtml(h.name) + '</a>').join(', ')
-      : '<span style="color:var(--color-text-muted)">No holders</span>';
-    const grounding = k.vistaGrounding;
-    return `
-      <tr>
-        <td><span class="badge badge-key">${escapeHtml(k.keyName)}</span></td>
-        <td>${catBadge}</td>
-        <td>${escapeHtml(k.description)}</td>
-        <td style="font-weight:600">${k.holderCount}</td>
-        <td>${holderList}</td>
-        <td>${grounding.file19_1Ien ? 'IEN ' + grounding.file19_1Ien : '—'}</td>
-      </tr>`;
-  }).join('');
+  function renderKeyRows(list) {
+    if (!list.length) return '<tr><td colspan="4" style="text-align:center;color:var(--color-text-muted)">No matching keys</td></tr>';
+    return list.map(k => {
+      const grounding = k.vistaGrounding || {};
+      return `
+        <tr>
+          <td><span class="badge badge-key">${escapeHtml(k.keyName)}</span></td>
+          <td>${escapeHtml(k.description || '—')}</td>
+          <td style="font-weight:600">${k.holderCount}</td>
+          <td>${grounding.file19_1Ien ? 'IEN ' + grounding.file19_1Ien : '—'}</td>
+        </tr>`;
+    }).join('');
+  }
 
-  const keyNoteHtml = res.integrationNote
+  const noteHtml = res.integrationNote
     ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
          <strong>Integration Note:</strong> ${escapeHtml(res.integrationNote)}
        </div>`
     : '';
 
   el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Key Inventory</div>
     <div class="page-header">
       <h1>Key Inventory</h1>
       ${sourceBadge(res.sourceStatus || res.source)}
@@ -859,31 +1200,35 @@ async function renderKeyInventory(el) {
         <div class="card-value">${summary.totalKeys}</div>
       </div>
       <div class="card">
-        <div class="card-label">Clinical Keys</div>
-        <div class="card-value">${summary.clinicalKeys}</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Admin Keys</div>
-        <div class="card-value">${summary.adminKeys}</div>
+        <div class="card-label">With Holders</div>
+        <div class="card-value">${summary.totalKeys - (summary.unassignedKeys || 0)}</div>
       </div>
       <div class="card">
         <div class="card-label">Unassigned</div>
-        <div class="card-value" style="${summary.unassignedKeys > 0 ? 'color:var(--color-warning)' : ''}">${summary.unassignedKeys}</div>
+        <div class="card-value" style="${(summary.unassignedKeys || 0) > 0 ? 'color:var(--color-warning)' : ''}">${summary.unassignedKeys || 0}</div>
       </div>
     </div>
-    ${keyNoteHtml}
-    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-primary)">
-      <strong>VistA Grounding:</strong> Keys live in File 19.1 (SECURITY KEY).
-      Holder lookup: <code>^XUSEC(keyName,DUZ)</code>.
-      Verification RPC: <code>ORWU HASKEY</code>.
-      Key assignment is terminal-only — <a href="#/guided-tasks">guided workflow →</a>
+    ${noteHtml}
+    <div class="filter-rail">
+      <input type="text" id="key-search" placeholder="Search keys…" />
+      <span class="result-count" id="key-count">Showing ${keys.length} of ${keys.length}</span>
     </div>
     <table class="data-table">
       <thead><tr>
-        <th>Key</th><th>Category</th><th>Description</th><th>Holders</th><th>Assigned To</th><th>File 19.1</th>
+        <th>Key Name</th><th>Description</th><th>Holders</th><th>File 19.1</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody id="key-tbody">${renderKeyRows(keys)}</tbody>
     </table>`;
+
+  const searchInput = document.getElementById('key-search');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = (searchInput.value || '').toLowerCase();
+      const filtered = keys.filter(k => k.keyName.toLowerCase().includes(q) || (k.description || '').toLowerCase().includes(q));
+      document.getElementById('key-tbody').innerHTML = renderKeyRows(filtered);
+      document.getElementById('key-count').textContent = `Showing ${filtered.length} of ${keys.length}`;
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -891,40 +1236,56 @@ async function renderKeyInventory(el) {
 // ---------------------------------------------------------------------------
 async function renderEsigStatus(el) {
   el.innerHTML = `
-    <div class="page-header">
-      <h1>Electronic Signature Status</h1>
-    </div>
-    <div class="loading-message">Loading e-sig status…</div>`;
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Electronic Signature Status</div>
+    <div class="page-header"><h1>Electronic Signature Status</h1></div>
+    <div class="loading-message">Loading e-sig status from VistA…</div>`;
 
   const res = await api('esig-status');
   if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load e-sig status</div>`; return; }
   const users = res.data;
   const agg = res.aggregates;
-  const grounding = res.vistaGrounding;
+  const grounding = res.vistaGrounding || {};
 
-  const rows = users.map(u => {
-    const statusBadge = u.esigStatus === 'active' ? 'badge-active'
-      : u.esigStatus === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
-    return `
-      <tr>
-        <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
-        <td>${u.duz ?? '—'}</td>
-        <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
-        <td><span class="badge ${statusBadge}">${escapeHtml(u.esigStatus)}</span></td>
-        <td>${u.hasCode ? 'Yes' : 'No'}</td>
-      </tr>`;
-  }).join('');
-
-  const esigNoteHtml = res.integrationNote
-    ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
-         <strong>Integration Note:</strong> ${escapeHtml(res.integrationNote)}
-       </div>`
-    : '';
+  function renderEsigRows(list) {
+    if (!list.length) return '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted)">No matching users</td></tr>';
+    return list.map(u => {
+      const statusBadge = u.esigStatus === 'active' ? 'badge-active'
+        : u.esigStatus === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
+      return `
+        <tr>
+          <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
+          <td>${u.duz ?? '—'}</td>
+          <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
+          <td><span class="badge ${statusBadge}">${escapeHtml(u.esigStatus)}</span></td>
+          <td>${u.hasCode ? 'Yes' : 'No'}</td>
+          <td>${escapeHtml(u.sigBlockName || '—')}</td>
+        </tr>`;
+    }).join('');
+  }
 
   el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Electronic Signature Status</div>
     <div class="page-header">
       <h1>Electronic Signature Status</h1>
       ${sourceBadge(res.sourceStatus || res.source)}
+    </div>
+    <div class="detail-section" style="margin-bottom:16px;padding:16px;font-size:13px;border-left:4px solid var(--color-primary);background:#f0fdf4;">
+      <strong>What is a VistA Electronic Signature?</strong><br/>
+      In VistA, an electronic signature is a <strong>typed text code</strong> (like a secondary password),
+      <em>not</em> a handwritten or graphical signature. It is NOT captured via touchscreen, signature pad, or image upload.<br/><br/>
+      <strong>How it works:</strong><br/>
+      <ol style="margin:8px 0 0 20px;padding:0;">
+        <li>An administrator or the user themselves sets an e-signature code (a secret phrase).</li>
+        <li>VistA hashes the code using <code>$$EN^XUSHSH</code> and stores the hash in File 200, field 20.4. The original code is never stored.</li>
+        <li>When a clinician signs a note, order, or other clinical document, they type their e-signature code.</li>
+        <li>VistA hashes the typed code and compares it to the stored hash. If they match, the document is signed.</li>
+      </ol><br/>
+      <strong>Signature block fields</strong> (also set during e-sig setup):<br/>
+      <ul style="margin:4px 0 0 20px;padding:0;">
+        <li><strong>Initials</strong> — displayed in chart headers (File 200 field 20.2)</li>
+        <li><strong>Signature Block Printed Name</strong> — appears on signed documents (File 200 field 20.3)</li>
+        <li><strong>Signature Block Title</strong> — e.g. "MD", "RN", "PharmD" (File 200 field 20.3 piece 2)</li>
+      </ul>
     </div>
     <div class="card-grid" style="margin-bottom:20px">
       <div class="card">
@@ -944,534 +1305,247 @@ async function renderEsigStatus(el) {
         <div class="card-value" style="${agg.revoked > 0 ? 'color:var(--color-error)' : ''}">${agg.revoked}</div>
       </div>
     </div>
-    ${esigNoteHtml}
-    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
-      <strong>VistA Grounding:</strong> E-signature codes are stored as hashed values in
-      <code>${escapeHtml(grounding.field)}</code> and <strong>cannot be retrieved</strong>.
-      Validation RPC: <code>${escapeHtml(grounding.validationRpc)}</code>.
-      ${escapeHtml(grounding.note)}
-      E-sig setup/reset is terminal-only — <a href="#/guided-tasks">guided workflow →</a>
+    <div class="filter-rail">
+      <input type="text" id="esig-search" placeholder="Search users…" />
+      <select id="esig-filter">
+        <option value="">All statuses</option>
+        <option value="active">Active (code set)</option>
+        <option value="not-configured">Not configured</option>
+      </select>
+      <span class="result-count" id="esig-count">Showing ${users.length} of ${users.length}</span>
     </div>
     <table class="data-table">
       <thead><tr>
-        <th>Name</th><th>DUZ</th><th>User Status</th><th>E-Sig Status</th><th>Has Code</th>
+        <th>Name</th><th>DUZ</th><th>User Status</th><th>E-Sig Status</th><th>Has Code</th><th>Sig Block Name</th>
       </tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody id="esig-tbody">${renderEsigRows(users)}</tbody>
     </table>`;
+
+  const esigSearch = document.getElementById('esig-search');
+  const esigFilter = document.getElementById('esig-filter');
+  function applyEsigFilters() {
+    const q = (esigSearch.value || '').toLowerCase();
+    const sf = esigFilter.value;
+    const filtered = users.filter(u => {
+      if (q && !u.name.toLowerCase().includes(q) && !(u.duz || '').toString().includes(q)) return false;
+      if (sf && u.esigStatus !== sf) return false;
+      return true;
+    });
+    document.getElementById('esig-tbody').innerHTML = renderEsigRows(filtered);
+    document.getElementById('esig-count').textContent = `Showing ${filtered.length} of ${users.length}`;
+  }
+  if (esigSearch) esigSearch.addEventListener('input', applyEsigFilters);
+  if (esigFilter) esigFilter.addEventListener('change', applyEsigFilters);
 }
 
 // ---------------------------------------------------------------------------
-// Guided Write Workflows
+// VistA tools (DDR probe -- direct RPC, no terminal write path)
 // ---------------------------------------------------------------------------
-async function renderGuidedTasks(el) {
-  // 19 guided write workflows from the canonical catalog (GW-* IDs)
-  // Mode A = Live Read (auto-verify), Mode B = Guided Terminal Write, Mode C = Terminal-Only
-  const workflows = [
-    // --- USER MANAGEMENT ---
-    {
-      id: 'GW-USR-01', category: 'User Management', mode: 'B',
-      title: 'Add New User',
-      description: 'Create a new user in VistA File 200 with proper access/verify codes, person class, and division assignment.',
-      vistaTarget: 'File 200 via UPDATE^DIE or ^VA(200)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal (SSH or Docker exec)',
-        'Navigate: EVE > User Management > Add a New User',
-        'Enter user demographics (name, SSN, DOB)',
-        'Assign ACCESS CODE and VERIFY CODE',
-        'Set PERSON CLASS and SERVICE/SECTION',
-        'Assign DIVISION(s) via File 200 node "DIV"',
-        'Allocate required security keys (PROVIDER, ORES, etc.)',
-      ],
-      verifyStep: 'Re-read user list: check new user appears in File 200 B-index',
-      verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'VistA user creation requires multi-file coordination (200, 200.01, 8930.3) with MUMPS triggers. No safe write RPC exists for full user provisioning.',
-    },
-    {
-      id: 'GW-USR-02', category: 'User Management', mode: 'B',
-      title: 'Edit User Properties',
-      description: 'Modify an existing user\'s status, division assignment, person class, or service/section.',
-      vistaTarget: 'File 200 via ^DIE or VA Kernel menus',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > User Management > Edit an Existing User',
-        'Select user by name or DUZ',
-        'Modify target field(s)',
-      ],
-      verifyStep: 'Re-read user detail: confirm changed fields reflect new values',
-      verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'User field edits involve FileMan cross-references and triggers that must execute within the MUMPS environment.',
-    },
-    {
-      id: 'GW-USR-03', category: 'User Management', mode: 'B',
-      title: 'Deactivate User (DISUSER)',
-      description: 'Set DISUSER flag (File 200 field 4) to prevent a user from logging into VistA. Does not delete the record.',
-      vistaTarget: 'File 200 field 4 (DISUSER)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > User Management > Edit an Existing User',
-        'Select user by name or DUZ',
-        'Set DISUSER field to YES',
-        'Optionally remove security keys to prevent residual access',
-        'Optionally clear electronic signature code',
-      ],
-      verifyStep: 'Re-read user detail: confirm status shows inactive/DISUSER=YES',
-      verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'User deactivation involves DISUSER flag plus potential key revocation and signature code clearing. Multiple cross-referenced fields must be coordinated.',
-    },
-    {
-      id: 'GW-USR-04', category: 'User Management', mode: 'B',
-      title: 'Reactivate User',
-      description: 'Clear the DISUSER flag and restore access for a previously deactivated user. May need to re-assign keys and verify codes.',
-      vistaTarget: 'File 200 field 4 (DISUSER) + field 2/11 (verify code)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > User Management > Edit an Existing User',
-        'Select user by name or DUZ',
-        'Set DISUSER field to NO',
-        'Verify ACCESS CODE and VERIFY CODE are still valid',
-        'Re-allocate security keys if previously revoked',
-      ],
-      verifyStep: 'Re-read user detail: confirm status active, DISUSER=NO',
-      verifyRoute: '#/users',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Reactivation requires clearing DISUSER, possibly resetting verify code, and re-allocating keys — all FileMan-coordinated operations.',
-    },
-    {
-      id: 'GW-USR-05', category: 'User Management', mode: 'C',
-      title: 'Set Up Electronic Signature',
-      description: 'Configure or reset a user\'s electronic signature code in File 200 field 20.4. E-sig is required for signing orders and notes.',
-      vistaTarget: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal (SSH or Docker exec)',
-        'Navigate: EVE > User Management > Electronic Signature',
-        'Select user by name or DUZ',
-        'User enters new signature code (interactive, not scriptable)',
-        'VistA hashes and stores in File 200 field 20.4',
-      ],
-      verifyStep: 'Re-read e-sig status: confirm user shows esigStatus=active',
-      verifyRoute: '#/esig-status',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'E-sig codes are hashed by ENCRYP^XUSRB1 and must be entered interactively. Cannot be set via RPC — VistA security design constraint.',
-    },
-    // --- KEY MANAGEMENT ---
-    {
-      id: 'GW-KEY-01', category: 'Key Management', mode: 'B',
-      title: 'Allocate Security Key',
-      description: 'Grant a security key (File 19.1) to a user. Keys control access to VistA menu options and RPCs.',
-      vistaTarget: 'File 19.1 holders via ^XUSEC',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Menu Management > Key Management > Allocation',
-        'Select key name (e.g., PROVIDER, ORES, XUMGR)',
-        'Select user to grant key to',
-        'Confirm allocation',
-      ],
-      verifyStep: 'Re-read key inventory: confirm holder count increased for this key',
-      verifyRoute: '#/key-inventory',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Key allocation writes to ^XUSEC global with FileMan-managed cross-references. Direct writes risk index corruption.',
-    },
-    {
-      id: 'GW-KEY-02', category: 'Key Management', mode: 'B',
-      title: 'Remove Security Key',
-      description: 'Revoke a security key from a user. The key record remains in File 19.1 but the user is removed from the holder list.',
-      vistaTarget: 'File 19.1 holders via ^XUSEC',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Menu Management > Key Management > De-Allocation',
-        'Select key name',
-        'Select user to revoke key from',
-        'Confirm de-allocation',
-      ],
-      verifyStep: 'Re-read key inventory: confirm holder count decreased for this key',
-      verifyRoute: '#/key-inventory',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Key de-allocation must update ^XUSEC cross-references atomically within FileMan.',
-    },
-    // --- DIVISION MANAGEMENT ---
-    {
-      id: 'GW-DIV-01', category: 'Division Management', mode: 'C',
-      title: 'Manage Division Configuration',
-      description: 'Add or modify a Medical Center Division (File 40.8) and link it to an Institution (File 4).',
-      vistaTarget: 'File 40.8 via ^DG(40.8)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Systems Manager > Site Parameters',
-        'Edit Medical Center Division file',
-        'Set division name, institution pointer, facility number',
-      ],
-      verifyStep: 'Re-read facilities: confirm XUS DIVISION GET returns updated data',
-      verifyRoute: '#/facilities',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Division configuration affects system-wide routing and is tightly coupled to Kernel site parameters.',
-    },
-    {
-      id: 'GW-DIV-02', category: 'Division Management', mode: 'B',
-      title: 'Manage Service/Section',
-      description: 'Create or edit a Service/Section entry used for user assignment and workload reporting.',
-      vistaTarget: 'File 49 (SERVICE/SECTION) via ^DIC(49)',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Systems Manager > MAS Parameter Entry/Edit',
-        'Select Service/Section file',
-        'Enter or edit service name, abbreviation, chief',
-        'Link to appropriate division',
-      ],
-      verifyStep: 'Confirm service appears in user edit picklist',
-      verifyRoute: '#/facilities',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Service/Section entries in File 49 are referenced by user records, workload, and bed control. FileMan cross-references must be maintained.',
-    },
-    {
-      id: 'GW-DIV-03', category: 'Division Management', mode: 'B',
-      title: 'View/Edit Kernel Site Parameters',
-      description: 'View and modify Kernel System Parameters (File 8989.3) including site name, domain, and production account flag.',
-      vistaTarget: 'File 8989.3 (KERNEL SYSTEM PARAMETERS)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Systems Manager > Kernel System Parameters',
-        'Review current site name, domain, production flag',
-        'Edit parameters as needed (requires XUMGR key)',
-      ],
-      verifyStep: 'Confirm updated parameters via terminal re-read',
-      verifyRoute: '#/facilities',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Kernel parameters are foundational infrastructure. Changes cascade to login behavior, RPC context, and site identification.',
-    },
-    // --- CLINIC MANAGEMENT ---
-    {
-      id: 'GW-CLIN-01', category: 'Clinic Management', mode: 'B',
-      title: 'Add/Edit Clinic Location',
-      description: 'Create or modify a Hospital Location (File 44) clinic entry with scheduling parameters.',
-      vistaTarget: 'File 44 via ^SC',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Scheduling > Set Up Clinic',
-        'Enter clinic name, abbreviation, type (C=Clinic)',
-        'Set division pointer, stop codes, default slot length',
-        'Configure availability (optional)',
-      ],
-      verifyStep: 'Re-read clinic list: confirm ORWU CLINLOC returns the new/changed clinic',
-      verifyRoute: '#/clinics',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
-    },
-    {
-      id: 'GW-CLIN-02', category: 'Clinic Management', mode: 'B',
-      title: 'Edit Clinic Fields',
-      description: 'Modify clinic properties: stop code, slot length, display name, abbreviation, or inactivation date.',
-      vistaTarget: 'File 44 fields via ^SC',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Scheduling > Set Up Clinic',
-        'Select existing clinic by name',
-        'Edit target field(s) — stop code, slot length, abbreviation',
-      ],
-      verifyStep: 'Re-read clinic list: confirm changed fields reflect new values',
-      verifyRoute: '#/clinics',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Stop code and scheduling fields have associated cross-references in File 44 that FileMan must maintain.',
-    },
-    {
-      id: 'GW-CLIN-03', category: 'Clinic Management', mode: 'B',
-      title: 'Inactivate/Reactivate Clinic',
-      description: 'Set or clear the inactivation date on a File 44 clinic entry. Inactive clinics are excluded from scheduling.',
-      vistaTarget: 'File 44 INACTIVATION DATE field',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Scheduling > Set Up Clinic',
-        'Select clinic by name',
-        'Set INACTIVATION DATE to today (inactivate) or clear it (reactivate)',
-      ],
-      verifyStep: 'Re-read clinic list: confirm clinic status changed',
-      verifyRoute: '#/clinics',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Inactivation date changes trigger scheduling cross-reference updates in File 44.',
-    },
-    // --- WARD MANAGEMENT ---
-    {
-      id: 'GW-WARD-01', category: 'Ward Management', mode: 'B',
-      title: 'Add/Edit Ward Location',
-      description: 'Create or modify a Ward Location (File 42) with room-bed inventory and link to File 44 type=W.',
-      vistaTarget: 'File 42 via ^DIC(42) + File 405.4 via ^DG(405.4)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > ADT Manager > Ward Definition',
-        'Enter ward name, specialty, service',
-        'Set corresponding Hospital Location (File 44 type=W)',
-        'Define room-bed inventory in File 405.4',
-        'Assign operating beds and out-of-service beds',
-      ],
-      verifyStep: 'Re-read ward list: confirm ORQPT WARDS returns the new/changed ward',
-      verifyRoute: '#/wards',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Ward creation requires coordinated entries in File 42, File 44, and File 405.4. MUMPS cross-references link bed status to ADT movements.',
-    },
-    {
-      id: 'GW-WARD-02', category: 'Ward Management', mode: 'C',
-      title: 'Room-Bed Setup',
-      description: 'Add, modify, or decommission room-bed entries in File 405.4 for an existing ward.',
-      vistaTarget: 'File 405.4 (ROOM-BED) via ^DG(405.4)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > ADT Manager > Bed Control',
-        'Select ward',
-        'Add/edit/decommission beds',
-        'Set bed status (available, out-of-service)',
-      ],
-      verifyStep: 'Re-read ward list: confirm bed counts updated',
-      verifyRoute: '#/wards',
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Room-bed changes in File 405.4 update bed tracking and ADT census cross-references. DDR FILER could write but risks data integrity.',
-    },
-    // --- ORDERING / CPRS CONFIG ---
-    {
-      id: 'GW-ORD-01', category: 'Ordering Configuration', mode: 'C',
-      title: 'Quick Order Management',
-      description: 'Create or edit quick orders used by CPRS for streamlined ordering. Quick orders reference order dialogs and pre-populated fields.',
-      vistaTarget: 'File 101.41 (ORDER DIALOG) via CPRS setup menus',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > CPRS Manager > Quick Order Management',
-        'Select order dialog type (meds, labs, consults)',
-        'Enter quick order name and pre-populated fields',
-        'Assign to target clinic or provider',
-      ],
-      verifyStep: 'Confirm quick order appears in CPRS ordering dialog (requires CPRS login)',
-      verifyRoute: null,
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Quick order creation involves File 101.41 with complex sub-file structures. No safe write RPC exists for full order dialog provisioning.',
-    },
-    {
-      id: 'GW-ORD-02', category: 'Ordering Configuration', mode: 'A',
-      title: 'Configure CPRS Notifications',
-      description: 'View and modify CPRS notification settings. Uses ORQ3 LOADALL/SAVEALL RPCs for read and write.',
-      vistaTarget: 'Notification parameters via ORQ3 LOADALL / ORQ3 SAVEALL',
-      riskLevel: 'medium',
-      steps: [
-        'Review current notification settings via ORQ3 LOADALL RPC',
-        'Identify notifications to enable/disable',
-        'Compose updated settings payload',
-        'Submit via ORQ3 SAVEALL RPC (if available in sandbox)',
-      ],
-      verifyStep: 'Re-read via ORQ3 LOADALL: confirm updated settings',
-      verifyRoute: null,
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'While ORQ3 SAVEALL exists as a write RPC, notification parameter structures are complex. Terminal verification recommended after RPC write.',
-    },
-    // --- MENU / PCMM ---
-    {
-      id: 'GW-MENU-01', category: 'System Configuration', mode: 'C',
-      title: 'View/Edit Menu Trees',
-      description: 'View and modify VistA menu option trees (File 19). Controls user navigation and feature access.',
-      vistaTarget: 'File 19 (OPTION) via ^DIC(19)',
-      riskLevel: 'high',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Menu Management > Edit Options',
-        'Select option by name',
-        'Add/remove sub-options or modify properties',
-        'Verify menu tree reflects changes',
-      ],
-      verifyStep: 'Confirm via terminal: menu tree shows updated structure',
-      verifyRoute: null,
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'Menu trees in File 19 have recursive sub-file structures with security key linkages. No write RPC exists.',
-    },
-    {
-      id: 'GW-PCMM-01', category: 'System Configuration', mode: 'C',
-      title: 'PCMM Team Management',
-      description: 'Create or modify Patient Care Management Module (PCMM) team assignments linking providers to patient panels.',
-      vistaTarget: 'PCMM files via SD PCMM menus',
-      riskLevel: 'medium',
-      steps: [
-        'Open VistA terminal',
-        'Navigate: EVE > Scheduling > PCMM Manager',
-        'Select team or create new team',
-        'Assign providers and define roles',
-        'Link patients to primary care team',
-      ],
-      verifyStep: 'Confirm via terminal: team roster shows updated assignments',
-      verifyRoute: null,
-      terminalCommand: 'docker exec -it local-vista-utf8 su - vista -c "mumps -r ^XUP"',
-      whyTerminal: 'PCMM team/patient assignment involves multiple cross-referenced files. No safe write RPC exists for team management.',
-    },
-  ];
-
-  const riskColor = { high: '#dc2626', medium: '#d97706', low: '#059669' };
-  const modeLabel = { A: 'Mode A — Live Read', B: 'Mode B — Guided Terminal', C: 'Mode C — Terminal Only' };
-  const modeColor = { A: '#059669', B: '#2563eb', C: '#7c3aed' };
-
-  // Group by category
-  const categories = [];
-  const catMap = {};
-  for (const w of workflows) {
-    if (!catMap[w.category]) { catMap[w.category] = []; categories.push(w.category); }
-    catMap[w.category].push(w);
-  }
-
-  function renderCard(w) {
-    const stepsHtml = w.steps.map((s, i) => `
-      <li>
-        <label class="step-check">
-          <input type="checkbox" data-wf="${w.id}" data-step="${i}" />
-          <span>${escapeHtml(s)}</span>
-        </label>
-      </li>`).join('');
-
-    const verifyHtml = w.verifyRoute
-      ? `<div class="guided-task-verify">
-           <strong>Verify:</strong> ${escapeHtml(w.verifyStep)}
-           <a href="${w.verifyRoute}" class="verify-link">Open verify surface →</a>
-         </div>`
-      : `<div class="guided-task-verify">
-           <strong>Verify:</strong> ${escapeHtml(w.verifyStep || 'Manual terminal verification required')}
-         </div>`;
-
-    return `
-    <div class="guided-task-card" id="wf-${w.id}">
-      <div class="guided-task-header">
-        <h3>${escapeHtml(w.title)}</h3>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span class="mode-badge" style="background:${modeColor[w.mode]};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">${w.mode}</span>
-          <span class="risk-badge" style="background:${riskColor[w.riskLevel]};color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase">${escapeHtml(w.riskLevel)}</span>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--color-text-muted);margin-bottom:4px;">${escapeHtml(w.id)} · ${escapeHtml(modeLabel[w.mode])}</div>
-      <p class="guided-task-desc">${escapeHtml(w.description)}</p>
-      <div class="guided-task-target">
-        <strong>VistA target:</strong> ${escapeHtml(w.vistaTarget)}
-      </div>
-      <div class="guided-task-steps">
-        <strong>Steps:</strong>
-        <ol>${stepsHtml}</ol>
-      </div>
-      <div class="guided-task-terminal">
-        <strong>Terminal entry point:</strong>
-        <code class="terminal-cmd">${escapeHtml(w.terminalCommand)}</code>
-      </div>
-      ${verifyHtml}
-      <details class="evidence-section">
-        <summary>Evidence capture</summary>
-        <textarea class="evidence-input" data-wf="${w.id}" rows="4" placeholder="Paste terminal output or describe what you observed…"></textarea>
-        <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">Evidence is stored locally in browser only · not sent to server</div>
-      </details>
-      <div class="guided-task-rationale">
-        <em>${escapeHtml(w.whyTerminal)}</em>
-      </div>
-    </div>`;
-  }
-
-  const categoryBlocks = categories.map(cat => `
-    <div class="guided-category">
-      <h2 class="guided-category-title">${escapeHtml(cat)}</h2>
-      <div class="guided-tasks-grid">
-        ${catMap[cat].map(w => renderCard(w)).join('')}
-      </div>
-    </div>`).join('');
-
-  // Summary counts
-  const total = workflows.length;
-  const modeACnt = workflows.filter(w => w.mode === 'A').length;
-  const modeBCnt = workflows.filter(w => w.mode === 'B').length;
-  const modeCCnt = workflows.filter(w => w.mode === 'C').length;
-  const highRisk = workflows.filter(w => w.riskLevel === 'high').length;
-
+async function renderVistaTools(el) {
   el.innerHTML = `
     <div class="page-header">
-      <h1>Guided Write Workflows</h1>
-      <span class="source-posture terminal">TERMINAL</span>
+      <h1>VistA tools</h1>
+      <span class="source-posture vista">RPC</span>
     </div>
-    <div class="card-grid" style="margin-bottom:1rem;">
-      <div class="card"><div class="card-label">Total Workflows</div><div class="card-value">${total}</div></div>
-      <div class="card"><div class="card-label">Mode A (Live)</div><div class="card-value" style="color:${modeColor.A}">${modeACnt}</div></div>
-      <div class="card"><div class="card-label">Mode B (Guided)</div><div class="card-value" style="color:${modeColor.B}">${modeBCnt}</div></div>
-      <div class="card"><div class="card-label">Mode C (Terminal)</div><div class="card-value" style="color:${modeColor.C}">${modeCCnt}</div></div>
-      <div class="card"><div class="card-label">High Risk</div><div class="card-value" style="color:${riskColor.high}">${highRisk}</div></div>
-    </div>
-    <div class="guided-tasks-intro">
-      <p><strong>VistA writes require terminal access.</strong> Direct web-based writes to VistA
-      globals risk index corruption, missed cross-references, and audit gaps.</p>
-      <p>Each workflow follows the 6-step canonical pattern: <strong>Display → Compose → Attempt → Fallback → Evidence → Verify.</strong>
-      Check off steps as you complete them. Paste terminal output in the evidence section. Use the verify link to re-read VistA state and confirm your change took effect.</p>
-      <p style="font-size:12px;color:var(--color-text-muted);">
-        <strong>Mode A</strong> = live read/write via confirmed RPCs ·
-        <strong>Mode B</strong> = guided terminal write with browser verification ·
-        <strong>Mode C</strong> = terminal-only, no browser writeback
-      </p>
-    </div>
-    ${categoryBlocks}`;
+    <p class="detail-section" style="padding:12px 16px;font-size:13px;">
+      All configuration writes go through <strong>DDR VALIDATOR / DDR FILER</strong> or distro overlay RPCs (e.g. <code>ZVEUSMG</code>).
+      Optional <em>legacy terminal</em> is a separate product surface, not a required step for admin work.
+    </p>
+    <div class="loading-message" id="ddr-probe-loading">Running DDR probe…</div>
+    <pre id="ddr-probe-out" style="display:none;font-size:11px;overflow:auto;max-height:480px;background:#0f172a;color:#e2e8f0;padding:12px;border-radius:6px;"></pre>`;
 
-  // --- Step tracking persistence (localStorage) ---
-  const STEP_KEY = 've-guided-steps';
-  const EVIDENCE_KEY = 've-guided-evidence';
-
-  function loadSteps() {
-    try { return JSON.parse(localStorage.getItem(STEP_KEY)) || {}; } catch { return {}; }
+  const out = document.getElementById('ddr-probe-out');
+  const loading = document.getElementById('ddr-probe-loading');
+  try {
+    const res = await api('vista/ddr-probe');
+    loading.style.display = 'none';
+    out.style.display = 'block';
+    out.textContent = JSON.stringify(res, null, 2);
+  } catch (e) {
+    loading.textContent = 'Probe failed: ' + e.message;
   }
-  function saveSteps(data) { localStorage.setItem(STEP_KEY, JSON.stringify(data)); }
-  function loadEvidence() {
-    try { return JSON.parse(localStorage.getItem(EVIDENCE_KEY)) || {}; } catch { return {}; }
-  }
-  function saveEvidence(data) { localStorage.setItem(EVIDENCE_KEY, JSON.stringify(data)); }
+}
 
-  // Restore saved step state
-  const stepState = loadSteps();
-  el.querySelectorAll('input[data-wf][data-step]').forEach(cb => {
-    const key = cb.dataset.wf + ':' + cb.dataset.step;
-    if (stepState[key]) {
-      cb.checked = true;
-      cb.closest('label').querySelector('span').classList.add('step-done');
+// ---------------------------------------------------------------------------
+// Devices (DDR LISTER 3.5)
+// ---------------------------------------------------------------------------
+async function renderDeviceList(el) {
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Devices</div>
+    <div class="page-header"><h1>Devices</h1><span class="source-posture vista">Loading…</span></div>
+    <div class="loading-message">Loading devices from VistA…</div>`;
+  const res = await api('devices');
+  const badge = sourceBadge(res.sourceStatus || res.source);
+  if (!res.ok) {
+    el.innerHTML = `<div class="page-header"><h1>Devices</h1></div><div class="error-message">${escapeHtml(res.error || 'failed')}</div>`;
+    return;
+  }
+  const devices = res.data || [];
+
+  function renderDeviceRows(list) {
+    if (!list.length) return '<tr><td colspan="4" style="text-align:center;color:var(--color-text-muted)">No devices found</td></tr>';
+    return list.map(d => `
+      <tr>
+        <td>${escapeHtml(d.ien || '')}</td>
+        <td>${escapeHtml(d.name || '')}</td>
+        <td>${escapeHtml(d.type || '—')}</td>
+        <td>${escapeHtml(d.subtype || '—')}</td>
+      </tr>`).join('');
+  }
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Devices</div>
+    <div class="page-header"><h1>Devices (File 3.5)</h1>${badge}</div>
+    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-primary)">
+      <strong>What are VistA devices?</strong> File 3.5 stores terminal, printer, and resource device definitions.
+      Devices control how VistA sends output — to screens, printers, file queues, or specialized equipment.
+      Common types: <code>TRM</code> (terminal), <code>P-OTHER</code> (printer), <code>RES</code> (resource), <code>HFS</code> (host file server).
+    </div>
+    <div class="card-grid" style="margin-bottom:12px;">
+      <div class="card"><div class="card-label">Total Devices</div><div class="card-value">${devices.length}</div></div>
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="dev-search" placeholder="Search devices…" />
+      <span class="result-count" id="dev-count">Showing ${devices.length} of ${devices.length}</span>
+    </div>
+    <table class="data-table"><thead><tr><th>IEN</th><th>Name</th><th>Type</th><th>Subtype</th></tr></thead>
+    <tbody id="dev-tbody">${renderDeviceRows(devices)}</tbody></table>
+    <div class="detail-section" style="margin-top:16px;">
+      <h2>Add Device</h2>
+      <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">Creates a new entry in File 3.5 via <code>DDR FILER</code>.</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <label>Device Name<br/><input type="text" id="dev-add-name" placeholder="e.g. LASER-PRINTER-1" style="min-width:220px;" /></label>
+        <button type="button" class="btn-primary" id="dev-add-btn">Add Device</button>
+      </div>
+      <div id="dev-add-msg" style="margin-top:8px;font-size:12px;"></div>
+    </div>`;
+
+  const devSearch = document.getElementById('dev-search');
+  if (devSearch) {
+    devSearch.addEventListener('input', () => {
+      const q = (devSearch.value || '').toLowerCase();
+      const filtered = devices.filter(d => (d.name || '').toLowerCase().includes(q) || (d.type || '').toLowerCase().includes(q));
+      document.getElementById('dev-tbody').innerHTML = renderDeviceRows(filtered);
+      document.getElementById('dev-count').textContent = `Showing ${filtered.length} of ${devices.length}`;
+    });
+  }
+
+  const addBtn = document.getElementById('dev-add-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const name = (document.getElementById('dev-add-name') || {}).value || '';
+      const msg = document.getElementById('dev-add-msg');
+      if (!name.trim()) { msg.textContent = 'Device name is required.'; msg.style.color = '#b91c1c'; return; }
+      msg.textContent = 'Creating device in VistA…';
+      msg.style.color = '';
+      const out = await apiPost('devices', { name: name.trim() });
+      if (out.ok) {
+        msg.textContent = 'Device created. Refreshing list…';
+        msg.style.color = '#166534';
+        setTimeout(() => renderDeviceList(el), 1000);
+      } else {
+        msg.textContent = out.error || JSON.stringify(out);
+        msg.style.color = '#b91c1c';
+      }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kernel parameters (DDR GETS 8989.3)
+// ---------------------------------------------------------------------------
+async function renderParamsKernel(el) {
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Kernel Site Parameters</div>
+    <div class="page-header"><h1>Kernel Site Parameters</h1><span class="source-posture vista">Loading…</span></div>
+    <div class="loading-message">Loading kernel parameters from VistA…</div>`;
+  const res = await api('params/kernel');
+  const badge = sourceBadge(res.sourceStatus || res.source);
+  if (!res.ok) {
+    el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Kernel Site Parameters</div>
+    <div class="page-header"><h1>Kernel Site Parameters</h1></div>
+    <div class="error-message">${escapeHtml(res.error || 'Failed to load kernel parameters')}</div>
+    <div class="detail-section" style="margin-top:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
+      <strong>Note:</strong> File 8989.3 (KERNEL SYSTEM PARAMETERS) may not have IEN 1 populated in this VistA instance.
+      This file controls site-level settings like site name, domain, default institution, and default language.
+    </div>`;
+    return;
+  }
+
+  const lines = res.rawLines || [];
+  const fieldMap = {};
+  const LABELS = {
+    '.01': 'SITE NAME',
+    '.02': 'DOMAIN NAME',
+    '.03': 'DEFAULT INSTITUTION',
+    '.04': 'DEFAULT AUTO MENU',
+    '.05': 'DEFAULT LANGUAGE',
+  };
+  for (const line of lines) {
+    if (line.includes('^') && !line.startsWith('[')) {
+      const parts = line.split('^');
+      if (parts.length >= 2) {
+        const fieldRef = parts[0]?.trim();
+        const value = parts.slice(1).join('^').trim();
+        if (fieldRef) fieldMap[fieldRef] = value;
+      }
+    }
+  }
+
+  const hasData = Object.keys(fieldMap).length > 0 && !lines.some(l => l.includes('[ERROR]'));
+
+  const fieldRows = hasData
+    ? Object.entries(fieldMap).map(([k, v]) => {
+        const label = LABELS[k] || k;
+        return `<div class="detail-row"><dt>${escapeHtml(label)} <code style="font-size:10px;color:var(--color-text-muted)">${escapeHtml(k)}</code></dt><dd>${escapeHtml(v || '(empty)')}</dd></div>`;
+      }).join('')
+    : '<div class="detail-row"><dt>Status</dt><dd style="color:var(--color-warning)">No field data returned from File 8989.3 IEN 1. The file may not be populated in this VistA instance.</dd></div>';
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Kernel Site Parameters</div>
+    <div class="page-header"><h1>Kernel Site Parameters</h1>${badge}</div>
+    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-primary)">
+      <strong>What is this?</strong> File 8989.3 (KERNEL SYSTEM PARAMETERS) stores site-level configuration:
+      the site name, network domain, default institution, auto-menu settings, and default language.
+      These are foundational settings that affect every user on the system.
+    </div>
+    <div class="detail-section">
+      <h2>Current Values</h2>
+      <dl>${fieldRows}</dl>
+    </div>
+    <div class="detail-section" style="margin-top:12px;">
+      <h2>Edit Field</h2>
+      <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:8px;">Saves via <code>DDR VALIDATOR</code> + <code>DDR FILER</code> to File 8989.3 IEN 1.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+        <label>Field<br/><select id="ta-kf" style="min-width:200px;">
+          <option value=".01">.01 — SITE NAME</option>
+          <option value=".02">.02 — DOMAIN NAME</option>
+          <option value=".03">.03 — DEFAULT INSTITUTION</option>
+          <option value=".04">.04 — DEFAULT AUTO MENU</option>
+          <option value=".05">.05 — DEFAULT LANGUAGE</option>
+        </select></label>
+        <label>Value<br/><input type="text" id="ta-kv" placeholder="New value" style="min-width:200px;" /></label>
+        <button type="button" class="btn-primary" id="ta-ksave">Save to VistA</button>
+      </div>
+      <div id="ta-kmsg" style="margin-top:8px;font-size:12px;"></div>
+    </div>`;
+
+  document.getElementById('ta-ksave').addEventListener('click', async () => {
+    const field = document.getElementById('ta-kf').value;
+    const value = document.getElementById('ta-kv').value;
+    const msg = document.getElementById('ta-kmsg');
+    if (!value.trim()) { msg.textContent = 'Value is required.'; msg.style.color = '#b91c1c'; return; }
+    if (!confirm('Update kernel parameter ' + field + ' to "' + value + '"? This is a site-wide change.')) return;
+    msg.textContent = 'Saving…';
+    msg.style.color = '';
+    const out = await apiPut('params/kernel', { field, value });
+    if (out.ok) {
+      msg.textContent = 'Saved. Refresh to see updated values.';
+      msg.style.color = '#166534';
+    } else {
+      msg.textContent = out.error || JSON.stringify(out);
+      msg.style.color = '#b91c1c';
     }
   });
-
-  // Restore saved evidence
-  const evidState = loadEvidence();
-  el.querySelectorAll('textarea.evidence-input').forEach(ta => {
-    if (evidState[ta.dataset.wf]) ta.value = evidState[ta.dataset.wf];
-  });
-
-  // Step checkbox handler
-  el.addEventListener('change', (e) => {
-    const cb = e.target.closest('input[data-wf][data-step]');
-    if (!cb) return;
-    const key = cb.dataset.wf + ':' + cb.dataset.step;
-    const data = loadSteps();
-    data[key] = cb.checked;
-    saveSteps(data);
-    const span = cb.closest('label').querySelector('span');
-    span.classList.toggle('step-done', cb.checked);
-  });
-
-  // Evidence textarea handler (debounced save)
-  let evidTimer = null;
-  el.addEventListener('input', (e) => {
-    const ta = e.target.closest('textarea.evidence-input');
-    if (!ta) return;
-    clearTimeout(evidTimer);
-    evidTimer = setTimeout(() => {
-      const data = loadEvidence();
-      data[ta.dataset.wf] = ta.value;
-      saveEvidence(data);
-    }, 400);
-  });
 }
+

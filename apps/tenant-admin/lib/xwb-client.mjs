@@ -73,6 +73,49 @@ function buildRpcMessage(rpcName, params = []) {
   return msg + EOT;
 }
 
+/**
+ * @typedef {{ type: 'literal'; value: string } | { type: 'list'; value: Record<string, string> }} RpcParam
+ */
+
+function encodeListKeyForMumps(key) {
+  const trimmed = key.trim();
+  if (!trimmed) return '""';
+  if (trimmed.startsWith('"')) return trimmed;
+  if (/^\d+(,\d+)*$/.test(trimmed)) return trimmed;
+  const commaIndex = trimmed.indexOf(',');
+  if (commaIndex === -1) return '"' + trimmed + '"';
+  const head = trimmed.slice(0, commaIndex).trim();
+  const tail = trimmed.slice(commaIndex);
+  if (!head) return trimmed;
+  return '"' + head + '"' + tail;
+}
+
+/**
+ * RPC message with LIST-type params (DDR FILER, DDR GETS ENTRY DATA, DDR LISTER, etc.)
+ */
+function buildRpcMessageEx(rpcName, params) {
+  let msg = PREFIX + '11302' + '\x01' + '1' + sPack(rpcName);
+  if (params.length === 0) {
+    msg += '54f';
+  } else {
+    msg += '5';
+    for (const p of params) {
+      if (p.type === 'literal') {
+        msg += '0' + lPack(p.value) + 'f';
+      } else {
+        const entries = Object.entries(p.value);
+        msg += '2';
+        entries.forEach(([key, val], idx) => {
+          const quotedKey = encodeListKeyForMumps(key);
+          msg += lPack(quotedKey) + lPack(val);
+          msg += idx < entries.length - 1 ? 't' : 'f';
+        });
+      }
+    }
+  }
+  return msg + EOT;
+}
+
 function buildBye() {
   return PREFIX + '10304' + sPack('#BYE#') + EOT;
 }
@@ -304,6 +347,23 @@ export class XwbBroker {
     return resp.split(/\r?\n/).filter(l => l.length > 0);
   }
 
+  /**
+   * Call an RPC with mixed literal + LIST parameters (FileMan DDR family, ORWDAL32, etc.).
+   * @param {string} rpcName
+   * @param {RpcParam[]} params
+   * @returns {Promise<string[]>}
+   */
+  async callRpcWithList(rpcName, params = []) {
+    if (!this.#connected || !this.#sock || this.#sock.destroyed) {
+      throw new Error('Not connected. Call connect() first.');
+    }
+    dbg('RPC-LIST', rpcName);
+    await this.#rawSend(buildRpcMessageEx(rpcName, params));
+    const resp = stripNulls(await this.#readToEOT());
+    dbg('RESP', resp.substring(0, 300));
+    return resp.split(/\r?\n/).filter(l => l.length > 0);
+  }
+
   /** Disconnect from broker. */
   disconnect() {
     if (this.#sock && !this.#sock.destroyed) {
@@ -316,6 +376,18 @@ export class XwbBroker {
     this.#duz = '';
     this.#userName = '';
   }
+}
+
+// ---- Async mutex for broker serialization --------------------------------
+
+let _lockQueue = Promise.resolve();
+
+function withBrokerLock(fn) {
+  let release;
+  const next = new Promise(res => { release = res; });
+  const wait = _lockQueue;
+  _lockQueue = next;
+  return wait.then(() => fn().finally(release));
 }
 
 // ---- Singleton broker instance -------------------------------------------
@@ -332,6 +404,14 @@ export async function getBroker() {
   _broker = new XwbBroker();
   await _broker.connect();
   return _broker;
+}
+
+/**
+ * Execute an RPC call under the broker mutex.
+ * Prevents concurrent TCP socket corruption.
+ */
+export function lockedRpc(fn) {
+  return withBrokerLock(fn);
 }
 
 /**

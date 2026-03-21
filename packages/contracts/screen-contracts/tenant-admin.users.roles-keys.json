@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "title": "Role Assignment & Key Inventory",
   "status": "draft",
-  "description": "Read-only inventory of VistA security keys with holder cross-reference. Keys defined in File 19.1, holder lookup via ^XUSEC global, verification via ORWU HASKEY RPC. Categorized as clinical vs administrative. Shows holder count, assigned users, and File 19.1 IEN grounding. Key assignment and revocation require guided terminal workflows.",
+  "description": "Inventory of VistA security keys with holder cross-reference. Keys defined in File 19.1, holder lookup via ^XUSEC global, verification via ORWU HASKEY RPC. Key assignment and removal use POST/DELETE /users/:duz/keys (ZVE USMG KEYS) when the distro overlay RPC is registered; otherwise the API returns integration-pending.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "local",
   "surfaceType": "admin",
@@ -12,8 +12,8 @@
     "scopePosture": "tenant-scoped",
     "entityContextRequired": ["tenantId"]
   },
-  "readWritePosture": "read-only",
-  "directWriteAllowed": false,
+  "readWritePosture": "controlled-write",
+  "directWriteAllowed": true,
   "dataSources": [
     {
       "sourceId": "vista-file-200-keys",

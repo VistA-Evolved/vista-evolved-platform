@@ -11,7 +11,7 @@
 > — functions TM-USR-01 through TM-USR-08, TM-KEY-01 through TM-KEY-04, TM-MENU-01
 >
 > **See also:**
-> - [Slice Ranking](vista-admin-slice-ranking-and-mode-selection.md) — Slice 1 (read) and Slice 2 (guided write) both target this domain
+> - [Slice Ranking](vista-admin-slice-ranking-and-mode-selection.md) — Slice 1 (read) and Slice 2 (**direct writes** via DDR + `ZVEUSMG`) target this domain
 > - [Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md) §2.1 Users/Access, §2.2 Keys/Menus
 > - [Domain Map](vista-admin-domain-map.md) — domains D1 (Users/Access) and D2 (Keys/Menus)
 > - [Truth Discovery Pack](tenant-admin-vista-admin-truth-discovery-pack.md) — File 200/19.1 details
@@ -134,7 +134,7 @@ Seven RPCs forming a complete user lifecycle management suite. All confirmed in 
 
 | RPC | Purpose | If Available | If Missing |
 |-----|---------|-------------|-----------|
-| `XUS IAM ADD USER` | Create new user in File 200 | Replaces ZVECREUSER.m pattern | Fall back to VE USER EDIT + guided terminal |
+| `XUS IAM ADD USER` | Create new user in File 200 | Replaces ZVECREUSER.m pattern | Fall back to `ZVE USMG ADD` / DDR FILER (not terminal-guided) |
 | `XUS IAM FIND USER` | Search users | Alternative to `ORWU NEWPERS` | Use ORWU NEWPERS (confirmed) |
 | `XUS IAM DISPLAY USER` | Display user detail | Richer than ORWU USERINFO | Use VE USER DETAIL (custom) |
 | `XUS IAM EDIT USER` | Edit user fields | Standard write path | Use VE USER EDIT (custom) |
@@ -144,10 +144,10 @@ Seven RPCs forming a complete user lifecycle management suite. All confirmed in 
 
 **Probe command:**
 ```powershell
-# Add to services/vista/ZVEPROB.m LIST array and run:
-docker cp services\vista\ZVEPROB.m vehu:/tmp/ZVEPROB.m
-docker exec vehu bash -c "cp /tmp/ZVEPROB.m /home/vehu/r/ZVEPROB.m && chown vehu:vehu /home/vehu/r/ZVEPROB.m"
-docker exec vehu su - vehu -c "mumps -r PROBE^ZVEPROB"
+# Copy vista-evolved-vista-distro overlay/routines/ZVEPROB.m into the instance r/ and run:
+docker cp overlay/routines/ZVEPROB.m <container>:/tmp/ZVEPROB.m
+# (then install per your image's r/ path and user)
+docker exec <container> su - <vista_user> -c "mumps -r PROBE^ZVEPROB"
 ```
 
 ### Tier 3: Custom VE* RPCs — From Archive ZVEUSER.m
@@ -241,7 +241,7 @@ Source: `vista-evolved-platform/apps/tenant-admin/public/app.js`
 | User List | `#/users` | Fixture + VistA user search | Working prototype |
 | User Detail | `#/users/:id` | Fixture only (detail) | Fixture-backed |
 | Role Assignment | `#/roles` | Fixture only | Fixture-backed |
-| Guided Tasks | `#/guided-tasks` | Static instructions | 5 terminal workflows |
+| VistA tools | `#/vista-tools` | `GET .../vista/ddr-probe` | DDR family + write posture |
 
 ### 3.4 MUMPS Write Patterns (from archive)
 
@@ -300,11 +300,11 @@ Start: Does VEHU have XUS IAM RPCs?
             └─ Read-only with Tier 1 RPCs only
                 Use ORWU NEWPERS for search
                 Use XWB GET VARIABLE VALUE for detail reads
-                Guided terminal for all writes
-                Lowest risk, least functionality
+                Writes via tenant-admin API (DDR + `ZVEUSMG`) once overlay is installed
+                Lowest risk for reads; writes require DUZ privileges + audit
 ```
 
-**Recommended path:** Probe XUS IAM first. If available, prefer standard Kernel RPCs. If missing, install ZVEUSER.m for reads and use guided terminal for writes until trust is established.
+**Recommended path:** Probe XUS IAM first. If available, prefer standard Kernel RPCs. If missing, install **`ZVEUSMG`** (distro overlay) and use **tenant-admin direct-write** routes — not terminal-guided workflows.
 
 ---
 
@@ -360,26 +360,25 @@ The following operations form the Slice 1 read workspace (Mode A, zero write ris
 
 ---
 
-## 6. Guided Write Scope (Slice 2)
+## 6. Direct Write Scope (Slice 2) — supersedes Mode B
 
-These operations require Mode B (live read + guided write):
+These operations use **live read + direct API write** (DDR and/or `ZVE USMG *`):
 
-| Operation | Write RPC (if available) | Guided Terminal Fallback | Risk Level |
-|-----------|------------------------|------------------------|-----------|
-| Create user | `XUS IAM ADD USER` (probe) or ZVECREUSER.m pattern | Terminal: `^XUP` → User Management | HIGH — multi-file coordination |
-| Edit user | `XUS IAM EDIT USER` (probe) or `VE USER EDIT` | Terminal: FileMan edit File 200 | MEDIUM — single field at a time |
-| Assign key | `VE USER ADD KEY` (custom) | Terminal: Key Management option | MEDIUM — subfile write |
-| Remove key | `VE USER REMOVE KEY` (custom) | Terminal: Key Management option | MEDIUM — subfile delete |
-| Deactivate user | `XUS IAM TERMINATE USER` (probe) or `VE USER DEACTIVATE` | Terminal: DISUSER field edit | HIGH — affects access |
+| Operation | Primary write path | Legacy terminal (optional) | Risk Level |
+|-----------|-------------------|---------------------------|------------|
+| Create user | `ZVE USMG ADD` or `XUS IAM ADD USER` (if probed) | Power-user only | HIGH — multi-field |
+| Edit user (allow-listed) | `DDR VALIDATOR` + `DDR FILER` on File 200 | Power-user only | MEDIUM |
+| Assign key | `ZVE USMG KEYS` | Power-user only | MEDIUM |
+| Remove key | `ZVE USMG KEYS` | Power-user only | MEDIUM |
+| Deactivate / reactivate | `ZVE USMG DEACT` / `REACT` or DDR on File 200 | Power-user only | HIGH |
 
-### Guided write workflow pattern:
+### Direct write pattern (tenant-admin):
 
-1. Browser displays current VistA state (from Slice 1 reads)
-2. Admin fills in the desired change via form
-3. If direct RPC exists and is confirmed: execute via API with audit capture
-4. If no direct RPC: browser generates terminal command guidance
-5. Evidence capture: admin confirms completion (screenshot or terminal output)
-6. Browser re-reads VistA state to verify the change took effect
+1. Browser displays current VistA state (Slice 1 reads)
+2. Admin submits a governed form
+3. API validates (`DDR VALIDATOR` where applicable) and files (`DDR FILER` or `ZVE USMG *`)
+4. Response returns FileMan errors or success; UI shows toast
+5. Optional: browser re-reads via DDR GETS / ORWU RPCs to confirm
 
 ---
 

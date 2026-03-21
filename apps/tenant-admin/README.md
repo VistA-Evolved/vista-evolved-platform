@@ -13,7 +13,7 @@
 ## What this is
 
 A working **VistA-first operational shell** for tenant-scoped administration.
-It serves 13 API surfaces with layout, navigation, filter rails, context rails,
+It serves 15 API surfaces (13 with dedicated UI renders) with layout, navigation, filter rails, context rails,
 breadcrumbs, and a badge vocabulary that dynamically reflects the actual data source.
 
 The XWB broker client (`lib/xwb-client.mjs`) connects directly to the VistA
@@ -29,16 +29,18 @@ when VistA is unreachable. Every response includes an honest `source` field
 | Dashboard | `#/dashboard` | VistA (aggregated counts) | Fixture counts | ✅ VistA-first |
 | VistA Status | `#/` (status bar) | VistA broker probe | Error state | ✅ VistA-direct |
 | User List | `#/users` | `ORWU NEWPERS` | `fixtures/users.json` | ✅ VistA-first |
-| User Detail | `#/users/:id` | `ORWU NEWPERS` (by IEN) | `fixtures/users.json` | ✅ VistA-first |
+| User Detail | `#/users/:id` | `DDR GETS` File 200 / `ORWU NEWPERS` | `fixtures/users.json` | ✅ VistA-first |
 | Topology | `#/topology` | `XUS DIVISION GET` + `ORWU CLINLOC` + `ORQPT WARDS` | `fixtures/facilities.json` | ✅ VistA-first |
 | Facility List | `#/facilities` | `XUS DIVISION GET` + `ORWU CLINLOC` | `fixtures/facilities.json` | ✅ VistA-first |
 | Facility Detail | `#/facilities/:id` | `ORWU CLINLOC` / `ORQPT WARDS` (by IEN) | `fixtures/facilities.json` | ✅ VistA-first |
 | Clinic List | `#/clinics` | `ORWU CLINLOC` | `fixtures/facilities.json` | ✅ VistA-first |
 | Ward List | `#/wards` | `ORQPT WARDS` | `fixtures/facilities.json` | ✅ VistA-first |
-| Role Assignment | `#/roles` | Fixture (`integration-pending`) | — | ⏳ No bulk RPC |
-| Key Inventory | `#/key-inventory` | Fixture (`integration-pending`) | — | ⏳ No bulk RPC |
-| E-Sig Status | `#/esig-status` | Fixture (`integration-pending`) | — | ⏳ No bulk RPC |
-| Guided Tasks | `#/guided-tasks` | Hardcoded catalog | — | ✅ Platform-owned |
+| Role Assignment | `#/roles` | `DDR LISTER` File 19.1 | `fixtures/roles.json` | ✅ VistA-first |
+| Key Inventory | `#/key-inventory` | `DDR LISTER` File 19.1 | `fixtures/roles.json` | ✅ VistA-first |
+| E-Sig Status | `#/esig-status` | `ORWU NEWPERS` + `DDR GETS` 20.2-20.4 | `fixtures/users.json` | ✅ VistA-first |
+| VistA tools | `#/vista-tools` | DDR probe + direct-write posture | `GET /vista/ddr-probe` | ✅ Platform-owned |
+| Devices | `#/devices` | `DDR LISTER` File 3.5 | — | ✅ VistA-direct |
+| Kernel params | `#/params/kernel` | `DDR GETS` File 8989.3 | — | ✅ VistA-direct |
 
 ### VistA adapter (lib/vista-adapter.mjs → lib/xwb-client.mjs)
 
@@ -51,18 +53,21 @@ when VistA is unreachable. Every response includes an honest `source` field
 | `fetchVistaClinics(search)` | `ORWU CLINLOC` | Clinic list from File 44 |
 | `fetchVistaWards()` | `ORQPT WARDS` | Ward list from File 42 |
 | `checkVistaKey(keyName)` | `ORWU HASKEY` | Per-user key check (File 19.1) |
+| `ddrGetsFile200(ien, fields)` | `DDR GETS ENTRY DATA` | Read File 200 fields by IEN |
+| `ddrListerSecurityKeys()` | `DDR LISTER` | List keys from File 19.1 |
+| `ddrValidateField(file, iens, field, value)` | `DDR VALIDATOR` | Validate before filing |
+| `ddrFilerEdit(file, iens, field, value)` | `DDR FILER` (EDIT) | Write allow-listed field |
+| `ddrFilerAdd(file, field, iens, value)` | `DDR FILER` (ADD) | Create new entry |
+| `callZveRpc(name, params)` | Any `ZVE*` RPC | Call distro overlay RPC |
+| `probeDdrRpcFamily()` | DDR family probe | Check DDR RPC availability |
+| `fetchVistaEsigStatusForUsers(users)` | `DDR GETS ENTRY DATA` | Bulk e-sig status (fields 20.2-20.4) |
 
-### Integration-pending surfaces
+### Partially integrated surfaces
 
-Three surfaces currently serve fixture data because no single VistA RPC
-enumerates the required data in bulk:
-
-- **Role assignment** — No RPC enumerates all security keys from File 19.1. `ORWU HASKEY` checks one key per call but cannot list all keys. Requires DDR global read or custom M routine.
-- **Key inventory** — Depends on role/key enumeration (same blocker as above).
-- **E-sig status** — `ORWU VALIDSIG` validates one e-signature per call but cannot enumerate all users' e-sig status in bulk.
-
-These surfaces display `source: "fixture"`, `sourceStatus: "integration-pending"`,
-and an `integrationNote` explaining the specific blocker.
+Holder-count cross-referencing for keys/roles requires reading `^XUSEC(KEY,DUZ)`
+or File 200 field 51 — not yet wired in this slice. When VistA DDR LISTER
+returns keys but holder lookup fails, `holderCount: 0` is shown with an
+integration note.
 
 ### Fixture files (degraded-mode fallback only)
 
@@ -150,13 +155,13 @@ The `tenantId` and `cpReturnUrl` are passed as query parameters.
 
 - **Single-socket XWB broker:** The XWB client maintains one TCP socket. Concurrent RPC calls must be serialized (no `Promise.all`). All multi-RPC routes use sequential calls.
 - **No tenant-scoped session auth:** `tenantId` is passed as a query parameter, not enforced by session.
-- **No write workflows wired:** Guided tasks document terminal procedures only.
+- **Direct writes require distro RPCs:** Key assignment and some user ops need `INSTALL^ZVEUSMG` on the target instance. See `vista-evolved-vista-distro/docs/how-to/zveusmg-overlay-install.md`.
 - **User detail by IEN:** Uses `ORWU NEWPERS` empty search then filters by IEN. Users not in the first page of results may fall through to fixture.
-- **No site parameter reads:** File 8989.3 (Kernel Site Parameters) not yet wired.
+- **Kernel params:** `GET/PUT /params/kernel` (allow-listed fields on File 8989.3).
 
 ## Next steps
 
-1. Wire role/key inventory to VistA via DDR global read or custom M routine for File 19.1
-2. Wire bulk e-sig status checking
-3. Add site parameter read path (File 8989.3)
-4. Formalize guided write workflows with evidence capture and verification
+1. Wire holder-count cross-reference for key inventory (`^XUSEC` or File 200 field 51)
+2. Expand DDR allow-lists (more File 200 contact fields, clinic/ward metadata)
+3. Expand ZVE* RPC coverage per `packages/contracts/openapi/tenant-admin.openapi.yaml`
+4. Add device-type management (File 3.5 fields 1-3 beyond .01)

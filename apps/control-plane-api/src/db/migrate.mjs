@@ -166,6 +166,73 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_oe_unpublished ON outbox_event(published) WHERE NOT published;
     `,
   },
+  {
+    version: 9,
+    description: 'Operator invitations, alerts, usage metering, commercial stubs, feature flags',
+    sql: `
+      CREATE TABLE IF NOT EXISTS operator_invitation (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id    UUID REFERENCES tenant(id),
+        email        TEXT NOT NULL,
+        token_hash   TEXT NOT NULL,
+        status       TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending','accepted','revoked','expired')),
+        invited_by   TEXT NOT NULL,
+        expires_at   TIMESTAMPTZ,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_oi_tenant ON operator_invitation(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_oi_status ON operator_invitation(status);
+
+      CREATE TABLE IF NOT EXISTS operator_alert (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id        UUID REFERENCES tenant(id),
+        severity         TEXT NOT NULL DEFAULT 'info'
+                         CHECK (severity IN ('info','warning','error','critical')),
+        title            TEXT NOT NULL,
+        body             TEXT,
+        acknowledged_at  TIMESTAMPTZ,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_oa_severity ON operator_alert(severity);
+      CREATE INDEX IF NOT EXISTS idx_oa_created ON operator_alert(created_at);
+
+      CREATE TABLE IF NOT EXISTS usage_meter_event (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id    UUID REFERENCES tenant(id),
+        metric_name  TEXT NOT NULL,
+        quantity     NUMERIC NOT NULL DEFAULT 1,
+        detail       JSONB,
+        recorded_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ume_tenant ON usage_meter_event(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_ume_metric ON usage_meter_event(metric_name);
+
+      CREATE TABLE IF NOT EXISTS commercial_entitlement (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id        UUID NOT NULL REFERENCES tenant(id),
+        sku              TEXT NOT NULL,
+        status           TEXT NOT NULL DEFAULT 'stub'
+                         CHECK (status IN ('stub','active','suspended')),
+        billing_provider TEXT NOT NULL DEFAULT 'unconfigured',
+        external_ref     TEXT,
+        meta             JSONB,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ce_tenant ON commercial_entitlement(tenant_id);
+
+      CREATE TABLE IF NOT EXISTS environment_feature_flag (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        flag_key     TEXT NOT NULL,
+        environment  TEXT NOT NULL DEFAULT 'default',
+        enabled      BOOLEAN NOT NULL DEFAULT false,
+        meta         JSONB,
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(flag_key, environment)
+      );
+    `,
+  },
 ];
 
 /**
@@ -198,7 +265,7 @@ const isDirectRun = process.argv[1]?.endsWith('migrate.mjs');
 if (isDirectRun) {
   try {
     console.log('Running control-plane migrations...');
-    const result = await migrate();
+    const result = await runMigrations();
     console.log(`Done. Applied ${result.applied} of ${result.total} migrations.`);
   } catch (err) {
     console.error('Migration failed:', err.message);
