@@ -92,6 +92,7 @@ nav:
     - "VistA Admin Grounded Domain: Users, Keys, Signatures": explanation/vista-admin-grounded-domain-users-keys-signatures.md
     - "VistA Admin Grounded Domain: Institution, Division, Clinic": explanation/vista-admin-grounded-domain-institution-division-clinic.md
     - VistA Admin Guided Write Workflows: explanation/vista-admin-guided-write-workflows.md
+    - VistA Admin Repo Gap Analysis: explanation/vista-admin-repo-gap-analysis.md
   - ADRs:
     - adrs/index.md
     - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md

@@ -1,7 +1,7 @@
 # VistA Admin — Slice Ranking and Mode Selection
 
 > **Purpose:** Ranks the first 15–25 candidate admin functions by business importance,
-> safety, truth availability, and UI feasibility. Selects the first two slice candidates
+> safety, truth availability, and UI feasibility. Selects the first three slice candidates
 > with explicit justification.
 >
 > **Parent:** [Terminal-to-UI Translation Matrix](vista-admin-terminal-to-ui-translation-matrix.md)
@@ -72,7 +72,7 @@ Business importance is double-weighted because the goal is tenant-admin value, n
 
 ---
 
-## 4. First Two Slice Candidates
+## 4. First Three Slice Candidates
 
 ### Slice 1: **User/Key Read Workspace** (Mode A — Live Read)
 
@@ -104,22 +104,39 @@ Business importance is double-weighted because the goal is tenant-admin value, n
 
 **Depends on Slice 1:** Must complete the read workspace first. Can't guide a user creation if you can't display the current user list.
 
+### Slice 3: **Facility Topology Read Workspace** (Mode A — Live Read)
+
+**Functions:** TM-CLIN-01 (list clinics), TM-CLIN-02 (view clinic detail), TM-WARD-01 (list wards), TM-WARD-02 (ward detail), TM-WARD-05 (ward census)
+
+**Justification:**
+1. **Business importance:** Clinic and ward configuration is daily ADPAC work. Every scheduling, admission, and order-entry workflow depends on correctly configured locations. This is the second most-referenced admin concern after user/key management.
+2. **Safety:** Pure read-only. Zero risk to VistA data. Reads operate against Files 44 (Hospital Location) and 42 (Ward Location) — stable, well-documented structures.
+3. **Truth availability:** `ORWU CLINLOC` is VEHU-confirmed for clinic search. `ORQPT WARDS` is VEHU-confirmed for ward list. `ORQPT WARD PATIENTS` is confirmed for census. `SDES GET CLINIC INFO` is Vivian-confirmed for clinic detail. Archive has `VE CLIN LIST`, `VE WARD LIST` custom RPCs.
+4. **UI feasibility:** All Mode A — list views with search, hierarchy indicators (clinic→division→institution), detail panels. The institution/division context from Slice 1 provides the navigation frame.
+5. **Persona alignment:** TA-2 (ADPAC) spends most of their time managing clinic and ward configuration. This slice delivers the read foundation before clinic create/edit writes.
+
+**What this proves:** That the tenant-admin facility topology is grounded in real VistA location data, not fabricated tree widgets. Combined with Slice 1, this gives admins a complete read view of users, keys, and the institutional hierarchy they operate within.
+
+**Depends on Slice 1:** Institution and division context is needed to frame clinic and ward listings. Slice 1 provides that context.
+
 ---
 
 ## 5. Sequencing Rationale
 
 ```
-Slice 1 (Read Workspace)   →  Slice 2 (User/Key Writes)
-  pure Mode A reads              Mode B guided writes
-  zero risk                      audit-captured writes
-  proves browser truth           proves guided workflow
+Slice 1 (User/Key Reads)   →  Slice 2 (User/Key Writes)   →  Slice 3 (Facility Reads)
+  pure Mode A reads              Mode B guided writes            Mode A location reads
+  zero risk                      audit-captured writes           zero risk
+  proves browser truth           proves guided workflow          proves topology truth
 ```
 
 **Why not start with clinics?** Clinics (ranked #5 for list) have equally good read RPCs but clinic creation requires file 44 knowledge that is more complex than File 200. Users are the primitive — clinics, wards, and orders all depend on having users first.
 
-**Why not start with electronic signature (C)?** ES code entry is terminal-only by VistA security design and cannot be proven as a browser feature. It should be third, after the mode B pattern is proven.
+**Why not start with electronic signature (C)?** ES code entry is terminal-only by VistA security design and cannot be proven as a browser feature. It should come after the mode B pattern is proven.
 
 **Why not skip straight to writes?** Because every write in VistA is validated against the data dictionary. Without read-side proof that the browser correctly interprets VistA state, write guidance can't be trusted.
+
+**Why Slice 3 before clinic writes?** Clinic writes (Mode B) depend on reading the current clinic/ward state accurately. The topology read workspace must be proven before guided clinic creation is credible.
 
 ---
 

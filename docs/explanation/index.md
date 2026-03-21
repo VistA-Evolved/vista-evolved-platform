@@ -78,3 +78,4 @@ Architecture rationale, governance protocols, and design philosophy.
 - [VistA Admin Grounded Domain: Users, Keys, Signatures](vista-admin-grounded-domain-users-keys-signatures.md)
 - [VistA Admin Grounded Domain: Institution, Division, Clinic](vista-admin-grounded-domain-institution-division-clinic.md)
 - [VistA Admin Guided Write Workflows](vista-admin-guided-write-workflows.md)
+- [VistA Admin Repo Gap Analysis](vista-admin-repo-gap-analysis.md)
