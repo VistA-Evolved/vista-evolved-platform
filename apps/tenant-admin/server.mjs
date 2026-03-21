@@ -38,6 +38,7 @@ import {
   ddrGetsEntry,
   ddrValidateField,
   ddrFilerEdit,
+  ddrFilerEditMulti,
   ddrFilerAdd,
   callZveRpc,
   isRpcMissingError,
@@ -1464,6 +1465,400 @@ async function main() {
         return out;
       });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '3.1', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Health Summary Types (File 142) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/health-summary-types', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '142', FIELDS: '.01;.02;.05;.06;.08;.09', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            ien,
+            name: a[1]?.trim() || '',
+            title: a[2]?.trim() || '',
+            lock: a[3]?.trim() || '',
+            owner: a[4]?.trim() || '',
+            suppressWithoutData: a[5]?.trim() || '',
+            nationallyExported: a[6]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '142', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- TIU Document Definitions (File 8925.1) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/tiu-document-defs', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '8925.1', FIELDS: '.01;.02;.03;.04;.07', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            ien,
+            name: a[1]?.trim() || '',
+            abbreviation: a[2]?.trim() || '',
+            printName: a[3]?.trim() || '',
+            type: a[4]?.trim() || '',
+            status: a[5]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '8925.1', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Mail Groups (File 3.8) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/mail-groups', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '3.8', FIELDS: '.01;4;5;7;10', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            ien,
+            name: a[1]?.trim() || '',
+            type: a[2]?.trim() || '',
+            organizer: a[3]?.trim() || '',
+            selfEnroll: a[4]?.trim() || '',
+            restrictions: a[5]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '3.8', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Radiology Procedures (File 71) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/radiology-procedures', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '71', FIELDS: '.01;6;9;12', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            ien,
+            name: a[1]?.trim() || '',
+            procedureType: a[2]?.trim() || '',
+            cptCode: a[3]?.trim() || '',
+            imagingType: a[4]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '71', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Error Trap (File 3.077) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/error-trap', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '3.077', FIELDS: '.01;1;2;3;4;6;20', FLAGS: 'IP', MAX: '200' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            ien,
+            errorText: a[1]?.trim() || '',
+            firstDateTime: a[2]?.trim() || '',
+            mostRecentDateTime: a[3]?.trim() || '',
+            routineName: a[4]?.trim() || '',
+            frequency: a[5]?.trim() || '',
+            lastGlobal: a[6]?.trim() || '',
+            lineOfCode: a[7]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '3.077', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Health Summary Type detail (DDR GETS) + edit (DDR FILER) ----
+
+  app.get('/api/tenant-admin/v1/health-summary-types/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('142', ien, '.01;.02;.05;.06;.07;.08;.09');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '142', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/health-summary-types/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', title: '.02', lock: '.05', suppressWithoutData: '.08' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('142', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '142', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- TIU Doc Def detail + edit ----
+
+  app.get('/api/tenant-admin/v1/tiu-document-defs/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('8925.1', ien, '.01;.02;.03;.04;.07;.08;.1;.13');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '8925.1', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/tiu-document-defs/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', abbreviation: '.02', printName: '.03', status: '.07' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('8925.1', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '8925.1', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Mail Group detail + edit ----
+
+  app.get('/api/tenant-admin/v1/mail-groups/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('3.8', ien, '.01;4;5;5.1;7;8;10');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '3.8', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/mail-groups/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', type: '4', organizer: '5', selfEnroll: '7', restrictions: '10' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('3.8', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '3.8', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Radiology Procedure detail + edit ----
+
+  app.get('/api/tenant-admin/v1/radiology-procedures/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('71', ien, '.01;6;7;9;10;12;13;18');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '71', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/radiology-procedures/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', procedureType: '6', cptCode: '9', imagingType: '12' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('71', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '71', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Insurance Company detail + edit (File 36) ----
+
+  app.get('/api/tenant-admin/v1/insurance-companies/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('36', ien, '.01;.111;.112;.113;.114;.115;.131;3;4');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '36', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/insurance-companies/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', streetAddr1: '.111', city: '.114', state: '.115', phone: '.131' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('36', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '36', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Treating Specialty detail + edit (File 45.7) ----
+
+  app.get('/api/tenant-admin/v1/treating-specialties/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('45.7', ien, '.01;1;2');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '45.7', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Appointment Type detail + edit (File 409.1) ----
+
+  app.get('/api/tenant-admin/v1/appointment-types/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('409.1', ien, '.01;3;4');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '409.1', ien, data };
     } catch (e) {
       return { ok: false, tenantId, source: 'error', error: e.message };
     }

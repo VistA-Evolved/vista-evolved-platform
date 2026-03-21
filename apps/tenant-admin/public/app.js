@@ -112,28 +112,21 @@ const ROUTES = [
     { name: 'Menu Name', field: '100.98/.01', type: 'Free text', notes: 'CPRS menu organization' },
     { name: 'Notification Recipients', field: '100.9/773', type: 'Multiple', notes: 'Who gets notified on order events' },
   ]) },
-  { pattern: '#/tiu-config', fn: (el) => renderIntegrationPending(el, 'TIU / Clinical Documentation', 'Clinical Config', '#/dashboard', 'TIU-01..TIU-04', 'Document Definitions, Parameters, Print, Templates', 'Files 8925.1, 8925.99', 'DDR LISTER/FILER', 'TIU (Text Integration Utility) configuration: note titles, document types, signature rules, print settings, and template management.', [
-    { name: 'Document Definition Name', field: '8925.1/.01', type: 'Free text', notes: 'Note title (e.g. PROGRESS NOTE, DISCHARGE SUMMARY)' },
-    { name: 'Type', field: '8925.1/1', type: 'Set', notes: 'DC (document class), DOC (document definition), CL (class)' },
-    { name: 'Status', field: '8925.1/5', type: 'Set', notes: 'Active / Inactive / Test' },
-    { name: 'Print Name', field: '8925.1/8', type: 'Free text', notes: 'What appears on printed note' },
-    { name: 'Requires Signature', field: '8925.99/10', type: 'Yes/No', notes: 'Site parameter: all notes require e-sig?' },
-    { name: 'Default Print Template', field: '8925.99/20', type: 'Pointer', notes: 'Template used when printing notes' },
-  ]) },
+  { pattern: '#/tiu-config', fn: renderTiuConfig },
   { pattern: '#/pharmacy-config', fn: renderDrugFile },
   { pattern: '#/lab-config', fn: renderLabTests },
-  { pattern: '#/radiology-config', fn: (el) => renderIntegrationPending(el, 'Radiology Configuration', 'Clinical Config', '#/dashboard', 'RAD-01..RAD-04', 'Procedures, Locations, Division Params, Diagnostic Codes', 'Files 71, 79.1', 'DDR LISTER/FILER', 'Radiology/imaging administration: procedure/exam setup, location parameters, division parameters, diagnostic codes.') },
+  { pattern: '#/radiology-config', fn: renderRadiologyConfig },
   { pattern: '#/nursing-config', fn: (el) => renderIntegrationPending(el, 'Nursing Configuration', 'Clinical Config', '#/dashboard', 'NUR-01..NUR-04', 'Locations, Site Params, Care Plans, I/O Config', 'NURS files', 'DDR FILER', 'Nursing administration: nursing location config, site parameters, care plan templates, intake/output categories.') },
-  { pattern: '#/health-summary-config', fn: (el) => renderIntegrationPending(el, 'Health Summary Configuration', 'Clinical Config', '#/dashboard', 'HS-01..HS-03', 'Types, Components, Site Params', 'File 142', 'DDR LISTER/FILER', 'Health summary administration: create/edit health summary type definitions, enable/disable components, display defaults.') },
+  { pattern: '#/health-summary-config', fn: renderHealthSummaryConfig },
   { pattern: '#/billing-params', fn: (el) => renderIntegrationPending(el, 'Billing Parameters', 'Billing & Insurance', '#/dashboard', 'BIL-01..BIL-02', 'IB Site Parameters, MCCR Parameters', 'IB files', 'DDR GETS/FILER', 'Integrated Billing site-level configuration: core billing settings, cost center reporting parameters.') },
   { pattern: '#/insurance', fn: renderInsuranceCompanies },
   { pattern: '#/encounter-forms', fn: (el) => renderIntegrationPending(el, 'Encounter Forms', 'Billing & Insurance', '#/dashboard', 'BIL-06', 'Encounter Form Editor (IBDF)', 'IB files', 'DDR FILER', 'Design encounter forms and assign them to clinics. Used for workload capture and billing.') },
   { pattern: '#/claims-tracking', fn: (el) => renderIntegrationPending(el, 'Claims Tracking', 'Billing & Insurance', '#/dashboard', 'BIL-07', 'Claims Tracking Parameters', 'IBT files', 'DDR GETS/FILER', 'Configure claims tracking rules, follow-up intervals, and escalation paths.') },
   { pattern: '#/params/kernel', fn: renderParamsKernel },
-  { pattern: '#/mailman-config', fn: (el) => renderIntegrationPending(el, 'MailMan Configuration', 'System & Parameters', '#/params/kernel', 'MM-01..MM-04', 'Site Params, Mail Groups, Background Filer, Queue Mgmt', 'Files 4.3, 3.8', 'DDR GETS/FILER + Custom RPC', 'MailMan (VistA internal messaging): site parameters, distribution groups, background filer status, and queue management.') },
+  { pattern: '#/mailman-config', fn: renderMailGroups },
   { pattern: '#/taskman', fn: renderTaskMan },
   { pattern: '#/menu-management', fn: renderMenuManagement },
-  { pattern: '#/error-trap', fn: (el) => renderIntegrationPending(el, 'Error Processing', 'System & Parameters', '#/params/kernel', 'ERR-01..ERR-02', 'Error Trap Display, Error Cleanup', 'Error globals', 'Custom RPC', 'View recent MUMPS errors from the VistA error trap. Purge old errors. Analyze error frequency.') },
+  { pattern: '#/error-trap', fn: renderErrorTrap },
   { pattern: '#/packages', fn: renderInstalledPackages },
   { pattern: '#/modules', fn: renderModuleEntitlements },
   { pattern: '#/monitoring/status', fn: renderMonitoringStatus },
@@ -2447,5 +2440,410 @@ async function renderTaskMan(el) {
     const filtered = rows.filter(r => (r.entryPoint || '').toLowerCase().includes(q) || (r.routine || '').toLowerCase().includes(q));
     document.getElementById('tm-tbody').innerHTML = filtered.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td><code>${escapeHtml(r.entryPoint || '—')}</code></td><td><code>${escapeHtml(r.routine || '—')}</code></td><td>${escapeHtml(r.scheduledRun || '—')}</td><td>${escapeHtml(statusMap[r.statusCode] || r.statusCode || '—')}</td></tr>`).join('');
     document.getElementById('tm-count').textContent = `${filtered.length} of ${rows.length} tasks`;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Health Summary Types (File 142) — DDR LISTER + DDR FILER (CRUD)
+// ---------------------------------------------------------------------------
+async function renderHealthSummaryConfig(el) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > Health Summary</div><div class="loading-message">Loading health summary types...</div>`;
+  const res = await api('health-summary-types');
+  if (!res.ok) { el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > Health Summary</div><div class="error-message">${escapeHtml(res.error || 'Failed to load')}</div>`; return; }
+  const rows = res.data || [];
+  let editIen = null;
+
+  function render() {
+    el.innerHTML = `
+      <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > Health Summary Types</div>
+      <div class="page-header"><h1>Health Summary Types (File 142)</h1>${sourceBadge(res.source)}</div>
+      <div class="explanation-header">
+        <strong>Health Summary Configuration</strong>
+        File 142 defines summary report templates that clinicians see. Each type controls which clinical components (vitals, labs, meds, notes) appear
+        and in what order. Click any row to view details and edit settings. Changes write directly to VistA via <code>DDR FILER</code>.
+      </div>
+      <div class="filter-rail">
+        <input type="text" id="hs-search" placeholder="Search by name..." />
+        <span class="result-count" id="hs-count">${rows.length} types</span>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>IEN</th><th>Name</th><th>Title</th><th>Lock</th><th>Owner</th><th>Suppress Empty</th><th>National</th><th></th></tr></thead>
+        <tbody id="hs-tbody">${rows.length ? rows.map(r => `<tr>
+          <td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.title || '-')}</td>
+          <td>${escapeHtml(r.lock || '-')}</td><td>${escapeHtml(r.owner || '-')}</td>
+          <td>${r.suppressWithoutData === 'Y' ? 'Yes' : r.suppressWithoutData || '-'}</td>
+          <td>${r.nationallyExported === 'Y' ? 'Yes' : r.nationallyExported || '-'}</td>
+          <td><button class="btn-sm" data-ien="${r.ien}">Edit</button></td>
+        </tr>`).join('') : '<tr><td colspan="8">No health summary types found</td></tr>'}</tbody>
+      </table>
+      <div id="hs-detail"></div>`;
+    document.getElementById('hs-search')?.addEventListener('input', applyFilter);
+    document.querySelectorAll('#hs-tbody button[data-ien]').forEach(btn => btn.addEventListener('click', () => loadDetail(btn.dataset.ien)));
+  }
+
+  function applyFilter() {
+    const q = (document.getElementById('hs-search')?.value || '').toLowerCase();
+    const filtered = rows.filter(r => (r.name || '').toLowerCase().includes(q) || (r.title || '').toLowerCase().includes(q));
+    document.getElementById('hs-tbody').innerHTML = filtered.map(r => `<tr>
+      <td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.title || '-')}</td>
+      <td>${escapeHtml(r.lock || '-')}</td><td>${escapeHtml(r.owner || '-')}</td>
+      <td>${r.suppressWithoutData === 'Y' ? 'Yes' : r.suppressWithoutData || '-'}</td>
+      <td>${r.nationallyExported === 'Y' ? 'Yes' : r.nationallyExported || '-'}</td>
+      <td><button class="btn-sm" data-ien="${r.ien}">Edit</button></td>
+    </tr>`).join('');
+    document.querySelectorAll('#hs-tbody button[data-ien]').forEach(btn => btn.addEventListener('click', () => loadDetail(btn.dataset.ien)));
+    document.getElementById('hs-count').textContent = `${filtered.length} of ${rows.length} types`;
+  }
+
+  async function loadDetail(ien) {
+    const det = document.getElementById('hs-detail');
+    det.innerHTML = '<div class="loading-message">Loading detail...</div>';
+    const d = await api(`health-summary-types/${ien}`);
+    if (!d.ok) { det.innerHTML = `<div class="error-message">${escapeHtml(d.error || 'Failed')}</div>`; return; }
+    const f = d.data || {};
+    det.innerHTML = `
+      <div style="margin-top:16px;padding:16px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);">
+        <h3>Edit Health Summary Type (IEN ${escapeHtml(ien)})</h3>
+        <div class="form-grid">
+          <label>Name (.01)</label><input type="text" id="hs-e-name" value="${escapeHtml(f['.01'] || '')}" />
+          <label>Title (.02)</label><input type="text" id="hs-e-title" value="${escapeHtml(f['.02'] || '')}" />
+          <label>Lock (.05)</label><input type="text" id="hs-e-lock" value="${escapeHtml(f['.05'] || '')}" placeholder="Security key name" />
+          <label>Suppress Empty (.08)</label><select id="hs-e-suppress"><option value="">-</option><option value="Y" ${f['.08']==='Y'?'selected':''}>Yes</option><option value="N" ${f['.08']==='N'?'selected':''}>No</option></select>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn-primary" id="hs-save">Save to VistA</button>
+          <button class="btn-secondary" id="hs-cancel">Cancel</button>
+        </div>
+        <div id="hs-save-status" style="margin-top:8px;"></div>
+      </div>`;
+    document.getElementById('hs-save').addEventListener('click', async () => {
+      const payload = { name: document.getElementById('hs-e-name').value, title: document.getElementById('hs-e-title').value, lock: document.getElementById('hs-e-lock').value, suppressWithoutData: document.getElementById('hs-e-suppress').value };
+      const st = document.getElementById('hs-save-status');
+      st.innerHTML = '<span style="color:var(--color-warning);">Saving...</span>';
+      const r = await apiPut(`health-summary-types/${ien}`, payload);
+      if (r.ok) { st.innerHTML = '<span style="color:var(--color-success);">Saved to VistA</span>'; const ref = await api('health-summary-types'); if (ref.ok) { rows.length = 0; rows.push(...ref.data); } }
+      else st.innerHTML = `<span style="color:var(--color-danger);">Error: ${escapeHtml(r.error || 'Save failed')}</span>`;
+    });
+    document.getElementById('hs-cancel').addEventListener('click', () => { det.innerHTML = ''; });
+  }
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// TIU Document Definitions (File 8925.1) — DDR LISTER + DDR FILER (CRUD)
+// ---------------------------------------------------------------------------
+async function renderTiuConfig(el) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > TIU</div><div class="loading-message">Loading TIU document definitions...</div>`;
+  const res = await api('tiu-document-defs');
+  if (!res.ok) { el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > TIU</div><div class="error-message">${escapeHtml(res.error || 'Failed to load')}</div>`; return; }
+  const rows = res.data || [];
+  const typeMap = { 'DOC': 'Document', 'DC': 'Document Class', 'CL': 'Class', 'O': 'Object' };
+  const statusMap = { '11': 'Active', '0': 'Inactive', '7': 'Test' };
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > TIU Document Definitions</div>
+    <div class="page-header"><h1>TIU Document Definitions (File 8925.1)</h1>${sourceBadge(res.source)}</div>
+    <div class="explanation-header">
+      <strong>Clinical Documentation Configuration</strong>
+      File 8925.1 stores every note title and document class in VistA's Text Integration Utility (TIU). Clinicians see these when creating
+      progress notes, discharge summaries, consult reports, etc. Type classifies the hierarchy: Class > Document Class > Document.
+      Click a row to edit the definition. Changes write to VistA via <code>DDR FILER</code>.
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="tiu-search" placeholder="Search by name or abbreviation..." />
+      <select id="tiu-type-filter"><option value="">All Types</option>${Object.entries(typeMap).map(([k,v]) => `<option value="${k}">${v} (${k})</option>`).join('')}</select>
+      <span class="result-count" id="tiu-count">${rows.length} definitions</span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>IEN</th><th>Name</th><th>Abbreviation</th><th>Print Name</th><th>Type</th><th>Status</th><th></th></tr></thead>
+      <tbody id="tiu-tbody"></tbody>
+    </table>
+    <div id="tiu-detail"></div>`;
+
+  function renderRows(list) {
+    document.getElementById('tiu-tbody').innerHTML = list.length ? list.map(r => `<tr>
+      <td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.abbreviation || '-')}</td>
+      <td>${escapeHtml(r.printName || '-')}</td><td>${escapeHtml(typeMap[r.type] || r.type || '-')}</td>
+      <td>${escapeHtml(statusMap[r.status] || r.status || '-')}</td>
+      <td><button class="btn-sm" data-ien="${r.ien}">Edit</button></td>
+    </tr>`).join('') : '<tr><td colspan="7">No definitions found</td></tr>';
+    document.querySelectorAll('#tiu-tbody button[data-ien]').forEach(btn => btn.addEventListener('click', () => loadTiuDetail(btn.dataset.ien)));
+  }
+
+  function applyFilter() {
+    const q = (document.getElementById('tiu-search').value || '').toLowerCase();
+    const typ = document.getElementById('tiu-type-filter').value;
+    const filtered = rows.filter(r => {
+      if (q && !(r.name || '').toLowerCase().includes(q) && !(r.abbreviation || '').toLowerCase().includes(q)) return false;
+      if (typ && r.type !== typ) return false;
+      return true;
+    });
+    renderRows(filtered);
+    document.getElementById('tiu-count').textContent = `${filtered.length} of ${rows.length} definitions`;
+  }
+
+  async function loadTiuDetail(ien) {
+    const det = document.getElementById('tiu-detail');
+    det.innerHTML = '<div class="loading-message">Loading detail...</div>';
+    const d = await api(`tiu-document-defs/${ien}`);
+    if (!d.ok) { det.innerHTML = `<div class="error-message">${escapeHtml(d.error || 'Failed')}</div>`; return; }
+    const f = d.data || {};
+    det.innerHTML = `
+      <div style="margin-top:16px;padding:16px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);">
+        <h3>Edit TIU Definition (IEN ${escapeHtml(ien)})</h3>
+        <div class="form-grid">
+          <label>Name (.01)</label><input type="text" id="tiu-e-name" value="${escapeHtml(f['.01'] || '')}" />
+          <label>Abbreviation (.02)</label><input type="text" id="tiu-e-abbr" value="${escapeHtml(f['.02'] || '')}" />
+          <label>Print Name (.03)</label><input type="text" id="tiu-e-print" value="${escapeHtml(f['.03'] || '')}" />
+          <label>Status (.07)</label><select id="tiu-e-status"><option value="">-</option><option value="11" ${f['.07']==='11'?'selected':''}>Active</option><option value="0" ${f['.07']==='0'?'selected':''}>Inactive</option><option value="7" ${f['.07']==='7'?'selected':''}>Test</option></select>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn-primary" id="tiu-save">Save to VistA</button>
+          <button class="btn-secondary" id="tiu-cancel">Cancel</button>
+        </div>
+        <div id="tiu-save-status" style="margin-top:8px;"></div>
+      </div>`;
+    document.getElementById('tiu-save').addEventListener('click', async () => {
+      const payload = { name: document.getElementById('tiu-e-name').value, abbreviation: document.getElementById('tiu-e-abbr').value, printName: document.getElementById('tiu-e-print').value, status: document.getElementById('tiu-e-status').value };
+      const st = document.getElementById('tiu-save-status');
+      st.innerHTML = '<span style="color:var(--color-warning);">Saving...</span>';
+      const r = await apiPut(`tiu-document-defs/${ien}`, payload);
+      if (r.ok) { st.innerHTML = '<span style="color:var(--color-success);">Saved to VistA</span>'; }
+      else st.innerHTML = `<span style="color:var(--color-danger);">Error: ${escapeHtml(r.error || 'Save failed')}</span>`;
+    });
+    document.getElementById('tiu-cancel').addEventListener('click', () => { det.innerHTML = ''; });
+  }
+
+  renderRows(rows);
+  document.getElementById('tiu-search').addEventListener('input', applyFilter);
+  document.getElementById('tiu-type-filter').addEventListener('change', applyFilter);
+}
+
+// ---------------------------------------------------------------------------
+// Mail Groups (File 3.8) — DDR LISTER + DDR FILER (CRUD)
+// ---------------------------------------------------------------------------
+async function renderMailGroups(el) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > <a href="#/params/kernel">System</a> > Mail Groups</div><div class="loading-message">Loading mail groups...</div>`;
+  const res = await api('mail-groups');
+  if (!res.ok) { el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > <a href="#/params/kernel">System</a> > Mail Groups</div><div class="error-message">${escapeHtml(res.error || 'Failed to load')}</div>`; return; }
+  const rows = res.data || [];
+  const typeMap = { 'PU': 'Public', 'PR': 'Private', 'PO': 'Personal' };
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > <a href="#/params/kernel">System</a> > MailMan Groups</div>
+    <div class="page-header"><h1>MailMan Groups (File 3.8)</h1>${sourceBadge(res.source)}</div>
+    <div class="explanation-header">
+      <strong>VistA Internal Messaging Groups</strong>
+      File 3.8 stores MailMan distribution groups used for internal VistA messaging. Alerts, notifications, and system messages are routed to these groups.
+      Public groups accept messages from anyone; Private groups restrict senders. Click a row to edit group settings.
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="mg-search" placeholder="Search groups..." />
+      <select id="mg-type-filter"><option value="">All Types</option>${Object.entries(typeMap).map(([k,v]) => `<option value="${k}">${v} (${k})</option>`).join('')}</select>
+      <span class="result-count" id="mg-count">${rows.length} groups</span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>IEN</th><th>Group Name</th><th>Type</th><th>Organizer</th><th>Self-Enroll</th><th>Restrictions</th><th></th></tr></thead>
+      <tbody id="mg-tbody"></tbody>
+    </table>
+    <div id="mg-detail"></div>`;
+
+  function renderRows(list) {
+    document.getElementById('mg-tbody').innerHTML = list.length ? list.map(r => `<tr>
+      <td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td>
+      <td>${escapeHtml(typeMap[r.type] || r.type || '-')}</td>
+      <td>${escapeHtml(r.organizer || '-')}</td>
+      <td>${r.selfEnroll === '1' ? 'Yes' : r.selfEnroll === '0' ? 'No' : r.selfEnroll || '-'}</td>
+      <td>${escapeHtml(r.restrictions || '-')}</td>
+      <td><button class="btn-sm" data-ien="${r.ien}">Edit</button></td>
+    </tr>`).join('') : '<tr><td colspan="7">No mail groups found</td></tr>';
+    document.querySelectorAll('#mg-tbody button[data-ien]').forEach(btn => btn.addEventListener('click', () => loadMgDetail(btn.dataset.ien)));
+  }
+
+  function applyFilter() {
+    const q = (document.getElementById('mg-search').value || '').toLowerCase();
+    const typ = document.getElementById('mg-type-filter').value;
+    const filtered = rows.filter(r => {
+      if (q && !(r.name || '').toLowerCase().includes(q)) return false;
+      if (typ && r.type !== typ) return false;
+      return true;
+    });
+    renderRows(filtered);
+    document.getElementById('mg-count').textContent = `${filtered.length} of ${rows.length} groups`;
+  }
+
+  async function loadMgDetail(ien) {
+    const det = document.getElementById('mg-detail');
+    det.innerHTML = '<div class="loading-message">Loading detail...</div>';
+    const d = await api(`mail-groups/${ien}`);
+    if (!d.ok) { det.innerHTML = `<div class="error-message">${escapeHtml(d.error || 'Failed')}</div>`; return; }
+    const f = d.data || {};
+    det.innerHTML = `
+      <div style="margin-top:16px;padding:16px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);">
+        <h3>Edit Mail Group (IEN ${escapeHtml(ien)})</h3>
+        <div class="form-grid">
+          <label>Name (.01)</label><input type="text" id="mg-e-name" value="${escapeHtml(f['.01'] || '')}" />
+          <label>Type (4)</label><select id="mg-e-type"><option value="">-</option><option value="PU" ${f['4']==='PU'?'selected':''}>Public</option><option value="PR" ${f['4']==='PR'?'selected':''}>Private</option></select>
+          <label>Self-Enrollment (7)</label><select id="mg-e-enroll"><option value="">-</option><option value="1" ${f['7']==='1'?'selected':''}>Yes</option><option value="0" ${f['7']==='0'?'selected':''}>No</option></select>
+          <label>Restrictions (10)</label><input type="text" id="mg-e-restrict" value="${escapeHtml(f['10'] || '')}" />
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn-primary" id="mg-save">Save to VistA</button>
+          <button class="btn-secondary" id="mg-cancel">Cancel</button>
+        </div>
+        <div id="mg-save-status" style="margin-top:8px;"></div>
+      </div>`;
+    document.getElementById('mg-save').addEventListener('click', async () => {
+      const payload = { name: document.getElementById('mg-e-name').value, type: document.getElementById('mg-e-type').value, selfEnroll: document.getElementById('mg-e-enroll').value, restrictions: document.getElementById('mg-e-restrict').value };
+      const st = document.getElementById('mg-save-status');
+      st.innerHTML = '<span style="color:var(--color-warning);">Saving...</span>';
+      const r = await apiPut(`mail-groups/${ien}`, payload);
+      if (r.ok) { st.innerHTML = '<span style="color:var(--color-success);">Saved to VistA</span>'; }
+      else st.innerHTML = `<span style="color:var(--color-danger);">Error: ${escapeHtml(r.error || 'Save failed')}</span>`;
+    });
+    document.getElementById('mg-cancel').addEventListener('click', () => { det.innerHTML = ''; });
+  }
+
+  renderRows(rows);
+  document.getElementById('mg-search').addEventListener('input', applyFilter);
+  document.getElementById('mg-type-filter').addEventListener('change', applyFilter);
+}
+
+// ---------------------------------------------------------------------------
+// Radiology Procedures (File 71) — DDR LISTER + DDR FILER (CRUD)
+// ---------------------------------------------------------------------------
+async function renderRadiologyConfig(el) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > Radiology</div><div class="loading-message">Loading radiology procedures...</div>`;
+  const res = await api('radiology-procedures');
+  if (!res.ok) { el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > Radiology</div><div class="error-message">${escapeHtml(res.error || 'Failed to load')}</div>`; return; }
+  const rows = res.data || [];
+  const procTypeMap = { 'D': 'Diagnostic', 'I': 'Interventional', 'B': 'Broad', 'S': 'Series', 'P': 'Parent' };
+  const imgTypeMap = { '1': 'General Radiology', '2': 'CT Scan', '3': 'MRI', '4': 'Ultrasound', '5': 'Nuclear Medicine', '6': 'Angio/Neuro', '7': 'Cardiology', 'n': 'N/A' };
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > Clinical Config > Radiology Procedures</div>
+    <div class="page-header"><h1>Radiology Procedures (File 71)</h1>${sourceBadge(res.source)}</div>
+    <div class="explanation-header">
+      <strong>Imaging Procedure Configuration</strong>
+      File 71 defines every radiology and nuclear medicine procedure available for ordering. Each procedure maps to a CPT code and imaging modality type.
+      Type of Procedure classifies diagnostic vs interventional. Click a row to edit. Changes write to VistA via <code>DDR FILER</code>.
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="rad-search" placeholder="Search procedures or CPT..." />
+      <select id="rad-img-filter"><option value="">All Imaging Types</option>${Object.entries(imgTypeMap).map(([k,v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+      <span class="result-count" id="rad-count">${rows.length} procedures</span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>IEN</th><th>Procedure Name</th><th>Type</th><th>CPT Code</th><th>Imaging Type</th><th></th></tr></thead>
+      <tbody id="rad-tbody"></tbody>
+    </table>
+    <div id="rad-detail"></div>`;
+
+  function renderRows(list) {
+    document.getElementById('rad-tbody').innerHTML = list.length ? list.map(r => `<tr>
+      <td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td>
+      <td>${escapeHtml(procTypeMap[r.procedureType] || r.procedureType || '-')}</td>
+      <td><code>${escapeHtml(r.cptCode || '-')}</code></td>
+      <td>${escapeHtml(imgTypeMap[r.imagingType] || r.imagingType || '-')}</td>
+      <td><button class="btn-sm" data-ien="${r.ien}">Edit</button></td>
+    </tr>`).join('') : '<tr><td colspan="6">No procedures found</td></tr>';
+    document.querySelectorAll('#rad-tbody button[data-ien]').forEach(btn => btn.addEventListener('click', () => loadRadDetail(btn.dataset.ien)));
+  }
+
+  function applyFilter() {
+    const q = (document.getElementById('rad-search').value || '').toLowerCase();
+    const img = document.getElementById('rad-img-filter').value;
+    const filtered = rows.filter(r => {
+      if (q && !(r.name || '').toLowerCase().includes(q) && !(r.cptCode || '').includes(q)) return false;
+      if (img && r.imagingType !== img) return false;
+      return true;
+    });
+    renderRows(filtered);
+    document.getElementById('rad-count').textContent = `${filtered.length} of ${rows.length} procedures`;
+  }
+
+  async function loadRadDetail(ien) {
+    const det = document.getElementById('rad-detail');
+    det.innerHTML = '<div class="loading-message">Loading detail...</div>';
+    const d = await api(`radiology-procedures/${ien}`);
+    if (!d.ok) { det.innerHTML = `<div class="error-message">${escapeHtml(d.error || 'Failed')}</div>`; return; }
+    const f = d.data || {};
+    det.innerHTML = `
+      <div style="margin-top:16px;padding:16px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);">
+        <h3>Edit Radiology Procedure (IEN ${escapeHtml(ien)})</h3>
+        <div class="form-grid">
+          <label>Name (.01)</label><input type="text" id="rad-e-name" value="${escapeHtml(f['.01'] || '')}" />
+          <label>Type of Procedure (6)</label><select id="rad-e-type"><option value="">-</option>${Object.entries(procTypeMap).map(([k,v]) => `<option value="${k}" ${f['6']===k?'selected':''}>${v}</option>`).join('')}</select>
+          <label>CPT Code (9)</label><input type="text" id="rad-e-cpt" value="${escapeHtml(f['9'] || '')}" />
+          <label>Imaging Type (12)</label><select id="rad-e-img"><option value="">-</option>${Object.entries(imgTypeMap).map(([k,v]) => `<option value="${k}" ${f['12']===k?'selected':''}>${v}</option>`).join('')}</select>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn-primary" id="rad-save">Save to VistA</button>
+          <button class="btn-secondary" id="rad-cancel">Cancel</button>
+        </div>
+        <div id="rad-save-status" style="margin-top:8px;"></div>
+      </div>`;
+    document.getElementById('rad-save').addEventListener('click', async () => {
+      const payload = { name: document.getElementById('rad-e-name').value, procedureType: document.getElementById('rad-e-type').value, cptCode: document.getElementById('rad-e-cpt').value, imagingType: document.getElementById('rad-e-img').value };
+      const st = document.getElementById('rad-save-status');
+      st.innerHTML = '<span style="color:var(--color-warning);">Saving...</span>';
+      const r = await apiPut(`radiology-procedures/${ien}`, payload);
+      if (r.ok) { st.innerHTML = '<span style="color:var(--color-success);">Saved to VistA</span>'; }
+      else st.innerHTML = `<span style="color:var(--color-danger);">Error: ${escapeHtml(r.error || 'Save failed')}</span>`;
+    });
+    document.getElementById('rad-cancel').addEventListener('click', () => { det.innerHTML = ''; });
+  }
+
+  renderRows(rows);
+  document.getElementById('rad-search').addEventListener('input', applyFilter);
+  document.getElementById('rad-img-filter').addEventListener('change', applyFilter);
+}
+
+// ---------------------------------------------------------------------------
+// Error Trap (File 3.077) — DDR LISTER (read-only monitoring)
+// ---------------------------------------------------------------------------
+async function renderErrorTrap(el) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > <a href="#/params/kernel">System</a> > Error Trap</div><div class="loading-message">Loading error trap...</div>`;
+  const res = await api('error-trap');
+  if (!res.ok) { el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > <a href="#/params/kernel">System</a> > Error Trap</div><div class="error-message">${escapeHtml(res.error || 'Failed to load')}</div>`; return; }
+  const rows = res.data || [];
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> > <a href="#/params/kernel">System</a> > Error Trap</div>
+    <div class="page-header"><h1>Error Trap (File 3.077)</h1>${sourceBadge(res.source)}</div>
+    <div class="explanation-header">
+      <strong>MUMPS Error Log</strong>
+      File 3.077 captures MUMPS runtime errors (<code>^%ZTER</code>) including the error text, offending routine, frequency, and last global reference.
+      Use this to diagnose system issues, identify frequently-failing routines, and track error patterns. High-frequency errors may indicate
+      configuration problems or missing prerequisites.
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="et-search" placeholder="Search by error text or routine..." />
+      <span class="result-count" id="et-count">${rows.length} errors</span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>IEN</th><th>Error Text</th><th>Routine</th><th>Frequency</th><th>First Seen</th><th>Last Seen</th><th>Last Global</th></tr></thead>
+      <tbody id="et-tbody">${rows.length ? rows.map(r => `<tr>
+        <td>${escapeHtml(r.ien)}</td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(r.errorText)}">${escapeHtml(r.errorText || '-')}</td>
+        <td><code>${escapeHtml(r.routineName || '-')}</code></td>
+        <td style="text-align:center;">${escapeHtml(r.frequency || '-')}</td>
+        <td>${escapeHtml(r.firstDateTime || '-')}</td>
+        <td>${escapeHtml(r.mostRecentDateTime || '-')}</td>
+        <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(r.lastGlobal)}">${escapeHtml(r.lastGlobal || '-')}</td>
+      </tr>`).join('') : '<tr><td colspan="7">No errors found in trap</td></tr>'}</tbody>
+    </table>`;
+  document.getElementById('et-search').addEventListener('input', () => {
+    const q = (document.getElementById('et-search').value || '').toLowerCase();
+    const filtered = rows.filter(r => (r.errorText || '').toLowerCase().includes(q) || (r.routineName || '').toLowerCase().includes(q));
+    document.getElementById('et-tbody').innerHTML = filtered.map(r => `<tr>
+      <td>${escapeHtml(r.ien)}</td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(r.errorText)}">${escapeHtml(r.errorText || '-')}</td>
+      <td><code>${escapeHtml(r.routineName || '-')}</code></td>
+      <td style="text-align:center;">${escapeHtml(r.frequency || '-')}</td>
+      <td>${escapeHtml(r.firstDateTime || '-')}</td>
+      <td>${escapeHtml(r.mostRecentDateTime || '-')}</td>
+      <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(r.lastGlobal)}">${escapeHtml(r.lastGlobal || '-')}</td>
+    </tr>`).join('');
+    document.getElementById('et-count').textContent = `${filtered.length} of ${rows.length} errors`;
   });
 }

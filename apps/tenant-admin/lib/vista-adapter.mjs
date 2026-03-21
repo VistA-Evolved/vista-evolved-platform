@@ -529,6 +529,50 @@ export async function ddrFilerEdit(file, iens, field, value, flags = 'E') {
 }
 
 /**
+ * File multiple fields at once via DDR FILER (EDIT mode).
+ * Each key in editsObj is a field number, value is the new value.
+ * Builds multi-row LIST param: { '1': 'FILE^FIELD1^IENS^VAL1', '2': 'FILE^FIELD2^IENS^VAL2', ... }
+ *
+ * @param {string} file - VistA file number
+ * @param {string} iens - IENS string (must include trailing comma, e.g. "123,")
+ * @param {Object} editsObj - { fieldNum: value, ... }
+ * @param {string} [flags='E'] - DDR FILER flags
+ */
+export async function ddrFilerEditMulti(file, iens, editsObj, flags = 'E') {
+  return lockedRpc(async () => {
+    try {
+      const broker = await getBroker();
+      const entries = Object.entries(editsObj);
+      const listVal = {};
+      for (let i = 0; i < entries.length; i++) {
+        const [field, value] = entries[i];
+        listVal[String(i + 1)] = `${file}^${field}^${iens}^${value}`;
+      }
+      const lines = await broker.callRpcWithList('DDR FILER', [
+        { type: 'literal', value: 'EDIT' },
+        { type: 'list', value: listVal },
+        { type: 'literal', value: flags },
+      ]);
+      const hasError = lines.some(l => l.includes('[BEGIN_diERRORS]') || (l === '[ERROR]'));
+      if (hasError) {
+        const errLines = [];
+        let inErr = false;
+        for (const l of lines) {
+          if (l.includes('[BEGIN_diERRORS]')) { inErr = true; continue; }
+          if (l.includes('[END_diERRORS]')) { inErr = false; continue; }
+          if (inErr) errLines.push(l);
+        }
+        const msg = errLines.filter(l => !l.startsWith('FIELD^') && !l.startsWith('FILE^') && !l.startsWith('IENS^') && !l.match(/^\d+\^/)).join('; ') || 'DDR FILER error';
+        return { ok: false, rpcUsed: 'DDR FILER', error: msg, lines };
+      }
+      return { ok: true, rpcUsed: 'DDR FILER', lines, fieldCount: entries.length };
+    } catch (err) {
+      return { ok: false, error: err.message, rpcUsed: 'DDR FILER' };
+    }
+  });
+}
+
+/**
  * DDR FILER ADD mode — single DDRROOT row FILE^FIELD^IENS^VALUE (often +1, for new IEN).
  */
 export async function ddrFilerAdd(file, field, iens, value, flags = 'E') {
