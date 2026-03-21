@@ -149,19 +149,31 @@ The `tenantId` and `cpReturnUrl` are passed as query parameters.
 - **User detail by IEN:** Uses `ORWU NEWPERS` empty search then filters by IEN. Users not in the first page of results will return an error.
 - **Kernel params:** `GET/PUT /params/kernel` (allow-listed fields on File 8989.3).
 
-## Data source policy
+## Data source and runtime truth policy
 
 **NO FIXTURE FILES. NO JSON FALLBACKS. NO ALTERNATE DATA SOURCES.**
+**EVERY ROUTE MUST BE VERIFIED AGAINST THE RUNNING VISTA DOCKER.**
 
 Every route in this application reads from and writes to the live VistA system.
 If VistA is unreachable, the route returns `{ok: false, source: "error", error: "..."}`.
 The UI displays an error badge and message — never fake or stale data.
 
+A route is NOT done until:
+- **Reads**: return `ok: true, source: 'vista'` with real VistA data from the running Docker
+- **Writes**: succeed AND the written data can be read back to confirm it reached VistA
+- **Edits**: change a value AND read-back confirms the value changed in VistA
+- **Deletes**: confirm the record is gone via read-back after deletion
+- **UI**: correctly displays the data and all actions (buttons, forms, links) actually work
+
+Code that compiles but was never tested against the live VistA Docker is NOT done.
+"Should work" or "looks correct" without live test output is NEVER acceptable.
+
 This policy is enforced by:
 1. Server header comment in `server.mjs`
 2. This README
-3. Cursor rule `.cursor/rules/vista-only-data-source.mdc`
-4. Code review: any `readFile` of JSON data files or `source: 'fixture'` is a rejection-worthy violation.
+3. Cursor rule `.cursor/rules/40-vista-only-data-source.mdc`
+4. AGENTS.md non-negotiable rule #8
+5. Code review: any `readFile` of JSON data, `source: 'fixture'`, or untested routes are rejection-worthy violations.
 
 ## Next steps
 

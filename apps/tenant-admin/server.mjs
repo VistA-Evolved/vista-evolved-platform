@@ -13,6 +13,9 @@
  * RULE: Every route reads from and writes to the live VistA system.
  * If VistA is unreachable, routes return {ok: false, error: ...}.
  * There are NO fixture files, NO JSON fallbacks, NO alternate data sources.
+ * Every route MUST be verified against the running VistA Docker.
+ * Reads must return real data. Writes must be proven with read-back.
+ * Code that was never tested against the live system is NOT done.
  *
  * Port: 4520 (per port-registry.md pattern — control-plane=4500, API=4510, tenant-admin=4520)
  */
