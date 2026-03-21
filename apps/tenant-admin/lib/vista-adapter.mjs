@@ -150,6 +150,34 @@ export async function fetchVistaClinics(searchText = '') {
 }
 
 /**
+ * Fetch ward locations from VistA via ORQPT WARDS.
+ *
+ * @returns {{ ok: boolean, source: string, data?: Array, error?: string }}
+ */
+export async function fetchVistaWards() {
+  if (!VISTA_API_URL) {
+    return { ok: false, source: 'unavailable', error: 'VISTA_API_URL not configured' };
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), VISTA_TIMEOUT_MS);
+    const url = `${VISTA_API_URL}/vista/wards`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) {
+      return { ok: false, source: 'vista-error', error: `HTTP ${res.status}` };
+    }
+    const body = await res.json();
+    if (body.ok) {
+      return { ok: true, source: 'vista', data: body.data || [] };
+    }
+    return { ok: false, source: 'vista-error', error: body.error || 'Unknown VistA error' };
+  } catch (err) {
+    return { ok: false, source: 'unavailable', error: err.message };
+  }
+}
+
+/**
  * Fetch current authenticated user info from VistA via XUS GET USER INFO.
  *
  * @returns {{ ok: boolean, source: string, data?: object, error?: string }}

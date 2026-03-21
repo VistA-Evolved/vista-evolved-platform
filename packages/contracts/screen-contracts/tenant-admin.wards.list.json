@@ -1,9 +1,15 @@
 {
   "surfaceId": "tenant-admin.wards.list",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "Ward, Room, and Bed Configuration",
   "status": "draft",
-  "description": "Ward, room, and bed configuration surface. VistA File 42 (WARD LOCATION) and File 42.4 (ROOM-BED) are the canonical source of truth. Read-only mirror is the appropriate initial posture.",
+  "description": "Ward list with bed inventory (available/occupied counts). VistA File 42 (WARD LOCATION), File 44 (ward-type location), and File 405.4 (ROOM-BED) are the canonical source. VistA-first with fixture fallback.",
+  "vistaFields": {
+    "File 42": ["NAME (.01)", "SPECIALTY (2)"],
+    "File 44": ["NAME (.01)", "TYPE (.01,3) = W"],
+    "File 405.4": ["ROOM-BED (.01)", "STATUS (2)"]
+  },
+  "rpcs": ["ORQPT WARDS"],
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "primary",
   "surfaceType": "admin",

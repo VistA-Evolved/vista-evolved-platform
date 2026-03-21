@@ -18,7 +18,7 @@ import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { probeVista, fetchVistaUsers, fetchVistaDivisions, fetchVistaClinics } from './lib/vista-adapter.mjs';
+import { probeVista, fetchVistaUsers, fetchVistaDivisions, fetchVistaClinics, fetchVistaWards } from './lib/vista-adapter.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4520', 10);
@@ -193,6 +193,160 @@ async function main() {
     return { ok: true, source: 'fixture', tenantId, data: fixtures.roles };
   });
 
+  // ---- Clinic list: extract clinics from facility hierarchy ----
+
+  app.get('/api/tenant-admin/v1/clinics', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const typeFilter = req.query.type || '';
+
+    // Try VistA adapter first
+    const vistaResult = await fetchVistaClinics(req.query.search || '');
+    if (vistaResult.ok) {
+      return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
+    }
+
+    // Fixture fallback: extract clinics from facility hierarchy
+    function extractClinics(items, parentDivision) {
+      let clinics = [];
+      for (const f of items) {
+        if (f.type === 'Clinic' && (!typeFilter || f.vistaGrounding.locationType === typeFilter)) {
+          clinics.push({ ...f, parentDivision: parentDivision || null });
+        }
+        if (f.children) {
+          const divName = f.type === 'Division' ? f.name : parentDivision;
+          clinics = clinics.concat(extractClinics(f.children, divName));
+        }
+      }
+      return clinics;
+    }
+    const clinics = extractClinics(fixtures.facilities, null);
+
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: clinics,
+      summary: {
+        totalClinics: clinics.length,
+        withStopCode: clinics.filter(c => c.vistaGrounding.stopCode).length,
+        avgSlotLength: clinics.length
+          ? Math.round(clinics.reduce((s, c) => s + (c.vistaGrounding.defaultSlotLength || 0), 0) / clinics.length)
+          : 0,
+      },
+      vistaGrounding: {
+        readRpc: 'ORWU CLINLOC',
+        file: 'File 44 (HOSPITAL LOCATION)',
+        typeIndex: '^SC("AC","C",IEN)',
+        note: 'Type C = Clinic. Division linkage via field 0 piece 4 → File 40.8.',
+      },
+      vistaStatus: vistaResult.error || 'unavailable',
+    };
+  });
+
+  // ---- Ward list: extract wards from facility hierarchy ----
+
+  app.get('/api/tenant-admin/v1/wards', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+
+    // Try VistA adapter first
+    const vistaResult = await fetchVistaWards();
+    if (vistaResult.ok) {
+      return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
+    }
+
+    // Fixture fallback: wards are at institution level
+    const wards = [];
+    for (const inst of fixtures.facilities) {
+      if (inst.wards) {
+        for (const w of inst.wards) {
+          wards.push({
+            ...w,
+            parentInstitution: inst.name,
+            bedCount: w.beds ? w.beds.length : 0,
+            availableBeds: w.beds ? w.beds.filter(b => b.status === 'available').length : 0,
+            occupiedBeds: w.beds ? w.beds.filter(b => b.status === 'occupied').length : 0,
+          });
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: wards,
+      summary: {
+        totalWards: wards.length,
+        totalBeds: wards.reduce((s, w) => s + w.bedCount, 0),
+        availableBeds: wards.reduce((s, w) => s + w.availableBeds, 0),
+        occupiedBeds: wards.reduce((s, w) => s + w.occupiedBeds, 0),
+      },
+      vistaGrounding: {
+        readRpc: 'ORQPT WARDS',
+        file: 'File 42 (WARD LOCATION)',
+        file44Type: 'W',
+        bedFile: 'File 405.4 (ROOM-BED)',
+        note: 'Wards map to File 44 type=W and File 42. Room-beds in File 405.4.',
+      },
+      vistaStatus: vistaResult.error || 'unavailable',
+    };
+  });
+
+  // ---- Facility topology: summary hierarchy ----
+
+  app.get('/api/tenant-admin/v1/topology', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+
+    const topology = fixtures.facilities.map(inst => {
+      const divisions = (inst.children || []).filter(c => c.type === 'Division');
+      return {
+        id: inst.id,
+        name: inst.name,
+        type: inst.type,
+        stationNumber: inst.vistaGrounding.stationNumber || null,
+        divisionCount: divisions.length,
+        clinicCount: divisions.reduce((s, d) =>
+          s + (d.children || []).filter(c => c.type === 'Clinic').length, 0),
+        wardCount: (inst.wards || []).length,
+        bedCount: (inst.wards || []).reduce((s, w) => s + (w.beds || []).length, 0),
+        divisions: divisions.map(d => ({
+          id: d.id,
+          name: d.name,
+          facilityNumber: d.vistaGrounding.facilityNumber || null,
+          clinicCount: (d.children || []).filter(c => c.type === 'Clinic').length,
+          clinics: (d.children || []).filter(c => c.type === 'Clinic').map(c => ({
+            id: c.id,
+            name: c.name,
+            abbreviation: c.vistaGrounding.abbreviation || null,
+            stopCode: c.vistaGrounding.stopCode || null,
+            slotLength: c.vistaGrounding.defaultSlotLength || null,
+          })),
+        })),
+        wards: (inst.wards || []).map(w => ({
+          id: w.id,
+          name: w.name,
+          specialty: w.vistaGrounding.specialty || null,
+          bedCount: (w.beds || []).length,
+          availableBeds: (w.beds || []).filter(b => b.status === 'available').length,
+        })),
+      };
+    });
+
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: topology,
+      vistaGrounding: {
+        hierarchy: 'Institution (File 4) → Division (File 40.8) → Clinic (File 44 type=C) / Ward (File 42 + File 44 type=W)',
+        rpcs: ['XUS DIVISION GET', 'ORWU CLINLOC', 'ORQPT WARDS'],
+      },
+    };
+  });
+
   // ---- Key inventory: cross-reference keys to holders ----
 
   app.get('/api/tenant-admin/v1/key-inventory', async (req) => {
@@ -281,6 +435,17 @@ async function main() {
       for (const f of items) { n++; if (f.children) n += countFacilities(f.children); }
       return n;
     }
+    function countClinics(items) {
+      let n = 0;
+      for (const f of items) {
+        if (f.type === 'Clinic') n++;
+        if (f.children) n += countClinics(f.children);
+      }
+      return n;
+    }
+    const wardCount = fixtures.facilities.reduce((s, inst) => s + (inst.wards || []).length, 0);
+    const bedCount = fixtures.facilities.reduce((s, inst) =>
+      s + (inst.wards || []).reduce((ws, w) => ws + (w.beds || []).length, 0), 0);
     const probe = await probeVista();
     const activeUsers = fixtures.users.filter(u => u.status === 'active').length;
     const esigActive = fixtures.users.filter(u =>
@@ -294,6 +459,9 @@ async function main() {
         userCount: fixtures.users.length,
         activeUserCount: activeUsers,
         facilityCount: countFacilities(fixtures.facilities),
+        clinicCount: countClinics(fixtures.facilities),
+        wardCount,
+        bedCount,
         roleCount: fixtures.roles.length,
         esigActiveCount: esigActive,
         vistaGrounding: probe.ok ? 'connected' : 'integration-pending',

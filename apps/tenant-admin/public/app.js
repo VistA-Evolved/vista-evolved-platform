@@ -107,6 +107,10 @@ function route() {
     renderKeyInventory(content);
   } else if (hash === '#/esig-status') {
     renderEsigStatus(content);
+  } else if (hash === '#/clinics') {
+    renderClinicList(content);
+  } else if (hash === '#/wards') {
+    renderWardList(content);
   } else if (hash === '#/guided-tasks') {
     renderGuidedTasks(content);
   } else {
@@ -173,7 +177,17 @@ async function renderDashboard(el) {
       <div class="card">
         <div class="card-label">Facilities</div>
         <div class="card-value">${d.facilityCount}</div>
-        <div class="card-sub"><a href="#/facilities">View facility list →</a></div>
+        <div class="card-sub"><a href="#/facilities">View topology →</a></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Clinics</div>
+        <div class="card-value">${d.clinicCount ?? '—'}</div>
+        <div class="card-sub"><a href="#/clinics">View clinic list →</a></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Wards / Beds</div>
+        <div class="card-value">${d.wardCount ?? '—'} / ${d.bedCount ?? '—'}</div>
+        <div class="card-sub"><a href="#/wards">View ward list →</a></div>
       </div>
       <div class="card">
         <div class="card-label">Security Keys</div>
@@ -505,9 +519,32 @@ async function renderFacilityDetail(el, facId) {
   const f = findFacility(res.data, facId);
   if (!f) { el.innerHTML = `<div class="error-message">Facility not found</div>`; return; }
 
-  const groundingRows = Object.entries(f.vistaGrounding || {}).map(([k, v]) =>
-    `<div class="detail-row"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd></div>`
-  ).join('');
+  const groundingRows = Object.entries(f.vistaGrounding || {}).map(([k, v]) => {
+    if (typeof v === 'object') return '';
+    return `<div class="detail-row"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(String(v))}</dd></div>`;
+  }).join('');
+
+  // File-specific fields (from enriched fixture)
+  const fileFields = f.file4Fields || f.file40_8Fields || f.file44Fields || null;
+  const fileFieldsHtml = fileFields
+    ? `<div class="detail-section">
+         <h2>VistA File Fields</h2>
+         <dl>${Object.entries(fileFields).map(([k, v]) =>
+           `<div class="detail-row"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd></div>`
+         ).join('')}</dl>
+       </div>`
+    : '';
+
+  // Extra identity rows for enriched data
+  const extraIdentity = [];
+  if (f.stationNumber) extraIdentity.push(`<div class="detail-row"><dt>Station Number</dt><dd>${escapeHtml(f.stationNumber)}</dd></div>`);
+  if (f.facilityType) extraIdentity.push(`<div class="detail-row"><dt>Facility Type</dt><dd>${escapeHtml(f.facilityType)}</dd></div>`);
+  if (f.facilityNumber) extraIdentity.push(`<div class="detail-row"><dt>Facility Number</dt><dd>${escapeHtml(f.facilityNumber)}</dd></div>`);
+  if (f.abbreviation) extraIdentity.push(`<div class="detail-row"><dt>Abbreviation</dt><dd>${escapeHtml(f.abbreviation)}</dd></div>`);
+  if (f.locationType) extraIdentity.push(`<div class="detail-row"><dt>Location Type</dt><dd>${escapeHtml(f.locationType)}</dd></div>`);
+  if (f.stopCode) extraIdentity.push(`<div class="detail-row"><dt>Stop Code</dt><dd>${escapeHtml(f.stopCode.ien + ' — ' + f.stopCode.name)}</dd></div>`);
+  if (f.defaultSlotLength) extraIdentity.push(`<div class="detail-row"><dt>Slot Length</dt><dd>${f.defaultSlotLength} min</dd></div>`);
+  if (f.global) extraIdentity.push(`<div class="detail-row"><dt>Global</dt><dd style="font-family:monospace;font-size:12px">${escapeHtml(f.global)}</dd></div>`);
 
   const childrenHtml = f.children && f.children.length
     ? `<div class="detail-section">
@@ -515,6 +552,18 @@ async function renderFacilityDetail(el, facId) {
          <ul class="facility-tree">
            ${f.children.map(c => `<li><a href="#/facilities/${encodeURIComponent(c.id)}">${escapeHtml(c.name)}</a> <span class="tree-type">${escapeHtml(c.type)}</span></li>`).join('')}
          </ul>
+       </div>`
+    : '';
+
+  // Ward children (for institution-level)
+  const wardsHtml = f.wards && f.wards.length
+    ? `<div class="detail-section">
+         <h2>Wards</h2>
+         <table>
+           <thead><tr><th>Ward</th><th>Specialty</th><th>Beds</th></tr></thead>
+           <tbody>${f.wards.map(w => `<tr><td>${escapeHtml(w.name)}</td><td>${escapeHtml(w.specialty || '—')}</td><td>${(w.beds || []).length}</td></tr>`).join('')}</tbody>
+         </table>
+         <div style="margin-top:4px"><a href="#/wards">View full ward list →</a></div>
        </div>`
     : '';
 
@@ -533,6 +582,7 @@ async function renderFacilityDetail(el, facId) {
           <dl>
             <div class="detail-row"><dt>Type</dt><dd>${escapeHtml(f.type)}</dd></div>
             <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(f.status)}</dd></div>
+            ${extraIdentity.join('')}
           </dl>
         </div>
 
@@ -541,7 +591,9 @@ async function renderFacilityDetail(el, facId) {
           <dl>${groundingRows}</dl>
         </div>
 
+        ${fileFieldsHtml}
         ${childrenHtml}
+        ${wardsHtml}
       </div>
 
       <aside class="context-rail">
@@ -562,6 +614,128 @@ async function renderFacilityDetail(el, facId) {
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Read-only in first slice</div>
         </div>
       </aside>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Clinic List
+// ---------------------------------------------------------------------------
+async function renderClinicList(el) {
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Clinic List</h1>
+      <span class="source-posture fixture">Loading…</span>
+    </div>
+    <div class="loading-message">Loading clinics…</div>`;
+
+  const res = await api('clinics');
+  if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load clinics</div>`; return; }
+  const clinics = res.data || [];
+  const summary = res.summary || {};
+  const grounding = res.vistaGrounding || {};
+
+  function clinicRows(list) {
+    if (!list.length) return '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted)">No clinics found</td></tr>';
+    return list.map(c => `
+      <tr>
+        <td>${escapeHtml(c.name)}</td>
+        <td>${escapeHtml(c.abbreviation || '—')}</td>
+        <td>${c.stopCode ? escapeHtml(c.stopCode.ien + ' — ' + c.stopCode.name) : '—'}</td>
+        <td>${c.defaultSlotLength ? c.defaultSlotLength + ' min' : '—'}</td>
+        <td><span class="badge ${c.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(c.status || 'active')}</span></td>
+        <td style="font-size:11px;color:var(--color-text-muted)">File 44 ^SC(${escapeHtml(String(c.file44Ien || c.ien || '?'))},</td>
+      </tr>`).join('');
+  }
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Clinic List</div>
+    <div class="page-header">
+      <h1>Clinic List</h1>
+      ${sourceBadge(res.source)}
+    </div>
+    <div class="card-grid" style="margin-bottom:1rem;">
+      <div class="card"><div class="card-label">Total Clinics</div><div class="card-value">${summary.totalClinics ?? clinics.length}</div></div>
+      <div class="card"><div class="card-label">With Stop Code</div><div class="card-value">${summary.withStopCode ?? '—'}</div></div>
+      <div class="card"><div class="card-label">Avg Slot Length</div><div class="card-value">${summary.avgSlotLength ? summary.avgSlotLength + ' min' : '—'}</div></div>
+    </div>
+    <div class="detail-section">
+      <table>
+        <thead><tr><th>Clinic Name</th><th>Abbreviation</th><th>Stop Code</th><th>Slot Length</th><th>Status</th><th>VistA Reference</th></tr></thead>
+        <tbody id="clinic-tbody">${clinicRows(clinics)}</tbody>
+      </table>
+    </div>
+    <div class="detail-section">
+      <h2>VistA Grounding</h2>
+      <dl>
+        <div class="detail-row"><dt>Read RPC</dt><dd>${escapeHtml(grounding.readRpc || 'ORWU CLINLOC')}</dd></div>
+        <div class="detail-row"><dt>Primary File</dt><dd>${escapeHtml(grounding.file || 'File 44 (Hospital Location)')}</dd></div>
+        <div class="detail-row"><dt>Global</dt><dd>^SC(</dd></div>
+        <div class="detail-row"><dt>Type Index</dt><dd>${escapeHtml(grounding.typeIndex || '"C" index in ^SC("TYPE","C",')}</dd></div>
+      </dl>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Ward List
+// ---------------------------------------------------------------------------
+async function renderWardList(el) {
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Ward List</h1>
+      <span class="source-posture fixture">Loading…</span>
+    </div>
+    <div class="loading-message">Loading wards…</div>`;
+
+  const res = await api('wards');
+  if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load wards</div>`; return; }
+  const wards = res.data || [];
+  const summary = res.summary || {};
+  const grounding = res.vistaGrounding || {};
+
+  function wardRows(list) {
+    if (!list.length) return '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted)">No wards found</td></tr>';
+    return list.map(w => {
+      const beds = w.beds || [];
+      const avail = beds.filter(b => b.status === 'available').length;
+      const occ = beds.filter(b => b.status === 'occupied').length;
+      return `
+      <tr>
+        <td>${escapeHtml(w.name)}</td>
+        <td>${escapeHtml(w.specialty || '—')}</td>
+        <td>${w.bedCount ?? beds.length}</td>
+        <td>${w.availableBeds ?? avail}</td>
+        <td>${w.occupiedBeds ?? occ}</td>
+        <td style="font-size:11px;color:var(--color-text-muted)">File 42 ^DIC(42,${escapeHtml(String(w.file42Ien || '?'))},</td>
+      </tr>`;
+    }).join('');
+  }
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Ward List</div>
+    <div class="page-header">
+      <h1>Ward List</h1>
+      ${sourceBadge(res.source)}
+    </div>
+    <div class="card-grid" style="margin-bottom:1rem;">
+      <div class="card"><div class="card-label">Total Wards</div><div class="card-value">${summary.totalWards ?? wards.length}</div></div>
+      <div class="card"><div class="card-label">Total Beds</div><div class="card-value">${summary.totalBeds ?? '—'}</div></div>
+      <div class="card"><div class="card-label">Available</div><div class="card-value">${summary.availableBeds ?? '—'}</div></div>
+      <div class="card"><div class="card-label">Occupied</div><div class="card-value">${summary.occupiedBeds ?? '—'}</div></div>
+    </div>
+    <div class="detail-section">
+      <table>
+        <thead><tr><th>Ward Name</th><th>Specialty</th><th>Beds</th><th>Available</th><th>Occupied</th><th>VistA Reference</th></tr></thead>
+        <tbody id="ward-tbody">${wardRows(wards)}</tbody>
+      </table>
+    </div>
+    <div class="detail-section">
+      <h2>VistA Grounding</h2>
+      <dl>
+        <div class="detail-row"><dt>Read RPC</dt><dd>${escapeHtml(grounding.readRpc || 'ORQPT WARDS')}</dd></div>
+        <div class="detail-row"><dt>Ward File</dt><dd>${escapeHtml(grounding.file || 'File 42 (Ward Location)')}</dd></div>
+        <div class="detail-row"><dt>Global</dt><dd>^DIC(42,</dd></div>
+        <div class="detail-row"><dt>Bed File</dt><dd>${escapeHtml(grounding.bedFile || 'File 405.4 (Room-Bed)')}</dd></div>
+      </dl>
     </div>`;
 }
 
@@ -796,6 +970,24 @@ async function renderGuidedTasks(el) {
       ],
       terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
       whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
+    },
+    {
+      id: 'manage-ward',
+      title: 'Add/Edit Ward Location',
+      description: 'Create or modify a Ward Location (File 42) with room-bed inventory (File 405.4) and link to Hospital Location (File 44 type=W).',
+      vistaTarget: 'File 42 via ^DIC(42) + File 405.4 via ^DG(405.4)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > ADT Manager > Ward Definition',
+        'Enter ward name, specialty, service',
+        'Set corresponding Hospital Location (File 44 type=W)',
+        'Define room-bed inventory in File 405.4',
+        'Assign operating beds and out-of-service beds',
+        'Verify: ORQPT WARDS returns the new ward',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Ward creation requires coordinated entries in File 42 (ward master), File 44 (hospital location), and File 405.4 (room-bed). MUMPS cross-references link bed status to ADT movements.',
     },
     {
       id: 'setup-esig',

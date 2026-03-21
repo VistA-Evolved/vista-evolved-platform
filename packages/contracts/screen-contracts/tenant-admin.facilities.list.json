@@ -1,9 +1,14 @@
 {
   "surfaceId": "tenant-admin.facilities.list",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "title": "Facility List",
   "status": "draft",
-  "description": "Facility list showing institution hierarchy (Institution → Division → Location). VistA File 4 (INSTITUTION) and File 40.8 (MEDICAL CENTER DIVISION) are the source of truth. Platform PG holds tenant-to-facility mapping. Read-only mirror of VistA data with platform governance overlay.",
+  "description": "Facility list showing institution hierarchy (Institution → Division → Clinic/Ward). VistA File 4 (INSTITUTION), File 40.8 (MEDICAL CENTER DIVISION), File 44 (HOSPITAL LOCATION), and File 42 (WARD LOCATION) are the source of truth. Includes clinic/ward/bed counts and topology summary. Read-only mirror of VistA data with platform governance overlay.",
+  "vistaFields": {
+    "File 4": ["NAME (.01)", "STATION NUMBER (99)", "FACILITY TYPE (13)"],
+    "File 40.8": ["NAME (.01)", "FACILITY NUMBER (.07)", "INSTITUTION POINTER (.07)"]
+  },
+  "rpcs": ["XUS DIVISION GET", "DDR LISTER", "ORWU CLINLOC", "ORQPT WARDS"],
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "primary",
   "surfaceType": "admin",

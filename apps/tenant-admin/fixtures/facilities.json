@@ -6,18 +6,244 @@
     "status": "active",
     "vistaGrounding": {
       "file4Ien": 1,
-      "status": "grounded"
+      "status": "grounded",
+      "stationNumber": "660",
+      "facilityType": "VAMC",
+      "global": "^DIC(4,1,",
+      "indexes": {
+        "nameIndex": "^DIC(4,\"B\",\"WORLDVISTA MEDICAL CENTER\",1)",
+        "stationIndex": "^DIC(4,\"D\",\"660\",1)"
+      },
+      "file4Fields": {
+        "source": "fixture -- modeled on File 4 field map from grounded domain doc",
+        "nameField01": "WORLDVISTA MEDICAL CENTER",
+        "stationNumberField0p2": "660",
+        "facilityTypeField0p11": "VAMC"
+      }
     },
     "children": [
       {
         "id": "fac-002",
         "name": "Main Division",
         "type": "Division",
-        "vistaGrounding": { "file40_8Ien": 1, "status": "grounded" },
+        "status": "active",
+        "vistaGrounding": {
+          "file40_8Ien": 1,
+          "status": "grounded",
+          "facilityNumber": "660",
+          "institutionPointer": 1,
+          "global": "^DG(40.8,1,",
+          "indexes": {
+            "nameIndex": "^DG(40.8,\"B\",\"MAIN DIVISION\",1)"
+          },
+          "file40_8Fields": {
+            "source": "fixture -- modeled on File 40.8 field map from grounded domain doc",
+            "divisionNameField0p1": "MAIN DIVISION",
+            "institutionPointerField0p2": 1,
+            "facilityNumberField0p7": "660"
+          }
+        },
         "children": [
-          { "id": "loc-001", "name": "General Medicine Clinic", "type": "Clinic", "vistaGrounding": { "file44Ien": 1, "status": "grounded" } },
-          { "id": "loc-002", "name": "Primary Care Clinic", "type": "Clinic", "vistaGrounding": { "file44Ien": 2, "status": "grounded" } },
-          { "id": "loc-003", "name": "Surgery Clinic", "type": "Clinic", "vistaGrounding": { "file44Ien": 3, "status": "grounded" } }
+          {
+            "id": "loc-001",
+            "name": "General Medicine Clinic",
+            "type": "Clinic",
+            "status": "active",
+            "vistaGrounding": {
+              "file44Ien": 1,
+              "status": "grounded",
+              "abbreviation": "GEN MED",
+              "locationType": "C",
+              "divisionPointer": 1,
+              "stopCode": { "ien": 301, "name": "GENERAL INTERNAL MEDICINE" },
+              "defaultSlotLength": 30,
+              "global": "^SC(1,",
+              "file44Fields": {
+                "source": "fixture -- modeled on File 44 field map from grounded domain doc",
+                "locationNameField0p1": "GENERAL MEDICINE CLINIC",
+                "abbreviationField0p2": "GEN MED",
+                "typeField0p3": "C",
+                "divisionPointerField0p4": 1,
+                "stopCodeField0p7": 301,
+                "defaultSlotLengthFieldSL": 30
+              }
+            }
+          },
+          {
+            "id": "loc-002",
+            "name": "Primary Care Clinic",
+            "type": "Clinic",
+            "status": "active",
+            "vistaGrounding": {
+              "file44Ien": 2,
+              "status": "grounded",
+              "abbreviation": "PRI CARE",
+              "locationType": "C",
+              "divisionPointer": 1,
+              "stopCode": { "ien": 323, "name": "PRIMARY CARE/MEDICINE" },
+              "defaultSlotLength": 20,
+              "global": "^SC(2,",
+              "file44Fields": {
+                "source": "fixture -- modeled on File 44 field map from grounded domain doc",
+                "locationNameField0p1": "PRIMARY CARE CLINIC",
+                "abbreviationField0p2": "PRI CARE",
+                "typeField0p3": "C",
+                "divisionPointerField0p4": 1,
+                "stopCodeField0p7": 323,
+                "defaultSlotLengthFieldSL": 20
+              }
+            }
+          },
+          {
+            "id": "loc-003",
+            "name": "Surgery Clinic",
+            "type": "Clinic",
+            "status": "active",
+            "vistaGrounding": {
+              "file44Ien": 3,
+              "status": "grounded",
+              "abbreviation": "SURG",
+              "locationType": "C",
+              "divisionPointer": 1,
+              "stopCode": { "ien": 401, "name": "GENERAL SURGERY" },
+              "defaultSlotLength": 30,
+              "global": "^SC(3,",
+              "file44Fields": {
+                "source": "fixture -- modeled on File 44 field map from grounded domain doc",
+                "locationNameField0p1": "SURGERY CLINIC",
+                "abbreviationField0p2": "SURG",
+                "typeField0p3": "C",
+                "divisionPointerField0p4": 1,
+                "stopCodeField0p7": 401,
+                "defaultSlotLengthFieldSL": 30
+              }
+            }
+          },
+          {
+            "id": "loc-004",
+            "name": "Mental Health Clinic",
+            "type": "Clinic",
+            "status": "active",
+            "vistaGrounding": {
+              "file44Ien": 4,
+              "status": "grounded",
+              "abbreviation": "MH",
+              "locationType": "C",
+              "divisionPointer": 1,
+              "stopCode": { "ien": 502, "name": "MENTAL HEALTH CLINIC-INDIVIDUAL" },
+              "defaultSlotLength": 60,
+              "global": "^SC(4,",
+              "file44Fields": {
+                "source": "fixture -- modeled on File 44 field map from grounded domain doc",
+                "locationNameField0p1": "MENTAL HEALTH CLINIC",
+                "abbreviationField0p2": "MH",
+                "typeField0p3": "C",
+                "divisionPointerField0p4": 1,
+                "stopCodeField0p7": 502,
+                "defaultSlotLengthFieldSL": 60
+              }
+            }
+          },
+          {
+            "id": "loc-005",
+            "name": "Pharmacy Window",
+            "type": "Clinic",
+            "status": "active",
+            "vistaGrounding": {
+              "file44Ien": 5,
+              "status": "grounded",
+              "abbreviation": "PHARM",
+              "locationType": "C",
+              "divisionPointer": 1,
+              "stopCode": { "ien": 160, "name": "CLINICAL PHARMACY" },
+              "defaultSlotLength": 15,
+              "global": "^SC(5,",
+              "file44Fields": {
+                "source": "fixture -- modeled on File 44 field map from grounded domain doc",
+                "locationNameField0p1": "PHARMACY WINDOW",
+                "abbreviationField0p2": "PHARM",
+                "typeField0p3": "C",
+                "divisionPointerField0p4": 1,
+                "stopCodeField0p7": 160,
+                "defaultSlotLengthFieldSL": 15
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "wards": [
+      {
+        "id": "ward-001",
+        "name": "MEDICINE WARD A",
+        "type": "Ward",
+        "status": "active",
+        "vistaGrounding": {
+          "file42Ien": 1,
+          "file44Ien": 10,
+          "status": "grounded",
+          "locationType": "W",
+          "divisionPointer": 1,
+          "specialty": { "ien": 1, "name": "GENERAL MEDICINE" },
+          "global": "^DIC(42,1,",
+          "file42Fields": {
+            "source": "fixture -- modeled on File 42 field map from grounded domain doc",
+            "wardNameField0p1": "MEDICINE WARD A"
+          }
+        },
+        "beds": [
+          { "id": "bed-001", "name": "A-101-A", "status": "available" },
+          { "id": "bed-002", "name": "A-101-B", "status": "occupied" },
+          { "id": "bed-003", "name": "A-102-A", "status": "available" },
+          { "id": "bed-004", "name": "A-102-B", "status": "available" }
+        ]
+      },
+      {
+        "id": "ward-002",
+        "name": "SURGERY WARD B",
+        "type": "Ward",
+        "status": "active",
+        "vistaGrounding": {
+          "file42Ien": 2,
+          "file44Ien": 11,
+          "status": "grounded",
+          "locationType": "W",
+          "divisionPointer": 1,
+          "specialty": { "ien": 2, "name": "GENERAL SURGERY" },
+          "global": "^DIC(42,2,",
+          "file42Fields": {
+            "source": "fixture -- modeled on File 42 field map from grounded domain doc",
+            "wardNameField0p1": "SURGERY WARD B"
+          }
+        },
+        "beds": [
+          { "id": "bed-005", "name": "B-201-A", "status": "available" },
+          { "id": "bed-006", "name": "B-201-B", "status": "available" }
+        ]
+      },
+      {
+        "id": "ward-003",
+        "name": "ICU",
+        "type": "Ward",
+        "status": "active",
+        "vistaGrounding": {
+          "file42Ien": 3,
+          "file44Ien": 12,
+          "status": "grounded",
+          "locationType": "W",
+          "divisionPointer": 1,
+          "specialty": { "ien": 8, "name": "MEDICAL ICU" },
+          "global": "^DIC(42,3,",
+          "file42Fields": {
+            "source": "fixture -- modeled on File 42 field map from grounded domain doc",
+            "wardNameField0p1": "ICU"
+          }
+        },
+        "beds": [
+          { "id": "bed-007", "name": "ICU-01", "status": "occupied" },
+          { "id": "bed-008", "name": "ICU-02", "status": "available" },
+          { "id": "bed-009", "name": "ICU-03", "status": "available" },
+          { "id": "bed-010", "name": "ICU-04", "status": "available" }
         ]
       }
     ]

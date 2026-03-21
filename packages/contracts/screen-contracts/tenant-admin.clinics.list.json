@@ -1,9 +1,13 @@
 {
   "surfaceId": "tenant-admin.clinics.list",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "Clinic List and Configuration",
   "status": "draft",
-  "description": "Clinic list and configuration surface. VistA File 44 (HOSPITAL LOCATION) is the canonical source of truth. Read-only mirror is the safe initial posture. Clinic creation and modification require FileMan or approved M entry points — write posture requires research.",
+  "description": "Clinic list showing all File 44 clinic-type locations with stop codes, slot lengths, and division linkage. VistA-first with fixture fallback. Includes summary stats and VistA grounding metadata.",
+  "vistaFields": {
+    "File 44": ["NAME (.01)", "ABBREVIATION (.01,2)", "TYPE (.01,3)", "DIVISION (.01,4)", "STOP CODE NUMBER (8)", "DEFAULT SLOT LENGTH (1912)"]
+  },
+  "rpcs": ["ORWU CLINLOC"],
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "primary",
   "surfaceType": "admin",
