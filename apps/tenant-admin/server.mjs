@@ -193,6 +193,86 @@ async function main() {
     return { ok: true, source: 'fixture', tenantId, data: fixtures.roles };
   });
 
+  // ---- Key inventory: cross-reference keys to holders ----
+
+  app.get('/api/tenant-admin/v1/key-inventory', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const category = req.query.category || '';
+
+    // Build inventory from fixtures with holder cross-reference
+    const inventory = fixtures.roles
+      .filter(r => !category || r.category === category)
+      .map(role => {
+        const holders = fixtures.users.filter(u => u.roles.includes(role.name));
+        return {
+          keyName: role.name,
+          vistaKey: role.vistaKey,
+          description: role.description,
+          category: role.category || 'uncategorized',
+          holderCount: holders.length,
+          holders: holders.map(h => ({
+            id: h.id,
+            name: h.name,
+            duz: h.vistaGrounding.duz,
+            status: h.status,
+          })),
+          vistaGrounding: role.vistaGrounding,
+        };
+      });
+
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: inventory,
+      summary: {
+        totalKeys: inventory.length,
+        clinicalKeys: inventory.filter(k => k.category === 'clinical').length,
+        adminKeys: inventory.filter(k => k.category === 'administrative').length,
+        unassignedKeys: inventory.filter(k => k.holderCount === 0).length,
+      },
+    };
+  });
+
+  // ---- E-signature status summary ----
+
+  app.get('/api/tenant-admin/v1/esig-status', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+
+    const summary = fixtures.users.map(u => ({
+      id: u.id,
+      name: u.name,
+      duz: u.vistaGrounding.duz,
+      status: u.status,
+      esigStatus: u.vistaGrounding.electronicSignature
+        ? u.vistaGrounding.electronicSignature.status
+        : 'unknown',
+      hasCode: u.vistaGrounding.electronicSignature
+        ? u.vistaGrounding.electronicSignature.hasCode
+        : false,
+    }));
+
+    return {
+      ok: true,
+      source: 'fixture',
+      tenantId,
+      data: summary,
+      aggregates: {
+        total: summary.length,
+        active: summary.filter(u => u.esigStatus === 'active').length,
+        notConfigured: summary.filter(u => u.esigStatus === 'not-configured').length,
+        revoked: summary.filter(u => u.esigStatus === 'revoked').length,
+      },
+      vistaGrounding: {
+        validationRpc: 'ORWU VALIDSIG',
+        field: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
+        note: 'E-sig codes are hashed in VistA and never retrievable. Presence check only.',
+      },
+    };
+  });
+
   app.get('/api/tenant-admin/v1/dashboard', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
@@ -202,14 +282,20 @@ async function main() {
       return n;
     }
     const probe = await probeVista();
+    const activeUsers = fixtures.users.filter(u => u.status === 'active').length;
+    const esigActive = fixtures.users.filter(u =>
+      u.vistaGrounding.electronicSignature && u.vistaGrounding.electronicSignature.status === 'active'
+    ).length;
     return {
       ok: true,
       source: 'fixture',
       tenantId,
       data: {
         userCount: fixtures.users.length,
+        activeUserCount: activeUsers,
         facilityCount: countFacilities(fixtures.facilities),
         roleCount: fixtures.roles.length,
+        esigActiveCount: esigActive,
         vistaGrounding: probe.ok ? 'connected' : 'integration-pending',
         vistaUrl: probe.url || null,
         moduleStatus: { enabled: 0, total: 0 }

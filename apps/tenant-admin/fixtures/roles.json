@@ -3,48 +3,105 @@
     "id": "role-001",
     "name": "PROVIDER",
     "vistaKey": "PROVIDER",
-    "description": "Clinical provider — can write orders, notes, and prescriptions",
-    "vistaGrounding": { "file19_1Ien": 1, "status": "grounded" },
-    "assignedUsers": ["user-001"]
+    "description": "Clinical provider -- can write orders, notes, and prescriptions",
+    "category": "clinical",
+    "vistaGrounding": {
+      "file19_1Ien": 1,
+      "status": "grounded",
+      "xusecGlobal": "^XUSEC(\"PROVIDER\")",
+      "lockedOptions": ["OR CPRS GUI CHART"],
+      "rpcCheck": "ORWU HASKEY"
+    },
+    "assignedUsers": ["user-001", "user-005"]
   },
   {
     "id": "role-002",
     "name": "ORES",
     "vistaKey": "ORES",
-    "description": "Order entry/results — can enter and sign orders",
-    "vistaGrounding": { "file19_1Ien": 2, "status": "grounded" },
-    "assignedUsers": ["user-001"]
+    "description": "Order entry/results -- can enter and sign orders",
+    "category": "clinical",
+    "vistaGrounding": {
+      "file19_1Ien": 2,
+      "status": "grounded",
+      "xusecGlobal": "^XUSEC(\"ORES\")",
+      "lockedOptions": ["OR CPRS GUI CHART"],
+      "rpcCheck": "ORWU HASKEY"
+    },
+    "assignedUsers": ["user-001", "user-005"]
   },
   {
     "id": "role-003",
     "name": "ORELSE",
     "vistaKey": "ORELSE",
-    "description": "Order entry — can enter but not sign orders",
-    "vistaGrounding": { "file19_1Ien": 3, "status": "grounded" },
+    "description": "Order entry -- can enter but not sign orders (nursing/clerk)",
+    "category": "clinical",
+    "vistaGrounding": {
+      "file19_1Ien": 3,
+      "status": "grounded",
+      "xusecGlobal": "^XUSEC(\"ORELSE\")",
+      "lockedOptions": [],
+      "rpcCheck": "ORWU HASKEY"
+    },
     "assignedUsers": ["user-003"]
   },
   {
     "id": "role-004",
     "name": "PSJ RPHARM",
     "vistaKey": "PSJ RPHARM",
-    "description": "Pharmacy — can verify and process medication orders",
-    "vistaGrounding": { "file19_1Ien": 4, "status": "grounded" },
+    "description": "Pharmacy -- can verify and process medication orders",
+    "category": "clinical",
+    "vistaGrounding": {
+      "file19_1Ien": 4,
+      "status": "grounded",
+      "xusecGlobal": "^XUSEC(\"PSJ RPHARM\")",
+      "lockedOptions": ["PSJ LM BACKDOOR ORDERS"],
+      "rpcCheck": "ORWU HASKEY"
+    },
     "assignedUsers": ["user-002"]
   },
   {
     "id": "role-005",
     "name": "XUMGR",
     "vistaKey": "XUMGR",
-    "description": "System manager — full administrative access",
-    "vistaGrounding": { "file19_1Ien": 5, "status": "grounded" },
-    "assignedUsers": ["user-004"]
+    "description": "Kernel system manager -- full administrative access to user/key management",
+    "category": "administrative",
+    "vistaGrounding": {
+      "file19_1Ien": 5,
+      "status": "grounded",
+      "xusecGlobal": "^XUSEC(\"XUMGR\")",
+      "lockedOptions": ["XUMAINT", "XUUSER"],
+      "rpcCheck": "ORWU HASKEY"
+    },
+    "assignedUsers": ["user-004", "user-005"]
   },
   {
     "id": "role-006",
     "name": "XUPROGMODE",
     "vistaKey": "XUPROGMODE",
-    "description": "Programmer mode — development and maintenance access",
-    "vistaGrounding": { "file19_1Ien": 6, "status": "grounded" },
-    "assignedUsers": ["user-004"]
+    "description": "Programmer mode -- development, direct global access, routine editing",
+    "category": "administrative",
+    "vistaGrounding": {
+      "file19_1Ien": 6,
+      "status": "grounded",
+      "xusecGlobal": "^XUSEC(\"XUPROGMODE\")",
+      "lockedOptions": ["XUPROG"],
+      "rpcCheck": "ORWU HASKEY"
+    },
+    "assignedUsers": ["user-004", "user-005"]
+  },
+  {
+    "id": "role-007",
+    "name": "SD SCHEDULING",
+    "vistaKey": "SD SCHEDULING",
+    "description": "Scheduling -- can create and manage patient appointments",
+    "category": "clinical",
+    "vistaGrounding": {
+      "file19_1Ien": null,
+      "status": "reference",
+      "xusecGlobal": "^XUSEC(\"SD SCHEDULING\")",
+      "lockedOptions": ["SDAM APPT MGMT"],
+      "rpcCheck": "ORWU HASKEY"
+    },
+    "assignedUsers": []
   }
 ]

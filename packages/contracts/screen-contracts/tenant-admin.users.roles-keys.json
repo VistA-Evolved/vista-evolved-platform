@@ -1,9 +1,9 @@
 {
   "surfaceId": "tenant-admin.users.roles-keys",
-  "version": "0.2.0",
-  "title": "Role Assignment",
+  "version": "0.3.0",
+  "title": "Role Assignment & Key Inventory",
   "status": "draft",
-  "description": "Read-only view of VistA security keys and role assignments for users within a tenant. VistA keys (File 200 KEYS field) and security key definitions (File 19.1) are the source of truth. Write-back for programmatic key assignment is research-required.",
+  "description": "Read-only inventory of VistA security keys with holder cross-reference. Keys defined in File 19.1, holder lookup via ^XUSEC global, verification via ORWU HASKEY RPC. Categorized as clinical vs administrative. Shows holder count, assigned users, and File 19.1 IEN grounding. Key assignment and revocation require guided terminal workflows.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "local",
   "surfaceType": "admin",
@@ -18,12 +18,14 @@
     {
       "sourceId": "vista-file-200-keys",
       "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA user key assignments from File 200 KEYS field — read-only mirror."
+      "description": "VistA user key assignments from File 200 KEYS subfile (200.051) — read-only mirror."
     },
     {
       "sourceId": "vista-file-19-1",
       "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA security key definitions from File 19.1 — read-only reference."
+      "description": "VistA security key definitions from File 19.1. Fast holder lookup: ^XUSEC(keyName,DUZ). RPC: ORWU HASKEY.",
+      "vistaLookup": "^XUSEC(KEY_NAME,USER_IEN)",
+      "rpcs": ["ORWU HASKEY", "XUS ALLKEYS"]
     }
   ],
   "dataClassification": "configuration",

@@ -9,7 +9,26 @@
     "vistaGrounding": {
       "duz": 87,
       "file200Status": "grounded",
-      "personClass": "Physician"
+      "personClass": "Physician",
+      "initials": "CWV",
+      "serviceSection": "MEDICINE",
+      "division": { "ien": 1, "name": "MAIN DIVISION" },
+      "primaryMenuOption": "OR CPRS GUI CHART",
+      "disuser": false,
+      "electronicSignature": {
+        "status": "active",
+        "hasCode": true,
+        "field204Present": true
+      },
+      "file200Fields": {
+        "source": "fixture -- modeled on File 200 field map from grounded domain doc",
+        "nameField01": "PROVIDER,CLYDE WV",
+        "initialsField1": "CWV",
+        "disuser4": false,
+        "electronicSigCode20_4": "***HASHED***",
+        "serviceSection29": "MEDICINE",
+        "primaryMenuOption201": "OR CPRS GUI CHART"
+      }
     }
   },
   {
@@ -22,7 +41,26 @@
     "vistaGrounding": {
       "duz": 88,
       "file200Status": "grounded",
-      "personClass": "Pharmacist"
+      "personClass": "Pharmacist",
+      "initials": "LWV",
+      "serviceSection": "PHARMACY",
+      "division": { "ien": 1, "name": "MAIN DIVISION" },
+      "primaryMenuOption": "OR CPRS GUI CHART",
+      "disuser": false,
+      "electronicSignature": {
+        "status": "active",
+        "hasCode": true,
+        "field204Present": true
+      },
+      "file200Fields": {
+        "source": "fixture -- modeled on File 200 field map from grounded domain doc",
+        "nameField01": "PHARMACIST,LINDA WV",
+        "initialsField1": "LWV",
+        "disuser4": false,
+        "electronicSigCode20_4": "***HASHED***",
+        "serviceSection29": "PHARMACY",
+        "primaryMenuOption201": "OR CPRS GUI CHART"
+      }
     }
   },
   {
@@ -35,7 +73,26 @@
     "vistaGrounding": {
       "duz": 89,
       "file200Status": "grounded",
-      "personClass": "Registered Nurse"
+      "personClass": "Registered Nurse",
+      "initials": "HWV",
+      "serviceSection": "NURSING",
+      "division": { "ien": 1, "name": "MAIN DIVISION" },
+      "primaryMenuOption": "OR CPRS GUI CHART",
+      "disuser": false,
+      "electronicSignature": {
+        "status": "active",
+        "hasCode": true,
+        "field204Present": true
+      },
+      "file200Fields": {
+        "source": "fixture -- modeled on File 200 field map from grounded domain doc",
+        "nameField01": "NURSE,HELEN WV",
+        "initialsField1": "HWV",
+        "disuser4": false,
+        "electronicSigCode20_4": "***HASHED***",
+        "serviceSection29": "NURSING",
+        "primaryMenuOption201": "OR CPRS GUI CHART"
+      }
     }
   },
   {
@@ -48,7 +105,84 @@
     "vistaGrounding": {
       "duz": null,
       "file200Status": "ungrounded",
-      "personClass": null
+      "personClass": null,
+      "initials": null,
+      "serviceSection": null,
+      "division": null,
+      "primaryMenuOption": null,
+      "disuser": null,
+      "electronicSignature": {
+        "status": "not-configured",
+        "hasCode": false,
+        "field204Present": false
+      },
+      "file200Fields": {
+        "source": "fixture -- user not yet grounded to VistA File 200"
+      }
+    }
+  },
+  {
+    "id": "user-005",
+    "name": "PROGRAMMER,ONE",
+    "username": "PRO1234",
+    "title": "System Programmer",
+    "status": "active",
+    "roles": ["XUPROGMODE", "XUMGR", "PROVIDER", "ORES"],
+    "vistaGrounding": {
+      "duz": 1,
+      "file200Status": "grounded",
+      "personClass": "Physician",
+      "initials": "PO",
+      "serviceSection": "IRM",
+      "division": { "ien": 1, "name": "MAIN DIVISION" },
+      "primaryMenuOption": "EVE",
+      "disuser": false,
+      "electronicSignature": {
+        "status": "active",
+        "hasCode": true,
+        "field204Present": true
+      },
+      "file200Fields": {
+        "source": "fixture -- matches VEHU DUZ 1 (PROGRAMMER,ONE)",
+        "nameField01": "PROGRAMMER,ONE",
+        "initialsField1": "PO",
+        "disuser4": false,
+        "electronicSigCode20_4": "***HASHED***",
+        "serviceSection29": "IRM",
+        "primaryMenuOption201": "EVE"
+      }
+    }
+  },
+  {
+    "id": "user-006",
+    "name": "DISABLED,FORMER WV",
+    "username": "FORMER1",
+    "title": "Former Staff",
+    "status": "inactive",
+    "roles": [],
+    "vistaGrounding": {
+      "duz": 92,
+      "file200Status": "grounded",
+      "personClass": null,
+      "initials": "FWV",
+      "serviceSection": "ADMINISTRATION",
+      "division": { "ien": 1, "name": "MAIN DIVISION" },
+      "primaryMenuOption": null,
+      "disuser": true,
+      "electronicSignature": {
+        "status": "revoked",
+        "hasCode": false,
+        "field204Present": false
+      },
+      "file200Fields": {
+        "source": "fixture -- models a DISUSER=1 (disabled) user in File 200",
+        "nameField01": "DISABLED,FORMER WV",
+        "initialsField1": "FWV",
+        "disuser4": true,
+        "electronicSigCode20_4": null,
+        "serviceSection29": "ADMINISTRATION",
+        "primaryMenuOption201": null
+      }
     }
   }
 ]

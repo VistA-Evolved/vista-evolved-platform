@@ -103,6 +103,10 @@ function route() {
     renderFacilityList(content);
   } else if (hash === '#/roles') {
     renderRoleAssignment(content);
+  } else if (hash === '#/key-inventory') {
+    renderKeyInventory(content);
+  } else if (hash === '#/esig-status') {
+    renderEsigStatus(content);
   } else if (hash === '#/guided-tasks') {
     renderGuidedTasks(content);
   } else {
@@ -164,7 +168,7 @@ async function renderDashboard(el) {
       <div class="card">
         <div class="card-label">Users</div>
         <div class="card-value">${d.userCount}</div>
-        <div class="card-sub"><a href="#/users">View user list →</a></div>
+        <div class="card-sub">${d.activeUserCount} active · <a href="#/users">View user list →</a></div>
       </div>
       <div class="card">
         <div class="card-label">Facilities</div>
@@ -172,9 +176,14 @@ async function renderDashboard(el) {
         <div class="card-sub"><a href="#/facilities">View facility list →</a></div>
       </div>
       <div class="card">
-        <div class="card-label">Security Keys / Roles</div>
+        <div class="card-label">Security Keys</div>
         <div class="card-value">${d.roleCount}</div>
-        <div class="card-sub"><a href="#/roles">View role assignment →</a></div>
+        <div class="card-sub"><a href="#/key-inventory">View key inventory →</a></div>
+      </div>
+      <div class="card">
+        <div class="card-label">E-Signatures Active</div>
+        <div class="card-value">${d.esigActiveCount ?? '—'}</div>
+        <div class="card-sub"><a href="#/esig-status">View e-sig status →</a></div>
       </div>
       <div class="card">
         <div class="card-label">VistA Grounding</div>
@@ -209,14 +218,20 @@ async function renderUserList(el) {
   }
 
   function renderUserRows(list) {
-    return list.map(u => `
+    return list.map(u => {
+      const eSig = u.vistaGrounding.electronicSignature || {};
+      const eSigBadge = eSig.status === 'active' ? 'badge-active'
+        : eSig.status === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
+      return `
       <tr>
         <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
         <td>${escapeHtml(u.title || '—')}</td>
         <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
-        <td>${u.roles.map(r => `<span class="badge badge-key">${escapeHtml(r)}</span>`).join(' ')}</td>
+        <td>${u.roles.map(r => '<span class="badge badge-key">' + escapeHtml(r) + '</span>').join(' ')}</td>
+        <td><span class="badge ${eSigBadge}">${escapeHtml(eSig.status || '—')}</span></td>
         <td><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   }
 
   el.innerHTML = `
@@ -240,7 +255,7 @@ async function renderUserList(el) {
     </div>
     <table class="data-table">
       <thead><tr>
-        <th>Name</th><th>Title</th><th>Status</th><th>Keys</th><th>VistA</th>
+        <th>Name</th><th>Title</th><th>Status</th><th>Keys</th><th>E-Sig</th><th>VistA</th>
       </tr></thead>
       <tbody id="user-tbody">${renderUserRows(users)}</tbody>
     </table>
@@ -278,12 +293,16 @@ async function renderUserDetail(el, userId) {
   const res = await api(`users/${encodeURIComponent(userId)}`);
   if (!res.ok) { el.innerHTML = `<div class="error-message">User not found</div>`; return; }
   const u = res.data;
+  const eSig = u.vistaGrounding.electronicSignature || {};
+  const eSigBadgeClass = eSig.status === 'active' ? 'badge-active'
+    : eSig.status === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
 
   el.innerHTML = `
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/users">User List</a> › ${escapeHtml(u.name)}</div>
     <div class="page-header">
       <h1>${escapeHtml(u.name)}</h1>
       <span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span>
+      ${u.vistaGrounding.disuser ? '<span class="badge badge-inactive">DISUSER</span>' : ''}
     </div>
 
     <div class="detail-layout">
@@ -294,21 +313,43 @@ async function renderUserDetail(el, userId) {
             <div class="detail-row"><dt>Username</dt><dd>${escapeHtml(u.username)}</dd></div>
             <div class="detail-row"><dt>Title</dt><dd>${escapeHtml(u.title || '—')}</dd></div>
             <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(u.status)}</dd></div>
+            <div class="detail-row"><dt>Initials</dt><dd>${escapeHtml(u.vistaGrounding.initials || '—')}</dd></div>
           </dl>
         </div>
 
         <div class="detail-section">
-          <h2>VistA Grounding</h2>
+          <h2>VistA Grounding (File 200)</h2>
           <dl>
-            <div class="detail-row"><dt>DUZ (File 200)</dt><dd>${u.vistaGrounding.duz ?? '—'}</dd></div>
+            <div class="detail-row"><dt>DUZ (IEN)</dt><dd>${u.vistaGrounding.duz ?? '—'}</dd></div>
             <div class="detail-row"><dt>Grounding Status</dt><dd><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></dd></div>
             <div class="detail-row"><dt>Person Class</dt><dd>${escapeHtml(u.vistaGrounding.personClass || '—')}</dd></div>
+            <div class="detail-row"><dt>Service/Section</dt><dd>${escapeHtml(u.vistaGrounding.serviceSection || '—')}</dd></div>
+            <div class="detail-row"><dt>Division</dt><dd>${u.vistaGrounding.division ? escapeHtml(u.vistaGrounding.division.name) + ' (IEN ' + u.vistaGrounding.division.ien + ')' : '—'}</dd></div>
+            <div class="detail-row"><dt>Primary Menu Option</dt><dd><code>${escapeHtml(u.vistaGrounding.primaryMenuOption || '—')}</code></dd></div>
+            <div class="detail-row"><dt>DISUSER (disabled)</dt><dd>${u.vistaGrounding.disuser === true ? '<span class="badge badge-inactive">YES</span>' : u.vistaGrounding.disuser === false ? 'No' : '—'}</dd></div>
           </dl>
+        </div>
+
+        <div class="detail-section">
+          <h2>Electronic Signature</h2>
+          <dl>
+            <div class="detail-row"><dt>E-Sig Status</dt><dd><span class="badge ${eSigBadgeClass}">${escapeHtml(eSig.status || 'unknown')}</span></dd></div>
+            <div class="detail-row"><dt>Has Code (Field 20.4)</dt><dd>${eSig.hasCode ? 'Yes (hashed in VistA)' : 'No'}</dd></div>
+            <div class="detail-row"><dt>Validation RPC</dt><dd><code>ORWU VALIDSIG</code></dd></div>
+          </dl>
+          <div style="margin-top:8px;padding:8px 12px;background:#fffbeb;border-radius:4px;font-size:12px;color:#92400e;">
+            E-signature codes are hashed in VistA File 200 field 20.4 and cannot be retrieved.
+            Validation is presence-check only via ORWU VALIDSIG. Setup/reset is terminal-only.
+          </div>
         </div>
 
         <div class="detail-section">
           <h2>Security Keys</h2>
-          <div>${u.roles.map(r => `<span class="badge badge-key" style="margin:2px">${escapeHtml(r)}</span>`).join(' ')}</div>
+          <div>${u.roles.length ? u.roles.map(r => '<span class="badge badge-key" style="margin:2px">' + escapeHtml(r) + '</span>').join(' ') : '<span style="color:var(--color-text-muted)">No keys assigned</span>'}</div>
+          <div style="margin-top:8px;font-size:12px;color:var(--color-text-muted);">
+            Keys are verified via <code>ORWU HASKEY</code> RPC. Assignment/revocation is terminal-only
+            (<a href="#/guided-tasks">guided workflow →</a>).
+          </div>
         </div>
       </div>
 
@@ -316,16 +357,23 @@ async function renderUserDetail(el, userId) {
         <div class="card">
           <div class="context-label">User</div>
           <div class="context-value">${escapeHtml(u.name)}</div>
+          <div class="context-label">DUZ</div>
+          <div class="context-value">${u.vistaGrounding.duz ?? '—'}</div>
           <div class="context-label">Status</div>
           <div class="context-value"><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></div>
           <div class="context-divider"></div>
-          <div class="context-label">VistA DUZ</div>
-          <div class="context-value">${u.vistaGrounding.duz ?? '—'}</div>
+          <div class="context-label">E-Sig</div>
+          <div class="context-value"><span class="badge ${eSigBadgeClass}">${escapeHtml(eSig.status || 'unknown')}</span></div>
+          <div class="context-label">Keys</div>
+          <div class="context-value">${u.roles.length} assigned</div>
+          <div class="context-divider"></div>
           <div class="context-label">Grounding</div>
           <div class="context-value"><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></div>
           <div class="context-divider"></div>
-          <div class="context-label">Actions</div>
-          <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">Read-only in first slice</div>
+          <div class="context-label">Write Actions</div>
+          <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">
+            <a href="#/guided-tasks">Guided terminal workflows →</a>
+          </div>
         </div>
       </aside>
     </div>`;
@@ -518,6 +566,148 @@ async function renderFacilityDetail(el, facId) {
 }
 
 // ---------------------------------------------------------------------------
+// Key Inventory
+// ---------------------------------------------------------------------------
+async function renderKeyInventory(el) {
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Key Inventory</h1>
+      <span class="source-posture fixture">Loading…</span>
+    </div>
+    <div class="loading-message">Loading key inventory…</div>`;
+
+  const res = await api('key-inventory');
+  if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load key inventory</div>`; return; }
+  const keys = res.data;
+  const summary = res.summary;
+
+  const rows = keys.map(k => {
+    const catBadge = k.category === 'clinical'
+      ? '<span class="badge" style="background:#dbeafe;color:#1e40af">clinical</span>'
+      : k.category === 'administrative'
+      ? '<span class="badge" style="background:#fef3c7;color:#92400e">admin</span>'
+      : '<span class="badge badge-inactive">other</span>';
+    const holderList = k.holders.length
+      ? k.holders.map(h => '<a href="#/users/' + encodeURIComponent(h.id) + '">' + escapeHtml(h.name) + '</a>').join(', ')
+      : '<span style="color:var(--color-text-muted)">No holders</span>';
+    const grounding = k.vistaGrounding;
+    return `
+      <tr>
+        <td><span class="badge badge-key">${escapeHtml(k.keyName)}</span></td>
+        <td>${catBadge}</td>
+        <td>${escapeHtml(k.description)}</td>
+        <td style="font-weight:600">${k.holderCount}</td>
+        <td>${holderList}</td>
+        <td>${grounding.file19_1Ien ? 'IEN ' + grounding.file19_1Ien : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Key Inventory</h1>
+      <span class="source-posture fixture">FIXTURE</span>
+    </div>
+    <div class="card-grid" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-label">Total Keys</div>
+        <div class="card-value">${summary.totalKeys}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Clinical Keys</div>
+        <div class="card-value">${summary.clinicalKeys}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Admin Keys</div>
+        <div class="card-value">${summary.adminKeys}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Unassigned</div>
+        <div class="card-value" style="${summary.unassignedKeys > 0 ? 'color:var(--color-warning)' : ''}">${summary.unassignedKeys}</div>
+      </div>
+    </div>
+    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-primary)">
+      <strong>VistA Grounding:</strong> Keys live in File 19.1 (SECURITY KEY).
+      Holder lookup: <code>^XUSEC(keyName,DUZ)</code>.
+      Verification RPC: <code>ORWU HASKEY</code>.
+      Key assignment is terminal-only — <a href="#/guided-tasks">guided workflow →</a>
+    </div>
+    <table class="data-table">
+      <thead><tr>
+        <th>Key</th><th>Category</th><th>Description</th><th>Holders</th><th>Assigned To</th><th>File 19.1</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ---------------------------------------------------------------------------
+// E-Signature Status
+// ---------------------------------------------------------------------------
+async function renderEsigStatus(el) {
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Electronic Signature Status</h1>
+      <span class="source-posture fixture">Loading…</span>
+    </div>
+    <div class="loading-message">Loading e-sig status…</div>`;
+
+  const res = await api('esig-status');
+  if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load e-sig status</div>`; return; }
+  const users = res.data;
+  const agg = res.aggregates;
+  const grounding = res.vistaGrounding;
+
+  const rows = users.map(u => {
+    const statusBadge = u.esigStatus === 'active' ? 'badge-active'
+      : u.esigStatus === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
+    return `
+      <tr>
+        <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
+        <td>${u.duz ?? '—'}</td>
+        <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(u.esigStatus)}</span></td>
+        <td>${u.hasCode ? 'Yes' : 'No'}</td>
+      </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <h1>Electronic Signature Status</h1>
+      <span class="source-posture fixture">FIXTURE</span>
+    </div>
+    <div class="card-grid" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-label">Total Users</div>
+        <div class="card-value">${agg.total}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">E-Sig Active</div>
+        <div class="card-value" style="color:var(--color-success)">${agg.active}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Not Configured</div>
+        <div class="card-value" style="${agg.notConfigured > 0 ? 'color:var(--color-warning)' : ''}">${agg.notConfigured}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Revoked</div>
+        <div class="card-value" style="${agg.revoked > 0 ? 'color:var(--color-error)' : ''}">${agg.revoked}</div>
+      </div>
+    </div>
+    <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
+      <strong>VistA Grounding:</strong> E-signature codes are stored as hashed values in
+      <code>${escapeHtml(grounding.field)}</code> and <strong>cannot be retrieved</strong>.
+      Validation RPC: <code>${escapeHtml(grounding.validationRpc)}</code>.
+      ${escapeHtml(grounding.note)}
+      E-sig setup/reset is terminal-only — <a href="#/guided-tasks">guided workflow →</a>
+    </div>
+    <table class="data-table">
+      <thead><tr>
+        <th>Name</th><th>DUZ</th><th>User Status</th><th>E-Sig Status</th><th>Has Code</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ---------------------------------------------------------------------------
 // Guided Write Workflows
 // ---------------------------------------------------------------------------
 async function renderGuidedTasks(el) {
@@ -606,6 +796,41 @@ async function renderGuidedTasks(el) {
       ],
       terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
       whyTerminal: 'Clinic setup involves multiple File 44 sub-nodes and scheduling cross-references that require interactive FileMan entry.',
+    },
+    {
+      id: 'setup-esig',
+      title: 'Set Up Electronic Signature',
+      description: 'Configure or reset a user\'s electronic signature code in File 200 field 20.4. E-sig is required for signing orders and notes.',
+      vistaTarget: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal (SSH or Docker exec)',
+        'Navigate: EVE > User Management > Electronic Signature',
+        'Select user by name or DUZ',
+        'User enters new signature code (interactive, not scriptable)',
+        'VistA hashes and stores in File 200 field 20.4',
+        'Verify: ORWU VALIDSIG returns confirmation for the user',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'Electronic signature codes are hashed by VistA Kernel (ENCRYP^XUSRB1) and stored in File 200 field 20.4. The code must be entered interactively — it cannot be set via RPC. This is a VistA security design constraint.',
+    },
+    {
+      id: 'deactivate-user',
+      title: 'Deactivate User (DISUSER)',
+      description: 'Set DISUSER flag (File 200 field 4) to prevent a user from logging into VistA. Does not delete the record.',
+      vistaTarget: 'File 200 field 4 (DISUSER)',
+      riskLevel: 'high',
+      steps: [
+        'Open VistA terminal',
+        'Navigate: EVE > User Management > Edit an Existing User',
+        'Select user by name or DUZ',
+        'Set DISUSER field to YES',
+        'Optionally remove security keys to prevent residual access',
+        'Optionally clear electronic signature code',
+        'Verify: user cannot authenticate via XUS SIGNON SETUP',
+      ],
+      terminalCommand: 'docker exec -it vehu su - vehu -c "mumps -r ^XUP"',
+      whyTerminal: 'User deactivation involves DISUSER flag plus potential key revocation and signature code clearing. Multiple cross-referenced fields must be coordinated within VistA\'s FileMan transaction model.',
     },
   ];
 

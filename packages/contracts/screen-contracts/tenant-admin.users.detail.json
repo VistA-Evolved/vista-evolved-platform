@@ -1,9 +1,9 @@
 {
   "surfaceId": "tenant-admin.users.detail",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "title": "User Detail",
   "status": "draft",
-  "description": "Detail view for a single user within a tenant. Displays platform identity and VistA File 200 attributes (keys, menu options, person class). VistA attributes are read-only. Role/key assignment posture requires VistA RPC research for programmatic key assignment.",
+  "description": "Detail view for a single user within a tenant. Displays platform identity and VistA File 200 attributes: DUZ, initials, person class, service/section, division, primary menu option, DISUSER flag, electronic signature status (field 20.4), and security key assignments. VistA attributes are read-only. Key assignment and e-sig setup require guided terminal workflows.",
   "workspaceFamily": "tenant-admin",
   "navigationLevel": "local",
   "surfaceType": "admin",
@@ -23,7 +23,16 @@
     {
       "sourceId": "vista-file-200",
       "sourceDomainClass": "vista-operational-truth",
-      "description": "VistA user record detail — DUZ, keys, menu options, person class. Read-only mirror."
+      "description": "VistA user record detail — DUZ, initials (field 1), person class, service/section (field 29), division, primary menu option (field 201), DISUSER (field 4), electronic signature status (field 20.4). Read-only mirror.",
+      "vistaFields": [
+        { "field": ".01", "name": "NAME", "display": true },
+        { "field": "1", "name": "INITIALS", "display": true },
+        { "field": "4", "name": "DISUSER", "display": true },
+        { "field": "20.4", "name": "ELECTRONIC SIGNATURE CODE", "display": "presence-only" },
+        { "field": "29", "name": "SERVICE/SECTION", "display": true },
+        { "field": "201", "name": "PRIMARY MENU OPTION", "display": true }
+      ],
+      "rpcs": ["XUS GET USER INFO", "ORWU USERINFO", "ORWU HASKEY", "ORWU VALIDSIG"]
     }
   ],
   "dataClassification": "configuration",
