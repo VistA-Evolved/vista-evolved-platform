@@ -16,30 +16,115 @@
     </div>
 
     <div class="shell">
-      <!-- Left navigation — concern-area groups (design-contract-v1 §3) -->
+      <!-- Left navigation — 7 domain groups per blueprint -->
       <nav class="left-nav" id="left-nav">
         <a href="#/dashboard" data-surface="dashboard" class="nav-link active">Dashboard</a>
 
-        <div class="nav-group-label">USERS &amp; ROLES</div>
-        <a href="#/users" data-surface="users-list" class="nav-link">User List</a>
-        <a href="#/roles" data-surface="roles-assignment" class="nav-link">Role Assignment</a>
-        <a href="#/key-inventory" data-surface="key-inventory" class="nav-link">Key Inventory</a>
-        <a href="#/esig-status" data-surface="esig-status" class="nav-link">E-Sig Status</a>
+        <div class="nav-group" data-group="users">
+          <div class="nav-group-header" data-toggle="users">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>USERS &amp; ACCESS</span>
+            <span class="nav-group-badge" id="nav-badge-users"></span>
+          </div>
+          <div class="nav-group-items" id="nav-items-users">
+            <a href="#/users" class="nav-link">User List</a>
+            <a href="#/roles" class="nav-link">Security Keys (Roles)</a>
+            <a href="#/key-inventory" class="nav-link">Key Inventory</a>
+            <a href="#/esig-status" class="nav-link">E-Sig Status</a>
+            <a href="#/access-profiles" class="nav-link">Access Profiles</a>
+            <a href="#/file-access" class="nav-link">File Access Security</a>
+          </div>
+        </div>
 
-        <div class="nav-group-label">FACILITIES</div>
-        <a href="#/facilities" data-surface="facilities-list" class="nav-link">Facility List</a>
-        <a href="#/clinics" data-surface="clinics-list" class="nav-link">Clinic List</a>
-        <a href="#/wards" data-surface="wards-list" class="nav-link">Ward List</a>
-        <a href="#/devices" data-surface="devices-list" class="nav-link">Devices</a>
-        <a href="#/params/kernel" data-surface="params-kernel" class="nav-link">Kernel params</a>
+        <div class="nav-group" data-group="facilities">
+          <div class="nav-group-header" data-toggle="facilities">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>FACILITIES &amp; LOCATIONS</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-facilities">
+            <a href="#/facilities" class="nav-link">Facility List</a>
+            <a href="#/clinics" class="nav-link">Clinics</a>
+            <a href="#/wards" class="nav-link">Wards</a>
+            <a href="#/beds" class="nav-link">Room-Bed Management</a>
+            <a href="#/treating-specialties" class="nav-link">Treating Specialties</a>
+            <a href="#/scheduling-config" class="nav-link">Scheduling Config</a>
+          </div>
+        </div>
 
-        <div class="nav-group-label">VISTA</div>
-        <a href="#/vista-tools" data-surface="vista-tools" class="nav-link">VistA tools</a>
+        <div class="nav-group" data-group="devices">
+          <div class="nav-group-header" data-toggle="devices">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>DEVICES &amp; CONNECTIVITY</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-devices">
+            <a href="#/devices" class="nav-link">Devices (Printers)</a>
+            <a href="#/terminal-types" class="nav-link">Terminal Types</a>
+            <a href="#/hl7-interfaces" class="nav-link">HL7 Interfaces</a>
+            <a href="#/rpc-status" class="nav-link">RPC Broker Status</a>
+          </div>
+        </div>
 
-        <div class="nav-group-label nav-group-planned">PLANNED</div>
-        <a href="#/modules" data-surface="modules" class="nav-link nav-planned">Module Entitlements</a>
-        <a href="#/connections" data-surface="connections" class="nav-link nav-planned">VistA Connections</a>
-        <a href="#/site-params" data-surface="site-params" class="nav-link nav-planned">Site Parameters</a>
+        <div class="nav-group" data-group="clinical">
+          <div class="nav-group-header" data-toggle="clinical">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>CLINICAL CONFIG</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-clinical">
+            <a href="#/order-config" class="nav-link">Order Entry</a>
+            <a href="#/tiu-config" class="nav-link">TIU / Notes</a>
+            <a href="#/pharmacy-config" class="nav-link">Pharmacy</a>
+            <a href="#/lab-config" class="nav-link">Laboratory</a>
+            <a href="#/radiology-config" class="nav-link">Radiology</a>
+            <a href="#/nursing-config" class="nav-link">Nursing</a>
+            <a href="#/health-summary-config" class="nav-link">Health Summary</a>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="billing">
+          <div class="nav-group-header" data-toggle="billing">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>BILLING &amp; INSURANCE</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-billing">
+            <a href="#/billing-params" class="nav-link">Billing Parameters</a>
+            <a href="#/insurance" class="nav-link">Insurance Companies</a>
+            <a href="#/encounter-forms" class="nav-link">Encounter Forms</a>
+            <a href="#/claims-tracking" class="nav-link">Claims Tracking</a>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="system">
+          <div class="nav-group-header" data-toggle="system">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>SYSTEM &amp; PARAMETERS</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-system">
+            <a href="#/params/kernel" class="nav-link">Kernel Site Params</a>
+            <a href="#/mailman-config" class="nav-link">MailMan</a>
+            <a href="#/taskman" class="nav-link">TaskMan</a>
+            <a href="#/menu-management" class="nav-link">Menu Management</a>
+            <a href="#/error-trap" class="nav-link">Error Processing</a>
+            <a href="#/packages" class="nav-link">Installed Packages</a>
+            <a href="#/modules" class="nav-link">Module Entitlements</a>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="monitoring">
+          <div class="nav-group-header" data-toggle="monitoring">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>MONITORING &amp; REPORTS</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-monitoring">
+            <a href="#/monitoring/status" class="nav-link">System Status</a>
+            <a href="#/monitoring/audit" class="nav-link">Audit Trail</a>
+            <a href="#/reports/billing" class="nav-link">Billing Report</a>
+            <a href="#/reports/scheduling" class="nav-link">Scheduling Report</a>
+            <a href="#/reports/lab" class="nav-link">Lab Report</a>
+            <a href="#/reports/radiology" class="nav-link">Radiology Report</a>
+            <a href="#/reports/nursing" class="nav-link">Nursing Report</a>
+            <a href="#/vista-tools" class="nav-link">VistA Tools (DDR)</a>
+          </div>
+        </div>
 
         <div class="nav-role-badge" id="role-badge">Role: Tenant Admin</div>
       </nav>

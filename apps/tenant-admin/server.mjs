@@ -29,6 +29,8 @@ import {
   probeDdrRpcFamily,
   ddrGetsFile200,
   ddrListerSecurityKeys,
+  resolveUserName,
+  ddrGetsEntry,
   ddrValidateField,
   ddrFilerEdit,
   ddrFilerAdd,
@@ -119,15 +121,38 @@ async function main() {
     const { userId } = req.params;
 
     // VistA-first: DDR GETS ENTRY DATA on File 200 (full field read path)
+    // 200.05 (Person Class) is a sub-file -- requires separate DDR LISTER call
+    // .01 NAME field often returns empty from DDR GETS (NAME-type field) -- merge from ORWU NEWPERS
+    const DETAIL_FIELDS_FULL = '.01;4;5;8;9;20.2;20.3;20.4;29;.132;.133;.134;.151;41.99;53.1;53.2;53.5;53.11;55;201';
+    const DETAIL_FIELDS_BASIC = '.01;4;5;8;9;20.2;20.3;20.4;29';
     try {
-      const ddr = await ddrGetsFile200(userId);
-      if (ddr.ok && (ddr.rawLines?.length > 0 || Object.keys(ddr.data).length > 0)) {
+      let ddr = await ddrGetsFile200(userId, DETAIL_FIELDS_FULL);
+      const hasError = (ddr.rawLines || []).some(l => l === '[ERROR]' || l.startsWith('[ERROR]'));
+      if (hasError) {
+        ddr = await ddrGetsFile200(userId, DETAIL_FIELDS_BASIC);
+      }
+      const realData = !((ddr.rawLines || []).some(l => l === '[ERROR]'));
+      if (ddr.ok && realData && (ddr.rawLines?.length > 0 || Object.keys(ddr.data).length > 0)) {
         const d = ddr.data;
-        const name =
-          d['.01'] ||
-          d['200,.01'] ||
-          (ddr.rawLines.find(l => l.includes('200') && l.includes('.01')) || '').split('^').pop() ||
-          `User ${userId}`;
+        const g = (f) => d[f] || d[`200,${f}`] || '';
+        let resolvedName = g('.01');
+        if (!resolvedName) {
+          try {
+            const nr = await resolveUserName(userId);
+            if (nr.ok) resolvedName = nr.name;
+          } catch (_) { /* ignore */ }
+        }
+        if (!resolvedName) {
+          try {
+            const usersRes = await fetchVistaUsers('');
+            if (usersRes.ok) {
+              const match = usersRes.data.find(u => String(u.ien) === String(userId));
+              if (match) resolvedName = match.name;
+            }
+          } catch (_) { /* ignore */ }
+        }
+        const name = resolvedName || `User ${userId}`;
+        const hasEsigCode = Boolean(g('20.4'));
         return {
           ok: true,
           source: 'vista',
@@ -136,11 +161,40 @@ async function main() {
             ien: userId,
             name: String(name).trim() || `User ${userId}`,
             username: String(name).trim(),
+            title: g('8') || '',
             status: 'active',
             roles: [],
             vistaFields: ddr.data,
             ddrRawLines: ddr.rawLines,
-            vistaGrounding: { duz: userId, file200Status: 'ddr-gets', rpcUsed: ddr.rpcUsed },
+            vistaGrounding: {
+              duz: userId,
+              file200Status: 'ddr-gets',
+              rpcUsed: ddr.rpcUsed,
+              sex: g('4') || '',
+              dob: g('5') || '',
+              ssn: g('9') || '',
+              officePhone: g('.132') || '',
+              voicePager: g('.133') || '',
+              digitalPager: g('.134') || '',
+              email: g('.151') || '',
+              initials: g('20.2') || '',
+              sigBlockName: g('20.3') || '',
+              npi: g('41.99') || '',
+              stateLicense: g('53.1') || '',
+              dea: g('53.2') || '',
+              providerType: g('53.5') || '',
+              authMeds: g('53.11') || '',
+              pharmSchedules: g('55') || '',
+              personClass: '',
+              primaryMenuOption: g('201') || '',
+              serviceSection: g('29') || '',
+              electronicSignature: {
+                status: hasEsigCode ? 'active' : 'not-configured',
+                hasCode: hasEsigCode,
+                sigBlockName: g('20.3') || '',
+                sigBlockTitle: '',
+              },
+            },
           },
           vistaStatus: 'reachable',
         };
@@ -708,7 +762,7 @@ async function main() {
     }
   });
 
-  /** Direct write: update allow-listed File 200 contact fields via DDR VALIDATOR + DDR FILER */
+  /** Direct write: update allow-listed File 200 fields via DDR VALIDATOR + DDR FILER */
   app.put('/api/tenant-admin/v1/users/:ien', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
@@ -721,11 +775,16 @@ async function main() {
       '.133': 'VOICE PAGER',
       '.134': 'DIGITAL PAGER',
       '.151': 'MAIL CODE',
+      '4': 'SEX',
+      '20.2': 'ELECTRONIC SIGNATURE INITIALS',
+      '20.3': 'SIGNATURE BLOCK PRINTED NAME',
+      '20.4': 'ELECTRONIC SIGNATURE CODE',
+      '201': 'PRIMARY MENU OPTION',
     };
     if (!field || value === undefined || !ALLOW[field]) {
       return reply.code(400).send({
         ok: false,
-        error: 'field and value required; field must be an allow-listed contact field',
+        error: 'field and value required; field must be an allow-listed field',
         allowedFields: Object.keys(ALLOW),
         labels: ALLOW,
       });
@@ -829,7 +888,25 @@ async function main() {
     }
     if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
     const newIen = (z.line0 || '').split('^')[1] || null;
-    return { ok: true, tenantId, newIen, rpcUsed: z.rpcUsed, lines: z.lines };
+    const extraFields = [];
+    const EXTRA_MAP = {
+      title: '8', ssn: '9', sex: '4', dob: '5',
+      serviceSection: '29',
+      division: null, // sub-file 200.02 — requires ZVE USMG routine, not simple DDR FILER
+      primaryMenu: '201',
+    };
+    if (newIen) {
+      const iens = `${newIen},`;
+      for (const [key, fld] of Object.entries(EXTRA_MAP)) {
+        if (body[key] && fld) {
+          try {
+            await ddrFilerEdit(200, iens, fld, String(body[key]), 'E');
+            extraFields.push({ field: fld, key, status: 'ok' });
+          } catch (e) { extraFields.push({ field: fld, key, status: 'error', detail: e.message }); }
+        }
+      }
+    }
+    return { ok: true, tenantId, newIen, rpcUsed: z.rpcUsed, lines: z.lines, extraFields };
   });
 
   app.post('/api/tenant-admin/v1/users/:duz/esig', async (req, reply) => {
@@ -848,16 +925,45 @@ async function main() {
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
+  app.post('/api/tenant-admin/v1/users/:duz/provider', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const PROV_FIELDS = {
+      npi: { file200: '41.99', label: 'NPI' },
+      dea: { file200: '53.2', label: 'DEA NUMBER' },
+      stateLicense: { file200: '53.1', label: 'STATE LICENSE NUMBER' },
+      personClass: { file200: '200.05', label: 'PERSON CLASS' },
+      providerType: { file200: '53.5', label: 'PROVIDER TYPE' },
+      authMeds: { file200: '53.11', label: 'AUTHORIZED TO WRITE MED ORDERS' },
+      pharmSchedules: { file200: '55', label: 'DEA# SUFFIX / PHARMACY SCHEDULES' },
+      sigBlockTitle: { file200: '20.3', label: 'SIGNATURE BLOCK TITLE (piece 2)' },
+      title: { file200: '8', label: 'TITLE (pointer to File 3.1)' },
+    };
+    const fieldKey = body.field;
+    const value = body.value;
+    if (!fieldKey || !value || !PROV_FIELDS[fieldKey]) {
+      return reply.code(400).send({ ok: false, error: 'field and value required', allowedFields: Object.keys(PROV_FIELDS) });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const pf = PROV_FIELDS[fieldKey];
+    const iens = `${req.params.duz},`;
+    const filer = await ddrFilerEdit(200, iens, pf.file200, String(value), 'E');
+    if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', field: pf.label, error: filer.error });
+    return { ok: true, tenantId, duz: req.params.duz, field: pf.label, rpcUsed: 'DDR FILER' };
+  });
+
   app.put('/api/tenant-admin/v1/users/:duz/credentials', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const body = req.body || {};
-    if (!body.accessCode || !body.verifyCode) {
-      return reply.code(400).send({ ok: false, error: 'accessCode and verifyCode required' });
+    if (!body.accessCode && !body.verifyCode) {
+      return reply.code(400).send({ ok: false, error: 'accessCode or verifyCode required' });
     }
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
-    const z = await callZveRpc('ZVE USMG CRED', [String(req.params.duz), String(body.accessCode), String(body.verifyCode)]);
+    const z = await callZveRpc('ZVE USMG CRED', [String(req.params.duz), String(body.accessCode || ''), String(body.verifyCode || '')]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') {
       return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG CRED not registered.', detail: o.msg });
@@ -939,7 +1045,7 @@ async function main() {
       const lines = await lockedRpc(async () => {
         const broker = await getBroker();
         return broker.callRpcWithList('DDR GETS ENTRY DATA', [
-          { type: 'list', value: { FILE: '8989.3', IENS: '1,', FIELDS: '.01;.02;.03;.04;.05' } },
+          { type: 'list', value: { FILE: '8989.3', IENS: '1,', FIELDS: '.01;.02;.03;.04;.05;205;210;230;240;501' } },
         ]);
       });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '8989.3', rawLines: lines };
@@ -954,6 +1060,11 @@ async function main() {
     '.03': 'DEFAULT INSTITUTION',
     '.04': 'DEFAULT AUTO MENU',
     '.05': 'DEFAULT LANGUAGE',
+    '205': 'AGENCY CODE',
+    '210': 'DEFAULT TIMEOUT',
+    '230': 'PRODUCTION ACCOUNT',
+    '240': 'BROKER TIMEOUT',
+    '501': 'MULTIPLE SIGN-ON',
   };
 
   app.put('/api/tenant-admin/v1/params/kernel', async (req, reply) => {
@@ -1095,6 +1206,7 @@ async function main() {
     let facilityCount = 0;
     let bedCount = 0;
     let roleCount = fixtures.roles.length;
+    let deviceCount = 0;
     let esigActiveCount = 0;
 
     if (probe.ok) {
@@ -1107,6 +1219,17 @@ async function main() {
         if (clinicsRes.ok) { clinicCount = clinicsRes.data.length; facilityCount = clinicsRes.data.length; }
         if (wardsRes.ok) { wardCount = wardsRes.data.length; }
         if (keysRes.ok) { roleCount = keysRes.data.length; }
+        try {
+          const devRows = await lockedRpc(async () => {
+            const broker = await getBroker();
+            const lines = await broker.callRpcWithList('DDR LISTER', [
+              { type: 'list', value: { FILE: '3.5', FIELDS: '.01', FLAGS: 'IP', MAX: '999' } },
+            ]);
+            const parsed = parseDdrListerResponse(lines);
+            return parsed.ok ? parsed.data.length : 0;
+          });
+          deviceCount = devRows;
+        } catch (_) { /* ignore */ }
         if (usersRes.ok) {
           const es = await fetchVistaEsigStatusForUsers(usersRes.data, 120);
           if (es.ok) { esigActiveCount = es.data.filter(u => u.hasCode).length; }
@@ -1149,11 +1272,525 @@ async function main() {
         bedCount,
         roleCount,
         esigActiveCount,
+        deviceCount,
         vistaGrounding: probe.ok ? 'connected' : 'integration-pending',
         vistaUrl: probe.url || null,
         moduleStatus: { enabled: 0, total: 0 }
       }
     };
+  });
+
+  /** Clinic detail (File 44) via DDR GETS ENTRY DATA — all scheduling + basic fields */
+  app.get('/api/tenant-admin/v1/clinics/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const { ien } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const ddr = await ddrGetsEntry('44', ien, '.01;1;2;3;4;8;9;16;1912;1913;1914;1917;1918;1918.5;1920;2002;2503');
+      return { ok: true, source: 'vista', tenantId, ien, rpcUsed: ddr.rpcUsed, file: '44', data: ddr.data, rawLines: ddr.rawLines };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  /** Edit clinic field (File 44) via DDR VALIDATOR + DDR FILER */
+  const CLINIC44_ALLOW = {
+    '.01': 'CLINIC NAME', '2': 'ABBREVIATION', '8': 'STOP CODE NUMBER',
+    '16': 'DEFAULT PROVIDER', '1912': 'LENGTH OF APPOINTMENT',
+    '1913': 'VARIABLE APPOINTMENT LENGTH', '1914': 'HOUR CLINIC DISPLAY BEGINS',
+    '1917': 'DISPLAY INCREMENTS PER HOUR', '1918': 'OVERBOOKS/DAY MAXIMUM',
+    '1918.5': 'SCHEDULE ON HOLIDAYS', '1920': 'ALLOWABLE CONSECUTIVE NO-SHOWS',
+    '2002': 'MAX DAYS FOR FUTURE BOOKING', '2503': 'CREDIT STOP CODE',
+  };
+
+  app.put('/api/tenant-admin/v1/clinics/:ien/fields', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const field = body.field;
+    const value = body.value;
+    if (!field || value === undefined || !CLINIC44_ALLOW[field]) {
+      return reply.code(400).send({ ok: false, error: 'field and value required', allowedFields: Object.keys(CLINIC44_ALLOW), labels: CLINIC44_ALLOW });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const iens = `${req.params.ien},`;
+    const valRes = await ddrValidateField(44, iens, field, String(value));
+    if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+    const filer = await ddrFilerEdit(44, iens, field, String(value), 'E');
+    if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error });
+    return { ok: true, tenantId, ien: req.params.ien, field, rpcUsed: ['DDR VALIDATOR', 'DDR FILER'], filerLines: filer.lines };
+  });
+
+  /** Ward detail (File 42) via DDR GETS ENTRY DATA */
+  app.get('/api/tenant-admin/v1/wards/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const { ien } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const ddr = await ddrGetsEntry('42', ien, '.01;.015;1;2;3;.1;.105');
+      return { ok: true, source: 'vista', tenantId, ien, rpcUsed: ddr.rpcUsed, file: '42', data: ddr.data, rawLines: ddr.rawLines };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  /** Device detail (File 3.5) via DDR GETS ENTRY DATA */
+  app.get('/api/tenant-admin/v1/devices/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const { ien } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const ddr = await ddrGetsEntry('3.5', ien, '.01;1;2;3;4;5;6;7;8;9;10;11;50');
+      return { ok: true, source: 'vista', tenantId, ien, rpcUsed: ddr.rpcUsed, file: '3.5', data: ddr.data, rawLines: ddr.rawLines };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  /** Edit device field (File 3.5) via DDR VALIDATOR + DDR FILER */
+  const DEVICE35_ALLOW = {
+    '.01': 'NAME', '1': '$I', '2': 'ASK DEVICE', '3': 'TYPE',
+    '4': 'SUBTYPE', '5': 'LOCATION OF TERMINAL', '6': 'RIGHT MARGIN',
+    '7': 'FORM FEED', '8': 'PAGE LENGTH', '9': 'CLOSE EXECUTE',
+    '10': 'OPEN PARAMETERS', '11': 'CLOSE PARAMETERS', '50': 'OUT OF SERVICE',
+  };
+
+  app.put('/api/tenant-admin/v1/devices/:ien/fields', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const field = body.field;
+    const value = body.value;
+    if (!field || value === undefined || !DEVICE35_ALLOW[field]) {
+      return reply.code(400).send({ ok: false, error: 'field and value required', allowedFields: Object.keys(DEVICE35_ALLOW), labels: DEVICE35_ALLOW });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+    const iens = `${req.params.ien},`;
+    const valRes = await ddrValidateField(3.5, iens, field, String(value));
+    if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+    const filer = await ddrFilerEdit(3.5, iens, field, String(value), 'E');
+    if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error });
+    return { ok: true, tenantId, ien: req.params.ien, field, rpcUsed: ['DDR VALIDATOR', 'DDR FILER'], filerLines: filer.lines };
+  });
+
+  /** Test print to device (File 3.5) — requires ZVE overlay routine */
+  app.post('/api/tenant-admin/v1/devices/:ien/test-print', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE DEV TESTPRINT', [String(req.params.ien)]);
+    const o = zveOutcome(z);
+    if (o.kind === 'missing') {
+      return reply.code(501).send({
+        ok: false,
+        integrationPending: true,
+        error: 'RPC ZVE DEV TESTPRINT not registered. Run INSTALL^ZVEDEV in VistA.',
+        detail: o.msg,
+      });
+    }
+    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    return { ok: true, tenantId, ien: req.params.ien, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  /** Delete device (File 3.5) via DDR DELETE ENTRY */
+  app.delete('/api/tenant-admin/v1/devices/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const iens = `${req.params.ien},`;
+    try {
+      const lines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpcWithList('DDR DELETE ENTRY', [
+          { type: 'list', value: { FILE: '3.5', IENS: iens } },
+        ]);
+      });
+      const hasError = lines.some(l => l.includes('[ERROR]') || l.includes('[Data]'));
+      if (hasError) {
+        return reply.code(502).send({ ok: false, error: 'DDR DELETE ENTRY returned error', lines });
+      }
+      return { ok: true, tenantId, ien: req.params.ien, rpcUsed: 'DDR DELETE ENTRY', lines };
+    } catch (e) {
+      if (isRpcMissingError(e.message || '')) {
+        return reply.code(501).send({
+          ok: false,
+          integrationPending: true,
+          error: 'DDR DELETE ENTRY not available.',
+          detail: e.message,
+        });
+      }
+      return reply.code(502).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ---- Terminal Types (File 3.2) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/terminal-types', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '3.2', FIELDS: '.01;1;2;3', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', rightMargin: a[2]?.trim() || '', formFeed: a[3]?.trim() || '', pageLength: a[4]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '3.2', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Treating Specialties (File 45.7) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/treating-specialties', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '45.7', FIELDS: '.01;1;2', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', service: a[2]?.trim() || '', specialty: a[3]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '45.7', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Room-Bed Management (File 405.4) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/room-beds', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '405.4', FIELDS: '.01;.02;.2', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, roomBed: a[1]?.trim() || '', description: a[2]?.trim() || '', outOfService: a[3]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '405.4', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Installed Packages (File 9.4) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/packages', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '9.4', FIELDS: '.01;1;2', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', prefix: a[2]?.trim() || '', shortDesc: a[3]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '9.4', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- HL7 Interfaces (File 870 — HL LOGICAL LINK) via DDR LISTER (read-only) ----
+
+  app.get('/api/tenant-admin/v1/hl7-interfaces', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '870', FIELDS: '.01;2;4;200.02', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', institution: a[2]?.trim() || '', lowerLayer: a[3]?.trim() || '', autostart: a[4]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '870', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Insurance Companies (File 36) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/insurance-companies', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '36', FIELDS: '.01;.111;.114;.115;.116', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', streetAddr: a[2]?.trim() || '', city: a[3]?.trim() || '', state: a[4]?.trim() || '', zip: a[5]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '36', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Appointment Types (File 409.1) via DDR LISTER ----
+
+  app.get('/api/tenant-admin/v1/appointment-types', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '409.1', FIELDS: '.01;3;4', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', inactive: a[2]?.trim() || '', synonym: a[3]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '409.1', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Menu Options (File 19) via DDR LISTER (read-only) ----
+
+  app.get('/api/tenant-admin/v1/menu-options', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '19', FIELDS: '.01;1;3.6;4', FLAGS: 'IP', MAX: '200' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', menuText: a[2]?.trim() || '', type: a[3]?.trim() || '', description: a[4]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '19', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Drug File / Formulary (File 50) via DDR LISTER (read-only) ----
+
+  app.get('/api/tenant-admin/v1/drug-file', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '50', FIELDS: '.01;2;3;100', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', vaClass: a[2]?.trim() || '', dea: a[3]?.trim() || '', inactiveDate: a[4]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '50', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Lab Tests (File 60) via DDR LISTER (read-only) ----
+
+  app.get('/api/tenant-admin/v1/lab-tests', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '60', FIELDS: '.01;3;4', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '', type: a[2]?.trim() || '', subscript: a[3]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '60', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- TaskMan Status (File 14.4) via DDR LISTER (read-only) ----
+
+  app.get('/api/tenant-admin/v1/taskman-tasks', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '14.4', FIELDS: '.01;2;6;51', FLAGS: 'IP', MAX: '200' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, entryPoint: a[1]?.trim() || '', routine: a[2]?.trim() || '', scheduledRun: a[3]?.trim() || '', statusCode: a[4]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '14.4', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  // ---- Titles (File 3.1) via DDR LISTER (read-only) ----
+
+  app.get('/api/tenant-admin/v1/titles', async (req) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'integration-pending', error: p.error };
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '3.1', FIELDS: '.01', FLAGS: 'IP', MAX: '999' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({ ien, name: a[1]?.trim() || '' });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '3.1', data: rows };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
   });
 
   // ---- SPA fallback ----

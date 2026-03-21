@@ -401,9 +401,26 @@ let _broker = null;
 export async function getBroker() {
   if (_broker && _broker.connected) return _broker;
   if (_broker) { _broker.disconnect(); }
-  _broker = new XwbBroker();
-  await _broker.connect();
-  return _broker;
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      _broker = new XwbBroker();
+      await _broker.connect();
+      return _broker;
+    } catch (err) {
+      const msg = err.message || '';
+      const isCipherIssue = /not a valid access|cipher|garbled/i.test(msg);
+      if (isCipherIssue && attempt < MAX_RETRIES) {
+        dbg('RETRY', `Cipher pad issue on attempt ${attempt}, retrying...`);
+        try { _broker.disconnect(); } catch {}
+        _broker = null;
+        await new Promise(r => setTimeout(r, 500 * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Failed to connect after ' + MAX_RETRIES + ' attempts');
 }
 
 /**

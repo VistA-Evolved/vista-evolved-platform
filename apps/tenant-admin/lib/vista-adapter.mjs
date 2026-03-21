@@ -325,28 +325,67 @@ export async function probeDdrRpcFamily() {
  * @param {string} ien - File 200 IEN
  * @param {string} fields - Semicolon-separated field numbers (e.g. ".01;1;4;8;20.2;20.3;20.4")
  */
-export async function ddrGetsFile200(ien, fields = '.01;1;4;8;9;20.2;20.3;20.4;29') {
+function parseDdrGetsLines(lines) {
+  // DDR GETS response: fileNum^iens^fieldNum^externalValue^internalValue
+  const fieldsOut = {};
+  const allLines = [];
+  for (const line of lines) {
+    allLines.push(line);
+    if (!line.includes('^')) continue;
+    const parts = line.split('^');
+    if (parts.length < 3) continue;
+    const fieldNum = parts[2];
+    if (!fieldNum || fieldNum === '') continue;
+    const extVal = parts[3] || '';
+    const intVal = parts[4] || '';
+    fieldsOut[fieldNum] = extVal || intVal;
+  }
+  const hasError = allLines.some(l => l === '[ERROR]' || l.startsWith('[ERROR]'));
+  return { fieldsOut, allLines, hasError };
+}
+
+/**
+ * Generic DDR GETS ENTRY DATA with field-by-field fallback.
+ * Many VistA instances return [ERROR] for multi-field requests but succeed per-field.
+ */
+export async function ddrGetsEntry(file, ien, fields) {
   return lockedRpc(async () => {
     try {
       const broker = await getBroker();
+      // First try all fields at once
       const lines = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
-        { type: 'list', value: { FILE: '200', IENS: `${ien},`, FIELDS: fields } },
+        { type: 'list', value: { FILE: String(file), IENS: `${ien},`, FIELDS: fields } },
       ]);
+      const result = parseDdrGetsLines(lines);
+      if (!result.hasError && Object.keys(result.fieldsOut).length > 0) {
+        return { ok: true, source: 'vista', rpcUsed: 'DDR GETS ENTRY DATA', ien, data: result.fieldsOut, rawLines: result.allLines };
+      }
+      // Fallback: call field-by-field
+      const fieldList = fields.split(';').filter(Boolean);
       const fieldsOut = {};
-      for (const line of lines) {
-        if (!line.includes('^')) continue;
-        const parts = line.split('^');
-        const fn = parts[1] || parts[0];
-        if (fn) fieldsOut[String(fn).replace(/^200,/, '')] = parts.slice(2).join('^') || parts[parts.length - 1];
+      const allLines = [];
+      for (const f of fieldList) {
+        try {
+          const fl = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
+            { type: 'list', value: { FILE: String(file), IENS: `${ien},`, FIELDS: f } },
+          ]);
+          const r = parseDdrGetsLines(fl);
+          if (!r.hasError) Object.assign(fieldsOut, r.fieldsOut);
+          allLines.push(...fl);
+        } catch (_) { /* skip failed field */ }
       }
-      if (lines.length && Object.keys(fieldsOut).length === 0) {
-        fieldsOut._rawLines = lines;
+      if (Object.keys(fieldsOut).length > 0) {
+        return { ok: true, source: 'vista', rpcUsed: 'DDR GETS ENTRY DATA (per-field)', ien, data: fieldsOut, rawLines: allLines };
       }
-      return { ok: true, source: 'vista', rpcUsed: 'DDR GETS ENTRY DATA', ien, data: fieldsOut, rawLines: lines };
+      return { ok: true, source: 'vista', rpcUsed: 'DDR GETS ENTRY DATA', ien, data: { _rawLines: lines }, rawLines: lines };
     } catch (err) {
       return { ok: false, source: 'unavailable', error: err.message };
     }
   });
+}
+
+export async function ddrGetsFile200(ien, fields = '.01;1;4;8;9;20.2;20.3;20.4;29') {
+  return ddrGetsEntry('200', ien, fields);
 }
 
 /**
@@ -389,6 +428,46 @@ export async function ddrListerSecurityKeys() {
 }
 
 /**
+ * Look up a File 200 user name by IEN using DDR LISTER with SCREEN filter.
+ * Falls back to ORWU NEWPERS partial search if DDR LISTER SCREEN fails.
+ */
+export async function resolveUserName(ien) {
+  return lockedRpc(async () => {
+    try {
+      const broker = await getBroker();
+      const lines = await broker.callRpcWithList('DDR LISTER', [
+        { type: 'list', value: { FILE: '200', FIELDS: '.01', FLAGS: 'IP', MAX: '1', SCREEN: `I DA=${ien}` } },
+      ]);
+      const parsed = parseDdrListerResponse(lines);
+      if (parsed.ok && parsed.data.length > 0) {
+        const parts = parsed.data[0].split('^');
+        const name = parts[1]?.trim();
+        if (name) return { ok: true, name };
+      }
+    } catch (_) { /* fall through */ }
+    try {
+      const broker = await getBroker();
+      const raw = await broker.callRpc('ORWU NEWPERS', [String(ien), '1']);
+      if (raw && typeof raw === 'string') {
+        const lines = raw.split('\n').filter(l => l.trim());
+        for (const line of lines) {
+          const parts = line.split('^');
+          if (String(parts[0]).trim() === String(ien)) {
+            return { ok: true, name: (parts[1] || '').trim() };
+          }
+        }
+        if (lines.length === 1) {
+          const parts = lines[0].split('^');
+          const name = (parts[1] || '').trim();
+          if (name) return { ok: true, name };
+        }
+      }
+    } catch (_) { /* fall through */ }
+    return { ok: false, name: '' };
+  });
+}
+
+/**
  * Validate a field value before filing (DDR VALIDATOR).
  */
 export async function ddrValidateField(file, iens, field, value) {
@@ -398,6 +477,18 @@ export async function ddrValidateField(file, iens, field, value) {
       const lines = await broker.callRpcWithList('DDR VALIDATOR', [
         { type: 'list', value: { FILE: String(file), IENS: iens, FIELD: String(field), VALUE: value } },
       ]);
+      const hasError = lines.some(l => l.includes('[BEGIN_diERRORS]') || l.includes('[ERROR]'));
+      if (hasError) {
+        const errLines = [];
+        let inErr = false;
+        for (const l of lines) {
+          if (l.includes('[BEGIN_diERRORS]')) { inErr = true; continue; }
+          if (l.includes('[END_diERRORS]')) { inErr = false; continue; }
+          if (inErr) errLines.push(l);
+        }
+        const msg = errLines.filter(l => !l.startsWith('FIELD^') && !l.startsWith('FILE^') && !l.startsWith('IENS^') && !l.match(/^\d+\^/)).join('; ') || 'Validation failed';
+        return { ok: false, rpcUsed: 'DDR VALIDATOR', error: msg, lines };
+      }
       return { ok: true, rpcUsed: 'DDR VALIDATOR', lines };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -418,6 +509,18 @@ export async function ddrFilerEdit(file, iens, field, value, flags = 'E') {
         { type: 'list', value: { '1': row } },
         { type: 'literal', value: flags },
       ]);
+      const hasError = lines.some(l => l.includes('[BEGIN_diERRORS]') || (l === '[ERROR]'));
+      if (hasError) {
+        const errLines = [];
+        let inErr = false;
+        for (const l of lines) {
+          if (l.includes('[BEGIN_diERRORS]')) { inErr = true; continue; }
+          if (l.includes('[END_diERRORS]')) { inErr = false; continue; }
+          if (inErr) errLines.push(l);
+        }
+        const msg = errLines.filter(l => !l.startsWith('FIELD^') && !l.startsWith('FILE^') && !l.startsWith('IENS^') && !l.match(/^\d+\^/)).join('; ') || 'DDR FILER error';
+        return { ok: false, rpcUsed: 'DDR FILER', error: msg, lines };
+      }
       return { ok: true, rpcUsed: 'DDR FILER', lines };
     } catch (err) {
       return { ok: false, error: err.message, rpcUsed: 'DDR FILER' };

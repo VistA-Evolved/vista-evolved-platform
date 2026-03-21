@@ -144,7 +144,7 @@
 | Concern | Canonical location | Notes |
 |---------|-------------------|-------|
 | **VistA RPC reference index** | `docs/reference/vista-rpc-reference-data.md` | Master index of all RPC reference material across all repos |
-| **VistA admin coverage map** | `docs/reference/vista-admin-coverage-map.md` | Maps every VistA terminal admin function to tenant-admin UI status. ~132 functions tracked: ~9% DONE, ~5% PARTIAL, ~86% MISSING. Priority roadmap for new site setup. |
+| **VistA admin coverage map** | `docs/reference/vista-admin-coverage-map.md` | Canonical map of ~117 VistA admin functions across 7 domains. ~24% PASS-LIVE, ~2% PASS-SHELL, ~74% MISSING. Supersedes prior gap docs. Field-level detail, VistA file/RPC, blocker IDs. |
 | Vivian RPC index (3,747) | VistA-Evolved (frozen): `data/vista/vivian/rpc_index.json` | Normalized flat RPC list |
 | Full File 8994 catalog | VistA-Evolved (frozen): `data/vista/rpcs/rpc-catalog.json` | ~4,500 RPCs with params |
 | Domain admin specs (15) | VistA-Evolved (frozen): `data/vista/admin-specs/*.json` | Per-domain RPC specs |
