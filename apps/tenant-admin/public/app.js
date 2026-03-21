@@ -88,6 +88,8 @@ const ROUTES = [
   { pattern: /^#\/clinics\/(.+)/, fn: (el, m) => renderClinicDetail(el, decodeURIComponent(m[1])) },
   { pattern: /^#\/wards\/(.+)/, fn: (el, m) => renderWardDetail(el, decodeURIComponent(m[1])) },
   { pattern: /^#\/devices\/(.+)/, fn: (el, m) => renderDeviceDetail(el, decodeURIComponent(m[1])) },
+  { pattern: /^#\/treating-specialties\/(.+)/, fn: (el, m) => renderTreatingSpecialtyDetail(el, decodeURIComponent(m[1])) },
+  { pattern: /^#\/appointment-types\/(.+)/, fn: (el, m) => renderAppointmentTypeDetail(el, decodeURIComponent(m[1])) },
   { pattern: '#/users', fn: renderUserList },
   { pattern: '#/facilities', fn: renderFacilityList },
   { pattern: '#/roles', fn: renderRoleAssignment },
@@ -217,6 +219,15 @@ function sourceBadge(source) {
   if (source === 'integration-pending') return '<span class="source-posture pending">INTEGRATION-PENDING</span>';
   if (source === 'error') return '<span class="source-posture error">ERROR</span>';
   return '<span class="source-posture error">UNKNOWN</span>';
+}
+
+function wireClickableRows(tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.querySelectorAll('tr.clickable-row').forEach(tr => {
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => { window.location.hash = tr.dataset.href; });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1407,18 +1418,24 @@ async function renderWardDetail(el, wardIen) {
       </div>
     </div>
     <div class="detail-section">
-      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">▾</span> Edit Ward Name</h2>
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Edit Ward Fields</h2>
       <div class="collapsible-content">
-        <div style="display:flex;gap:8px;align-items:flex-end;">
-          <label style="font-size:12px;">New Name<br/><input type="text" id="ward-edit-name" placeholder="Ward name" style="min-width:220px;" /></label>
-          <button type="button" class="btn-primary btn-sm" id="ward-edit-save">Rename</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+          <label style="font-size:12px;">Ward Name (.01)<br/><input type="text" id="ward-edit-name" value="${v('.01')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Abbreviation (.015)<br/><input type="text" id="ward-edit-abbr" value="${v('.015')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Operating Beds (.1)<br/><input type="text" id="ward-edit-beds" value="${v('.1')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Bedsects (3)<br/><input type="text" id="ward-edit-bedsects" value="${v('3')}" style="width:100%;" /></label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="ward-edit-save">Save to VistA</button>
+          <button type="button" class="btn-sm" onclick="window.location.hash='#/wards'">Cancel</button>
         </div>
         <div id="ward-edit-msg" style="margin-top:8px;font-size:12px;"></div>
       </div>
     </div>
     ${res.ok && res.rawLines ? `
     <div class="detail-section collapsed">
-      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">▾</span> Raw DDR GETS (File 42)</h2>
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Raw DDR GETS (File 42)</h2>
       <div class="collapsible-content">
         <pre style="font-size:11px;overflow:auto;max-height:200px;background:#f8fafc;padding:8px;border-radius:4px;">${escapeHtml(JSON.stringify(d, null, 2))}</pre>
       </div>
@@ -1426,14 +1443,23 @@ async function renderWardDetail(el, wardIen) {
 
   const saveBtn = document.getElementById('ward-edit-save');
   if (saveBtn) saveBtn.addEventListener('click', async () => {
-    const name = (document.getElementById('ward-edit-name') || {}).value || '';
     const msg = document.getElementById('ward-edit-msg');
-    if (!name.trim()) { msg.textContent = 'Name required.'; msg.style.color = '#b91c1c'; return; }
-    if (!confirm('Rename ward to "' + name.trim() + '"?')) return;
-    msg.textContent = 'Saving…'; msg.style.color = '';
-    const out = await apiPut(`wards/${encodeURIComponent(wardIen)}`, { name: name.trim() });
-    msg.textContent = out.ok ? 'Saved.' : (out.error || JSON.stringify(out));
+    const payload = {};
+    const nameVal = (document.getElementById('ward-edit-name') || {}).value;
+    const abbrVal = (document.getElementById('ward-edit-abbr') || {}).value;
+    const bedsVal = (document.getElementById('ward-edit-beds') || {}).value;
+    const bedsectsVal = (document.getElementById('ward-edit-bedsects') || {}).value;
+    if (nameVal && nameVal !== v('.01')) payload.name = nameVal;
+    if (abbrVal !== undefined) payload.division = abbrVal;
+    if (bedsVal && bedsVal !== v('.1')) payload.wardLocation = bedsVal;
+    if (bedsectsVal && bedsectsVal !== v('3')) payload.bedsects = bedsectsVal;
+    if (Object.keys(payload).length === 0) { msg.textContent = 'No changes detected.'; msg.style.color = '#92400e'; return; }
+    if (!confirm('Save changes to VistA?')) return;
+    msg.textContent = 'Saving...'; msg.style.color = '';
+    const out = await apiPut(`wards/${encodeURIComponent(wardIen)}/fields`, payload);
+    msg.textContent = out.ok ? 'Saved successfully.' : (out.error || JSON.stringify(out));
     msg.style.color = out.ok ? '#166534' : '#b91c1c';
+    if (out.ok) setTimeout(() => renderWardDetail(el, wardIen), 1000);
   });
 }
 
@@ -2131,13 +2157,142 @@ async function renderTreatingSpecialties(el) {
     </div>
     <table class="data-table">
       <thead><tr><th>IEN</th><th>Specialty Name</th><th>Service</th><th>Specialty Type</th></tr></thead>
-      <tbody id="ts-tbody">${rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.service || '—')}</td><td>${escapeHtml(r.specialty || '—')}</td></tr>`).join('') : '<tr><td colspan="4">No treating specialties found</td></tr>'}</tbody>
+      <tbody id="ts-tbody">${rows.length ? rows.map(r => `<tr class="clickable-row" data-href="#/treating-specialties/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.service || '—')}</td><td>${escapeHtml(r.specialty || '—')}</td></tr>`).join('') : '<tr><td colspan="4">No treating specialties found</td></tr>'}</tbody>
     </table>`;
+  wireClickableRows('ts-tbody');
   document.getElementById('ts-search').addEventListener('input', () => {
     const q = (document.getElementById('ts-search').value || '').toLowerCase();
     const filtered = rows.filter(r => (r.name || '').toLowerCase().includes(q));
-    document.getElementById('ts-tbody').innerHTML = filtered.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.service || '—')}</td><td>${escapeHtml(r.specialty || '—')}</td></tr>`).join('');
+    document.getElementById('ts-tbody').innerHTML = filtered.map(r => `<tr class="clickable-row" data-href="#/treating-specialties/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.service || '—')}</td><td>${escapeHtml(r.specialty || '—')}</td></tr>`).join('');
+    wireClickableRows('ts-tbody');
     document.getElementById('ts-count').textContent = `${filtered.length} of ${rows.length} specialties`;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Treating Specialty Detail + Edit (File 45.7)
+// ---------------------------------------------------------------------------
+async function renderTreatingSpecialtyDetail(el, tsIen) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/treating-specialties">Treating Specialties</a> › Specialty ${escapeHtml(tsIen)}</div><div class="loading-message">Loading from VistA...</div>`;
+  const res = await api(`treating-specialties/${encodeURIComponent(tsIen)}`);
+  const d = (res.ok && res.data && res.data.data) ? res.data.data : {};
+  const badge = sourceBadge(res.ok ? 'vista' : 'error');
+  const v = (f) => escapeHtml(d[f] || '');
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/treating-specialties">Treating Specialties</a> › ${v('.01') || 'Specialty ' + escapeHtml(tsIen)}</div>
+    <div class="page-header"><h1>${v('.01') || 'Treating Specialty'}</h1>${badge}</div>
+    <div class="explanation-header">
+      <strong>Treating Specialty (File 45.7)</strong>
+      Treating specialties are assigned to wards for bed management and workload reporting.
+      Edit via <code>DDR FILER</code>.
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Details</h2>
+      <div class="collapsible-content">
+        <dl>
+          <div class="detail-row"><dt>Specialty Name (.01)</dt><dd>${v('.01') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Specialty (1)</dt><dd>${v('1') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Service Connected (2)</dt><dd>${v('2') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>IEN</dt><dd>${escapeHtml(tsIen)}</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Edit Specialty</h2>
+      <div class="collapsible-content">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+          <label style="font-size:12px;">Name (.01)<br/><input type="text" id="ts-edit-name" value="${v('.01')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Specialty (1)<br/><input type="text" id="ts-edit-specialty" value="${v('1')}" style="width:100%;" /></label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="ts-edit-save">Save to VistA</button>
+          <button type="button" class="btn-sm" onclick="window.location.hash='#/treating-specialties'">Cancel</button>
+        </div>
+        <div id="ts-edit-msg" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+    </div>`;
+
+  const saveBtn = document.getElementById('ts-edit-save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('ts-edit-msg');
+    const payload = {};
+    const nameVal = (document.getElementById('ts-edit-name') || {}).value;
+    const specVal = (document.getElementById('ts-edit-specialty') || {}).value;
+    if (nameVal !== undefined && nameVal !== v('.01')) payload.name = nameVal;
+    if (specVal !== undefined && specVal !== v('1')) payload.specialty = specVal;
+    if (Object.keys(payload).length === 0) { msg.textContent = 'No changes detected.'; msg.style.color = '#92400e'; return; }
+    if (!confirm('Save changes to VistA?')) return;
+    msg.textContent = 'Saving...'; msg.style.color = '';
+    const out = await apiPut(`treating-specialties/${encodeURIComponent(tsIen)}`, payload);
+    msg.textContent = out.ok ? 'Saved successfully.' : (out.error || JSON.stringify(out));
+    msg.style.color = out.ok ? '#166534' : '#b91c1c';
+    if (out.ok) setTimeout(() => renderTreatingSpecialtyDetail(el, tsIen), 1000);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Appointment Type Detail + Edit (File 409.1)
+// ---------------------------------------------------------------------------
+async function renderAppointmentTypeDetail(el, atIen) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/scheduling-config">Scheduling</a> › Appointment Type ${escapeHtml(atIen)}</div><div class="loading-message">Loading from VistA...</div>`;
+  const res = await api(`appointment-types/${encodeURIComponent(atIen)}`);
+  const d = (res.ok && res.data && res.data.data) ? res.data.data : {};
+  const badge = sourceBadge(res.ok ? 'vista' : 'error');
+  const v = (f) => escapeHtml(d[f] || '');
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/scheduling-config">Scheduling</a> › ${v('.01') || 'Type ' + escapeHtml(atIen)}</div>
+    <div class="page-header"><h1>${v('.01') || 'Appointment Type'}</h1>${badge}</div>
+    <div class="explanation-header">
+      <strong>Appointment Type (File 409.1)</strong>
+      Defines scheduling types used across clinics. Each type has a default duration and can be set inactive.
+      Edit via <code>DDR FILER</code>.
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Details</h2>
+      <div class="collapsible-content">
+        <dl>
+          <div class="detail-row"><dt>Appointment Type (.01)</dt><dd>${v('.01') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Default Duration (3)</dt><dd>${v('3') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Inactive Date (4)</dt><dd>${v('4') || '<em>none - active</em>'}</dd></div>
+          <div class="detail-row"><dt>IEN</dt><dd>${escapeHtml(atIen)}</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Edit Appointment Type</h2>
+      <div class="collapsible-content">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+          <label style="font-size:12px;">Name (.01)<br/><input type="text" id="at-edit-name" value="${v('.01')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Default Duration (3)<br/><input type="text" id="at-edit-duration" value="${v('3')}" placeholder="minutes" style="width:100%;" /></label>
+          <label style="font-size:12px;">Inactive Date (4)<br/><input type="text" id="at-edit-inactive" value="${v('4')}" placeholder="Leave empty for active" style="width:100%;" /></label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="at-edit-save">Save to VistA</button>
+          <button type="button" class="btn-sm" onclick="window.location.hash='#/scheduling-config'">Cancel</button>
+        </div>
+        <div id="at-edit-msg" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+    </div>`;
+
+  const saveBtn = document.getElementById('at-edit-save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('at-edit-msg');
+    const payload = {};
+    const nameVal = (document.getElementById('at-edit-name') || {}).value;
+    const durVal = (document.getElementById('at-edit-duration') || {}).value;
+    const inactVal = (document.getElementById('at-edit-inactive') || {}).value;
+    if (nameVal !== undefined && nameVal !== v('.01')) payload.name = nameVal;
+    if (durVal !== undefined && durVal !== v('3')) payload.defaultDuration = durVal;
+    if (inactVal !== undefined && inactVal !== v('4')) payload.inactiveDate = inactVal;
+    if (Object.keys(payload).length === 0) { msg.textContent = 'No changes detected.'; msg.style.color = '#92400e'; return; }
+    if (!confirm('Save changes to VistA?')) return;
+    msg.textContent = 'Saving...'; msg.style.color = '';
+    const out = await apiPut(`appointment-types/${encodeURIComponent(atIen)}`, payload);
+    msg.textContent = out.ok ? 'Saved successfully.' : (out.error || JSON.stringify(out));
+    msg.style.color = out.ok ? '#166534' : '#b91c1c';
+    if (out.ok) setTimeout(() => renderAppointmentTypeDetail(el, atIen), 1000);
   });
 }
 
@@ -2291,12 +2446,14 @@ async function renderSchedulingConfig(el) {
     </div>
     <table class="data-table">
       <thead><tr><th>IEN</th><th>Appointment Type</th><th>Synonym</th><th>Status</th></tr></thead>
-      <tbody id="at-tbody">${rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.synonym || '—')}</td><td>${r.inactive ? '<span class="badge badge-inactive">Inactive</span>' : '<span class="badge badge-active">Active</span>'}</td></tr>`).join('') : '<tr><td colspan="4">No appointment types found in File 409.1</td></tr>'}</tbody>
+      <tbody id="at-tbody">${rows.length ? rows.map(r => `<tr class="clickable-row" data-href="#/appointment-types/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.synonym || '—')}</td><td>${r.inactive ? '<span class="badge badge-inactive">Inactive</span>' : '<span class="badge badge-active">Active</span>'}</td></tr>`).join('') : '<tr><td colspan="4">No appointment types found in File 409.1</td></tr>'}</tbody>
     </table>`;
+  wireClickableRows('at-tbody');
   document.getElementById('at-search').addEventListener('input', () => {
     const q = (document.getElementById('at-search').value || '').toLowerCase();
     const filtered = rows.filter(r => (r.name || '').toLowerCase().includes(q) || (r.synonym || '').toLowerCase().includes(q));
-    document.getElementById('at-tbody').innerHTML = filtered.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.synonym || '—')}</td><td>${r.inactive ? '<span class="badge badge-inactive">Inactive</span>' : '<span class="badge badge-active">Active</span>'}</td></tr>`).join('');
+    document.getElementById('at-tbody').innerHTML = filtered.map(r => `<tr class="clickable-row" data-href="#/appointment-types/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.synonym || '—')}</td><td>${r.inactive ? '<span class="badge badge-inactive">Inactive</span>' : '<span class="badge badge-active">Active</span>'}</td></tr>`).join('');
+    wireClickableRows('at-tbody');
     document.getElementById('at-count').textContent = `${filtered.length} of ${rows.length} types`;
   });
 }

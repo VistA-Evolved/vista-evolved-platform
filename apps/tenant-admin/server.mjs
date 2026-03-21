@@ -1848,6 +1848,25 @@ async function main() {
     }
   });
 
+  app.put('/api/tenant-admin/v1/treating-specialties/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', specialty: '1', serviceConnected: '2' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('45.7', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '45.7', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
   // ---- Appointment Type detail + edit (File 409.1) ----
 
   app.get('/api/tenant-admin/v1/appointment-types/:ien', async (req) => {
@@ -1862,6 +1881,46 @@ async function main() {
     } catch (e) {
       return { ok: false, tenantId, source: 'error', error: e.message };
     }
+  });
+
+  app.put('/api/tenant-admin/v1/appointment-types/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', defaultDuration: '3', inactiveDate: '4' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('409.1', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '409.1', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Ward multi-field edit via DDR FILER (File 42) ----
+
+  app.put('/api/tenant-admin/v1/wards/:ien/fields', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', division: '.015', service: '1', wardLocation: '.1', bedsects: '3' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('42', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '42', ien, fieldCount: result.fieldCount, lines: result.lines };
   });
 
   // ---- SPA fallback ----
