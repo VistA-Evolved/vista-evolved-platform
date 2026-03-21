@@ -90,6 +90,9 @@ const ROUTES = [
   { pattern: /^#\/devices\/(.+)/, fn: (el, m) => renderDeviceDetail(el, decodeURIComponent(m[1])) },
   { pattern: /^#\/treating-specialties\/(.+)/, fn: (el, m) => renderTreatingSpecialtyDetail(el, decodeURIComponent(m[1])) },
   { pattern: /^#\/appointment-types\/(.+)/, fn: (el, m) => renderAppointmentTypeDetail(el, decodeURIComponent(m[1])) },
+  { pattern: /^#\/terminal-types\/(.+)/, fn: (el, m) => renderTerminalTypeDetail(el, decodeURIComponent(m[1])) },
+  { pattern: /^#\/room-beds\/(.+)/, fn: (el, m) => renderRoomBedDetail(el, decodeURIComponent(m[1])) },
+  { pattern: /^#\/titles\/(.+)/, fn: (el, m) => renderTitleDetail(el, decodeURIComponent(m[1])) },
   { pattern: '#/users', fn: renderUserList },
   { pattern: '#/facilities', fn: renderFacilityList },
   { pattern: '#/roles', fn: renderRoleAssignment },
@@ -104,6 +107,7 @@ const ROUTES = [
   { pattern: '#/scheduling-config', fn: renderSchedulingConfig },
   { pattern: '#/devices', fn: renderDeviceList },
   { pattern: '#/terminal-types', fn: renderTerminalTypes },
+  { pattern: '#/titles', fn: renderTitles },
   { pattern: '#/hl7-interfaces', fn: renderHL7Interfaces },
   { pattern: '#/rpc-status', fn: renderVistaTools },
   { pattern: '#/order-config', fn: (el) => renderIntegrationPending(el, 'Order Entry Configuration', 'Clinical Config', '#/dashboard', 'OE-01..OE-06', 'Quick Orders, Order Sets, Menus, Items, Prompts, Notifications', 'Files 101.41, 101.43, 100.98, 100.9', 'DDR LISTER/FILER', 'CPRS order entry configuration: define quick orders, order sets, menus, orderable items, prompts, and notification rules.', [
@@ -2126,12 +2130,14 @@ async function renderTerminalTypes(el) {
     </div>
     <table class="data-table">
       <thead><tr><th>IEN</th><th>Name</th><th>Right Margin</th><th>Form Feed</th><th>Page Length</th></tr></thead>
-      <tbody id="tt-tbody">${rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.rightMargin || '—')}</td><td>${escapeHtml(r.formFeed || '—')}</td><td>${escapeHtml(r.pageLength || '—')}</td></tr>`).join('') : '<tr><td colspan="5">No terminal types found</td></tr>'}</tbody>
+      <tbody id="tt-tbody">${rows.length ? rows.map(r => `<tr class="clickable-row" data-href="#/terminal-types/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.rightMargin || '—')}</td><td>${escapeHtml(r.formFeed || '—')}</td><td>${escapeHtml(r.pageLength || '—')}</td></tr>`).join('') : '<tr><td colspan="5">No terminal types found</td></tr>'}</tbody>
     </table>`;
+  wireClickableRows('tt-tbody');
   document.getElementById('tt-search').addEventListener('input', () => {
     const q = (document.getElementById('tt-search').value || '').toLowerCase();
     const filtered = rows.filter(r => (r.name || '').toLowerCase().includes(q));
-    document.getElementById('tt-tbody').innerHTML = filtered.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.rightMargin || '—')}</td><td>${escapeHtml(r.formFeed || '—')}</td><td>${escapeHtml(r.pageLength || '—')}</td></tr>`).join('');
+    document.getElementById('tt-tbody').innerHTML = filtered.map(r => `<tr class="clickable-row" data-href="#/terminal-types/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.rightMargin || '—')}</td><td>${escapeHtml(r.formFeed || '—')}</td><td>${escapeHtml(r.pageLength || '—')}</td></tr>`).join('');
+    wireClickableRows('tt-tbody');
     document.getElementById('tt-count').textContent = `${filtered.length} of ${rows.length} types`;
   });
 }
@@ -2297,6 +2303,232 @@ async function renderAppointmentTypeDetail(el, atIen) {
 }
 
 // ---------------------------------------------------------------------------
+// Terminal Type Detail + Edit (File 3.2)
+// ---------------------------------------------------------------------------
+async function renderTerminalTypeDetail(el, ttIen) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/terminal-types">Terminal Types</a> › Type ${escapeHtml(ttIen)}</div><div class="loading-message">Loading from VistA...</div>`;
+  const res = await api(`terminal-types/${encodeURIComponent(ttIen)}`);
+  const d = (res.ok && res.data && res.data.data) ? res.data.data : {};
+  const badge = sourceBadge(res.ok ? 'vista' : 'error');
+  const v = (f) => escapeHtml(d[f] || '');
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/terminal-types">Terminal Types</a> › ${v('.01') || 'Type ' + escapeHtml(ttIen)}</div>
+    <div class="page-header"><h1>${v('.01') || 'Terminal Type'}</h1>${badge}</div>
+    <div class="explanation-header">
+      <strong>Terminal Type (File 3.2)</strong>
+      Controls printer/terminal emulation: margins, page length, form feed behavior.
+      Edit via <code>DDR FILER</code>.
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Details</h2>
+      <div class="collapsible-content">
+        <dl>
+          <div class="detail-row"><dt>Name (.01)</dt><dd>${v('.01') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Right Margin (1)</dt><dd>${v('1') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Form Feed (2)</dt><dd>${v('2') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Page Length (3)</dt><dd>${v('3') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Back Space (4)</dt><dd>${v('4') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Open Execute (5)</dt><dd>${v('5') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Close Execute (6)</dt><dd>${v('6') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>IEN</dt><dd>${escapeHtml(ttIen)}</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Edit Terminal Type</h2>
+      <div class="collapsible-content">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+          <label style="font-size:12px;">Name (.01)<br/><input type="text" id="tt-edit-name" value="${v('.01')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Right Margin (1)<br/><input type="text" id="tt-edit-margin" value="${v('1')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Form Feed (2)<br/><input type="text" id="tt-edit-ff" value="${v('2')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Page Length (3)<br/><input type="text" id="tt-edit-pl" value="${v('3')}" style="width:100%;" /></label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="tt-edit-save">Save to VistA</button>
+          <button type="button" class="btn-sm" onclick="window.location.hash='#/terminal-types'">Cancel</button>
+        </div>
+        <div id="tt-edit-msg" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+    </div>`;
+
+  const saveBtn = document.getElementById('tt-edit-save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('tt-edit-msg');
+    const payload = {};
+    const nameVal = (document.getElementById('tt-edit-name') || {}).value;
+    const marginVal = (document.getElementById('tt-edit-margin') || {}).value;
+    const ffVal = (document.getElementById('tt-edit-ff') || {}).value;
+    const plVal = (document.getElementById('tt-edit-pl') || {}).value;
+    if (nameVal && nameVal !== v('.01')) payload.name = nameVal;
+    if (marginVal && marginVal !== v('1')) payload.rightMargin = marginVal;
+    if (ffVal && ffVal !== v('2')) payload.formFeed = ffVal;
+    if (plVal && plVal !== v('3')) payload.pageLength = plVal;
+    if (Object.keys(payload).length === 0) { msg.textContent = 'No changes detected.'; msg.style.color = '#92400e'; return; }
+    if (!confirm('Save changes to VistA?')) return;
+    msg.textContent = 'Saving...'; msg.style.color = '';
+    const out = await apiPut(`terminal-types/${encodeURIComponent(ttIen)}`, payload);
+    msg.textContent = out.ok ? 'Saved successfully.' : (out.error || JSON.stringify(out));
+    msg.style.color = out.ok ? '#166534' : '#b91c1c';
+    if (out.ok) setTimeout(() => renderTerminalTypeDetail(el, ttIen), 1000);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Room-Bed Detail + Edit (File 405.4)
+// ---------------------------------------------------------------------------
+async function renderRoomBedDetail(el, rbIen) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/beds">Room-Beds</a> › Bed ${escapeHtml(rbIen)}</div><div class="loading-message">Loading from VistA...</div>`;
+  const res = await api(`room-beds/${encodeURIComponent(rbIen)}`);
+  const d = (res.ok && res.data && res.data.data) ? res.data.data : {};
+  const badge = sourceBadge(res.ok ? 'vista' : 'error');
+  const v = (f) => escapeHtml(d[f] || '');
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/beds">Room-Beds</a> › ${v('.01') || 'Bed ' + escapeHtml(rbIen)}</div>
+    <div class="page-header"><h1>${v('.01') || 'Room-Bed'}</h1>${badge}</div>
+    <div class="explanation-header">
+      <strong>Room-Bed (File 405.4)</strong>
+      Stores all rooms and beds across wards. Each bed links to a ward and has an out-of-service status.
+      Edit via <code>DDR FILER</code>.
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Details</h2>
+      <div class="collapsible-content">
+        <dl>
+          <div class="detail-row"><dt>Room-Bed (.01)</dt><dd>${v('.01') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Ward (.02)</dt><dd>${v('.02') || '<em>empty</em>'} <small>(File 42 pointer)</small></dd></div>
+          <div class="detail-row"><dt>Ward Location (.04)</dt><dd>${v('.04') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Out of Service (.2)</dt><dd>${v('.2') || 'No'}</dd></div>
+          <div class="detail-row"><dt>Bed Status (2)</dt><dd>${v('2') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>Occupation Status (3)</dt><dd>${v('3') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>IEN</dt><dd>${escapeHtml(rbIen)}</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Edit Room-Bed</h2>
+      <div class="collapsible-content">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:500px;">
+          <label style="font-size:12px;">Room-Bed Name (.01)<br/><input type="text" id="rb-edit-name" value="${v('.01')}" style="width:100%;" /></label>
+          <label style="font-size:12px;">Out of Service (.2)<br/><select id="rb-edit-oos" style="width:100%;"><option value="" ${!v('.2') ? 'selected' : ''}>No</option><option value="1" ${v('.2') === '1' ? 'selected' : ''}>Yes</option></select></label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="rb-edit-save">Save to VistA</button>
+          <button type="button" class="btn-sm" onclick="window.location.hash='#/beds'">Cancel</button>
+        </div>
+        <div id="rb-edit-msg" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+    </div>`;
+
+  const saveBtn = document.getElementById('rb-edit-save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('rb-edit-msg');
+    const payload = {};
+    const nameVal = (document.getElementById('rb-edit-name') || {}).value;
+    const oosVal = (document.getElementById('rb-edit-oos') || {}).value;
+    if (nameVal && nameVal !== v('.01')) payload.roomBed = nameVal;
+    if (oosVal !== v('.2')) payload.outOfService = oosVal;
+    if (Object.keys(payload).length === 0) { msg.textContent = 'No changes detected.'; msg.style.color = '#92400e'; return; }
+    if (!confirm('Save changes to VistA?')) return;
+    msg.textContent = 'Saving...'; msg.style.color = '';
+    const out = await apiPut(`room-beds/${encodeURIComponent(rbIen)}`, payload);
+    msg.textContent = out.ok ? 'Saved successfully.' : (out.error || JSON.stringify(out));
+    msg.style.color = out.ok ? '#166534' : '#b91c1c';
+    if (out.ok) setTimeout(() => renderRoomBedDetail(el, rbIen), 1000);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Titles List (File 3.1) — DDR LISTER backed
+// ---------------------------------------------------------------------------
+async function renderTitles(el) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Titles</div><div class="loading-message">Loading titles from VistA...</div>`;
+  const res = await api('titles');
+  if (!res.ok) { el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Titles</div><div class="error-message">${escapeHtml(res.error || 'Failed to load')}</div>`; return; }
+  const rows = res.data || [];
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Titles</div>
+    <div class="page-header"><h1>Titles (File 3.1)</h1>${sourceBadge(res.source)}</div>
+    <div class="explanation-header">
+      <strong>VistA Title File</strong>
+      File 3.1 stores user titles (e.g., CHIEF OF STAFF, NURSE MANAGER, MEDICAL RECORDS CLERK).
+      Titles are referenced by File 200 (NEW PERSON) records. Click a title to view details and edit.
+    </div>
+    <div class="filter-rail">
+      <input type="text" id="ti-search" placeholder="Search titles..." />
+      <span class="result-count" id="ti-count">${rows.length} titles</span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>IEN</th><th>Title Name</th></tr></thead>
+      <tbody id="ti-tbody">${rows.length ? rows.map(r => `<tr class="clickable-row" data-href="#/titles/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td></tr>`).join('') : '<tr><td colspan="2">No titles found in File 3.1</td></tr>'}</tbody>
+    </table>`;
+  wireClickableRows('ti-tbody');
+  document.getElementById('ti-search').addEventListener('input', () => {
+    const q = (document.getElementById('ti-search').value || '').toLowerCase();
+    const filtered = rows.filter(r => (r.name || '').toLowerCase().includes(q));
+    document.getElementById('ti-tbody').innerHTML = filtered.map(r => `<tr class="clickable-row" data-href="#/titles/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.name)}</td></tr>`).join('');
+    wireClickableRows('ti-tbody');
+    document.getElementById('ti-count').textContent = `${filtered.length} of ${rows.length} titles`;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Title Detail + Edit (File 3.1)
+// ---------------------------------------------------------------------------
+async function renderTitleDetail(el, titleIen) {
+  el.innerHTML = `<div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Titles › Title ${escapeHtml(titleIen)}</div><div class="loading-message">Loading from VistA...</div>`;
+  const res = await api(`titles/${encodeURIComponent(titleIen)}`);
+  const d = (res.ok && res.data && res.data.data) ? res.data.data : {};
+  const badge = sourceBadge(res.ok ? 'vista' : 'error');
+  const v = (f) => escapeHtml(d[f] || '');
+
+  el.innerHTML = `
+    <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › Titles › ${v('.01') || 'Title ' + escapeHtml(titleIen)}</div>
+    <div class="page-header"><h1>${v('.01') || 'Title'}</h1>${badge}</div>
+    <div class="explanation-header">
+      <strong>Title (File 3.1)</strong>
+      User titles used in VistA (e.g., CHIEF OF STAFF, NURSE MANAGER). Referenced by File 200 user records.
+      Edit via <code>DDR FILER</code>.
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Details</h2>
+      <div class="collapsible-content">
+        <dl>
+          <div class="detail-row"><dt>Title Name (.01)</dt><dd>${v('.01') || '<em>empty</em>'}</dd></div>
+          <div class="detail-row"><dt>IEN</dt><dd>${escapeHtml(titleIen)}</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h2 class="collapsible-header" onclick="this.parentElement.classList.toggle('collapsed')"><span class="chevron">&#9662;</span> Edit Title</h2>
+      <div class="collapsible-content">
+        <div style="max-width:300px;">
+          <label style="font-size:12px;">Title Name (.01)<br/><input type="text" id="title-edit-name" value="${v('.01')}" style="width:100%;" /></label>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="title-edit-save">Save to VistA</button>
+          <button type="button" class="btn-sm" onclick="history.back()">Cancel</button>
+        </div>
+        <div id="title-edit-msg" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+    </div>`;
+
+  const saveBtn = document.getElementById('title-edit-save');
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const msg = document.getElementById('title-edit-msg');
+    const nameVal = (document.getElementById('title-edit-name') || {}).value;
+    if (!nameVal || nameVal === v('.01')) { msg.textContent = 'No changes detected.'; msg.style.color = '#92400e'; return; }
+    if (!confirm('Rename title to "' + nameVal + '"?')) return;
+    msg.textContent = 'Saving...'; msg.style.color = '';
+    const out = await apiPut(`titles/${encodeURIComponent(titleIen)}`, { name: nameVal });
+    msg.textContent = out.ok ? 'Saved successfully.' : (out.error || JSON.stringify(out));
+    msg.style.color = out.ok ? '#166534' : '#b91c1c';
+    if (out.ok) setTimeout(() => renderTitleDetail(el, titleIen), 1000);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Room-Bed Management (File 405.4) — DDR LISTER backed
 // ---------------------------------------------------------------------------
 async function renderRoomBeds(el) {
@@ -2318,12 +2550,14 @@ async function renderRoomBeds(el) {
     </div>
     <table class="data-table">
       <thead><tr><th>IEN</th><th>Room-Bed</th><th>Description</th><th>Out-of-Service</th></tr></thead>
-      <tbody id="rb-tbody">${rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.roomBed)}</td><td>${escapeHtml(r.description || '—')}</td><td>${r.outOfService === '1' ? '<span style="color:var(--error)">Yes</span>' : 'No'}</td></tr>`).join('') : '<tr><td colspan="4">No room-beds found in File 405.4</td></tr>'}</tbody>
+      <tbody id="rb-tbody">${rows.length ? rows.map(r => `<tr class="clickable-row" data-href="#/room-beds/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.roomBed)}</td><td>${escapeHtml(r.description || '—')}</td><td>${r.outOfService === '1' ? '<span style="color:var(--error)">Yes</span>' : 'No'}</td></tr>`).join('') : '<tr><td colspan="4">No room-beds found in File 405.4</td></tr>'}</tbody>
     </table>`;
+  wireClickableRows('rb-tbody');
   document.getElementById('rb-search').addEventListener('input', () => {
     const q = (document.getElementById('rb-search').value || '').toLowerCase();
     const filtered = rows.filter(r => (r.roomBed || '').toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q));
-    document.getElementById('rb-tbody').innerHTML = filtered.map(r => `<tr><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.roomBed)}</td><td>${escapeHtml(r.description || '—')}</td><td>${r.outOfService === '1' ? '<span style="color:var(--error)">Yes</span>' : 'No'}</td></tr>`).join('');
+    document.getElementById('rb-tbody').innerHTML = filtered.map(r => `<tr class="clickable-row" data-href="#/room-beds/${r.ien}"><td>${escapeHtml(r.ien)}</td><td>${escapeHtml(r.roomBed)}</td><td>${escapeHtml(r.description || '—')}</td><td>${r.outOfService === '1' ? '<span style="color:var(--error)">Yes</span>' : 'No'}</td></tr>`).join('');
+    wireClickableRows('rb-tbody');
     document.getElementById('rb-count').textContent = `${filtered.length} of ${rows.length} room-beds`;
   });
 }

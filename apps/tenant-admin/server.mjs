@@ -1470,6 +1470,111 @@ async function main() {
     }
   });
 
+  // ---- Terminal Type detail + edit (File 3.2) ----
+
+  app.get('/api/tenant-admin/v1/terminal-types/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('3.2', ien, '.01;1;2;3;4;5;6');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '3.2', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/terminal-types/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01', rightMargin: '1', formFeed: '2', pageLength: '3', backSpace: '4' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('3.2', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '3.2', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Room-Bed detail + edit (File 405.4) ----
+
+  app.get('/api/tenant-admin/v1/room-beds/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('405.4', ien, '.01;.02;.04;.2;2;3');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '405.4', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/room-beds/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { roomBed: '.01', ward: '.02', outOfService: '.2' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('405.4', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '405.4', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
+  // ---- Title detail + edit (File 3.1) ----
+
+  app.get('/api/tenant-admin/v1/titles/:ien', async (req) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return { ok: false, error: 'tenantId required' };
+    const p = await probeVista();
+    if (!p.ok) return { ok: false, tenantId, source: 'error', error: p.error };
+    try {
+      const data = await ddrGetsEntry('3.1', ien, '.01');
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '3.1', ien, data };
+    } catch (e) {
+      return { ok: false, tenantId, source: 'error', error: e.message };
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/titles/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    const body = req.body || {};
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    const fieldMap = { name: '.01' };
+    const edits = {};
+    for (const [k, fld] of Object.entries(fieldMap)) {
+      if (body[k] !== undefined) edits[fld] = body[k];
+    }
+    if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No editable fields provided' });
+    const iens = `${ien},`;
+    const result = await ddrFilerEditMulti('3.1', iens, edits);
+    if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER', error: result.error, lines: result.lines });
+    return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '3.1', ien, fieldCount: result.fieldCount, lines: result.lines };
+  });
+
   // ---- Health Summary Types (File 142) via DDR LISTER ----
 
   app.get('/api/tenant-admin/v1/health-summary-types', async (req) => {
