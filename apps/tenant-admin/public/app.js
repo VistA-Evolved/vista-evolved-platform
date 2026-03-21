@@ -1,13 +1,13 @@
 /**
- * Tenant Admin — Dual-Mode SPA (VistA-first, fixture fallback)
+ * Tenant Admin — VistA-First SPA (direct XWB broker, fixture fallback)
  *
  * Hash-based routing with 11 render functions matching the tenant-admin surfaces
  * defined in tenant-admin-design-contract-v1.md (plus later-slice additions).
  *
- * Implementation posture: dual-mode — VistA adapter + fixture fallback.
- * When VISTA_API_URL is configured and VistA is reachable, data comes from
- * VistA RPCs (ORWU NEWPERS, ORWU HASKEY, XUS DIVISION GET, ORWU CLINLOC,
- * ORQPT WARDS). Otherwise, fixture data is used.
+ * Implementation posture: VistA-first — direct XWB RPC broker connection via
+ * lib/xwb-client.mjs. When VISTA_HOST/PORT/ACCESS_CODE/VERIFY_CODE are configured,
+ * data comes from live VistA RPCs (ORWU NEWPERS, ORWU HASKEY, XUS DIVISION GET,
+ * ORWU CLINLOC, ORQPT WARDS). Otherwise, fixture data is used.
  * Source badges honestly display "VistA", "FIXTURE", or "TERMINAL" per surface.
  *
  * Surfaces: Dashboard, User List, User Detail, Role Assignment,
@@ -237,17 +237,21 @@ async function renderUserList(el) {
 
   function renderUserRows(list) {
     return list.map(u => {
-      const eSig = u.vistaGrounding.electronicSignature || {};
+      const vg = u.vistaGrounding || {};
+      const eSig = vg.electronicSignature || {};
       const eSigBadge = eSig.status === 'active' ? 'badge-active'
         : eSig.status === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
+      const id = u.id || u.ien || 'unknown';
+      const roles = u.roles || [];
+      const groundingStatus = vg.file200Status || (u.ien ? 'vista-ien' : 'unknown');
       return `
       <tr>
-        <td><a href="#/users/${encodeURIComponent(u.id)}">${escapeHtml(u.name)}</a></td>
-        <td>${escapeHtml(u.title || '—')}</td>
-        <td><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></td>
-        <td>${u.roles.map(r => '<span class="badge badge-key">' + escapeHtml(r) + '</span>').join(' ')}</td>
+        <td><a href="#/users/${encodeURIComponent(id)}">${escapeHtml(u.name)}</a></td>
+        <td>${escapeHtml(u.title || (u.ien ? 'DUZ ' + u.ien : '—'))}</td>
+        <td><span class="badge ${(u.status || 'active') === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status || 'active')}</span></td>
+        <td>${roles.length ? roles.map(r => '<span class="badge badge-key">' + escapeHtml(r) + '</span>').join(' ') : '<span class="badge badge-ungrounded">—</span>'}</td>
         <td><span class="badge ${eSigBadge}">${escapeHtml(eSig.status || '—')}</span></td>
-        <td><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></td>
+        <td><span class="badge ${groundingStatus === 'grounded' ? 'badge-grounded' : groundingStatus === 'vista-ien' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(groundingStatus)}</span></td>
       </tr>`;
     }).join('');
   }
@@ -288,8 +292,9 @@ async function renderUserList(el) {
     const groundF = document.getElementById('user-grounding-filter').value;
     const filtered = users.filter(u => {
       if (q && !u.name.toLowerCase().includes(q) && !(u.title || '').toLowerCase().includes(q)) return false;
-      if (statusF && u.status !== statusF) return false;
-      if (groundF && u.vistaGrounding.file200Status !== groundF) return false;
+      if (statusF && (u.status || 'active') !== statusF) return false;
+      const gStatus = (u.vistaGrounding || {}).file200Status || (u.ien ? 'grounded' : 'unknown');
+      if (groundF && gStatus !== groundF) return false;
       return true;
     });
     document.getElementById('user-tbody').innerHTML = renderUserRows(filtered);
@@ -311,16 +316,21 @@ async function renderUserDetail(el, userId) {
   const res = await api(`users/${encodeURIComponent(userId)}`);
   if (!res.ok) { el.innerHTML = `<div class="error-message">User not found</div>`; return; }
   const u = res.data;
-  const eSig = u.vistaGrounding.electronicSignature || {};
+  const vg = u.vistaGrounding || {};
+  const eSig = vg.electronicSignature || {};
   const eSigBadgeClass = eSig.status === 'active' ? 'badge-active'
     : eSig.status === 'revoked' ? 'badge-inactive' : 'badge-ungrounded';
+  const roles = u.roles || [];
+  const userStatus = u.status || 'active';
+  const groundingStatus = vg.file200Status || (u.ien ? 'vista-ien' : 'unknown');
 
   el.innerHTML = `
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/users">User List</a> › ${escapeHtml(u.name)}</div>
     <div class="page-header">
       <h1>${escapeHtml(u.name)}</h1>
-      <span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span>
-      ${u.vistaGrounding.disuser ? '<span class="badge badge-inactive">DISUSER</span>' : ''}
+      <span class="badge ${userStatus === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(userStatus)}</span>
+      ${vg.disuser ? '<span class="badge badge-inactive">DISUSER</span>' : ''}
+      ${sourceBadge(res.source)}
     </div>
 
     <div class="detail-layout">
@@ -328,23 +338,23 @@ async function renderUserDetail(el, userId) {
         <div class="detail-section">
           <h2>Identity</h2>
           <dl>
-            <div class="detail-row"><dt>Username</dt><dd>${escapeHtml(u.username)}</dd></div>
-            <div class="detail-row"><dt>Title</dt><dd>${escapeHtml(u.title || '—')}</dd></div>
-            <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(u.status)}</dd></div>
-            <div class="detail-row"><dt>Initials</dt><dd>${escapeHtml(u.vistaGrounding.initials || '—')}</dd></div>
+            <div class="detail-row"><dt>Username</dt><dd>${escapeHtml(u.username || u.name || '—')}</dd></div>
+            <div class="detail-row"><dt>Title</dt><dd>${escapeHtml(u.title || (u.ien ? 'DUZ ' + u.ien : '—'))}</dd></div>
+            <div class="detail-row"><dt>Status</dt><dd>${escapeHtml(userStatus)}</dd></div>
+            <div class="detail-row"><dt>Initials</dt><dd>${escapeHtml(vg.initials || '—')}</dd></div>
           </dl>
         </div>
 
         <div class="detail-section">
           <h2>VistA Grounding (File 200)</h2>
           <dl>
-            <div class="detail-row"><dt>DUZ (IEN)</dt><dd>${u.vistaGrounding.duz ?? '—'}</dd></div>
-            <div class="detail-row"><dt>Grounding Status</dt><dd><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></dd></div>
-            <div class="detail-row"><dt>Person Class</dt><dd>${escapeHtml(u.vistaGrounding.personClass || '—')}</dd></div>
-            <div class="detail-row"><dt>Service/Section</dt><dd>${escapeHtml(u.vistaGrounding.serviceSection || '—')}</dd></div>
-            <div class="detail-row"><dt>Division</dt><dd>${u.vistaGrounding.division ? escapeHtml(u.vistaGrounding.division.name) + ' (IEN ' + u.vistaGrounding.division.ien + ')' : '—'}</dd></div>
-            <div class="detail-row"><dt>Primary Menu Option</dt><dd><code>${escapeHtml(u.vistaGrounding.primaryMenuOption || '—')}</code></dd></div>
-            <div class="detail-row"><dt>DISUSER (disabled)</dt><dd>${u.vistaGrounding.disuser === true ? '<span class="badge badge-inactive">YES</span>' : u.vistaGrounding.disuser === false ? 'No' : '—'}</dd></div>
+            <div class="detail-row"><dt>DUZ (IEN)</dt><dd>${vg.duz ?? u.ien ?? '—'}</dd></div>
+            <div class="detail-row"><dt>Grounding Status</dt><dd><span class="badge ${groundingStatus === 'grounded' || groundingStatus === 'vista-ien' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(groundingStatus)}</span></dd></div>
+            <div class="detail-row"><dt>Person Class</dt><dd>${escapeHtml(vg.personClass || '—')}</dd></div>
+            <div class="detail-row"><dt>Service/Section</dt><dd>${escapeHtml(vg.serviceSection || '—')}</dd></div>
+            <div class="detail-row"><dt>Division</dt><dd>${vg.division ? escapeHtml(vg.division.name) + ' (IEN ' + vg.division.ien + ')' : '—'}</dd></div>
+            <div class="detail-row"><dt>Primary Menu Option</dt><dd><code>${escapeHtml(vg.primaryMenuOption || '—')}</code></dd></div>
+            <div class="detail-row"><dt>DISUSER (disabled)</dt><dd>${vg.disuser === true ? '<span class="badge badge-inactive">YES</span>' : vg.disuser === false ? 'No' : '—'}</dd></div>
           </dl>
         </div>
 
@@ -363,7 +373,7 @@ async function renderUserDetail(el, userId) {
 
         <div class="detail-section">
           <h2>Security Keys</h2>
-          <div>${u.roles.length ? u.roles.map(r => '<span class="badge badge-key" style="margin:2px">' + escapeHtml(r) + '</span>').join(' ') : '<span style="color:var(--color-text-muted)">No keys assigned</span>'}</div>
+          <div>${roles.length ? roles.map(r => '<span class="badge badge-key" style="margin:2px">' + escapeHtml(r) + '</span>').join(' ') : '<span style="color:var(--color-text-muted)">No keys assigned</span>'}</div>
           <div style="margin-top:8px;font-size:12px;color:var(--color-text-muted);">
             Keys are verified via <code>ORWU HASKEY</code> RPC. Assignment/revocation is terminal-only
             (<a href="#/guided-tasks">guided workflow →</a>).
@@ -376,17 +386,19 @@ async function renderUserDetail(el, userId) {
           <div class="context-label">User</div>
           <div class="context-value">${escapeHtml(u.name)}</div>
           <div class="context-label">DUZ</div>
-          <div class="context-value">${u.vistaGrounding.duz ?? '—'}</div>
+          <div class="context-value">${vg.duz ?? u.ien ?? '—'}</div>
           <div class="context-label">Status</div>
-          <div class="context-value"><span class="badge ${u.status === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(u.status)}</span></div>
+          <div class="context-value"><span class="badge ${userStatus === 'active' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(userStatus)}</span></div>
           <div class="context-divider"></div>
           <div class="context-label">E-Sig</div>
           <div class="context-value"><span class="badge ${eSigBadgeClass}">${escapeHtml(eSig.status || 'unknown')}</span></div>
           <div class="context-label">Keys</div>
-          <div class="context-value">${u.roles.length} assigned</div>
+          <div class="context-value">${roles.length} assigned</div>
           <div class="context-divider"></div>
           <div class="context-label">Grounding</div>
-          <div class="context-value"><span class="badge ${u.vistaGrounding.file200Status === 'grounded' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(u.vistaGrounding.file200Status)}</span></div>
+          <div class="context-value"><span class="badge ${groundingStatus === 'grounded' || groundingStatus === 'vista-ien' ? 'badge-grounded' : 'badge-ungrounded'}">${escapeHtml(groundingStatus)}</span></div>
+          <div class="context-label">Source</div>
+          <div class="context-value">${sourceBadge(res.source)}</div>
           <div class="context-divider"></div>
           <div class="context-label">Write Actions</div>
           <div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">
@@ -404,7 +416,6 @@ async function renderRoleAssignment(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Role Assignment</h1>
-      <span class="source-posture fixture">FIXTURE</span>
     </div>
     <div class="loading-message">Loading roles…</div>`;
 
@@ -420,11 +431,18 @@ async function renderRoleAssignment(el) {
       <td>${r.assignedUsers.length ? r.assignedUsers.map(u => typeof u === 'object' ? '<a href="#/users/' + encodeURIComponent(u.id) + '">' + escapeHtml(u.name) + '</a>' : escapeHtml(u)).join(', ') : '<span style="color:var(--color-text-muted)">None</span>'}</td>
     </tr>`).join('');
 
+  const noteHtml = res.integrationNote
+    ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
+         <strong>Integration Note:</strong> ${escapeHtml(res.integrationNote)}
+       </div>`
+    : '';
+
   el.innerHTML = `
     <div class="page-header">
       <h1>Role Assignment</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      ${sourceBadge(res.source)}
     </div>
+    ${noteHtml}
     <table class="data-table">
       <thead><tr>
         <th>Key</th><th>Description</th><th>File 19.1</th><th>Assigned Users</th>
@@ -460,11 +478,14 @@ async function renderFacilityList(el) {
     return items.map(f => {
       const indentClass = indent > 0 ? ` tree-indent-${Math.min(indent, 2)}` : '';
       const childHtml = f.children && f.children.length ? renderTree(f.children, indent + 1) : '';
+      const fId = f.id || f.ien || 'unknown';
+      const fType = f.type || (f.ien ? 'Clinic' : '—');
+      const fStatus = f.status || 'active';
       return `
         <li class="${indentClass}">
-          <a href="#/facilities/${encodeURIComponent(f.id)}">${escapeHtml(f.name)}</a>
-          <span class="tree-type">${escapeHtml(f.type)}</span>
-          <span class="badge ${f.status === 'active' ? 'badge-active' : 'badge-inactive'}" style="margin-left:4px">${escapeHtml(f.status)}</span>
+          <a href="#/facilities/${encodeURIComponent(fId)}">${escapeHtml(f.name)}</a>
+          <span class="tree-type">${escapeHtml(fType)}</span>
+          <span class="badge ${fStatus === 'active' ? 'badge-active' : 'badge-inactive'}" style="margin-left:4px">${escapeHtml(fStatus)}</span>
         </li>
         ${childHtml}`;
     }).join('');
@@ -505,22 +526,30 @@ async function renderFacilityDetail(el, facId) {
     <div class="breadcrumb"><a href="#/dashboard">Dashboard</a> › <a href="#/facilities">Facility List</a> › Detail</div>
     <div class="loading-message">Loading facility…</div>`;
 
-  // Facilities may be nested — search recursively
-  const res = await api('facilities');
-  if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load facilities</div>`; return; }
+  // Try the detail endpoint first (VistA-first on the server side)
+  const detailRes = await api(`facilities/${encodeURIComponent(facId)}`);
+  let res, f;
+  if (detailRes.ok) {
+    res = detailRes;
+    f = detailRes.data;
+  } else {
+    // Fallback: fetch full list and search client-side (for deeply nested fixture facilities)
+    res = await api('facilities');
+    if (!res.ok) { el.innerHTML = `<div class="error-message">Failed to load facilities</div>`; return; }
 
-  function findFacility(items, id) {
-    for (const f of items) {
-      if (f.id === id) return f;
-      if (f.children) {
-        const found = findFacility(f.children, id);
-        if (found) return found;
+    function findFacility(items, id) {
+      for (const item of items) {
+        if (item.id === id) return item;
+        if (item.children) {
+          const found = findFacility(item.children, id);
+          if (found) return found;
+        }
       }
+      return null;
     }
-    return null;
-  }
 
-  const f = findFacility(res.data, facId);
+    f = findFacility(res.data, facId);
+  }
   if (!f) { el.innerHTML = `<div class="error-message">Facility not found</div>`; return; }
 
   const groundingRows = Object.entries(f.vistaGrounding || {}).map(([k, v]) => {
@@ -709,7 +738,7 @@ async function renderWardList(el) {
         <td>${w.bedCount ?? beds.length}</td>
         <td>${w.availableBeds ?? avail}</td>
         <td>${w.occupiedBeds ?? occ}</td>
-        <td style="font-size:11px;color:var(--color-text-muted)">File 42 ^DIC(42,${escapeHtml(String(w.file42Ien || '?'))},</td>
+        <td style="font-size:11px;color:var(--color-text-muted)">File 42 ^DIC(42,${escapeHtml(String(w.file42Ien || w.ien || '?'))},</td>
       </tr>`;
     }).join('');
   }
@@ -750,7 +779,6 @@ async function renderKeyInventory(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Key Inventory</h1>
-      <span class="source-posture fixture">Loading…</span>
     </div>
     <div class="loading-message">Loading key inventory…</div>`;
 
@@ -780,10 +808,16 @@ async function renderKeyInventory(el) {
       </tr>`;
   }).join('');
 
+  const keyNoteHtml = res.integrationNote
+    ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
+         <strong>Integration Note:</strong> ${escapeHtml(res.integrationNote)}
+       </div>`
+    : '';
+
   el.innerHTML = `
     <div class="page-header">
       <h1>Key Inventory</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      ${sourceBadge(res.source)}
     </div>
     <div class="card-grid" style="margin-bottom:20px">
       <div class="card">
@@ -803,6 +837,7 @@ async function renderKeyInventory(el) {
         <div class="card-value" style="${summary.unassignedKeys > 0 ? 'color:var(--color-warning)' : ''}">${summary.unassignedKeys}</div>
       </div>
     </div>
+    ${keyNoteHtml}
     <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-primary)">
       <strong>VistA Grounding:</strong> Keys live in File 19.1 (SECURITY KEY).
       Holder lookup: <code>^XUSEC(keyName,DUZ)</code>.
@@ -824,7 +859,6 @@ async function renderEsigStatus(el) {
   el.innerHTML = `
     <div class="page-header">
       <h1>Electronic Signature Status</h1>
-      <span class="source-posture fixture">Loading…</span>
     </div>
     <div class="loading-message">Loading e-sig status…</div>`;
 
@@ -847,10 +881,16 @@ async function renderEsigStatus(el) {
       </tr>`;
   }).join('');
 
+  const esigNoteHtml = res.integrationNote
+    ? `<div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
+         <strong>Integration Note:</strong> ${escapeHtml(res.integrationNote)}
+       </div>`
+    : '';
+
   el.innerHTML = `
     <div class="page-header">
       <h1>Electronic Signature Status</h1>
-      <span class="source-posture fixture">FIXTURE</span>
+      ${sourceBadge(res.source)}
     </div>
     <div class="card-grid" style="margin-bottom:20px">
       <div class="card">
@@ -870,6 +910,7 @@ async function renderEsigStatus(el) {
         <div class="card-value" style="${agg.revoked > 0 ? 'color:var(--color-error)' : ''}">${agg.revoked}</div>
       </div>
     </div>
+    ${esigNoteHtml}
     <div class="detail-section" style="margin-bottom:12px;padding:12px 16px;font-size:12px;border-left:4px solid var(--color-warning)">
       <strong>VistA Grounding:</strong> E-signature codes are stored as hashed values in
       <code>${escapeHtml(grounding.field)}</code> and <strong>cannot be retrieved</strong>.

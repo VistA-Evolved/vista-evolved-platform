@@ -13,7 +13,7 @@ The original VistA-Evolved monorepo mixed control plane, admin UI, VistA distro 
 ## Decision
 
 - **VistA-Evolved (archive)** — Frozen prototype/salvage/reference. No new canonical product work. Reusable process assets may be copied out.
-- **vista-evolved-platform** — Control plane, admin console, contracts (OpenAPI, AsyncAPI, schemas), config (ports, modules, tenants), domain, UI design system. No VistA runtime or distro build.
+- **vista-evolved-platform** - Control plane, tenant-admin prototype shell, admin-console placeholder, contracts (OpenAPI, AsyncAPI, schemas), config (ports, modules, tenants), domain, UI design system. No VistA runtime or distro build.
 - **vista-evolved-vista-distro** — VistA upstream fetch/pin, overlay (routines, install, patches), docker (e.g. local-vista), build/verify scripts. No platform app code.
 
 ## Consequences

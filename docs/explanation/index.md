@@ -67,6 +67,10 @@ Architecture rationale, governance protocols, and design philosophy.
 - [Tenant Admin Personas Jobs and First-Slice Journeys](tenant-admin-personas-jobs-and-first-slice-journeys.md)
 - [Operator-to-Tenant-Admin Handoff Model](operator-to-tenant-admin-handoff-model.md)
 - [Tenant Admin Design Contract v1](tenant-admin-design-contract-v1.md)
+- [Tenant Admin First Live Slice Decision](tenant-admin-first-live-slice-decision.md)
+- [Fixture Inventory and Truth Ownership Audit](fixture-inventory-and-truth-ownership-audit.md)
+- [Tenant Admin Happy-Path Source Map](tenant-admin-happy-path-source-map.md)
+- [Live Broker Canonical Path](live-broker-canonical-path.md)
 
 ## VistA admin corpus
 

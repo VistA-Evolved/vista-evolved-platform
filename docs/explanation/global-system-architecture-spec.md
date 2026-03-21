@@ -30,7 +30,8 @@ VistA Evolved is in **architecture planning and terminal-first proof** phase.
 - Architecture planning may proceed ahead of broad implementation.
 - Browser-hosted VistA-backed terminal is the first major product surface.
 - Terminal overall is not yet fully signed off under the UTF-8 lane (see Section 2).
-- Broad control-plane, tenant-admin, and clinician GUI implementation remains unauthorized until explicitly instructed.
+- Broad control-plane, tenant-admin, and clinician GUI rollout remains unauthorized until explicitly instructed.
+- Public `main` does contain bounded prototypes in `apps/control-plane/`, `apps/control-plane-api/`, and `apps/tenant-admin/`; these do not by themselves establish live-verified operator or tenant-admin truth.
 
 ---
 
@@ -120,7 +121,7 @@ Per VE-PLAT-ADR-0001:
 
 ### vista-evolved-platform
 
-- **Role:** Platform governance, control plane, admin console, contracts, config, domain, design system, capability manifests, architecture specs.
+- **Role:** Platform governance, control plane, tenant-admin prototype shell, contracts, config, domain, design system, capability manifests, architecture specs.
 - **Owns:** OpenAPI/AsyncAPI/JSON Schema contracts, capability manifests, module/tenant config, platform database schema (for control-plane concerns only), architecture documentation, governance CI, design system.
 - **Does not own:** VistA runtime, VistA source code, build lanes, VistA overlays, MUMPS routines, VistA port assignments, lane truth.
 - **Governing ADRs:** VE-PLAT-ADR-0001 (three-repo), VE-PLAT-ADR-0002 (contract-first), VE-PLAT-ADR-0003 (control plane vs tenant admin).
@@ -223,9 +224,9 @@ The operator-facing control plane manages system-wide concerns that are above an
 Per-tenant administrative configuration managed by the tenant's own administrators.
 
 - **Scope:** Facility structure (departments, wards, beds), user management, printer/device defaults, site parameters, module enablement within tenant's entitlement.
-- **Lives in:** `apps/admin-console/` in the platform repo.
+- **Lives in:** `apps/tenant-admin/` on current public `main`. `apps/admin-console/` remains a reserved placeholder path.
 - **Auth:** Tenant-admin scoped. Cannot affect other tenants or system-wide config.
-- **Status:** Architecture defined (VE-PLAT-ADR-0003). Broad implementation not yet authorized.
+- **Status:** Architecture defined (VE-PLAT-ADR-0003). A bounded dual-mode prototype exists, but a live VistA-proven tenant-admin happy path is not yet established.
 
 ### 7.6 Workspace plane (separated operational surfaces)
 

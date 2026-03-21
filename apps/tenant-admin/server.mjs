@@ -1,14 +1,15 @@
 /**
- * Tenant Admin — Workspace Shell
+ * Tenant Admin — VistA-First Operational Shell
  *
  * Fastify dev server serving the tenant-admin SPA.
  *
  *   1. Serves static assets (HTML/CSS/JS) from public/
- *   2. Exposes dual-mode API routes: VistA-first with fixture fallback
+ *   2. Exposes VistA-first API routes with fixture fallback for degraded mode
  *
  * Tenant-scoped: every request requires tenantId context.
- * VistA grounding: adapter-based — uses VISTA_API_URL if configured,
- * falls back to fixture data with honest source labeling.
+ * VistA grounding: direct XWB RPC broker connection via lib/xwb-client.mjs.
+ * Env vars: VISTA_HOST, VISTA_PORT, VISTA_ACCESS_CODE, VISTA_VERIFY_CODE, VISTA_CONTEXT.
+ * Falls back to fixture data with honest source labeling when VistA is unreachable.
  *
  * Port: 4520 (per port-registry.md pattern — control-plane=4500, API=4510, tenant-admin=4520)
  */
@@ -18,7 +19,8 @@ import fastifyStatic from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { probeVista, fetchVistaUsers, fetchVistaDivisions, fetchVistaClinics, fetchVistaWards } from './lib/vista-adapter.mjs';
+import { probeVista, fetchVistaUsers, fetchVistaDivisions, fetchVistaClinics, fetchVistaWards, fetchVistaCurrentUser } from './lib/vista-adapter.mjs';
+import { disconnectBroker } from './lib/xwb-client.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4520', 10);
@@ -58,7 +60,13 @@ async function main() {
 
   app.get('/api/tenant-admin/v1/vista-status', async () => {
     const probe = await probeVista();
-    return { ok: true, vista: probe };
+    const currentUser = probe.ok ? await fetchVistaCurrentUser() : { ok: false };
+    return {
+      ok: true,
+      vista: probe,
+      currentUser: currentUser.ok ? currentUser.data : null,
+      connectionMode: 'direct-xwb',
+    };
   });
 
   // ---- Dual-mode user routes (VistA-first, fixture fallback) ----
@@ -85,18 +93,31 @@ async function main() {
 
   app.get('/api/tenant-admin/v1/users/:userId', async (req) => {
     const { userId } = req.params;
-    // Fixture lookup (VistA user-detail requires DUZ-based lookup — future slice)
-    const user = fixtures.users.find(u => u.id === userId);
-    if (!user) return { ok: false, error: 'user not found' };
 
-    // Probe VistA for source labeling
-    const probe = await probeVista();
-    return {
-      ok: true,
-      source: 'fixture',
-      data: user,
-      vistaStatus: probe.ok ? 'reachable' : 'unavailable',
-    };
+    // VistA-first: try broker lookup by IEN
+    try {
+      const usersRes = await fetchVistaUsers('');
+      if (usersRes.ok) {
+        const vistaUser = usersRes.data.find(u => String(u.ien) === String(userId));
+        if (vistaUser) {
+          return {
+            ok: true, source: 'vista', data: {
+              id: vistaUser.ien, name: vistaUser.name, ien: vistaUser.ien,
+              username: vistaUser.name, status: 'active', roles: [],
+              vistaGrounding: { duz: vistaUser.ien, file200Status: 'vista-ien' }
+            }, vistaStatus: 'reachable'
+          };
+        }
+      }
+    } catch (_) { /* VistA unavailable — fall through to fixture */ }
+
+    // Fixture fallback
+    const user = fixtures.users.find(u => u.id === userId);
+    if (user) {
+      return { ok: true, source: 'fixture', data: user, vistaStatus: 'unavailable' };
+    }
+
+    return { ok: false, error: 'user not found' };
   });
 
   // ---- Dual-mode facility routes (VistA-first, fixture fallback) ----
@@ -106,10 +127,11 @@ async function main() {
     if (!tenantId) return { ok: false, error: 'tenantId required' };
 
     // Try VistA adapter: divisions + clinics → assemble topology
+    // Sequential calls — XWB broker has no mutex, concurrent RPCs corrupt responses
     const divResult = await fetchVistaDivisions();
     const clinicResult = await fetchVistaClinics(req.query.search || '');
 
-    if (divResult.ok) {
+    if (divResult.ok || clinicResult.ok) {
       // Build topology from VistA data
       const divisions = (divResult.data || []).map(d => ({
         id: `div-${d.ien || d.id || 'unknown'}`,
@@ -122,29 +144,30 @@ async function main() {
         children: [],
       }));
 
-      // Attach clinics to divisions if we have them
-      if (clinicResult.ok) {
-        const clinics = (clinicResult.data || []).map(c => ({
-          id: `loc-${c.ien || c.id || 'unknown'}`,
-          name: c.name || c.locationName || 'Unknown Clinic',
-          type: 'Clinic',
-          status: 'active',
-          vistaGrounding: { file44Ien: c.ien || c.id, status: 'grounded' },
-        }));
-        // If only one division, attach all clinics to it; otherwise flat list
-        if (divisions.length === 1) {
-          divisions[0].children = clinics;
-        } else if (divisions.length > 1) {
-          // Clinics without division-level grouping — attach as flat peers
-          for (const c of clinics) divisions.push(c);
-        }
+      const clinics = clinicResult.ok ? (clinicResult.data || []).map(c => ({
+        id: `loc-${c.ien || c.id || 'unknown'}`,
+        name: c.name || c.locationName || 'Unknown Clinic',
+        type: 'Clinic',
+        status: 'active',
+        vistaGrounding: { file44Ien: c.ien || c.id, status: 'grounded' },
+      })) : [];
+
+      let facilities;
+      if (divisions.length === 1) {
+        divisions[0].children = clinics;
+        facilities = divisions;
+      } else if (divisions.length > 1) {
+        facilities = [...divisions, ...clinics];
+      } else {
+        // No divisions returned (single-division sandbox) — return clinics directly
+        facilities = clinics;
       }
 
       return {
         ok: true,
         source: 'vista',
         tenantId,
-        data: divisions,
+        data: facilities,
         vistaNote: clinicResult.ok
           ? 'Divisions via XUS DIVISION GET, clinics via ORWU CLINLOC'
           : 'Divisions via XUS DIVISION GET (clinics unavailable)',
@@ -163,7 +186,38 @@ async function main() {
 
   app.get('/api/tenant-admin/v1/facilities/:facilityId', async (req) => {
     const { facilityId } = req.params;
-    // Fixture lookup (VistA detail requires IEN-based global reads — future slice)
+
+    // VistA-first: try to match facilityId against VistA clinic/ward IENs
+    // facilityId format from VistA list routes: "loc-{ien}"
+    const ienMatch = facilityId.match(/^loc-(\d+)$/);
+    if (ienMatch) {
+      const ien = ienMatch[1];
+      try {
+        // Sequential — XWB broker has no mutex for concurrent calls
+        const clinicsRes = await fetchVistaClinics('');
+        const wardsRes = await fetchVistaWards();
+        const clinic = clinicsRes.ok && clinicsRes.data.find(c => String(c.ien) === ien);
+        if (clinic) {
+          return {
+            ok: true, source: 'vista', data: {
+              id: facilityId, name: clinic.name, type: 'Clinic', status: 'active',
+              vistaGrounding: { file44Ien: ien, status: 'grounded' }
+            }, vistaStatus: 'reachable'
+          };
+        }
+        const ward = wardsRes.ok && wardsRes.data.find(w => String(w.ien) === ien);
+        if (ward) {
+          return {
+            ok: true, source: 'vista', data: {
+              id: facilityId, name: ward.name, type: 'Ward', status: 'active',
+              vistaGrounding: { file42Ien: ien, status: 'grounded' }
+            }, vistaStatus: 'reachable'
+          };
+        }
+      } catch (_) { /* VistA unavailable — fall through to fixture */ }
+    }
+
+    // Fixture fallback
     function findFacility(items, id) {
       for (const f of items) {
         if (f.id === id) return f;
@@ -177,13 +231,11 @@ async function main() {
     const facility = findFacility(fixtures.facilities, facilityId);
     if (!facility) return { ok: false, error: 'facility not found' };
 
-    // Probe VistA for source labeling
-    const probe = await probeVista();
     return {
       ok: true,
       source: 'fixture',
       data: facility,
-      vistaStatus: probe.ok ? 'reachable' : 'unavailable',
+      vistaStatus: 'unavailable',
     };
   });
 
@@ -197,7 +249,14 @@ async function main() {
         return user ? { id: user.id, name: user.name } : { id: uid, name: uid };
       }),
     }));
-    return { ok: true, source: 'fixture', tenantId, data: enrichedRoles };
+    return {
+      ok: true,
+      source: 'fixture',
+      sourceStatus: 'integration-pending',
+      tenantId,
+      data: enrichedRoles,
+      integrationNote: 'No VistA RPC enumerates File 19.1 security keys in bulk. ORWU HASKEY checks one user+key at a time. Full key inventory requires DDR FILE ENTRIES or a custom M routine scanning ^DIC(19.1).',
+    };
   });
 
   // ---- Clinic list: extract clinics from facility hierarchy ----
@@ -319,37 +378,63 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
 
+    // VistA-first: assemble topology from live broker data
+    // Sequential calls — XWB broker client has no mutex, so concurrent RPCs on
+    // the same TCP socket corrupt each other's response buffers.
+    try {
+      const divRes = await fetchVistaDivisions();
+      const clinicRes = await fetchVistaClinics('');
+      const wardRes = await fetchVistaWards();
+
+      if (divRes.ok || clinicRes.ok || wardRes.ok) {
+        const divisions = (divRes.ok ? divRes.data : []).map(d => ({
+          id: `div-${d.ien}`, name: d.name, type: 'Division',
+          stationNumber: d.stationNumber || null,
+          vistaGrounding: { file40_8Ien: d.ien, status: 'grounded' },
+        }));
+        const clinics = (clinicRes.ok ? clinicRes.data : []).map(c => ({
+          id: `loc-${c.ien}`, name: c.name, type: 'Clinic',
+          vistaGrounding: { file44Ien: c.ien, status: 'grounded' },
+        }));
+        const wards = (wardRes.ok ? wardRes.data : []).map(w => ({
+          id: `ward-${w.ien}`, name: w.name, type: 'Ward',
+          vistaGrounding: { file42Ien: w.ien, status: 'grounded' },
+        }));
+
+        // Build unified topology: divisions at top, clinics and wards nested
+        const topology = divisions.length > 0
+          ? divisions.map(d => ({ ...d, clinicCount: clinics.length, wardCount: wards.length, clinics, wards }))
+          : [{ id: 'site-default', name: 'Site', type: 'Site', clinicCount: clinics.length, wardCount: wards.length, clinics, wards }];
+
+        return {
+          ok: true,
+          source: 'vista',
+          tenantId,
+          data: topology,
+          vistaGrounding: {
+            hierarchy: 'Division (XUS DIVISION GET) → Clinic (ORWU CLINLOC) / Ward (ORQPT WARDS)',
+            rpcsUsed: [
+              divRes.ok ? 'XUS DIVISION GET' : null,
+              clinicRes.ok ? 'ORWU CLINLOC' : null,
+              wardRes.ok ? 'ORQPT WARDS' : null,
+            ].filter(Boolean),
+          },
+        };
+      }
+    } catch (_) { /* VistA unavailable — fall through to fixture */ }
+
+    // Fixture fallback
     const topology = fixtures.facilities.map(inst => {
       const divisions = (inst.children || []).filter(c => c.type === 'Division');
       return {
-        id: inst.id,
-        name: inst.name,
-        type: inst.type,
-        stationNumber: inst.vistaGrounding.stationNumber || null,
+        id: inst.id, name: inst.name, type: inst.type,
+        stationNumber: (inst.vistaGrounding || {}).stationNumber || null,
         divisionCount: divisions.length,
-        clinicCount: divisions.reduce((s, d) =>
-          s + (d.children || []).filter(c => c.type === 'Clinic').length, 0),
+        clinicCount: divisions.reduce((s, d) => s + (d.children || []).filter(c => c.type === 'Clinic').length, 0),
         wardCount: (inst.wards || []).length,
-        bedCount: (inst.wards || []).reduce((s, w) => s + (w.beds || []).length, 0),
         divisions: divisions.map(d => ({
-          id: d.id,
-          name: d.name,
-          facilityNumber: d.vistaGrounding.facilityNumber || null,
+          id: d.id, name: d.name,
           clinicCount: (d.children || []).filter(c => c.type === 'Clinic').length,
-          clinics: (d.children || []).filter(c => c.type === 'Clinic').map(c => ({
-            id: c.id,
-            name: c.name,
-            abbreviation: c.vistaGrounding.abbreviation || null,
-            stopCode: c.vistaGrounding.stopCode || null,
-            slotLength: c.vistaGrounding.defaultSlotLength || null,
-          })),
-        })),
-        wards: (inst.wards || []).map(w => ({
-          id: w.id,
-          name: w.name,
-          specialty: w.vistaGrounding.specialty || null,
-          bedCount: (w.beds || []).length,
-          availableBeds: (w.beds || []).filter(b => b.status === 'available').length,
         })),
       };
     });
@@ -359,6 +444,7 @@ async function main() {
       source: 'fixture',
       tenantId,
       data: topology,
+      integrationNote: 'VistA broker unavailable — showing fixture topology as fallback.',
       vistaGrounding: {
         hierarchy: 'Institution (File 4) → Division (File 40.8) → Clinic (File 44 type=C) / Ward (File 42 + File 44 type=W)',
         rpcs: ['XUS DIVISION GET', 'ORWU CLINLOC', 'ORQPT WARDS'],
@@ -397,6 +483,7 @@ async function main() {
     return {
       ok: true,
       source: 'fixture',
+      sourceStatus: 'integration-pending',
       tenantId,
       data: inventory,
       summary: {
@@ -405,6 +492,7 @@ async function main() {
         adminKeys: inventory.filter(k => k.category === 'administrative').length,
         unassignedKeys: inventory.filter(k => k.holderCount === 0).length,
       },
+      integrationNote: 'Key-to-holder mapping is fixture-based. ORWU HASKEY can verify individual assignments but cannot enumerate all holders of a given key. Requires DDR global read of ^XUSEC(key) or a custom M routine.',
     };
   });
 
@@ -430,6 +518,7 @@ async function main() {
     return {
       ok: true,
       source: 'fixture',
+      sourceStatus: 'integration-pending',
       tenantId,
       data: summary,
       aggregates: {
@@ -438,6 +527,7 @@ async function main() {
         notConfigured: summary.filter(u => u.esigStatus === 'not-configured').length,
         revoked: summary.filter(u => u.esigStatus === 'revoked').length,
       },
+      integrationNote: 'ORWU VALIDSIG validates one e-sig at a time but no RPC exposes bulk e-sig status across all users. Fixture data reflects design-time assumptions, not live VistA state. Requires per-user ORWU VALIDSIG probing or DDR read of File 200 field 20.4 hash presence.',
       vistaGrounding: {
         validationRpc: 'ORWU VALIDSIG',
         field: 'File 200 field 20.4 (ELECTRONIC SIGNATURE CODE)',
@@ -496,40 +586,67 @@ async function main() {
   app.get('/api/tenant-admin/v1/dashboard', async (req) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return { ok: false, error: 'tenantId required' };
-    function countFacilities(items) {
-      let n = 0;
-      for (const f of items) { n++; if (f.children) n += countFacilities(f.children); }
-      return n;
-    }
-    function countClinics(items) {
-      let n = 0;
-      for (const f of items) {
-        if (f.type === 'Clinic') n++;
-        if (f.children) n += countClinics(f.children);
-      }
-      return n;
-    }
-    const wardCount = fixtures.facilities.reduce((s, inst) => s + (inst.wards || []).length, 0);
-    const bedCount = fixtures.facilities.reduce((s, inst) =>
-      s + (inst.wards || []).reduce((ws, w) => ws + (w.beds || []).length, 0), 0);
+
     const probe = await probeVista();
-    const activeUsers = fixtures.users.filter(u => u.status === 'active').length;
-    const esigActive = fixtures.users.filter(u =>
-      u.vistaGrounding.electronicSignature && u.vistaGrounding.electronicSignature.status === 'active'
-    ).length;
+    let source = 'fixture';
+
+    // Try VistA-first for counts
+    let userCount = fixtures.users.length;
+    let activeUserCount = fixtures.users.filter(u => u.status === 'active').length;
+    let clinicCount = 0;
+    let wardCount = 0;
+    let facilityCount = 0;
+    let bedCount = 0;
+    let roleCount = fixtures.roles.length;
+    let esigActiveCount = 0;
+
+    if (probe.ok) {
+      try {
+        // Sequential calls — XWB broker has no mutex, concurrent RPCs corrupt responses
+        const usersRes = await fetchVistaUsers('');
+        const clinicsRes = await fetchVistaClinics('');
+        const wardsRes = await fetchVistaWards();
+        if (usersRes.ok) { userCount = usersRes.data.length; activeUserCount = userCount; source = 'vista'; }
+        if (clinicsRes.ok) { clinicCount = clinicsRes.data.length; facilityCount = clinicsRes.data.length; }
+        if (wardsRes.ok) { wardCount = wardsRes.data.length; }
+      } catch (_) { /* fall back to fixture counts */ }
+    } else {
+      function countFacilities(items) {
+        let n = 0;
+        for (const f of items) { n++; if (f.children) n += countFacilities(f.children); }
+        return n;
+      }
+      function countClinics(items) {
+        let n = 0;
+        for (const f of items) {
+          if (f.type === 'Clinic') n++;
+          if (f.children) n += countClinics(f.children);
+        }
+        return n;
+      }
+      facilityCount = countFacilities(fixtures.facilities);
+      clinicCount = countClinics(fixtures.facilities);
+      wardCount = fixtures.facilities.reduce((s, inst) => s + (inst.wards || []).length, 0);
+      bedCount = fixtures.facilities.reduce((s, inst) =>
+        s + (inst.wards || []).reduce((ws, w) => ws + (w.beds || []).length, 0), 0);
+      esigActiveCount = fixtures.users.filter(u =>
+        u.vistaGrounding.electronicSignature && u.vistaGrounding.electronicSignature.status === 'active'
+      ).length;
+    }
+
     return {
       ok: true,
-      source: 'fixture',
+      source,
       tenantId,
       data: {
-        userCount: fixtures.users.length,
-        activeUserCount: activeUsers,
-        facilityCount: countFacilities(fixtures.facilities),
-        clinicCount: countClinics(fixtures.facilities),
+        userCount,
+        activeUserCount,
+        facilityCount,
+        clinicCount,
         wardCount,
         bedCount,
-        roleCount: fixtures.roles.length,
-        esigActiveCount: esigActive,
+        roleCount,
+        esigActiveCount,
         vistaGrounding: probe.ok ? 'connected' : 'integration-pending',
         vistaUrl: probe.url || null,
         moduleStatus: { enabled: 0, total: 0 }
@@ -544,6 +661,15 @@ async function main() {
 
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Tenant Admin shell listening on http://127.0.0.1:${PORT}`);
+
+  // Graceful shutdown — disconnect VistA broker
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      console.log(`\n${sig} received. Disconnecting VistA broker...`);
+      disconnectBroker();
+      app.close().then(() => process.exit(0));
+    });
+  }
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

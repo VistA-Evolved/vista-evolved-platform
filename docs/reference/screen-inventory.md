@@ -295,7 +295,7 @@ These surfaces represent the terminal-first product strategy. The browser-hosted
 
 ## 7. Surface inventory — Priority Group B: Tenant operational admin foundation
 
-These surfaces represent the tenant-admin workspace (`apps/admin-console/`) per VE-PLAT-ADR-0003 and workspace map §12.
+These surfaces represent the tenant-admin workspace (`apps/tenant-admin/` on current public `main`; `apps/admin-console/` remains placeholder-only) per VE-PLAT-ADR-0003 and workspace map §12.
 
 ### 7.1 User management
 

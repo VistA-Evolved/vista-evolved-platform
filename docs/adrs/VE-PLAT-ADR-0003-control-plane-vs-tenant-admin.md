@@ -13,8 +13,9 @@ We need to distinguish platform-level control (tenants, deployments, system conf
 ## Decision
 
 - **Control plane:** Manages tenants, deployment profiles, capability packs, system-wide config. Lives in `apps/control-plane/`. Not tenant-scoped; operators/super-admins only.
-- **Tenant admin:** Per-tenant configuration, facility linkage, module enablement, tenant users. Exposed via **admin console** (`apps/admin-console/`) or APIs consumed by tenant admins. All operations are scoped to a tenant context.
+- **Tenant admin:** Per-tenant configuration, facility linkage, module enablement, tenant users. On current public `main`, the bounded runtime path is `apps/tenant-admin/`. `apps/admin-console/` is a reserved placeholder only. All operations are scoped to a tenant context.
 
 ## Consequences
 
-- Clear separation of who can change what. Control plane and admin console may share domain packages but have different auth and scope.
+- Clear separation of who can change what. Control plane and tenant-admin may share domain packages but have different auth and scope.
+- The existence of a bounded tenant-admin prototype does not authorize broad GUI claims or imply live VistA verification; proof remains required per governed build rules.

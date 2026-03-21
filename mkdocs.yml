@@ -84,6 +84,8 @@ nav:
     - Tenant Admin Personas Jobs and First-Slice Journeys: explanation/tenant-admin-personas-jobs-and-first-slice-journeys.md
     - Operator-to-Tenant-Admin Handoff Model: explanation/operator-to-tenant-admin-handoff-model.md
     - Tenant Admin Design Contract v1: explanation/tenant-admin-design-contract-v1.md
+    - Tenant Admin First Live Slice Decision: explanation/tenant-admin-first-live-slice-decision.md
+    - Public Main Reality Reconciliation: explanation/public-main-reality-reconciliation.md
     - VistA Admin Corpus Discovery Pack: explanation/vista-admin-corpus-discovery-pack.md
     - VistA Admin Domain Map: explanation/vista-admin-domain-map.md
     - VistA Admin Source Manual Index: explanation/vista-admin-source-manual-index.md
@@ -93,6 +95,9 @@ nav:
     - "VistA Admin Grounded Domain: Institution, Division, Clinic": explanation/vista-admin-grounded-domain-institution-division-clinic.md
     - VistA Admin Guided Write Workflows: explanation/vista-admin-guided-write-workflows.md
     - VistA Admin Repo Gap Analysis: explanation/vista-admin-repo-gap-analysis.md
+    - Fixture Inventory and Truth Ownership Audit: explanation/fixture-inventory-and-truth-ownership-audit.md
+    - Tenant Admin Happy-Path Source Map: explanation/tenant-admin-happy-path-source-map.md
+    - Live Broker Canonical Path: explanation/live-broker-canonical-path.md
   - ADRs:
     - adrs/index.md
     - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md
