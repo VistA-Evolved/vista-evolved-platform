@@ -1,123 +1,168 @@
 site_name: VistA Evolved Platform
-site_description: Governance, contracts, and architecture documentation for VistA Evolved Platform
+site_description: Governance, architecture, runbooks, and API reference for VistA Evolved Platform
 repo_url: https://github.com/vista-evolved/vista-evolved-platform
+repo_name: vista-evolved-platform
+copyright: "VistA Evolved Platform &mdash; Governed, Proof-Driven Build"
 
 theme:
   name: material
   palette:
-    scheme: default
-    primary: indigo
-    accent: blue
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  logo: assets/logo.svg
+  favicon: assets/favicon.png
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - navigation.path
+    - navigation.indexes
     - search.suggest
+    - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.annotate
+    - content.tooltips
+    - toc.follow
+    - toc.integrate
+
+plugins:
+  - search:
+      lang: en
+  - minify:
+      minify_html: false
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/vista-evolved
+  analytics:
+    provider: custom
 
 nav:
   - Home: index.md
+
+  - Getting Started:
+    - tutorials/index.md
+    - Getting Started: tutorials/getting-started.md
+    - Architecture Overview: explanation/global-system-architecture-spec.md
+    - Docker-First Workflow: how-to/docker-first.md
+
+  - How-To Guides:
+    - how-to/index.md
+    - Docker & Runtime:
+      - how-to/docker-first.md
+      - how-to/start-vista-docker.md
+      - how-to/verify-vista-connection.md
+    - Tenant Admin:
+      - how-to/add-vista-user.md
+      - how-to/create-clinic.md
+      - how-to/assign-security-key.md
+    - Operator:
+      - how-to/bootstrap-new-tenant.md
+      - how-to/configure-billing.md
+
+  - Runbooks:
+    - runbooks/index.md
+    - Lago Billing Setup: runbooks/lago-billing-setup.md
+    - Bootstrap Report: runbooks/bootstrap-report.md
+    - Terminal Proof Report: runbooks/terminal-proof-report.md
+    - Vista Provisioning: runbooks/vista-provisioning.md
+    - Vista Baselines: runbooks/vista-baselines.md
+
+  - Architecture:
+    - explanation/index.md
+    - Core Architecture:
+      - Global System Architecture: explanation/global-system-architecture-spec.md
+      - Tenant Admin Architecture: explanation/tenant-admin-architecture-and-boundaries.md
+      - Operator-to-Tenant Handoff: explanation/operator-to-tenant-admin-handoff-model.md
+      - Governed Build Protocol: explanation/governed-build-protocol.md
+      - AI Coding Governance: explanation/ai-coding-governance-and-sdlc.md
+    - Control Plane:
+      - Service Map: explanation/control-plane-service-map-and-operator-console-architecture.md
+      - Tenant Lifecycle: explanation/control-plane-tenant-lifecycle-and-orchestration-model.md
+      - Bootstrap & Provisioning: explanation/control-plane-operator-bootstrap-and-provisioning-contract-map.md
+    - VistA Integration:
+      - VistA Admin Coverage Map: reference/vista-admin-coverage-map.md
+      - VistA Admin Truth Map: explanation/tenant-admin-vista-truth-map.md
+      - VistA Admin Guided Write Workflows: explanation/vista-admin-guided-write-workflows.md
+      - VistA RPC Reference: reference/vista-rpc-reference-data.md
+      - Live Broker Canonical Path: explanation/live-broker-canonical-path.md
+    - Modularity & Packs:
+      - Pack and Adapter Architecture: explanation/pack-and-adapter-architecture-governance.md
+      - Capability Truth: explanation/capability-truth-and-claim-gating-spec.md
+      - Country and Payer Readiness: explanation/country-and-payer-readiness-registry-spec.md
+
   - Reference:
     - reference/index.md
     - Source of Truth Index: reference/source-of-truth-index.md
+    - Port Registry: reference/port-registry.md
+    - Permissions Matrix: reference/permissions-matrix.md
+    - Screen Inventory: reference/screen-inventory.md
+    - Data Ownership Matrix: reference/data-ownership-matrix.md
     - Doc Governance: reference/doc-governance.md
-    - Docs Policy: reference/docs-policy.md
+    - Persistence Policy: reference/persistence-policy.md
+    - Boundary Policy: reference/boundary-policy.md
     - Contract System: reference/contract-system.md
     - Contract Policy: reference/contract-policy.md
-    - Contract Mutation and Implementation Governance: reference/contract-mutation-and-implementation-governance-protocol.md
-    - Boundary Policy: reference/boundary-policy.md
-    - Persistence Policy: reference/persistence-policy.md
-    - Data Ownership Matrix: reference/data-ownership-matrix.md
-    - Port Registry: reference/port-registry.md
-    - Screen Inventory: reference/screen-inventory.md
-    - Permissions Matrix: reference/permissions-matrix.md
-    - Pack Visibility Rules: reference/pack-visibility-rules.md
-    - Nx Adoption Plan: reference/nx-adoption-plan.md
     - Decision Index: reference/decision-index.yaml
-    - Notion Sync Policy: reference/notion-sync-policy.md
-  - Explanation:
-    - explanation/index.md
-    - Global System Architecture: explanation/global-system-architecture-spec.md
-    - Organization Facility Network Service Model: explanation/organization-facility-network-service-model.md
-    - Pack and Adapter Architecture Governance: explanation/pack-and-adapter-architecture-governance.md
-    - Capability Truth and Claim-Gating: explanation/capability-truth-and-claim-gating-spec.md
-    - Country and Payer Readiness Registry: explanation/country-and-payer-readiness-registry-spec.md
-    - Specialty Content and Analytics Architecture: explanation/specialty-content-and-analytics-architecture-spec.md
-    - Information Architecture and Workspace Map: explanation/information-architecture-workspace-map.md
-    - Legal-Market Composition and Resolver: explanation/legal-market-composition-and-effective-configuration-resolver-spec.md
-    - AI Assist Safety Spec: explanation/ai-assist-safety-spec.md
-    - Governed Build Protocol: explanation/governed-build-protocol.md
-    - AI Coding Governance: explanation/ai-coding-governance-and-sdlc.md
-    - Control-Plane Service Map and Architecture: explanation/control-plane-service-map-and-operator-console-architecture.md
-    - Control-Plane Tenant Lifecycle and Orchestration: explanation/control-plane-tenant-lifecycle-and-orchestration-model.md
-    - Control-Plane Operator Bootstrap and Provisioning: explanation/control-plane-operator-bootstrap-and-provisioning-contract-map.md
-    - Control-Plane Tenant Lifecycle Contract (Batch 2): explanation/control-plane-tenant-lifecycle-and-provisioning-control-contract-map-batch-2.md
-    - Control-Plane Market Pack and System Write (Batch 3): explanation/control-plane-market-pack-and-system-write-contract-map-batch-3.md
-    - Control-Plane Local Write Review Runtime (Batch 3): explanation/control-plane-local-write-review-runtime-batch-3.md
-    - Control-Plane Local Operator Access (Wave 1): explanation/control-plane-local-operator-access-foundation-wave-1.md
-    - Control-Plane Composition Engine (Wave 2): explanation/control-plane-composition-engine-wave-2.md
-    - Control-Plane Fixture Truth Alignment (Batch 4): explanation/control-plane-fixture-truth-alignment-and-second-market-seed-batch-4.md
-    - Control-Plane Bootstrap Subsystem Pattern Scan: explanation/control-plane-bootstrap-subsystem-pattern-scan.md
-    - Control-Plane Bootstrap Journeys and Stories: explanation/control-plane-bootstrap-journeys-and-stories.md
-    - Control-Plane Bootstrap UX/IA and Wireframes: explanation/control-plane-bootstrap-ux-ia-and-wireframes.md
-    - Control-Plane Bootstrap Design Handoff Brief: explanation/control-plane-bootstrap-design-handoff-brief.md
-    - Control-Plane Static Review Prototype (Batch 2): explanation/control-plane-static-review-prototype-implementation-batch-2.md
-    - Control-Panel Surface Expansion (Batch 1): explanation/control-panel-surface-expansion-batch-1.md
-    - Control-Panel Page Specs (Batch 1): explanation/control-panel-page-specs-and-operator-manual-batch-1.md
-    - Control-Panel Page Specs v2: explanation/control-panel-page-specs-v2.md
-    - Control-Panel Action Semantics (Batch 1): explanation/control-panel-action-semantics-and-source-of-truth-binding-batch-1.md
-    - Control-Panel Action Semantics v2: explanation/control-panel-action-semantics-v2.md
-    - Control-Panel Design Contract (Batch 1): explanation/control-panel-design-contract-and-static-review-prototype-batch-1.md
-    - Control-Panel Design Contract v2: explanation/control-panel-design-contract-v2.md
-    - Control-Panel IA and Wireframe Contract v2: explanation/control-panel-information-architecture-and-wireframe-contract-v2.md
-    - Operator Console UX/IA Reset and Journey Pack: explanation/operator-console-ux-ia-reset-and-journey-pack.md
-    - Operator Console Personas Jobs and Service Map: explanation/operator-console-personas-jobs-and-service-map.md
-    - Operator Console Page Priority and Content Model: explanation/operator-console-page-priority-and-content-model.md
-    - Operator Console Design Contract v3: explanation/operator-console-design-contract-v3.md
-    - Operator Console Shell Content Model: explanation/operator-console-shell-content-model.md
-    - Operator Console Design Handoff Brief v2: explanation/operator-console-design-handoff-brief-v2.md
-    - Tenant Admin Architecture and Boundaries: explanation/tenant-admin-architecture-and-boundaries.md
-    - Tenant Admin VistA Truth Map: explanation/tenant-admin-vista-truth-map.md
-    - Tenant Admin VistA Admin Truth Discovery Pack: explanation/tenant-admin-vista-admin-truth-discovery-pack.md
-    - Tenant Admin VistA Users and Security Keys Map: explanation/tenant-admin-vista-users-and-security-keys-map.md
-    - Tenant Admin VistA Facility Division Clinic Map: explanation/tenant-admin-vista-facility-division-clinic-map.md
-    - Tenant Admin VistA Ward and Room-Bed Map: explanation/tenant-admin-vista-ward-bed-map.md
-    - Tenant Admin Personas Jobs and First-Slice Journeys: explanation/tenant-admin-personas-jobs-and-first-slice-journeys.md
-    - Operator-to-Tenant-Admin Handoff Model: explanation/operator-to-tenant-admin-handoff-model.md
-    - Tenant Admin Design Contract v1: explanation/tenant-admin-design-contract-v1.md
-    - Tenant Admin First Live Slice Decision: explanation/tenant-admin-first-live-slice-decision.md
-    - Public Main Reality Reconciliation: explanation/public-main-reality-reconciliation.md
-    - VistA Admin Corpus Discovery Pack: explanation/vista-admin-corpus-discovery-pack.md
-    - VistA Admin Domain Map: explanation/vista-admin-domain-map.md
-    - VistA Admin Source Manual Index: explanation/vista-admin-source-manual-index.md
-    - VistA Admin Terminal-to-UI Translation Matrix: explanation/vista-admin-terminal-to-ui-translation-matrix.md
-    - VistA Admin Slice Ranking and Mode Selection: explanation/vista-admin-slice-ranking-and-mode-selection.md
-    - "VistA Admin Grounded Domain: Users, Keys, Signatures": explanation/vista-admin-grounded-domain-users-keys-signatures.md
-    - "VistA Admin Grounded Domain: Institution, Division, Clinic": explanation/vista-admin-grounded-domain-institution-division-clinic.md
-    - VistA Admin Guided Write Workflows: explanation/vista-admin-guided-write-workflows.md
-    - VistA Admin Repo Gap Analysis: explanation/vista-admin-repo-gap-analysis.md
-    - Fixture Inventory and Truth Ownership Audit: explanation/fixture-inventory-and-truth-ownership-audit.md
-    - Tenant Admin Happy-Path Source Map: explanation/tenant-admin-happy-path-source-map.md
-    - Live Broker Canonical Path: explanation/live-broker-canonical-path.md
+
   - ADRs:
     - adrs/index.md
     - "VE-PLAT-ADR-0001: Three-Repo Architecture": adrs/VE-PLAT-ADR-0001-three-repo-architecture.md
     - "VE-PLAT-ADR-0002: Contract-First Architecture": adrs/VE-PLAT-ADR-0002-contract-first-architecture.md
     - "VE-PLAT-ADR-0003: Control Plane vs Tenant Admin": adrs/VE-PLAT-ADR-0003-control-plane-vs-tenant-admin.md
-  - Runbooks:
-    - runbooks/index.md
-    - Bootstrap Report: runbooks/bootstrap-report.md
-    - Terminal Proof Report: runbooks/terminal-proof-report.md
-  - How-To:
-    - how-to/index.md
-  - Tutorials:
-    - tutorials/index.md
+    - "VE-PLAT-ADR-0004: Billing System (Lago)": adrs/VE-PLAT-ADR-0004-billing-system-lago.md
+    - "VE-PLAT-ADR-0005: Platform DB Naming": adrs/VE-PLAT-ADR-0005-platform-db-naming.md
 
 markdown_extensions:
   - toc:
       permalink: true
+      toc_depth: 3
   - admonition
-  - pymdownx.highlight
-  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
+      combine_header_slug: true
+  - pymdownx.details
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.critic
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - def_list
   - tables
+  - md_in_html
+  - footnotes
+  - abbr
+
+extra_css:
+  - assets/extra.css

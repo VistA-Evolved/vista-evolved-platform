@@ -1,0 +1,223 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "error": "Error",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "finish": "Finish",
+    "search": "Search",
+    "filter": "Filter",
+    "refresh": "Refresh",
+    "unknown": "Unknown",
+    "none": "None",
+    "yes": "Yes",
+    "no": "No",
+    "notAvailable": "N/A",
+    "integrationPending": "Integration Pending",
+    "vistaSources": {
+      "live": "VistA Live",
+      "pending": "Integration Pending",
+      "unavailable": "Unavailable"
+    }
+  },
+  "auth": {
+    "title": "Sign In",
+    "description": "Use your VistA access code and verify code to sign in.",
+    "accessCode": "Access Code",
+    "verifyCode": "Verify Code",
+    "accessCodePlaceholder": "Enter your access code",
+    "verifyCodePlaceholder": "Enter your verify code",
+    "signIn": "Sign In",
+    "signingIn": "Signing in…",
+    "signOut": "Sign Out",
+    "sessionExpired": "Session expired. Please sign in again.",
+    "loginFailed": "Login failed. Check your access and verify codes.",
+    "connectionError": "Connection error. Is the VistA server running?",
+    "sandboxHint": "Sandbox: Access {accessCode} / Verify {verifyCode}",
+    "appTagline": "Site Administration Console",
+    "appName": "VistA Evolved"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "securityKeys": "Security Keys",
+    "facilities": "Facilities",
+    "clinics": "Clinics",
+    "wards": "Wards",
+    "clinicalConfig": "Clinical Config",
+    "bulletins": "Bulletins",
+    "billing": "Billing Parameters",
+    "system": "System Status",
+    "devices": "Devices",
+    "hl7": "HL7 Interfaces",
+    "switchToPlatformOps": "Switch to Platform Operations",
+    "switchToSiteAdmin": "Switch to Site Administration"
+  },
+  "tenant": {
+    "dashboard": {
+      "title": "Site Dashboard",
+      "description": "Real-time status from your VistA system",
+      "vistaHealth": "VistA Health",
+      "quickLinks": "Quick Links"
+    },
+    "users": {
+      "title": "VistA Users",
+      "description": "User accounts from VistA File 200 (New Person)",
+      "searchPlaceholder": "Search by name, title, or service…",
+      "noUsers": "No users returned from VistA.",
+      "columns": {
+        "ien": "IEN",
+        "name": "Name",
+        "title": "Title",
+        "service": "Service",
+        "division": "Division",
+        "status": "Status",
+        "npi": "NPI",
+        "active": "Active",
+        "inactive": "Inactive"
+      }
+    },
+    "securityKeys": {
+      "title": "Security Keys",
+      "description": "VistA security keys from File 19.1 — controls access to menus and RPCs",
+      "searchPlaceholder": "Search security keys…",
+      "noKeys": "No security keys returned from VistA."
+    },
+    "facilities": {
+      "title": "Facilities",
+      "description": "Medical centers and divisions from VistA File 4 (Institution)",
+      "searchPlaceholder": "Search facilities…",
+      "noFacilities": "No facilities returned from VistA."
+    },
+    "clinics": {
+      "title": "Clinics",
+      "description": "Hospital locations from VistA File 44 (Hospital Location)",
+      "searchPlaceholder": "Search clinics…",
+      "noClinics": "No clinics returned from VistA."
+    },
+    "wards": {
+      "title": "Wards",
+      "description": "Inpatient wards from VistA File 42 (Ward Location)",
+      "searchPlaceholder": "Search wards…",
+      "noWards": "No wards returned from VistA."
+    },
+    "devices": {
+      "title": "Devices",
+      "description": "Terminals, printers, and interfaces from VistA File 3.5 (Device)",
+      "searchPlaceholder": "Search devices…",
+      "noDevices": "No devices returned from VistA."
+    },
+    "system": {
+      "title": "System Status",
+      "description": "VistA runtime status, connection health, and site parameters",
+      "vistaConnection": "VistA Connection",
+      "currentSession": "Current Session",
+      "platform": "Platform",
+      "connected": "Connected",
+      "offline": "Offline",
+      "host": "Host",
+      "mode": "Mode",
+      "user": "User",
+      "duz": "DUZ",
+      "additionalViews": "Additional System Views",
+      "additionalViewsNote": "These views require additional VistA M-routine deployment."
+    },
+    "hl7": {
+      "title": "HL7 Interfaces",
+      "description": "Active HL7 messaging interfaces from VistA",
+      "integrationPending": "HL7 interface monitoring is not yet available in this version."
+    },
+    "clinical": {
+      "title": "Clinical Configuration",
+      "description": "Order entry, TIU, pharmacy, lab, radiology, and nursing configuration",
+      "integrationPending": "Clinical configuration views require additional M-routine deployment."
+    },
+    "bulletins": {
+      "title": "Bulletins",
+      "description": "System bulletins and notifications from VistA MailMan",
+      "integrationPending": "Bulletin management is not yet available in this version."
+    },
+    "billing": {
+      "title": "Billing Parameters",
+      "description": "IB billing parameters and insurance configuration from VistA",
+      "integrationPending": "Billing parameter management is not yet available in this version."
+    }
+  },
+  "operator": {
+    "dashboard": {
+      "title": "Operations Center",
+      "description": "Platform-wide overview across all tenants and services"
+    },
+    "tenants": {
+      "title": "Tenant Registry",
+      "description": "All provisioned VistA Evolved tenants",
+      "searchPlaceholder": "Search tenants…",
+      "noTenants": "No tenants provisioned yet.",
+      "newTenant": "New Tenant"
+    },
+    "billing": {
+      "title": "Billing & Entitlements",
+      "description": "Lago usage-based billing engine and tenant subscription management",
+      "openLagoUI": "Open Lago UI",
+      "setupRequired": "Setup Required",
+      "setupMessage": "Lago billing is not yet configured. Follow the billing setup runbook to provision the Lago service."
+    },
+    "monitoring": {
+      "title": "System Monitoring",
+      "description": "Platform-wide health, SLA indicators, and alert management"
+    },
+    "provisioning": {
+      "title": "Provisioning",
+      "description": "Tenant provisioning jobs, VistA M-routine installation, and templates"
+    },
+    "support": {
+      "title": "Support Console",
+      "description": "Open alerts, runbook links, and IT support escalation"
+    },
+    "audit": {
+      "title": "Audit Trail",
+      "description": "Immutable audit log of all platform events"
+    },
+    "system": {
+      "title": "System Configuration",
+      "description": "Platform-level configuration, feature flags, and deployment SKU"
+    },
+    "markets": {
+      "title": "Markets Registry",
+      "description": "Legal markets and payer readiness by country/region"
+    },
+    "packs": {
+      "title": "Pack Catalog",
+      "description": "Feature packs and module entitlements for tenant deployment"
+    },
+    "runbooks": {
+      "title": "Runbooks Hub",
+      "description": "Operational procedures for platform management"
+    },
+    "bootstrap": {
+      "title": "New Tenant Bootstrap",
+      "description": "Step-by-step wizard to provision a new VistA Evolved tenant"
+    },
+    "usage": {
+      "title": "Usage & Metering",
+      "description": "Tenant usage metrics and billing event data from Lago"
+    }
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive",
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "offline": "Offline",
+    "online": "Online",
+    "pending": "Pending",
+    "error": "Error",
+    "trial": "Trial",
+    "suspended": "Suspended"
+  }
+}

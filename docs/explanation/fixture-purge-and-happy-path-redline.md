@@ -1,5 +1,7 @@
 # Fixture Purge Inventory and Happy-Path Red-Line
 
+> **SUPERSEDED (2026-03-22):** Fixtures and review-action-map have been deleted from `apps/control-plane/`. This document is retained as historical reference for the review-mode design rationale.
+
 > **Status:** Canonical fixture audit and purge/conversion plan.
 > **Date:** 2026-03-21.
 > **Pass class:** PASS-DOC.

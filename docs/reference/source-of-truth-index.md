@@ -107,9 +107,14 @@
 | AI Operator Copilot subsystem | `apps/control-plane/copilot/` | Provider-neutral copilot with 8 bounded tools, operator-role enforcement, full audit. Disabled by default (`COPILOT_ENABLED=false`) |
 | Copilot API routes | `apps/control-plane/routes/copilot-routes.mjs` | Status, chat, audit endpoints at `/api/copilot/v1/*` |
 | Terminal proof-of-concept | `apps/terminal-proof/` | Terminal-first development scaffold |
-| **Tenant admin workspace** | `apps/tenant-admin/` | VistA-first prototype shell on port 4520. Surfaces include dashboard, users, roles, facilities, clinics, wards, key inventory, e-sig status, **VistA tools (DDR probe)**, devices, kernel params. Direct writes: DDR + `ZVE*`. See `apps/tenant-admin/README.md` |
-| Admin console shell | `apps/admin-console/` | Reserved placeholder only. Do not treat this path as the active tenant-admin runtime while `apps/tenant-admin/` exists on public `main`. |
+| **Unified Admin UI (Next.js)** | `apps/admin-ui/` | Primary admin UI on port 4530. Serves `/tenant/*` (site admin) and `/operator/*` (platform ops) via route namespacing. Proxies API calls to tenant-admin (4520) and control-plane-api (4510). shadcn/ui + Tailwind CSS. See `docs/adrs/VE-PLAT-ADR-0007-unified-admin-ui.md` |
+| **Tenant admin workspace** | `apps/tenant-admin/` | VistA-first operational shell on port 4520. 70+ API endpoints covering 30 VistA files. Surfaces include dashboard, users, roles, facilities, clinics, wards, key inventory, e-sig status, **VistA tools (DDR probe)**, devices, kernel params, drugs, labs, HL7, radiology, TIU, audit logs. Direct writes: DDR + `ZVE*`. See `apps/tenant-admin/README.md` |
+| ~~Admin console shell~~ | ~~`apps/admin-console/`~~ | **DELETED 2026-03-22.** Empty placeholder removed. `apps/tenant-admin/` is the sole tenant-admin runtime. |
 | Tenant-admin first live slice decision | `docs/explanation/tenant-admin-first-live-slice-decision.md` | Canonical Task 2 decision for the first truthful live tenant-admin slice after distro probe findings |
+| **Lago billing adapter** | `apps/control-plane-api/src/services/billing-adapter.mjs` | Wraps Lago REST API. Env: `LAGO_API_URL`, `LAGO_API_KEY`. Returns `{ok:false, pending:true}` when unconfigured. |
+| **Lago billing routes** | `apps/control-plane-api/src/routes/billing-routes.mjs` | 7 billing endpoints: customers, subscriptions, events, invoices |
+| **Lago Docker service** | `services/lago/docker-compose.yml` | Self-hosted Lago: API (3040), UI (3041), worker, PG, Redis |
+| **Billing system ADR** | `docs/adrs/VE-PLAT-ADR-0004-billing-system-lago.md` | Lago chosen over Stripe, Kill Bill, Chargebee (self-host + HIPAA + usage-based) |
 | Architecture decisions | `docs/adrs/` | Enterprise-namespaced VE-PLAT-ADR-NNNN |
 | Decision registry | `docs/reference/decision-index.yaml` | Cross-repo ADR index |
 | Boundaries | `docs/reference/boundary-policy.md` | Bounded contexts, cross-boundary rules |

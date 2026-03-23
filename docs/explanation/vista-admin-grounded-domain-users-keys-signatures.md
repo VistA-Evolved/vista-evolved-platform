@@ -237,10 +237,10 @@ Source: `vista-evolved-platform/apps/tenant-admin/public/app.js`
 
 | Surface | Route | Data Source | Status |
 |---------|-------|------------|--------|
-| Dashboard | `#/dashboard` | Fixture + VistA | Working prototype |
-| User List | `#/users` | Fixture + VistA user search | Working prototype |
-| User Detail | `#/users/:id` | Fixture only (detail) | Fixture-backed |
-| Role Assignment | `#/roles` | Fixture only | Fixture-backed |
+| Dashboard | `#/dashboard` | VistA (DDR aggregate counts) | PASS-LIVE |
+| User List | `#/users` | VistA (`ORWU NEWPERS` + `DDR LISTER`) | PASS-LIVE |
+| User Detail | `#/users/:duz` | VistA (`DDR GETS ENTRY DATA` File 200) | PASS-LIVE |
+| Role Assignment | `#/roles` | VistA (`DDR LISTER` File 19.1 + `^XUSEC`) | PASS-LIVE |
 | VistA tools | `#/vista-tools` | `GET .../vista/ddr-probe` | DDR family + write posture |
 
 ### 3.4 MUMPS Write Patterns (from archive)

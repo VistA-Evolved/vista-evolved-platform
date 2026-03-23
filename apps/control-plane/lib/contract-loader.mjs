@@ -9,10 +9,9 @@
  *   - GET /api/control-plane/v1/legal-market-profiles/:legalMarketId
  *   - GET /api/control-plane/v1/capabilities
  *   - GET /api/control-plane/v1/effective-plans
- *   - GET /api/control-plane/v1/packs          (hybrid: contract + 1 fabricated demo)
- *   - GET /api/control-plane/v1/packs/:packId  (hybrid: contract + 1 fabricated demo)
+ *   - GET /api/control-plane/v1/packs
+ *   - GET /api/control-plane/v1/packs/:packId
  *
- * All other read routes remain fixture-backed.
  * No auth, no persistence, no write execution.
  */
 
@@ -219,37 +218,8 @@ async function loadEffectivePlans(appRoot) {
 }
 
 // ---------------------------------------------------------------------------
-// Pack Catalog — hybrid: 8 contract manifests + 1 fabricated demo pack
+// Pack Catalog — contract manifests only
 // ---------------------------------------------------------------------------
-
-/**
- * Fabricated demo pack for the specialty pack family.
- * NOT from packages/contracts/pack-manifests/ — explicitly fabricated for
- * review prototype demonstration of a specialty-type pack. Segregated here
- * so it's visible and easy to remove when real specialty packs arrive.
- */
-const DEMO_PACK_SPECIALTY_CARDIOLOGY = {
-  packId: 'specialty-cardiology',
-  displayName: 'Cardiology Specialty Pack',
-  description: 'Cardiology specialty variation pack. Fabricated for review prototype demonstration of specialty pack family.',
-  packFamily: 'specialty',
-  version: '0.0.1',
-  lifecycle: {
-    state: 'draft',
-    owner: 'clinical-team',
-    implementationLocus: 'platform',
-    createdAt: '2026-03-19T00:00:00Z',
-    lastModifiedAt: '2026-03-19T00:00:00Z',
-  },
-  attachment: { primaryEntity: 'tenant', overrideScopes: [] },
-  dependencies: [],
-  eligibility: { legalMarkets: [], facilityTypes: [] },
-  contentSummary: { contentTypes: ['templates', 'configuration'], artifactCount: 0 },
-  adapterRequirements: [],
-  configurationKeys: [],
-  capabilityContributions: [],
-  _demo: true,
-};
 
 /** Transform a pack manifest into the OpenAPI PackSummary shape (for list items) */
 function toPackCatalogSummary(manifest) {
@@ -285,8 +255,7 @@ function toPackCatalogDetail(manifest) {
 
 async function loadPackCatalog(appRoot) {
   const packIndex = await loadPackManifestIndex(appRoot);
-  // Merge contract manifests + fabricated demo
-  const allManifests = [...packIndex.values(), DEMO_PACK_SPECIALTY_CARDIOLOGY];
+  const allManifests = [...packIndex.values()];
   const detailIndex = new Map();
   for (const m of allManifests) {
     detailIndex.set(m.packId, toPackCatalogDetail(m));

@@ -1,0 +1,144 @@
+{
+  "common": {
+    "loading": "جارٍ التحميل…",
+    "error": "خطأ",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "confirm": "تأكيد",
+    "back": "رجوع",
+    "next": "التالي",
+    "finish": "إنهاء",
+    "search": "بحث",
+    "filter": "تصفية",
+    "refresh": "تحديث",
+    "unknown": "غير معروف",
+    "none": "لا شيء",
+    "yes": "نعم",
+    "no": "لا",
+    "notAvailable": "غير متاح",
+    "integrationPending": "تكامل معلق",
+    "vistaSources": {
+      "live": "VistA مباشر",
+      "pending": "تكامل معلق",
+      "unavailable": "غير متاح"
+    }
+  },
+  "auth": {
+    "title": "تسجيل الدخول",
+    "description": "استخدم رمز الوصول ورمز التحقق الخاصين بـ VistA لتسجيل الدخول.",
+    "accessCode": "رمز الوصول",
+    "verifyCode": "رمز التحقق",
+    "accessCodePlaceholder": "أدخل رمز الوصول",
+    "verifyCodePlaceholder": "أدخل رمز التحقق",
+    "signIn": "تسجيل الدخول",
+    "signingIn": "جارٍ تسجيل الدخول…",
+    "signOut": "تسجيل الخروج",
+    "sessionExpired": "انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى.",
+    "loginFailed": "فشل تسجيل الدخول. تحقق من رموزك.",
+    "connectionError": "خطأ في الاتصال. هل خادم VistA يعمل؟",
+    "sandboxHint": "البيئة التجريبية: الوصول {accessCode} / التحقق {verifyCode}",
+    "appTagline": "وحدة تحكم إدارة الموقع",
+    "appName": "VistA Evolved"
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "users": "المستخدمون",
+    "securityKeys": "مفاتيح الأمان",
+    "facilities": "المرافق",
+    "clinics": "العيادات",
+    "wards": "الأجنحة",
+    "clinicalConfig": "الإعداد السريري",
+    "bulletins": "النشرات",
+    "billing": "معاملات الفواتير",
+    "system": "حالة النظام",
+    "devices": "الأجهزة",
+    "hl7": "واجهات HL7"
+  },
+  "tenant": {
+    "dashboard": {
+      "title": "لوحة تحكم الموقع",
+      "description": "الحالة في الوقت الفعلي من نظام VistA الخاص بك",
+      "vistaHealth": "صحة VistA",
+      "quickLinks": "روابط سريعة"
+    },
+    "users": {
+      "title": "مستخدمو VistA",
+      "description": "حسابات المستخدمين من ملف VistA 200 (الشخص الجديد)",
+      "searchPlaceholder": "البحث بالاسم أو اللقب أو الخدمة…",
+      "noUsers": "لم يتم إرجاع أي مستخدمين من VistA."
+    },
+    "securityKeys": {
+      "title": "مفاتيح الأمان",
+      "description": "مفاتيح أمان VistA من الملف 19.1",
+      "searchPlaceholder": "البحث عن مفاتيح الأمان…",
+      "noKeys": "لم يتم إرجاع أي مفاتيح أمان من VistA."
+    },
+    "facilities": {
+      "title": "المرافق",
+      "description": "المراكز الطبية والأقسام من ملف VistA 4 (المؤسسة)",
+      "searchPlaceholder": "البحث عن المرافق…",
+      "noFacilities": "لم يتم إرجاع أي مرافق من VistA."
+    },
+    "clinics": {
+      "title": "العيادات",
+      "description": "مواقع المستشفيات من ملف VistA 44",
+      "searchPlaceholder": "البحث عن العيادات…",
+      "noClinics": "لم يتم إرجاع أي عيادات من VistA."
+    },
+    "wards": {
+      "title": "الأجنحة",
+      "description": "أجنحة المرضى الداخليين من ملف VistA 42",
+      "searchPlaceholder": "البحث عن الأجنحة…",
+      "noWards": "لم يتم إرجاع أي أجنحة من VistA."
+    },
+    "devices": {
+      "title": "الأجهزة",
+      "description": "المحطات والطابعات من ملف VistA 3.5",
+      "searchPlaceholder": "البحث عن الأجهزة…",
+      "noDevices": "لم يتم إرجاع أي أجهزة من VistA."
+    },
+    "system": {
+      "title": "حالة النظام",
+      "description": "حالة بيئة تشغيل VistA وصحة الاتصال ومعاملات الموقع",
+      "vistaConnection": "اتصال VistA",
+      "currentSession": "الجلسة الحالية",
+      "platform": "المنصة",
+      "connected": "متصل",
+      "offline": "غير متصل"
+    }
+  },
+  "operator": {
+    "dashboard": {
+      "title": "مركز العمليات",
+      "description": "نظرة عامة على المنصة عبر جميع المستأجرين والخدمات"
+    },
+    "tenants": {
+      "title": "سجل المستأجرين",
+      "description": "جميع مستأجري VistA Evolved المُوفَّرين",
+      "searchPlaceholder": "البحث عن المستأجرين…",
+      "noTenants": "لم يتم توفير أي مستأجرين بعد.",
+      "newTenant": "مستأجر جديد"
+    },
+    "billing": {
+      "title": "الفواتير والاستحقاقات",
+      "description": "محرك الفوترة Lago وإدارة اشتراكات المستأجرين",
+      "openLagoUI": "فتح واجهة Lago",
+      "setupRequired": "الإعداد مطلوب",
+      "setupMessage": "لم يتم تكوين فوترة Lago بعد. اتبع دليل إعداد الفواتير."
+    }
+  },
+  "status": {
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "healthy": "سليم",
+    "degraded": "متدهور",
+    "offline": "غير متصل",
+    "online": "متصل",
+    "pending": "معلق",
+    "error": "خطأ",
+    "trial": "تجريبي",
+    "suspended": "موقوف"
+  }
+}

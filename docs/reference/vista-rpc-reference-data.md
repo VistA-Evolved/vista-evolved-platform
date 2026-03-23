@@ -3,6 +3,12 @@
 > **Purpose:** Central index of all VistA RPC reference material available across the
 > VistA Evolved repos. AI coders and team members: read this FIRST before guessing
 > at RPC names, parameter formats, or return types.
+>
+> **Canonical status:** This file in `vista-evolved-platform` is the **full detailed reference**.
+> The distro repo (`vista-evolved-vista-distro/docs/reference/vista-rpc-reference-data.md`)
+> contains a condensed version with a pointer back here. Edits to the frozen-repo corpus
+> tables, DDR specification, or external source links should be made **here** first —
+> the distro file covers only distro-specific ZVE* RPCs and the DDR quick-reference.
 
 ---
 

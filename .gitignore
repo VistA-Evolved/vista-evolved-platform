@@ -4,6 +4,7 @@ node_modules/
 # Build / artifacts
 artifacts/
 dist/
+.next/
 *.tsbuildinfo
 
 # MkDocs build output
@@ -26,3 +27,20 @@ scripts/notion/notion-sync-config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Test / probe artifacts
+cookies.txt
+probe-temp.json
+login-body.json
+login.json
+auth-token.txt
+req.json
+test-results/
+playwright-report/
+
+# Lago secrets
+services/lago/.env
+services/lago/lago-rsa.pem
+
+# Cursor plans (ephemeral)
+.cursor/plans/

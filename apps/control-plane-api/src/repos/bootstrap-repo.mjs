@@ -1,7 +1,7 @@
 /**
  * Bootstrap repository — PostgreSQL persistence for drafts and requests.
  */
-import { query, getClient } from '../db/pool.mjs';
+import { query } from '../db/pool.mjs';
 
 // ---- Bootstrap Draft ----
 

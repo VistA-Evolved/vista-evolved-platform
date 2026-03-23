@@ -118,14 +118,14 @@ Control Plane (platform-wide)
 
 ## 7. Implementation posture
 
-| Aspect | Current state | Target state |
-|--------|--------------|--------------|
-| App shell | Not started | `apps/tenant-admin/` — standalone app |
-| API | Not started | Tenant-admin API routes (tenant-scoped auth) |
-| Auth | Not started | Tenant-scoped session; user must have tenant-admin role |
-| VistA integration | Not started | Read VistA files via adapter; write site params via VistA RPCs |
+| Aspect | Current state | Notes |
+|--------|--------------|-------|
+| App shell | **Live** — `apps/tenant-admin/` standalone SPA | 9-domain nav with collapsible groups, 71 UI routes |
+| API | **Live** — 158 Fastify routes in `server.mjs` | DDR LISTER/GETS/FILER/VALIDATOR + 26 ZVE overlay RPCs |
+| Auth | **Live** — session-based with Bearer tokens | VistA XWB broker auth, DUZ + security keys in session |
+| VistA integration | **Live** — reads and writes via XWB broker | 14 M routines deployed, DDR + ZVE RPCs for CRUD |
 | Platform PG | Schema exists for modules, feature flags | Extend for facility, user, site params |
-| Design | Not started | Follows operator console design system (shared `packages/ui/`) |
+| Design | **Live** — shared design system in `packages/ui/design-system/` | tokens.css + layout.css consumed by both apps |
 
 ---
 

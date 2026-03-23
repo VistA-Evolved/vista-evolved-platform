@@ -1,5 +1,7 @@
 # Control-Plane Bootstrap — Design Handoff Brief
 
+> **DESIGN TARGET (2026-03-22):** This is a design handoff brief for future implementation. Not all features described here are currently implemented.
+
 > **Artifact type:** Explanation / planning research — NOT implementation authorization.
 > **Repo:** `vista-evolved-platform`
 > **Date:** 2026-03-18

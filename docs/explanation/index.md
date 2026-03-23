@@ -77,9 +77,25 @@ Architecture rationale, governance protocols, and design philosophy.
 - [VistA Admin Corpus Discovery Pack](vista-admin-corpus-discovery-pack.md)
 - [VistA Admin Domain Map](vista-admin-domain-map.md)
 - [VistA Admin Source Manual Index](vista-admin-source-manual-index.md)
-- [VistA Admin Terminal-to-UI Translation Matrix](vista-admin-terminal-to-ui-translation-matrix.md)
+- [VistA Admin Terminal-to-UI Translation Matrix](vista-admin-terminal-to-ui-translation-matrix.md) *(archived — see v2)*
+- [VistA Admin Terminal-to-UI Translation Matrix v2](vista-admin-terminal-to-ui-translation-matrix-v2.md)
 - [VistA Admin Slice Ranking and Mode Selection](vista-admin-slice-ranking-and-mode-selection.md)
 - [VistA Admin Grounded Domain: Users, Keys, Signatures](vista-admin-grounded-domain-users-keys-signatures.md)
 - [VistA Admin Grounded Domain: Institution, Division, Clinic](vista-admin-grounded-domain-institution-division-clinic.md)
 - [VistA Admin Guided Write Workflows](vista-admin-guided-write-workflows.md)
 - [VistA Admin Repo Gap Analysis](vista-admin-repo-gap-analysis.md)
+- [VistA Admin Coverage Ledger and Gap Map](vista-admin-coverage-ledger-and-gap-map.md)
+- [VistA Admin Deep Use-Case Audit](vista-admin-deep-use-case-audit.md)
+
+## Verification proofs
+
+- [Broker Canonicalization Proof](broker-canonicalization-proof.md)
+- [Guided Write Pass Live Proof](guided-write-pass-live-proof.md)
+- [Tenant Admin Pass Live Proof](tenant-admin-pass-live-proof.md)
+- [Tenant Admin Blocker Ledger](tenant-admin-blocker-ledger.md)
+- [Fixture Purge and Happy-Path Redline](fixture-purge-and-happy-path-redline.md)
+
+## Reconciliation
+
+- [Public Main Reality Reconciliation](public-main-reality-reconciliation.md) *(archived — see v2)*
+- [Three-Repo Reality Reconciliation v2](public-main-and-three-repo-reality-reconciliation-v2.md)

@@ -59,10 +59,8 @@ export const READ_ROUTES = [
 
 /**
  * Review-write route access map — 15 write simulation routes + 1 discovery route
- * on /api/control-plane-review/v1/*
- *
- * Action classes match review-action-map.mjs actionClass values.
- * These are review-only routes (executed: false, persistence: "none").
+ * Review routes were removed in Phase 0b cleanup (2026-03-22).
+ * This section is retained for reference but no longer has active routes.
  */
 export const REVIEW_ROUTES = [
   // W1: suspendTenant

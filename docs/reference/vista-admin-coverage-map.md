@@ -1,12 +1,10 @@
 # VistA Administration Coverage Map
 
-> **Purpose:** Single canonical reference mapping every VistA terminal administration function
-> to its tenant-admin UI status, with field-level detail, VistA file/RPC, and pass class.
+> **Status:** Supplementary reference — field-level detail and pass-class tracking.
+> The live-verified coverage summary with EVE menu mapping and enterprise EHR comparison
+> is in [vista-admin-coverage-ledger-and-gap-map.md](../explanation/vista-admin-coverage-ledger-and-gap-map.md).
 >
 > **Source:** VistA Menu Map (9,000+ options), VA VDL documentation, Kernel 8.0 Systems Management Guide.
->
-> **Supersedes:** vista-admin-coverage-ledger-and-gap-map.md, vista-admin-terminal-to-ui-translation-matrix-v2.md,
-> vista-admin-repo-gap-analysis.md (those are retained as archived reference only).
 >
 > **Pass Classes:**
 > - **PASS-LIVE** — UI surface exists, communicates with VistA, and verified against live Docker
@@ -310,7 +308,7 @@
 
 | Blocker ID | Status | Description | Affects |
 |-----------|--------|-------------|---------|
-| B-AUTH-001 | Active | No tenant-scoped session auth | All writes |
+| B-AUTH-001 | Resolved | Session auth with Bearer tokens + VistA XWB broker | All writes |
 | B-RPC-001 | Resolved | Bulk key enumeration | K-01 through K-06 |
 | B-RPC-002 | Resolved | Bulk e-sig status | U-15 |
 | B-RPC-003 | Resolved | Site parameter read path | KP-01 through KP-05 |

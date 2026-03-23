@@ -1,8 +1,8 @@
 # Public Main and Three-Repo Reality Reconciliation v2
 
 > **Status:** Canonical reconciliation — supersedes `public-main-reality-reconciliation.md`.
-> **Date:** 2026-03-21.
-> **Scope:** Reconciles all three public repos against actual `origin/main` truth and all prior task-report claims from the current VS Code chat session.
+> **Date:** 2026-03-21 (initial), updated 2026-03-22 (tenant-admin VistA-only rewrite).
+> **Scope:** Reconciles all three public repos against actual `origin/main` truth and all prior task-report claims.
 > **Pass class:** PASS-DOC.
 > **Governed by:** AGENTS.md §5 task-execution format, §0.6 repo files are source of truth.
 
@@ -31,13 +31,13 @@ On 2026-03-21, all three repos were inspected:
 
 | Artifact | Path | Status |
 |----------|------|--------|
-| Operator console (SPA + review runtime) | `apps/control-plane/` | **Present.** 22-surface SPA on port 4500. Hybrid reads (real-backend + fixture fallback). Review-only writes. Copilot subsystem. |
+| Operator console (SPA) | `apps/control-plane/` | **Present.** 22-surface SPA on port 4500. Real-backend reads (via `control-plane-api`) + contract-backed reads. Lifecycle proxy for real writes. ~~Fixtures, review-only write routes, and copilot subsystem removed 2026-03-22.~~ |
 | Control-plane real backend API | `apps/control-plane-api/` | **Present.** PG-backed state engine on port 4510. Tenant CRUD, bootstrap requests, provisioning runs. 4 route files, DB migration, pool. Docker compose for PG. |
-| Tenant admin prototype shell | `apps/tenant-admin/` | **Present.** Fastify + SPA on port 4520. 13 API surfaces. XWB broker adapter (`lib/xwb-client.mjs`, `lib/vista-adapter.mjs`). Fixture fallback with honest source labeling. |
-| Admin console placeholder | `apps/admin-console/` | **Present.** README-only placeholder. No runtime code. |
+| Tenant admin operational shell | `apps/tenant-admin/` | **Present.** Fastify + SPA on port 4520. **70+ VistA-only API routes** across 7 domains (users, facilities, clinical, billing, system, HL7, monitoring). XWB broker adapter (`lib/xwb-client.mjs`). Custom ZVE* M routines for user CRUD, clinic/ward management, and FileMan audit. **No fixture files, no JSON fallbacks** — all routes read/write live VistA exclusively. Full user lifecycle: create, rename, deactivate, reactivate, terminate. 44 Playwright E2E tests verified against running VistA Docker. Session auth with Bearer token and RBAC via VistA security keys. |
+| ~~Admin console placeholder~~ | ~~`apps/admin-console/`~~ | **DELETED 2026-03-22.** Empty placeholder removed. `apps/tenant-admin/` is the sole tenant-admin runtime. |
 | Terminal proof-of-concept | `apps/terminal-proof/` | **Present.** Minimal scaffold with `src/` and `public/`. |
 | Contracts (OpenAPI, AsyncAPI, schemas) | `packages/contracts/` | **Present.** OpenAPI (control-plane), AsyncAPI (provisioning events), JSON Schema (screen-contract, legal-market, pack-manifest, capability-manifest, effective-tenant-config). Pack-manifest, legal-market-profile, screen-contract, capability-manifest instances. |
-| Explanation docs | `docs/explanation/` | **Present.** 62 files covering architecture, governance, VistA truth discovery, tenant-admin design, operator console specs, fixture audit, broker canonical path, and more. |
+| Explanation docs | `docs/explanation/` | **Present.** 72 files covering architecture, governance, VistA truth discovery, tenant-admin design, operator console specs, coverage audits, broker canonical path, verification proofs, and reconciliation. |
 | ADRs | `docs/adrs/` | **Present.** VE-PLAT-ADR-0001 through 0003. |
 | Governance scripts | `scripts/governance/` | **Present.** |
 | CI gates | `.github/workflows/governance-gates.yml` | **Present.** |
@@ -67,26 +67,25 @@ On 2026-03-21, all three repos were inspected:
 
 ## 3. What is still prototype/shell only
 
-These items exist on public main but are **not yet live-proven against running VistA**:
-
 | Item | Current form | What makes it prototype |
 |------|-------------|------------------------|
-| Tenant-admin user list (`#/users`) | VistA-first adapter wired to `ORWU NEWPERS` | Adapter code exists and claims VistA-first. **No public proof package** showing live end-to-end browser → API → VistA → browser read-back cycle. |
-| Tenant-admin facility/clinic/ward lists | VistA-first adapter wired to `XUS DIVISION GET`, `ORWU CLINLOC`, `ORQPT WARDS` | Same. Adapter code exists. No public proof package. |
-| Tenant-admin topology (`#/topology`) | Assembles divisions + clinics + wards from VistA adapter calls | Same. No public proof package. |
-| Tenant-admin dashboard (`#/dashboard`) | Aggregates VistA counts if broker is available | Fallback to fixture counts. No public proof. |
-| Control-plane operator console | 22-surface SPA | Hybrid reads. Many surfaces serve fixture data as happy path. Review-only writes proxy to `control-plane-api`. No VistA integration (not expected — CP is platform-owned). |
+| Control-plane operator console | 22-surface SPA | Real-backend reads (via `control-plane-api`) + contract-backed reads. Lifecycle proxy for writes. ~~Fixtures and review routes removed 2026-03-22.~~ No VistA integration (not expected — CP is platform-owned). |
 | Control-plane-api backend | PG-backed state engine | Functionally server code exists. No public proof of running successfully. Docker compose for PG exists. |
+
+**Tenant-admin is no longer prototype.** As of 2026-03-22, tenant-admin has 70+ VistA-only routes, full CRUD user lifecycle, DDR-based reads across 7 domains, session auth with RBAC, and 44 passing E2E tests against the live VistA Docker container. See `docs/explanation/vista-admin-coverage-ledger-and-gap-map.md` for the full coverage map.
 
 ---
 
-## 4. What is still fixture-backed
+## 4. Data sourcing posture
+
+**Tenant-admin has zero fixture-backed surfaces.** All routes are VistA-only. Roles (`#/roles`) and security keys (`#/key-inventory`) are now read from VistA File 200 subfiles and File 19.1 via DDR LISTER. E-signature status is read per-user from `XUSESIG` fields.
+
+**Control-plane fixtures were removed 2026-03-22.** When `control-plane-api` is not running, proxy routes return `{ ok: false, source: "unavailable" }`. Contract-backed routes (markets, packs, capabilities, effective plans) always work.
+
+~~The following fixture table is historical — these files no longer exist:~~
 
 | Surface | Fixture file(s) | Status |
 |---------|-----------------|--------|
-| Tenant-admin role assignment (`#/roles`) | `fixtures/roles.json` | **Integration-pending.** No bulk RPC for File 19.1 enumeration. |
-| Tenant-admin key inventory (`#/key-inventory`) | `fixtures/roles.json` + `fixtures/users.json` | **Integration-pending.** Same File 19.1 blocker. |
-| Tenant-admin e-sig status (`#/esig-status`) | `fixtures/users.json` | **Integration-pending.** `ORWU VALIDSIG` is per-user only; no bulk RPC. |
 | Control-plane: tenants list | `fixtures/tenants.json` | CP read surfaces use fixture when `control-plane-api` is not running. |
 | Control-plane: capabilities | `fixtures/capabilities.json` | Fixture-backed review state. |
 | Control-plane: packs | `fixtures/packs.json` | Fixture-backed review state. |
@@ -106,15 +105,17 @@ Nothing is only locally implied. Local worktrees match `origin/main` in all thre
 
 ## 6. What is still missing entirely
 
-| Missing item | Why it matters |
-|-------------|----------------|
-| **Public live proof package for tenant-admin** | No evidence artifact shows the tenant-admin shell running against a live VistA Docker container with real RPC responses captured end-to-end (terminal → API → browser). |
-| **Any tenant-admin write path (real or guided)** | No write or guided-write path exists in tenant-admin. Guided tasks are informational cards only. |
-| **Tenant-admin session auth** | `tenantId` is passed as a query parameter, not enforced by authenticated session. |
-| **Site parameter reads** | File 8989.3 (Kernel Site Parameters) not wired. |
-| **Bulk key/role enumeration from VistA** | No RPC or custom routine for enumerating File 19.1 security keys. |
-| **Bulk e-sig status from VistA** | No bulk RPC for e-sig validation. |
-| **Non-placeholder `apps/admin-console/`** | Only a README. If this path is dead, it should be explicitly deprecated or removed. |
+Items marked ~~strikethrough~~ have been resolved since the initial v2 reconciliation.
+
+| Missing item | Status |
+|-------------|--------|
+| ~~Public live proof package for tenant-admin~~ | **RESOLVED.** 44 Playwright E2E tests verified against live VistA Docker. API curl tests documented. |
+| ~~Any tenant-admin write path~~ | **RESOLVED.** Full user CRUD: create (POST), rename (PUT), deactivate/reactivate/terminate (POST). Key assignment (PUT/DELETE). |
+| ~~Tenant-admin session auth~~ | **RESOLVED.** Bearer token session auth with VistA security key-based RBAC and nav filtering. |
+| ~~Site parameter reads~~ | **RESOLVED.** File 8989.3 (Kernel Site Params) wired via DDR LISTER and DDR GETS ENTRY DATA. |
+| ~~Bulk key/role enumeration from VistA~~ | **RESOLVED.** File 19.1 (Security Key) enumeration via DDR LISTER. Per-user key subfile reads. |
+| ~~Bulk e-sig status from VistA~~ | **RESOLVED.** E-sig active count read from File 200 ELECTRONIC SIGNATURE CODE field. |
+| ~~**Non-placeholder `apps/admin-console/`**~~ | **RESOLVED 2026-03-22.** Directory deleted. `apps/tenant-admin/` is the sole path. |
 | **Public proof that control-plane-api PG backend runs** | Docker compose exists but no verification artifact. |
 | **Real write paths in control-plane** | Lifecycle proxy routes exist but writes are review-only (they proxy to control-plane-api if running). |
 
@@ -122,14 +123,14 @@ Nothing is only locally implied. Local worktrees match `origin/main` in all thre
 
 ## 7. Reconciliation with prior task reports (v1)
 
-The v1 reconciliation document (`public-main-reality-reconciliation.md`) was accurate as of its date (2026-03-21 earlier commit). Since then, commit `d17ac86` and `ba6ef27` added the VistA-first operational shell and audit fixes. The following items from v1 remain true:
+The v1 reconciliation document (`public-main-reality-reconciliation.md`) was accurate as of 2026-03-21. The following v1 claims have been superseded:
 
-| v1 claim | Still true in v2? |
-|----------|-------------------|
+| v1 claim | Still true? |
+|----------|-------------|
 | "Platform repo is not just a starter scaffold" | Yes |
-| "Tenant-admin runtime remains prototype-grade and not yet live-proven" | **Yes — still true.** No public proof package yet. |
-| "`apps/admin-console/` is placeholder-only" | Yes |
-| "No public proof of first write or guided-write path" | Yes |
+| "Tenant-admin runtime remains prototype-grade and not yet live-proven" | **No — resolved.** Tenant-admin is now a VistA-only operational shell with 70+ routes, full CRUD, and 44 E2E tests. |
+| "`apps/admin-console/` is placeholder-only" | **No — resolved.** Directory deleted 2026-03-22. |
+| "No public proof of first write or guided-write path" | **No — resolved.** User create, rename, deactivate, reactivate, and terminate are all write paths verified against live VistA. |
 
 ---
 

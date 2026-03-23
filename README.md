@@ -1,10 +1,10 @@
 # VistA Evolved Platform
 
-Control plane, tenant-admin prototype shell, contracts, config, and domain for the VistA Evolved rebuild.
+Control plane, tenant-admin operational shell, contracts, config, and domain for the VistA Evolved rebuild.
 
 ## Repo layout
 
-- **apps/** - control-plane, control-plane-api, tenant-admin, admin-console placeholder
+- **apps/** - control-plane, control-plane-api, tenant-admin
 - **packages/** — contracts (OpenAPI, AsyncAPI, schemas), config (ports, modules, tenants), domain (admin, tenancy), ui (design-system)
 - **docs/** — tutorials, how-to, reference, explanation, ADRs, runbooks
 - **prompts/** — active prompts, templates
@@ -17,7 +17,6 @@ Public `main` is not a blank scaffold. It currently contains:
 
 - `apps/control-plane/` - operator console review runtime
 - `apps/control-plane-api/` - PG-backed control-plane backend
-- `apps/tenant-admin/` - VistA-first tenant-admin prototype shell with live XWB broker adapter and honest fixture fallback
-- `apps/admin-console/` - placeholder only
+- `apps/tenant-admin/` - VistA-only tenant-admin operational shell with live XWB broker adapter. All routes read from and write to the live VistA system exclusively — no fixture files, no JSON fallbacks, no alternate data sources. If VistA is unreachable, routes return `{ok: false, error: ...}`.
 
-What it does **not** yet contain is full write-path coverage for all tenant-admin surfaces. Read paths for users, facilities, clinics, and wards are live-proven against the UTF-8 VistA distro via XWB broker. See `docs/reference/source-of-truth-index.md`, `docs/explanation/public-main-reality-reconciliation.md`, and `docs/explanation/governed-build-protocol.md`.
+Tenant-admin covers 7 domains (70+ routes): users, facilities, clinical config, billing, system params, HL7 interfaces, and monitoring/audit. Full CRUD lifecycle for users (create, rename, deactivate, reactivate, terminate) is live-verified against the UTF-8 VistA distro. See `docs/reference/source-of-truth-index.md` and `docs/explanation/governed-build-protocol.md`.

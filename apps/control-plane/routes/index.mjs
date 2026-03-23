@@ -1,48 +1,27 @@
 /**
- * Read-only API routes for the control-plane review runtime.
+ * Read-only API routes for the control-plane operator console.
  *
- * Hybrid sourcing:
- *   Real-backend proxy (P0 graduated surfaces — port 4510 with fixture fallback):
- *     - R1: listTenants, R2: getTenant
- *     - R5: listTenantBootstrapRequests, R6: getTenantBootstrapRequest
- *     - R7: listProvisioningRuns, R8: getProvisioningRun
+ * Sourcing:
+ *   Real-backend proxy (control-plane-api on port 4510):
+ *     - R1/R2: tenants
+ *     - R5/R6: bootstrap requests
+ *     - R7/R8: provisioning runs
+ *     - audit events, operator data
  *
- *   Contract-backed (loaded from packages/contracts/ at startup):
- *     - R3: listLegalMarketProfiles
- *     - R4: getLegalMarketProfile
- *     - R9: listPacks (hybrid: contract manifests + 1 fabricated demo)
- *     - R9b: getPack (hybrid: contract manifests + 1 fabricated demo)
- *     - capabilities
- *     - effective-plans
+ *   Contract-backed (from packages/contracts/):
+ *     - R3/R4: legal market profiles
+ *     - R9: packs
+ *     - capabilities, effective-plans
  *
- *   Fixture-backed (loaded from fixtures/ at startup):
- *     - R10: getSystemConfig
- *
- * Response shapes align with the OpenAPI contract:
- *   packages/contracts/openapi/control-plane-operator-bootstrap-and-provisioning.openapi.yaml
+ * When the real backend is unreachable, proxy routes return
+ * { ok: false, source: "unavailable" } instead of fake data.
  *
  * Base path: /api/control-plane/v1
- * No writes, no persistence. Operator-access enforced at server level.
  */
 
 const PREFIX = '/api/control-plane/v1';
 const BACKEND_PREFIX = '/api/control-plane-admin/v1';
 
-/** Strip _provenance from fixture data before serving */
-function stripProvenance(obj) {
-  if (obj == null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(stripProvenance);
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (k === '_provenance') continue;
-    out[k] = stripProvenance(v);
-  }
-  return out;
-}
-
-/**
- * Fetch from real backend with timeout. Returns null on any failure.
- */
 async function backendFetch(backendUrl, path) {
   try {
     const controller = new AbortController();
@@ -56,9 +35,6 @@ async function backendFetch(backendUrl, path) {
   }
 }
 
-/**
- * Normalize a real-backend tenant row to the fixture-compatible shape.
- */
 function normalizeTenant(t) {
   return {
     tenantId: t.id,
@@ -77,9 +53,6 @@ function normalizeTenant(t) {
   };
 }
 
-/**
- * Normalize a real-backend bootstrap request row to the fixture-compatible shape.
- */
 function normalizeBootstrapRequest(r) {
   return {
     bootstrapRequestId: r.id,
@@ -95,9 +68,6 @@ function normalizeBootstrapRequest(r) {
   };
 }
 
-/**
- * Normalize a real-backend provisioning run row to the fixture-compatible shape.
- */
 function normalizeProvisioningRun(r) {
   return {
     provisioningRunId: r.id,
@@ -125,8 +95,10 @@ function normalizeProvisioningRun(r) {
   };
 }
 
-export default function registerRoutes(server, fixtures, contractData, backendUrl) {
-  // ── R1: listTenants (real-backend proxy with fixture fallback) ────────
+const UNAVAILABLE = { ok: false, source: 'unavailable', message: 'Start control-plane-api on port 4510 for live data.' };
+
+export default function registerRoutes(server, contractData, backendUrl) {
+  // R1: listTenants (real-backend only)
   server.get(`${PREFIX}/tenants`, async (request, reply) => {
     if (backendUrl) {
       const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
@@ -134,23 +106,13 @@ export default function registerRoutes(server, fixtures, contractData, backendUr
       const data = await backendFetch(backendUrl, path);
       if (data && data.ok) {
         const items = (data.tenants || []).map(normalizeTenant);
-        return {
-          _source: 'real-backend',
-          items,
-          pagination: {
-            page: 1,
-            pageSize: items.length || 20,
-            totalItems: items.length,
-            totalPages: 1,
-          },
-        };
+        return { _source: 'real-backend', items, pagination: { page: 1, pageSize: items.length || 20, totalItems: items.length, totalPages: 1 } };
       }
     }
-    const fixtureData = stripProvenance(fixtures['tenants']);
-    return { ...fixtureData, _source: 'fixture-fallback' };
+    return UNAVAILABLE;
   });
 
-  // ── R2: getTenant (real-backend proxy with fixture fallback) ──────────
+  // R2: getTenant (real-backend only)
   server.get(`${PREFIX}/tenants/:tenantId`, async (request, reply) => {
     const { tenantId } = request.params;
     if (backendUrl) {
@@ -159,57 +121,34 @@ export default function registerRoutes(server, fixtures, contractData, backendUr
         return { ...normalizeTenant(data.tenant), _source: 'real-backend' };
       }
     }
-    const tenant = fixtures['tenants'].items.find(t => t.tenantId === tenantId);
-    if (!tenant) {
-      reply.code(404);
-      return { error: 'not_found', message: `Tenant ${tenantId} not found` };
-    }
-    return { ...stripProvenance(tenant), _source: 'fixture-fallback' };
+    reply.code(404);
+    return { error: 'not_found', message: `Tenant ${tenantId} not found` };
   });
 
-  // ── R3: listLegalMarketProfiles (contract-backed) ────────────────────────
-  server.get(`${PREFIX}/legal-market-profiles`, async (request, reply) => {
-    return contractData.legalMarketProfiles;
-  });
+  // R3: listLegalMarketProfiles (contract-backed)
+  server.get(`${PREFIX}/legal-market-profiles`, async () => contractData.legalMarketProfiles);
 
-  // ── R4: getLegalMarketProfile (contract-backed) ─────────────────────────
+  // R4: getLegalMarketProfile (contract-backed)
   server.get(`${PREFIX}/legal-market-profiles/:legalMarketId`, async (request, reply) => {
-    const { legalMarketId } = request.params;
-    const market = contractData.legalMarketProfiles.items.find(
-      m => m.legalMarketId === legalMarketId
-    );
-    if (!market) {
-      reply.code(404);
-      return { error: 'not_found', message: `Market ${legalMarketId} not found` };
-    }
+    const market = contractData.legalMarketProfiles.items.find(m => m.legalMarketId === request.params.legalMarketId);
+    if (!market) { reply.code(404); return { error: 'not_found' }; }
     return market;
   });
 
-  // ── R5: listTenantBootstrapRequests (real-backend proxy with fixture fallback) ──
+  // R5: listBootstrapRequests (real-backend only)
   server.get(`${PREFIX}/tenant-bootstrap-requests`, async (request, reply) => {
     if (backendUrl) {
       const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
-      const path = `${BACKEND_PREFIX}/bootstrap/requests${qs ? '?' + qs : ''}`;
-      const data = await backendFetch(backendUrl, path);
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/bootstrap/requests${qs ? '?' + qs : ''}`);
       if (data && data.ok) {
         const items = (data.requests || []).map(normalizeBootstrapRequest);
-        return {
-          _source: 'real-backend',
-          items,
-          pagination: {
-            page: 1,
-            pageSize: items.length || 20,
-            totalItems: items.length,
-            totalPages: 1,
-          },
-        };
+        return { _source: 'real-backend', items, pagination: { page: 1, pageSize: items.length || 20, totalItems: items.length, totalPages: 1 } };
       }
     }
-    const fixtureData = stripProvenance(fixtures['bootstrap-requests']);
-    return { ...fixtureData, _source: 'fixture-fallback' };
+    return UNAVAILABLE;
   });
 
-  // ── R6: getTenantBootstrapRequest (real-backend proxy with fixture fallback) ──
+  // R6: getBootstrapRequest (real-backend only)
   server.get(`${PREFIX}/tenant-bootstrap-requests/:bootstrapRequestId`, async (request, reply) => {
     const { bootstrapRequestId } = request.params;
     if (backendUrl) {
@@ -218,162 +157,105 @@ export default function registerRoutes(server, fixtures, contractData, backendUr
         return { ...normalizeBootstrapRequest(data.request), _source: 'real-backend' };
       }
     }
-    const req = fixtures['bootstrap-requests'].items.find(
-      b => b.bootstrapRequestId === bootstrapRequestId
-    );
-    if (!req) {
-      reply.code(404);
-      return { error: 'not_found', message: `Bootstrap request ${bootstrapRequestId} not found` };
-    }
-    return { ...stripProvenance(req), _source: 'fixture-fallback' };
+    reply.code(404);
+    return { error: 'not_found', message: `Bootstrap request ${bootstrapRequestId} not found` };
   });
 
-  // ── R7: listProvisioningRuns (real-backend proxy with fixture fallback) ──
+  // R7: listProvisioningRuns (real-backend only)
   server.get(`${PREFIX}/provisioning-runs`, async (request, reply) => {
     if (backendUrl) {
       const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
-      const path = `${BACKEND_PREFIX}/provisioning/runs${qs ? '?' + qs : ''}`;
-      const data = await backendFetch(backendUrl, path);
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/provisioning/runs${qs ? '?' + qs : ''}`);
       if (data && data.ok) {
         const items = (data.runs || []).map(normalizeProvisioningRun);
-        return {
-          _source: 'real-backend',
-          items,
-          pagination: {
-            page: 1,
-            pageSize: items.length || 20,
-            totalItems: items.length,
-            totalPages: 1,
-          },
-        };
+        return { _source: 'real-backend', items, pagination: { page: 1, pageSize: items.length || 20, totalItems: items.length, totalPages: 1 } };
       }
     }
-    const fixtureData = stripProvenance(fixtures['provisioning-runs']);
-    return { ...fixtureData, _source: 'fixture-fallback' };
+    return UNAVAILABLE;
   });
 
-  // ── R8: getProvisioningRun (real-backend proxy with fixture fallback) ──
+  // R8: getProvisioningRun (real-backend only)
   server.get(`${PREFIX}/provisioning-runs/:provisioningRunId`, async (request, reply) => {
     const { provisioningRunId } = request.params;
     if (backendUrl) {
-      // Try with steps first for richer data
       const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/provisioning/runs/${encodeURIComponent(provisioningRunId)}/steps`);
       if (data && data.ok && data.run) {
         return { ...normalizeProvisioningRun(data.run), _source: 'real-backend' };
       }
-      // Fallback to basic run
       const basic = await backendFetch(backendUrl, `${BACKEND_PREFIX}/provisioning/runs/${encodeURIComponent(provisioningRunId)}`);
       if (basic && basic.ok && basic.run) {
         return { ...normalizeProvisioningRun(basic.run), _source: 'real-backend' };
       }
     }
-    const run = fixtures['provisioning-runs'].items.find(
-      r => r.provisioningRunId === provisioningRunId
-    );
-    if (!run) {
-      reply.code(404);
-      return { error: 'not_found', message: `Provisioning run ${provisioningRunId} not found` };
-    }
-    return { ...stripProvenance(run), _source: 'fixture-fallback' };
+    reply.code(404);
+    return { error: 'not_found', message: `Provisioning run ${provisioningRunId} not found` };
   });
 
-  // ── R9: listPacks (contract-backed hybrid + filters) ─────────────────────
-  server.get(`${PREFIX}/packs`, async (request, reply) => {
+  // R9: listPacks (contract-backed with filters)
+  server.get(`${PREFIX}/packs`, async (request) => {
     const { packFamily, lifecycleState, legalMarketId, search, page, pageSize } = request.query;
     let items = contractData.packCatalog.summaries;
-
-    // Filters per OpenAPI: packFamily, lifecycleState, legalMarketId, search
-    if (packFamily) {
-      items = items.filter(p => p.packFamily === packFamily);
-    }
-    if (lifecycleState) {
-      items = items.filter(p => p.lifecycleState === lifecycleState);
-    }
-    if (legalMarketId) {
-      items = items.filter(p => p.eligibleMarkets.includes(legalMarketId));
-    }
+    if (packFamily) items = items.filter(p => p.packFamily === packFamily);
+    if (lifecycleState) items = items.filter(p => p.lifecycleState === lifecycleState);
+    if (legalMarketId) items = items.filter(p => p.eligibleMarkets.includes(legalMarketId));
     if (search) {
       const term = search.toLowerCase();
-      items = items.filter(p =>
-        p.packId.toLowerCase().includes(term) ||
-        p.displayName.toLowerCase().includes(term) ||
-        (p.description && p.description.toLowerCase().includes(term))
-      );
+      items = items.filter(p => p.packId.toLowerCase().includes(term) || p.displayName.toLowerCase().includes(term) || (p.description && p.description.toLowerCase().includes(term)));
     }
-
-    // Pagination
     const pg = Math.max(1, parseInt(page, 10) || 1);
     const ps = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 20));
     const totalItems = items.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / ps));
     const start = (pg - 1) * ps;
-    const paged = items.slice(start, start + ps);
-
-    return {
-      items: paged,
-      pagination: { page: pg, pageSize: ps, totalItems, totalPages },
-    };
+    return { items: items.slice(start, start + ps), pagination: { page: pg, pageSize: ps, totalItems, totalPages } };
   });
 
-  // ── R9b: getPack (contract-backed hybrid) ───────────────────────────────
+  // R9b: getPack (contract-backed)
   server.get(`${PREFIX}/packs/:packId`, async (request, reply) => {
-    const { packId } = request.params;
-    const detail = contractData.packCatalog.detailIndex.get(packId);
-    if (!detail) {
-      reply.code(404);
-      return { error: 'not_found', message: `Pack ${packId} not found` };
-    }
+    const detail = contractData.packCatalog.detailIndex.get(request.params.packId);
+    if (!detail) { reply.code(404); return { error: 'not_found' }; }
     return detail;
   });
 
-  // ── R10: getSystemConfig ────────────────────────────────────────────────
-  server.get(`${PREFIX}/system-config`, async (request, reply) => {
-    return stripProvenance(fixtures['system-config']);
+  // R10: getSystemConfig (real-backend proxy)
+  server.get(`${PREFIX}/system-config`, async () => {
+    if (backendUrl) {
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/system-config`);
+      if (data && data.ok) return { ...data, _source: 'real-backend' };
+    }
+    return { ok: true, _source: 'default', config: {
+      identity: { provider: 'vista-xwb', oidcEnabled: false },
+      environments: ['development'],
+      provisioningDefaults: { topology: 'single-site' },
+      retentionDays: 365,
+    }};
   });
 
-  // ── Supplementary: capabilities (contract-backed) ────────────────────────
-  server.get(`${PREFIX}/capabilities`, async (request, reply) => {
-    return contractData.capabilities;
-  });
+  // Supplementary: capabilities (contract-backed)
+  server.get(`${PREFIX}/capabilities`, async () => contractData.capabilities);
 
-  // ── Supplementary: effective-plans (contract-backed) ────────────────────
-  server.get(`${PREFIX}/effective-plans`, async (request, reply) => {
-    return contractData.effectivePlans;
-  });
+  // Supplementary: effective-plans (contract-backed)
+  server.get(`${PREFIX}/effective-plans`, async () => contractData.effectivePlans);
 
-  // ── Audit events (real-backend proxy) ───────────────────────────────────
-  server.get(`${PREFIX}/audit/events`, async (request, reply) => {
+  // Audit events (real-backend proxy)
+  server.get(`${PREFIX}/audit/events`, async (request) => {
     if (backendUrl) {
       const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
-      const path = `${BACKEND_PREFIX}/audit/events${qs ? '?' + qs : ''}`;
-      const data = await backendFetch(backendUrl, path);
-      if (data && data.ok) {
-        return { ...data, _source: 'real-backend' };
-      }
+      const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}/audit/events${qs ? '?' + qs : ''}`);
+      if (data && data.ok) return { ...data, _source: 'real-backend' };
     }
-    return {
-      ok: true,
-      events: [],
-      _source: 'fixture-fallback',
-      message: 'Start control-plane-api (4510) for live audit_event rows.',
-    };
+    return UNAVAILABLE;
   });
 
-  // ── Operator surfaces (read proxy to control-plane-api) ────────────────
+  // Operator surfaces (real-backend proxy)
   function opProxy(suffix, emptyPayload) {
-    server.get(`${PREFIX}${suffix}`, async (request, reply) => {
+    server.get(`${PREFIX}${suffix}`, async (request) => {
       if (backendUrl) {
         const qs = request.url.includes('?') ? request.url.split('?')[1] : '';
-        const path = `${BACKEND_PREFIX}${suffix}${qs ? '?' + qs : ''}`;
-        const data = await backendFetch(backendUrl, path);
+        const data = await backendFetch(backendUrl, `${BACKEND_PREFIX}${suffix}${qs ? '?' + qs : ''}`);
         if (data && data.ok) return { ...data, _source: 'real-backend' };
       }
-      return {
-        ok: true,
-        ...emptyPayload,
-        _source: 'fixture-fallback',
-        message: 'Start control-plane-api for live PG-backed operator data.',
-      };
+      return UNAVAILABLE;
     });
   }
   opProxy('/operator/invitations', { invitations: [] });
@@ -381,4 +263,12 @@ export default function registerRoutes(server, fixtures, contractData, backendUr
   opProxy('/operator/usage-events', { events: [] });
   opProxy('/operator/entitlements', { entitlements: [] });
   opProxy('/operator/feature-flags', { flags: [] });
+
+  server.get(`${PREFIX}/billing/status`, async () => {
+    if (backendUrl) {
+      const data = await backendFetch(backendUrl, '/api/control-plane/v1/billing/status');
+      if (data && data.ok) return { ...data, _source: 'real-backend' };
+    }
+    return { ok: true, billing: { configured: false, provider: 'lago', model: 'usage-based + subscription' }, _source: 'fallback' };
+  });
 }

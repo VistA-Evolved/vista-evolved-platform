@@ -572,7 +572,7 @@ Internal and external roadmaps describe intent and planning. They are valuable f
 | What dashboards display readiness state? | Future UI work (not authorized) |
 | How is the website populated from readiness state? | Future website implementation |
 | How does the signup flow consume eligibility? | Future control-plane implementation |
-| How does tenant-admin UI display partial support? | Future admin-console implementation |
+| How does tenant-admin UI display partial support? | Future tenant-admin UI implementation |
 | How are state transitions automated in CI/CD? | Future pipeline implementation |
 | How is the country/payer readiness registry structured? | Country and payer readiness registry spec (global architecture Section 20, item 4) |
 | How does partner certification evidence feed into the pipeline? | Future process specification |

@@ -1,8 +1,10 @@
 # Control-Plane Effective-Configuration Composition Engine — Wave 2
 
+> **HISTORICAL (2026-03-22):** Review routes referenced here have been removed. The composition engine (plan-resolver) remains active for contract data resolution.
+
 > **Category:** explanation
 > **Scope:** `apps/control-plane/` local review runtime only
-> **Status:** active
+> **Status:** historical
 
 ## What the composition engine does
 

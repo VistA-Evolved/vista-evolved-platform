@@ -1,0 +1,134 @@
+# Lago billing engine — self-hosted usage-based + subscription billing.
+# Version: v1.44.0 (updated 2026-03-22, aligned with official compose)
+#
+# Usage:
+#   docker compose -f services/lago/docker-compose.yml up -d
+#
+# Lago API: http://127.0.0.1:3040/api/v1
+# Lago UI:  http://127.0.0.1:3041
+#
+# The org is auto-created via LAGO_CREATE_ORG=true on first boot.
+# Default API key: ve-lago-api-key-change-in-production
+#
+# PRODUCTION: Replace ALL *-change-in-production values with real secrets.
+#   SECRET_KEY_BASE, LAGO_ENCRYPTION_PRIMARY_KEY, etc. must all be unique
+#   cryptographically random values. Generate with: openssl rand -hex 32
+#
+# See: https://getlago.com/docs/guide/lago-self-hosted/docker
+
+x-backend-environment: &backend-env
+  DATABASE_URL: postgresql://lago:lago_dev@lago-db:5432/lago
+  REDIS_URL: redis://lago-redis:6379
+  LAGO_API_URL: http://lago-api:3000
+  SECRET_KEY_BASE: ve-lago-dev-secret-key-base-change-in-production
+  RAILS_ENV: production
+  RAILS_LOG_TO_STDOUT: "true"
+  LAGO_FRONT_URL: http://127.0.0.1:3041
+  LAGO_ENCRYPTION_PRIMARY_KEY: ve-encryption-primary-key-change-in-production
+  LAGO_ENCRYPTION_DETERMINISTIC_KEY: ve-encryption-deterministic-key-change-in-production
+  LAGO_ENCRYPTION_KEY_DERIVATION_SALT: ve-encryption-salt-change-in-production
+  LAGO_DISABLE_SIGNUP: "true"
+  LAGO_CREATE_ORG: "true"
+  LAGO_ORG_NAME: "VistA Evolved"
+  LAGO_ORG_USER_EMAIL: "admin@vista-evolved.io"
+  LAGO_ORG_USER_PASSWORD: "VeAdmin2026!!"
+  LAGO_ORG_API_KEY: "ve-lago-api-key-change-in-production"
+  LAGO_DISABLE_SEGMENT: "true"
+
+services:
+  lago-db:
+    image: getlago/postgres-partman:15.0-alpine
+    container_name: ve-lago-db
+    environment:
+      POSTGRES_DB: lago
+      POSTGRES_USER: lago
+      POSTGRES_PASSWORD: lago_dev
+      PGDATA: /data/postgres
+    volumes:
+      - lago-pgdata:/data/postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lago -d lago"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  lago-redis:
+    image: redis:7-alpine
+    container_name: ve-lago-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  lago-migrate:
+    image: getlago/api:v1.44.0
+    container_name: ve-lago-migrate
+    depends_on:
+      lago-db:
+        condition: service_healthy
+    command: ["./scripts/migrate.sh"]
+    volumes:
+      - ./lago-rsa.pem:/app/config/keys/private.pem:ro
+    environment:
+      <<: *backend-env
+    restart: "no"
+
+  lago-api:
+    image: getlago/api:v1.44.0
+    container_name: ve-lago-api
+    depends_on:
+      lago-migrate:
+        condition: service_completed_successfully
+      lago-db:
+        condition: service_healthy
+      lago-redis:
+        condition: service_healthy
+    command: ["./scripts/start.api.sh"]
+    volumes:
+      - ./lago-rsa.pem:/app/config/keys/private.pem:ro
+      - lago-storage:/app/storage
+    environment:
+      <<: *backend-env
+    ports:
+      - "3040:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  lago-front:
+    image: getlago/front:v1.44.0
+    container_name: ve-lago-front
+    depends_on:
+      lago-api:
+        condition: service_healthy
+    environment:
+      API_URL: http://127.0.0.1:3040
+      APP_ENV: production
+      LAGO_DISABLE_SIGNUP: "true"
+    ports:
+      - "3041:80"
+
+  lago-worker:
+    image: getlago/api:v1.44.0
+    container_name: ve-lago-worker
+    depends_on:
+      lago-migrate:
+        condition: service_completed_successfully
+      lago-db:
+        condition: service_healthy
+      lago-redis:
+        condition: service_healthy
+    command: ["./scripts/start.worker.sh"]
+    volumes:
+      - ./lago-rsa.pem:/app/config/keys/private.pem:ro
+      - lago-storage:/app/storage
+    environment:
+      <<: *backend-env
+
+volumes:
+  lago-pgdata:
+  lago-storage:

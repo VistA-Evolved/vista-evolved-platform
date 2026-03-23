@@ -1,5 +1,7 @@
 # Control-Plane Local Write Review Runtime (Batch 3)
 
+> **SUPERSEDED (2026-03-22):** Review-only write routes have been removed from `apps/control-plane/`. This document is retained as historical reference for the review simulation design.
+
 > **⚠️ EXPANDED.** This document describes the original 8-surface write-review architecture. The runtime now covers 21 surfaces with 15 write simulation routes. The write-review patterns and ReviewEnvelope contract defined here remain current; the surface count has expanded. See `apps/control-plane/README.md` for current posture.
 
 > **Explanation:** Rationale and architecture for the review-only write simulation

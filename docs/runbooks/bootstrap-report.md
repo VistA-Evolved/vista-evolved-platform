@@ -1,5 +1,9 @@
 # Bootstrap report — Three-repo start
 
+> **Historical snapshot.** This report captures the initial three-repo bootstrap state.
+> `apps/admin-console/` referenced below was a placeholder that has since been deleted (2026-03-22).
+> The active tenant-admin runtime is `apps/tenant-admin/`.
+
 > **Scope:** Archive the old repo, create vista-evolved-platform and vista-evolved-vista-distro, bootstrap structure and contracts only. No product features, no WorldVistA fetch, no Docker build, no app migration.
 
 ---

@@ -18,4 +18,5 @@ Technical references, policies, registries, and indexes.
 - [Nx Adoption Plan](nx-adoption-plan.md)
 - [Decision Index](decision-index.yaml)
 - [VistA RPC Reference Data](vista-rpc-reference-data.md)
+- [VistA Admin Coverage Map](vista-admin-coverage-map.md)
 - [Notion Sync Policy](notion-sync-policy.md)

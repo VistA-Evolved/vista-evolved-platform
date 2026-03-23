@@ -1,0 +1,113 @@
+/* VistA Evolved — Shared Design Tokens
+   Single source of truth for color, typography, spacing, and component tokens.
+   Both apps/control-plane and apps/tenant-admin import this file. */
+
+:root {
+  /* ── Color palette ─────────────────────────────────────────── */
+  --ve-color-bg:            #f4f5f7;
+  --ve-color-surface:       #ffffff;
+  --ve-color-border:        #e0e1e6;
+  --ve-color-text:          #1a1a2e;
+  --ve-color-text-muted:    #6b7280;
+
+  /* Brand */
+  --ve-color-primary:       #2563eb;
+  --ve-color-primary-hover:  #1d4ed8;
+  --ve-color-primary-bg:    #eff6ff;
+
+  /* Semantic */
+  --ve-color-success:       #059669;
+  --ve-color-success-bg:    #d1fae5;
+  --ve-color-success-text:  #065f46;
+  --ve-color-warning:       #d97706;
+  --ve-color-warning-bg:    #fef3c7;
+  --ve-color-warning-text:  #92400e;
+  --ve-color-error:         #dc2626;
+  --ve-color-error-bg:      #fee2e2;
+  --ve-color-error-text:    #991b1b;
+  --ve-color-info:          #0284c7;
+  --ve-color-info-bg:       #dbeafe;
+  --ve-color-info-text:     #1e40af;
+
+  /* Navigation */
+  --ve-color-nav-bg:        #1e293b;
+  --ve-color-nav-text:      #cbd5e1;
+  --ve-color-nav-active:    #ffffff;
+  --ve-color-nav-active-bg: rgba(255,255,255,0.12);
+  --ve-color-nav-active-border: #2563eb;
+  --ve-color-nav-group-label: rgba(255,255,255,0.45);
+  --ve-color-nav-hover:     rgba(255,255,255,0.08);
+  --ve-color-nav-divider:   rgba(255,255,255,0.06);
+
+  /* Banner */
+  --ve-color-banner-bg:     #1e293b;
+  --ve-color-banner-text:   #ffffff;
+
+  /* ── Badge palette (state families) ────────────────────────── */
+  --ve-badge-active-bg:     #d1fae5;
+  --ve-badge-active-text:   #065f46;
+  --ve-badge-draft-bg:      #e2e3e5;
+  --ve-badge-draft-text:    #41464b;
+  --ve-badge-pending-bg:    #fef3c7;
+  --ve-badge-pending-text:  #92400e;
+  --ve-badge-suspended-bg:  #fee2e2;
+  --ve-badge-suspended-text:#991b1b;
+  --ve-badge-archived-bg:   #e2e3e5;
+  --ve-badge-archived-text: #41464b;
+  --ve-badge-failed-bg:     #fee2e2;
+  --ve-badge-failed-text:   #991b1b;
+  --ve-badge-completed-bg:  #d1fae5;
+  --ve-badge-completed-text:#065f46;
+  --ve-badge-queued-bg:     #e2e3e5;
+  --ve-badge-queued-text:   #41464b;
+  --ve-badge-in-progress-bg:#dbeafe;
+  --ve-badge-in-progress-text:#1e40af;
+  --ve-badge-provisioning-bg:#dbeafe;
+  --ve-badge-provisioning-text:#1e40af;
+  --ve-badge-info-bg:       #dbeafe;
+  --ve-badge-info-text:     #1e40af;
+
+  /* ── Typography ────────────────────────────────────────────── */
+  --ve-font-sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ve-font-mono:  'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  --ve-font-size-xs:    10px;
+  --ve-font-size-sm:    12px;
+  --ve-font-size-base:  13px;
+  --ve-font-size-md:    14px;
+  --ve-font-size-lg:    16px;
+  --ve-font-size-xl:    20px;
+  --ve-font-size-2xl:   24px;
+  --ve-font-size-3xl:   28px;
+
+  /* ── Spacing scale (4px base) ──────────────────────────────── */
+  --ve-space-1:   4px;
+  --ve-space-2:   8px;
+  --ve-space-3:   12px;
+  --ve-space-4:   16px;
+  --ve-space-5:   20px;
+  --ve-space-6:   24px;
+  --ve-space-8:   32px;
+  --ve-space-10:  40px;
+  --ve-space-12:  48px;
+
+  /* ── Borders & Radius ──────────────────────────────────────── */
+  --ve-radius-sm:  4px;
+  --ve-radius:     6px;
+  --ve-radius-lg:  8px;
+  --ve-radius-xl:  12px;
+  --ve-radius-pill: 9999px;
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --ve-shadow-sm:  0 1px 2px rgba(0,0,0,0.05);
+  --ve-shadow:     0 2px 8px rgba(0,0,0,0.08);
+  --ve-shadow-lg:  0 8px 32px rgba(0,0,0,0.12);
+  --ve-shadow-xl:  0 20px 60px rgba(0,0,0,0.2);
+
+  /* ── Transitions ───────────────────────────────────────────── */
+  --ve-transition-fast: 0.15s ease;
+  --ve-transition:      0.2s ease;
+
+  /* ── Layout ────────────────────────────────────────────────── */
+  --ve-nav-width:    220px;
+  --ve-nav-width-collapsed: 56px;
+}

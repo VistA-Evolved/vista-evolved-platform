@@ -308,8 +308,22 @@ export class XwbBroker {
     dbg('RECV AV', avResp.substring(0, 200));
 
     const avLines = avResp.split(/\r?\n/);
-    const duz = avLines[0]?.trim();
-    if (!duz || duz === '0') {
+    let duz = avLines[0]?.trim() || '';
+    // VistA may prefix the response with compilation warnings/errors from
+    // routines like _ZISTCP.m. Strip everything up to the last numeric token
+    // on line 0, or fall back to scanning later lines for a bare DUZ number.
+    if (duz && !/^\d+$/.test(duz)) {
+      const numMatch = duz.match(/(\d+)\s*$/);
+      if (numMatch) {
+        duz = numMatch[1];
+      } else {
+        for (const ln of avLines) {
+          const stripped = (ln || '').trim();
+          if (/^\d+$/.test(stripped) && stripped !== '0') { duz = stripped; break; }
+        }
+      }
+    }
+    if (!duz || duz === '0' || !/^\d+$/.test(duz)) {
       const reason = avLines[3]?.trim() || avLines[2]?.trim() || avLines[1]?.trim() || avResp;
       this.disconnect();
       throw new Error('Sign-on failed: ' + reason.replace(/[\x00-\x1f]/g, ' ').trim());

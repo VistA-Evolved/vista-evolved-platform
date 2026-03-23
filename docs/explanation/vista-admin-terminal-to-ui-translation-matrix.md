@@ -1,5 +1,7 @@
 # VistA Admin — Terminal-to-UI Translation Matrix
 
+> **Status:** ARCHIVED — superseded by [Terminal-to-UI Translation Matrix v2](vista-admin-terminal-to-ui-translation-matrix-v2.md).
+>
 > **Purpose:** Maps every discovered VistA admin function from the terminal world to its
 > potential UI translation mode. This is the canonical anti-miss artifact: it ensures no
 > major terminal admin behavior is silently dropped when translating to a browser-based

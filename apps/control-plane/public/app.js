@@ -1,8 +1,8 @@
 /**
- * Operator Console — Local Review Runtime — app.js
+ * Platform Operations Console — Local Review Runtime — app.js
  *
  * Hash-based routing over 22 operator-console surfaces across 8 domains.
- * Data fetched from local Fastify API routes (real-backend → fixture fallback).
+ * Data fetched from local Fastify API routes (real-backend + contract-backed).
  * Lifecycle writes proxied to real backend when reachable.
  * Review writes are simulation-only — no persistence, no real execution.
  *
@@ -75,11 +75,11 @@ function switchRole(role) {
 // API loader — fetches from local Fastify routes
 // ---------------------------------------------------------------------------
 const API_BASE = '/api/control-plane/v1';
-const REVIEW_API_BASE = '/api/control-plane-review/v1';
+// Review routes removed — Phase 0b cleanup
 const LIFECYCLE_API_BASE = '/api/control-plane-lifecycle/v1';
-const FIXTURES = {};
+const DATA = {};
 
-async function loadFixtures() {
+async function loadData() {
   const endpoints = [
     ['tenants',               '/tenants'],
     ['bootstrap-requests',    '/tenant-bootstrap-requests'],
@@ -97,7 +97,7 @@ async function loadFixtures() {
       renderAccessDenied(err);
       return false;
     }
-    FIXTURES[key] = await resp.json();
+    DATA[key] = await resp.json();
   }
   return true;
 }
@@ -138,7 +138,7 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Tenant Admin handoff — opens the tenant-admin workspace with context
+// Site Administration handoff — opens the tenant-admin workspace with context
 function openTenantAdmin(tenantId) {
   const tid = tenantId || 'default-tenant';
   const cpReturn = encodeURIComponent(window.location.href);
@@ -148,10 +148,6 @@ function openTenantAdmin(tenantId) {
 function fmtDate(iso) {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
-}
-
-function disabledBtn(label, reason) {
-  return `<span class="tooltip-wrap"><button class="btn" disabled>${escHtml(label)}</button><span class="tooltip-text">${escHtml(reason)}</span></span>`;
 }
 
 function navLink(href, label) {
@@ -165,8 +161,8 @@ function sourceBadge(source) {
   if (source === 'real-backend') {
     return '<span class="source-badge source-real">real backend</span>';
   }
-  if (source === 'fixture-fallback') {
-    return '<span class="source-badge source-fixture">fixture fallback</span>';
+  if (source === 'unavailable') {
+    return '<span class="source-badge source-unavailable">backend unavailable</span>';
   }
   if (source === 'contract-backed') {
     return '<span class="source-badge source-contract">contract-backed</span>';
@@ -206,7 +202,7 @@ function renderLifecycleResult(containerId, result) {
     </div>`;
   } else if (result._source === 'backend-unreachable') {
     el.innerHTML = `<div class="lifecycle-result lifecycle-unreachable">
-      ${sourceBadge('fixture-fallback')} Real backend unreachable.
+      ${sourceBadge('unavailable')} Real backend unreachable.
       <span style="font-size:12px;display:block;margin-top:4px;">${escHtml(result.message || '')}</span>
     </div>`;
   } else {
@@ -217,219 +213,19 @@ function renderLifecycleResult(containerId, result) {
 }
 
 // ---------------------------------------------------------------------------
-// Review Dialog System — LOCAL REVIEW ONLY
+// Planned action stub — shown for surfaces not yet backed by real lifecycle
 // ---------------------------------------------------------------------------
-function openReviewDialog(title, operationId, fields, submitFn) {
-  const overlay = document.getElementById('review-dialog-overlay');
-  const dialog = document.getElementById('review-dialog');
-
-  let fieldsHtml = '';
-  for (const f of fields) {
-    if (f.type === 'checkbox') {
-      fieldsHtml += `<div class="review-checkbox"><input type="checkbox" id="rv-${f.key}"><label for="rv-${f.key}">${escHtml(f.label)}</label></div>`;
-    } else if (f.type === 'select') {
-      fieldsHtml += `<label>${escHtml(f.label)}</label><select id="rv-${f.key}">${f.options.map(o => `<option value="${escHtml(o.value)}">${escHtml(o.label)}</option>`).join('')}</select>`;
-    } else if (f.type === 'textarea') {
-      fieldsHtml += `<label>${escHtml(f.label)}${f.required ? ' *' : ''}</label><textarea id="rv-${f.key}" placeholder="${escHtml(f.placeholder || '')}"></textarea>`;
-    } else {
-      fieldsHtml += `<label>${escHtml(f.label)}${f.required ? ' *' : ''}</label><input type="text" id="rv-${f.key}" placeholder="${escHtml(f.placeholder || '')}" value="${escHtml(f.defaultValue || '')}">`;
-    }
-  }
-
-  dialog.innerHTML = `
-    <h2>${escHtml(title)}</h2>
-    <div class="review-subtitle">Canonical operation: <code>${escHtml(operationId)}</code></div>
-    <div class="review-warning-banner">
-      ⚠ REVIEW-ONLY — This action will NOT be executed. No data will be persisted or changed.
-    </div>
-    ${fieldsHtml}
-    <div class="review-actions">
-      <button class="btn btn-primary" id="rv-submit">Submit for Review</button>
-      <button class="btn" id="rv-cancel">Cancel</button>
-    </div>
-    <div id="rv-result"></div>
-  `;
-
-  overlay.style.display = 'flex';
-  dialog.querySelector('#rv-cancel').onclick = () => { overlay.style.display = 'none'; };
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.style.display = 'none'; };
-  dialog.querySelector('#rv-submit').onclick = async () => {
-    const body = {};
-    for (const f of fields) {
-      const el = document.getElementById(`rv-${f.key}`);
-      if (f.type === 'checkbox') body[f.key] = el.checked;
-      else body[f.key] = el.value;
-    }
-    await submitFn(body);
-  };
-}
-
-async function submitReview(method, path, body) {
-  const resp = await apiFetch(`${REVIEW_API_BASE}${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (resp.status === 403 || resp.status === 400) {
-    const err = await resp.json();
-    const container = document.getElementById('rv-result');
-    if (container) {
-      container.innerHTML = `<div class="review-result"><div class="result-header invalid">Access Denied &mdash; ${escHtml(err.message || 'Insufficient permissions')}</div></div>`;
-    }
-    return;
-  }
-  const data = await resp.json();
-  renderReviewResult(data);
-}
-
-function renderReviewResult(data) {
-  const container = document.getElementById('rv-result');
-  const isValid = data.validation && data.validation.valid;
-
-  let resolutionHtml = '';
-  if (data.resolutionPreview) {
-    const rp = data.resolutionPreview;
-    resolutionHtml = `
-      <div class="result-section">
-        <h4>Resolution Preview (Resolver v${escHtml(data.resolverVersion || rp.resolverVersion)})</h4>
-        <dl class="kv-list" style="font-size:13px;">
-          <dt>Legal Market</dt><dd>${escHtml(rp.legalMarketId)}</dd>
-          <dt>Profile Version</dt><dd>${escHtml(rp.profileVersion)}</dd>
-          <dt>Resolver Version</dt><dd>${escHtml(rp.resolverVersion)}</dd>
-          <dt>Facility Type</dt><dd>${escHtml(rp.facilityType || 'unspecified')}</dd>
-          <dt>Resolved Packs</dt><dd>${rp.resolvedPacks.length}</dd>
-          <dt>Deferred Items</dt><dd>${rp.deferredItems.length}</dd>
-          <dt>Dependency Issues</dt><dd>${(rp.dependencyIssues || []).length}</dd>
-          <dt>Gating Blockers</dt><dd>${rp.readinessPosture.gatingBlockers.length}</dd>
-          <dt>Effective Launch Tier</dt><dd>${badge(rp.readinessPosture.effectiveLaunchTier)}</dd>
-          <dt>Resolved At</dt><dd>${fmtDate(rp.resolvedAt)}</dd>
-        </dl>
-      </div>
-
-      <div class="result-section">
-        <h4>Resolved Packs (${rp.resolvedPacks.length})</h4>
-        <table style="font-size:13px;">
-          <thead><tr><th>Pack ID</th><th>Family</th><th>Source</th><th>State</th><th>Readiness</th><th>Constraints</th></tr></thead>
-          <tbody>
-            ${rp.resolvedPacks.map(p => `<tr>
-              <td><code>${escHtml(p.packId)}</code></td>
-              <td>${badge(p.packFamily)}</td>
-              <td>${badge(p.activationSource)}</td>
-              <td>${badge(p.packState)}</td>
-              <td>${badge(p.readinessState)}</td>
-              <td style="font-size:11px;">${(p.constraints || []).map(c => '• ' + escHtml(c)).join('<br>')}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-
-      ${rp.deferredItems.length > 0 ? `
-        <div class="result-section">
-          <h4>Deferred Items (${rp.deferredItems.length})</h4>
-          <table style="font-size:13px;">
-            <thead><tr><th>Pack ID</th><th>Reason</th><th>Migration Path</th></tr></thead>
-            <tbody>
-              ${rp.deferredItems.map(d => `<tr>
-                <td><code>${escHtml(d.packId)}</code></td>
-                <td>${badge(d.reason)}</td>
-                <td style="font-size:11px;">${escHtml(d.migrationPath)}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      ` : ''}
-
-      ${(rp.dependencyIssues || []).length > 0 ? `
-        <div class="result-section">
-          <h4>Dependency Issues (${rp.dependencyIssues.length})</h4>
-          <ul>${rp.dependencyIssues.map(i => `<li style="font-size:13px;">${escHtml(i.detail)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-
-      <div class="result-section">
-        <h4>Gating Blockers (${rp.readinessPosture.gatingBlockers.length})</h4>
-        ${rp.readinessPosture.gatingBlockers.length > 0 ? `
-          <ul class="blocker-list">
-            ${rp.readinessPosture.gatingBlockers.map(b => `
-              <li class="warning" style="font-size:13px;">
-                <span class="blocker-dim">${escHtml(b.dimension)}</span>: ${escHtml(b.blocker)}
-              </li>
-            `).join('')}
-          </ul>
-        ` : '<p style="font-size:13px;color:var(--success);">No gating blockers.</p>'}
-      </div>
-    `;
-  } else if (data.resolutionError) {
-    resolutionHtml = `
-      <div class="result-section">
-        <h4>Resolution Error</h4>
-        <p style="color:var(--danger);">${escHtml(data.resolutionError)}</p>
-      </div>
-    `;
-  }
-
-  let preflightHtml = '';
-  if (data.resolverPreflight) {
-    const pf = data.resolverPreflight;
-    preflightHtml = `
-      <div class="result-section">
-        <h4>Resolver Preflight (v${escHtml(pf.resolverVersion || '?')})</h4>
-        <dl class="kv-list" style="font-size:13px;">
-          ${pf.marketFound !== undefined ? `<dt>Market Found</dt><dd>${pf.marketFound ? 'Yes' : 'No'}</dd>` : ''}
-          ${pf.resolvedPackCount !== undefined ? `<dt>Resolved Packs</dt><dd>${pf.resolvedPackCount}</dd>` : ''}
-          ${pf.deferredItemCount !== undefined ? `<dt>Deferred Items</dt><dd>${pf.deferredItemCount}</dd>` : ''}
-          ${pf.gatingBlockerCount !== undefined ? `<dt>Gating Blockers</dt><dd>${pf.gatingBlockerCount}</dd>` : ''}
-          ${pf.effectiveLaunchTier ? `<dt>Effective Launch Tier</dt><dd>${badge(pf.effectiveLaunchTier)}</dd>` : ''}
-          ${pf.note ? `<dt>Note</dt><dd>${escHtml(pf.note)}</dd>` : ''}
-        </dl>
-      </div>
-    `;
-  }
-
-  container.innerHTML = `
-    <div class="review-result">
-      <div class="result-header ${isValid ? 'valid' : 'invalid'}">
-        ${isValid ? '✓ Validation passed' : '✗ Validation failed'} — Review result for <code>${escHtml(data.canonicalOperationId)}</code>
-      </div>
-
-      ${!isValid ? `
-        <div class="result-section">
-          <h4>Validation Errors</h4>
-          <ul>${data.validation.errors.map(e => `<li style="font-size:13px;color:var(--danger);">${escHtml(e)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-
-      ${resolutionHtml}
-      ${preflightHtml}
-
-      <div class="result-section">
-        <h4>Canonical Operation</h4>
-        <pre>${escHtml(data.canonicalHttpMethod)} ${escHtml(data.canonicalPath)}\noperationId: ${escHtml(data.canonicalOperationId)}</pre>
-      </div>
-
-      <div class="result-section">
-        <h4>Projected Events</h4>
-        <pre>${data.projectedEvents.map(e => `${escHtml(e.eventAddress)}\n  → ${escHtml(e.description)}`).join('\n')}</pre>
-      </div>
-
-      <div class="result-section">
-        <h4>Audit Preview</h4>
-        <pre>Action class: ${escHtml(data.auditPreview.actionClass)}
-Actor: ${escHtml(data.auditPreview.actorSource)}
-Resource: ${escHtml(data.auditPreview.resourceId)}
-Summary: ${escHtml(data.auditPreview.summary)}</pre>
-      </div>
-
-      <div class="result-section">
-        <h4>Guardrails</h4>
-        <ul>${data.guardrails.map(g => `<li style="font-size:13px;">${escHtml(g)}</li>`).join('')}</ul>
-      </div>
-
-      <div class="no-persist-banner">
-        ${data.notes.map(n => escHtml(n)).join(' · ')}
-      </div>
-    </div>
-  `;
+function showGovernedActionModal(actionName, detail) {
+  const msg = detail || `"${actionName}" requires the Platform Operations API (port 4510) to be running.`;
+  const el = document.getElementById('app');
+  const overlay = document.createElement('div');
+  overlay.className = 'governed-modal-overlay';
+  overlay.innerHTML = `<div class="governed-modal">
+    <h3>${escHtml(actionName)}</h3>
+    <p>${msg}</p>
+    <button onclick="this.closest('.governed-modal-overlay').remove()">Dismiss</button>
+  </div>`;
+  el.appendChild(overlay);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,12 +236,12 @@ async function doLifecycleAction(path, body, resultContainerId) {
   renderLifecycleResult(resultContainerId, result);
   // Refresh data after a short delay so counts update
   if (result.ok) {
-    setTimeout(() => { loadFixtures().then(() => navigate()); }, 600);
+    setTimeout(() => { loadData().then(() => navigate()); }, 600);
   }
 }
 
 async function doBootstrapDraftCreate(resultContainerId) {
-  const tenants = FIXTURES['tenants']?.items || [];
+  const tenants = DATA['tenants']?.items || [];
   if (tenants.length === 0) {
     renderLifecycleResult(resultContainerId, { ok: false, error: 'No tenants available to create a bootstrap draft for.' });
     return;
@@ -455,12 +251,12 @@ async function doBootstrapDraftCreate(resultContainerId) {
   const result = await lifecycleFetch('/bootstrap/drafts', { tenantId, displayName: tenants[0].displayName || 'New Bootstrap' });
   renderLifecycleResult(resultContainerId, result);
   if (result.ok) {
-    setTimeout(() => { loadFixtures().then(() => navigate()); }, 600);
+    setTimeout(() => { loadData().then(() => navigate()); }, 600);
   }
 }
 
 async function doCreateProvisioningRun(resultContainerId) {
-  const bootstrapData = FIXTURES['bootstrap-requests'] || { items: [] };
+  const bootstrapData = DATA['bootstrap-requests'] || { items: [] };
   const approved = (bootstrapData.items || []).filter(r => r.status === 'approved');
   if (approved.length === 0) {
     renderLifecycleResult(resultContainerId, { ok: false, error: 'No approved bootstrap requests available. Approve a bootstrap request first.' });
@@ -470,203 +266,61 @@ async function doCreateProvisioningRun(resultContainerId) {
   const result = await lifecycleFetch('/provisioning/runs', { bootstrapRequestId: req.bootstrapRequestId, tenantId: req.tenantId });
   renderLifecycleResult(resultContainerId, result);
   if (result.ok) {
-    setTimeout(() => { loadFixtures().then(() => navigate()); }, 600);
+    setTimeout(() => { loadData().then(() => navigate()); }, 600);
   }
 }
 
-// Review action openers for each surface
-function reviewSuspendTenant(tenantId) {
-  openReviewDialog('Suspend Tenant', 'suspendTenant', [
-    { key: 'reason', label: 'Reason', type: 'textarea', required: true, placeholder: 'Reason for suspending this tenant…' },
-  ], (body) => submitReview('POST', `/tenants/${encodeURIComponent(tenantId)}/suspend`, body));
-}
-function reviewReactivateTenant(tenantId) {
-  openReviewDialog('Reactivate Tenant', 'reactivateTenant', [
-    { key: 'reason', label: 'Reason', type: 'textarea', required: true, placeholder: 'Reason for reactivating this tenant…' },
-  ], (body) => submitReview('POST', `/tenants/${encodeURIComponent(tenantId)}/reactivate`, body));
-}
-function reviewArchiveTenant(tenantId) {
-  openReviewDialog('Archive Tenant (IRREVERSIBLE)', 'archiveTenant', [
-    { key: 'reason', label: 'Reason', type: 'textarea', required: true, placeholder: 'Reason for archiving this tenant…' },
-    { key: 'confirmArchive', label: 'I confirm this tenant should be permanently archived', type: 'checkbox' },
-  ], (body) => submitReview('POST', `/tenants/${encodeURIComponent(tenantId)}/archive`, body));
-}
+// Governed write actions — wire to real backend or show governance context
 function reviewResolvePlan() {
-  const markets = FIXTURES['legal-market-profiles'].items;
-  const packItems = FIXTURES['packs'].items;
-
-  // Build eligible pack checkboxes per market
-  function eligiblePacksFor(marketId) {
-    const market = markets.find(m => m.legalMarketId === marketId);
-    if (!market || !market.eligiblePacks) return [];
-    return market.eligiblePacks.map(p => ({
-      packId: typeof p === 'string' ? p : p.packId,
-      displayName: (typeof p === 'object' && p.displayName) ? p.displayName : (typeof p === 'string' ? p : p.packId),
-      hasManifest: packItems.some(pi => pi.packId === (typeof p === 'string' ? p : p.packId)),
-    }));
-  }
-
-  openReviewDialog('Resolve Effective Configuration Plan', 'resolveEffectiveConfigurationPlan', [
-    { key: 'legalMarketId', label: 'Legal Market ID', type: 'select', options: markets.map(m => ({ value: m.legalMarketId, label: `${m.displayName} (${m.legalMarketId})` })) },
-    { key: 'tenantDisplayName', label: 'Tenant Display Name (optional)', type: 'text', placeholder: 'e.g., Sunrise Medical Center' },
-    { key: 'facilityType', label: 'Facility Type (optional)', type: 'select', options: [{ value: '', label: '(none)' }, { value: 'single-clinic', label: 'Single Clinic' }, { value: 'multi-facility', label: 'Multi-Facility' }, { value: 'hospital', label: 'Hospital' }] },
-  ], async (body) => {
-    const cleaned = { legalMarketId: body.legalMarketId };
-    if (body.tenantDisplayName) cleaned.tenantDisplayName = body.tenantDisplayName;
-    if (body.facilityType) cleaned.facilityType = body.facilityType;
-
-    // Collect eligible pack selections
-    const eligible = eligiblePacksFor(body.legalMarketId);
-    const selectedPacks = eligible
-      .filter(ep => { const el = document.getElementById(`rv-ep-${ep.packId}`); return el && el.checked; })
-      .map(ep => ep.packId);
-    if (selectedPacks.length > 0) cleaned.selectedPacks = selectedPacks;
-
-    await submitReview('POST', '/effective-configuration-plans/resolve', cleaned);
+  showGovernedActionModal('Resolve Plan',
+    'Plan resolution is handled via the provisioning lifecycle. Use the provisioning runs page to retry or cancel runs.');
+}
+async function reviewCreateMarketDraft() {
+  const name = prompt('Market display name:');
+  if (!name) return;
+  const code = prompt('Market code (e.g. US, PH, DE):');
+  if (!code) return;
+  const result = await lifecycleFetch('/markets', { displayName: name, code });
+  if (result.ok) { await loadData(); navigate(); }
+  else showGovernedActionModal('Create Market Draft', `Failed: ${result.error || 'Unknown error'}`);
+}
+async function reviewUpdateMarketDraft() {
+  showGovernedActionModal('Update Market Draft',
+    'Market profiles are contract-governed. Edit the market JSON in <code>packages/contracts/instances/markets/</code> and redeploy.');
+}
+async function reviewSubmitMarketForReview() {
+  showGovernedActionModal('Submit Market for Review',
+    'Market launch-tier changes require second-operator approval per the governance model. File an audit event to initiate review.');
+}
+async function reviewCreatePackDraft() {
+  showGovernedActionModal('Create Pack Draft',
+    'Packs are contract-governed bundles. Create a new pack JSON in <code>packages/contracts/instances/packs/</code> and redeploy.');
+}
+async function reviewUpdatePackDraft() {
+  showGovernedActionModal('Update Pack Draft',
+    'Pack updates follow the contract mutation protocol. Edit the pack JSON and redeploy.');
+}
+async function reviewSubmitPackForReview() {
+  showGovernedActionModal('Submit Pack for Review',
+    'Pack lifecycle changes require governance review. File an audit event to initiate.');
+}
+async function reviewToggleFeatureFlag(flagKey, currentEnabled) {
+  const key = flagKey || prompt('Flag key to toggle:');
+  if (!key) return;
+  const env = prompt('Environment (staging/production):', 'staging');
+  if (!env) return;
+  const enabled = currentEnabled !== undefined ? !currentEnabled : confirm('Enable this flag? (OK=enable, Cancel=disable)');
+  const result = await apiFetch(`${API_BASE}/operator/feature-flags`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ flagKey: key, environment: env, enabled }),
   });
-
-  // After dialog opens, inject eligible pack checkboxes
-  setTimeout(() => {
-    const marketSel = document.getElementById('rv-legalMarketId');
-    const submitBtn = document.getElementById('rv-submit');
-    if (!marketSel || !submitBtn) return;
-
-    function renderEligibleSection() {
-      let existing = document.getElementById('rv-eligible-section');
-      if (existing) existing.remove();
-
-      const eligible = eligiblePacksFor(marketSel.value);
-      if (eligible.length === 0) return;
-
-      const section = document.createElement('div');
-      section.id = 'rv-eligible-section';
-      section.style.cssText = 'margin-top:12px;padding:8px;border:1px solid var(--border);border-radius:4px;';
-      section.innerHTML = `
-        <label style="font-size:13px;font-weight:600;">Eligible Packs (optional selections)</label>
-        ${eligible.map(ep => `
-          <div class="review-checkbox" style="margin-top:4px;">
-            <input type="checkbox" id="rv-ep-${escHtml(ep.packId)}" ${!ep.hasManifest ? 'disabled' : ''}>
-            <label for="rv-ep-${escHtml(ep.packId)}" style="${!ep.hasManifest ? 'opacity:0.5;' : ''}">
-              ${escHtml(ep.packId)} ${!ep.hasManifest ? '(no manifest — will be deferred)' : ''}
-            </label>
-          </div>
-        `).join('')}
-      `;
-      submitBtn.parentElement.insertBefore(section, submitBtn.parentElement.firstChild);
-    }
-
-    renderEligibleSection();
-    marketSel.addEventListener('change', renderEligibleSection);
-  }, 50);
+  if (result && result.ok) { await loadData(); navigate(); }
+  else showGovernedActionModal('Toggle Feature Flag', `Failed: ${(result && result.error) || 'Backend unavailable'}`);
 }
-function reviewCreateBootstrapRequest() {
-  openReviewDialog('Create Tenant Bootstrap Request', 'createTenantBootstrapRequest', [
-    { key: 'effectivePlanId', label: 'Effective Plan ID (UUID)', type: 'text', required: true, placeholder: 'UUID of a resolved plan' },
-    { key: 'tenantDisplayName', label: 'Tenant Display Name', type: 'text', required: true, placeholder: 'e.g., Sunrise Medical Center' },
-    { key: 'tenantNotes', label: 'Tenant Notes (optional)', type: 'textarea', placeholder: 'Optional notes…' },
-  ], (body) => {
-    const cleaned = { effectivePlanId: body.effectivePlanId, tenantDisplayName: body.tenantDisplayName };
-    if (body.tenantNotes) cleaned.tenantNotes = body.tenantNotes;
-    submitReview('POST', '/tenant-bootstrap-requests', cleaned);
-  });
-}
-function reviewCreateProvisioningRun() {
-  openReviewDialog('Create Provisioning Run', 'createProvisioningRun', [
-    { key: 'bootstrapRequestId', label: 'Bootstrap Request ID (UUID)', type: 'text', required: true, placeholder: 'UUID of an approved bootstrap request' },
-  ], (body) => submitReview('POST', '/provisioning-runs', body));
-}
-function reviewCancelProvisioningRun(runId) {
-  openReviewDialog('Cancel Provisioning Run', 'cancelProvisioningRun', [
-    { key: 'reason', label: 'Cancellation Reason', type: 'textarea', required: true, placeholder: 'Reason for cancelling this run…' },
-  ], (body) => submitReview('POST', `/provisioning-runs/${encodeURIComponent(runId)}/cancel`, body));
-}
-function reviewCreateMarketDraft() {
-  openReviewDialog('Create Legal-Market Profile Draft', 'createLegalMarketProfileDraft', [
-    { key: 'legalMarketId', label: 'Legal Market ID (ISO 3166-1 alpha-2)', type: 'text', required: true, placeholder: 'e.g., JP, DE, IN' },
-    { key: 'displayName', label: 'Display Name', type: 'text', required: true, placeholder: 'e.g., Japan' },
-    { key: 'launchTier', label: 'Launch Tier', type: 'select', options: [{ value: 'T0', label: 'T0 (draft)' }, { value: 'T1', label: 'T1' }, { value: 'T2', label: 'T2' }, { value: 'T3', label: 'T3' }] },
-  ], (body) => {
-    const cleaned = { legalMarketId: body.legalMarketId, displayName: body.displayName };
-    if (body.launchTier) cleaned.launchTier = body.launchTier;
-    submitReview('POST', '/legal-market-profiles', cleaned);
-  });
-}
-function reviewUpdateMarketDraft(legalMarketId) {
-  openReviewDialog(`Update Market Draft: ${legalMarketId}`, 'updateLegalMarketProfileDraft', [
-    { key: 'displayName', label: 'Display Name (optional)', type: 'text', placeholder: 'New display name' },
-    { key: 'launchTier', label: 'Launch Tier (optional)', type: 'select', options: [{ value: '', label: '(unchanged)' }, { value: 'T0', label: 'T0' }, { value: 'T1', label: 'T1' }, { value: 'T2', label: 'T2' }, { value: 'T3', label: 'T3' }] },
-  ], (body) => {
-    const cleaned = {};
-    if (body.displayName) cleaned.displayName = body.displayName;
-    if (body.launchTier) cleaned.launchTier = body.launchTier;
-    submitReview('PUT', `/legal-market-profiles/${encodeURIComponent(legalMarketId)}`, cleaned);
-  });
-}
-function reviewSubmitMarketForReview(legalMarketId) {
-  openReviewDialog(`Submit Market for Review: ${legalMarketId}`, 'submitLegalMarketProfileForReview', [
-    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Optional reason for submission…' },
-  ], (body) => {
-    const cleaned = {};
-    if (body.reason) cleaned.reason = body.reason;
-    submitReview('POST', `/legal-market-profiles/${encodeURIComponent(legalMarketId)}/submit-review`, cleaned);
-  });
-}
-function reviewCreatePackDraft() {
-  openReviewDialog('Create Pack Manifest Draft', 'createPackManifestDraft', [
-    { key: 'packId', label: 'Pack ID', type: 'text', required: true, placeholder: 'e.g., lang-jp, payer-bcbs' },
-    { key: 'displayName', label: 'Display Name', type: 'text', required: true, placeholder: 'e.g., Japanese Language Pack' },
-    { key: 'packFamily', label: 'Pack Family', type: 'select', required: true, options: [
-      { value: 'language', label: 'language' }, { value: 'locale', label: 'locale' },
-      { value: 'regulatory', label: 'regulatory' }, { value: 'national-standards', label: 'national-standards' },
-      { value: 'payer', label: 'payer' }, { value: 'specialty', label: 'specialty' },
-      { value: 'tenant-overlay', label: 'tenant-overlay' },
-    ]},
-    { key: 'description', label: 'Description (optional)', type: 'textarea', placeholder: 'Pack description…' },
-  ], (body) => {
-    const cleaned = { packId: body.packId, displayName: body.displayName, packFamily: body.packFamily };
-    if (body.description) cleaned.description = body.description;
-    submitReview('POST', '/packs', cleaned);
-  });
-}
-function reviewUpdatePackDraft(packId) {
-  openReviewDialog(`Update Pack Draft: ${packId}`, 'updatePackManifestDraft', [
-    { key: 'displayName', label: 'Display Name (optional)', type: 'text', placeholder: 'New display name' },
-    { key: 'description', label: 'Description (optional)', type: 'textarea', placeholder: 'New description' },
-  ], (body) => {
-    const cleaned = {};
-    if (body.displayName) cleaned.displayName = body.displayName;
-    if (body.description) cleaned.description = body.description;
-    submitReview('PUT', `/packs/${encodeURIComponent(packId)}`, cleaned);
-  });
-}
-function reviewSubmitPackForReview(packId) {
-  openReviewDialog(`Submit Pack for Review: ${packId}`, 'submitPackManifestForReview', [
-    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Optional reason for submission…' },
-  ], (body) => {
-    const cleaned = {};
-    if (body.reason) cleaned.reason = body.reason;
-    submitReview('POST', `/packs/${encodeURIComponent(packId)}/submit-review`, cleaned);
-  });
-}
-function reviewToggleFeatureFlag(flagKey, currentValue) {
-  openReviewDialog(`Toggle Feature Flag: ${flagKey}`, 'updateFeatureFlag', [
-    { key: 'value', label: `New Value (current: ${currentValue})`, type: 'select', options: [{ value: 'true', label: 'true (ON)' }, { value: 'false', label: 'false (OFF)' }] },
-    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Reason for change…' },
-  ], (body) => {
-    const cleaned = { value: body.value === 'true' };
-    if (body.reason) cleaned.reason = body.reason;
-    submitReview('PUT', `/system-config/feature-flags/${encodeURIComponent(flagKey)}`, cleaned);
-  });
-}
-function reviewUpdateSystemParameter(paramKey, currentValue) {
-  openReviewDialog(`Update System Parameter: ${paramKey}`, 'updateSystemParameter', [
-    { key: 'value', label: `New Value (current: ${currentValue})`, type: 'text', required: true, defaultValue: String(currentValue) },
-    { key: 'reason', label: 'Reason (optional)', type: 'textarea', placeholder: 'Reason for change…' },
-  ], (body) => {
-    const cleaned = { value: body.value };
-    if (body.reason) cleaned.reason = body.reason;
-    submitReview('PUT', `/system-config/parameters/${encodeURIComponent(paramKey)}`, cleaned);
-  });
+async function reviewUpdateSystemParameter() {
+  showGovernedActionModal('Update System Parameter',
+    'System configuration changes require the platform API on port 4510 with a <code>system_config</code> table. Start the API and run migrations.');
 }
 
 // ---------------------------------------------------------------------------
@@ -682,8 +336,8 @@ const ROUTES = {
   // Tenants
   'tenants':             renderTenantsList,
   'tenants-detail':      renderTenantsDetail,
-  // Operations
-  'operations':          renderOperationsCenter,
+  // Operations (alias → home)
+  'operations':          renderHome,
   'alerts':              renderAlertCenter,
   'backup-dr':           renderBackupDr,
   'environments':        renderEnvironmentsFlags,
@@ -736,10 +390,10 @@ function navigate() {
 // Surface 1: Tenant Registry (control-plane.tenants.list) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 function renderTenantsList() {
-  const data = FIXTURES['tenants'];
+  const data = DATA['tenants'];
   const items = data.items;
   const pg = data.pagination;
-  const source = data._source || 'fixture-fallback';
+  const source = data._source || 'unavailable';
 
   document.getElementById('app').innerHTML = `
     <div class="surface-header">
@@ -754,14 +408,24 @@ function renderTenantsList() {
 
     <div class="filter-bar">
       <label>Status</label>
-      <select disabled><option>All statuses</option></select>
+      <select id="tenant-filter-status" onchange="filterTenantsList()">
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="draft">Draft</option>
+        <option value="bootstrap-pending">Bootstrap Pending</option>
+        <option value="suspended">Suspended</option>
+        <option value="decommissioned">Decommissioned</option>
+      </select>
       <label>Market</label>
-      <select disabled><option>All markets</option></select>
+      <select id="tenant-filter-market" onchange="filterTenantsList()">
+        <option value="">All markets</option>
+        ${[...new Set(items.map(t => t.legalMarketId).filter(Boolean))].sort().map(m => `<option value="${escHtml(m)}">${escHtml(m)}</option>`).join('')}
+      </select>
       <label>Search</label>
-      <input type="text" placeholder="Search tenants…" disabled>
+      <input type="text" id="tenant-filter-search" placeholder="Search by name or ID…" oninput="filterTenantsList()">
     </div>
 
-    <table>
+    <table id="tenant-table">
       <thead>
         <tr>
           <th>Tenant ID</th>
@@ -770,38 +434,65 @@ function renderTenantsList() {
           <th>Legal Market</th>
           <th>Launch Tier</th>
           <th>Created</th>
+          <th>Actions</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="tenant-tbody">
         ${items.map(t => `
-          <tr class="clickable" onclick="location.hash='#/tenants/detail?id=${encodeURIComponent(t.tenantId)}'">
+          <tr class="clickable" data-tenant-id="${escHtml(t.tenantId)}" data-status="${escHtml(t.status || '')}" data-market="${escHtml(t.legalMarketId || '')}" data-name="${escHtml((t.displayName || '') + ' ' + (t.tenantId || '')).toLowerCase()}" onclick="location.hash='#/tenants/detail?id=${encodeURIComponent(t.tenantId)}'">
             <td><code>${escHtml(t.tenantId)}</code></td>
             <td>${escHtml(t.displayName)}</td>
             <td>${badge(t.status)}</td>
             <td>${escHtml(t.legalMarketId)}</td>
             <td>${badge(t.launchTier || '—')}</td>
             <td>${fmtDate(t.createdAt)}</td>
+            <td onclick="event.stopPropagation()">
+              <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="openTenantAdmin('${escHtml(t.tenantId)}')">Site Admin</button>
+            </td>
           </tr>
         `).join('')}
       </tbody>
     </table>
 
-    <div class="pagination">
+    <div class="pagination" id="tenant-pagination">
       <span>Showing ${items.length} of ${pg.totalItems} tenants</span>
       <span>Page ${pg.page} of ${pg.totalPages} · ${pg.pageSize} per page</span>
     </div>
   `;
+  window._tenantAllRows = items;
+}
+
+// ---------------------------------------------------------------------------
+// Tenant Registry live filter
+// ---------------------------------------------------------------------------
+function filterTenantsList() {
+  const status = (document.getElementById('tenant-filter-status') || {}).value || '';
+  const market = (document.getElementById('tenant-filter-market') || {}).value || '';
+  const search = ((document.getElementById('tenant-filter-search') || {}).value || '').toLowerCase();
+  const tbody = document.getElementById('tenant-tbody');
+  if (!tbody) return;
+  let visible = 0;
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const st = tr.dataset.status || '';
+    const mk = tr.dataset.market || '';
+    const nm = tr.dataset.name || '';
+    const show = (!status || st === status) && (!market || mk === market) && (!search || nm.includes(search));
+    tr.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const pg = document.getElementById('tenant-pagination');
+  if (pg) pg.firstElementChild.textContent = `Showing ${visible} of ${(window._tenantAllRows || []).length} tenants`;
 }
 
 // ---------------------------------------------------------------------------
 // Surface 2: Tenant Detail (control-plane.tenants.detail) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 async function renderTenantsDetail() {
-  // Extract tenant ID from URL hash query param or fall back to first fixture tenant
+  // Extract tenant ID from URL hash query param or fall back to first tenant
   const hashParts = location.hash.split('?');
   const params = new URLSearchParams(hashParts[1] || '');
-  const tenantId = params.get('id') || (FIXTURES['tenants'].items[0] || {}).tenantId;
-  const source = FIXTURES['tenants']._source || 'fixture-fallback';
+  const tenantId = params.get('id') || (DATA['tenants'].items[0] || {}).tenantId;
+  const source = DATA['tenants']._source || 'unavailable';
 
   // Try dynamic fetch from real backend for single tenant
   let tenant = null;
@@ -815,10 +506,10 @@ async function renderTenantsDetail() {
     }
   } catch { /* fallback below */ }
 
-  // Fallback to fixture
+  // Fallback to first available tenant
   if (!tenant) {
-    tenant = FIXTURES['tenants'].items.find(t => t.tenantId === tenantId) || FIXTURES['tenants'].items[0];
-    detailSource = 'fixture-fallback';
+    tenant = DATA['tenants'].items.find(t => t.tenantId === tenantId) || DATA['tenants'].items[0];
+    detailSource = 'unavailable';
   }
 
   if (!tenant) {
@@ -826,7 +517,7 @@ async function renderTenantsDetail() {
     return;
   }
 
-  const bootstrapReqs = FIXTURES['bootstrap-requests'].items.filter(b => b.tenantId === tenant.tenantId);
+  const bootstrapReqs = DATA['bootstrap-requests'].items.filter(b => b.tenantId === tenant.tenantId);
   const latestBootstrap = bootstrapReqs[0];
 
   document.getElementById('app').innerHTML = `
@@ -890,12 +581,12 @@ async function renderTenantsDetail() {
       ` : '<p>No active packs.</p>'}
     </div>
 
-    <!-- Tenant Admin Handoff -->
+    <!-- Site Administration Handoff -->
     <div class="card handoff-card">
       <h3>Tenant Operational Admin</h3>
       <p>
         Day-to-day tenant configuration (users, roles, facilities, VistA connections)
-        happens in the <strong>Tenant Admin</strong> workspace &mdash; a separate app
+        happens in the <strong>Site Administration</strong> workspace &mdash; a separate app
         scoped to one tenant at a time.
       </p>
       <ul class="handoff-items">
@@ -904,7 +595,7 @@ async function renderTenantsDetail() {
         <li>&#x2022; VistA instance connections</li>
         <li>&#x2022; Module entitlements &amp; feature flags</li>
       </ul>
-      <button class="btn-handoff" onclick="openTenantAdmin('${t.id}')" title="Open Tenant Admin workspace for this tenant">Open Tenant Admin ↗</button>
+      <button class="btn-handoff" onclick="openTenantAdmin('${escHtml(tenant.tenantId)}')" title="Open Site Administration workspace for this tenant">Open Site Administration ↗</button>
       <p style="font-size:11px;color:var(--text-muted);margin-top:10px;">Workspace: <code>vista-evolved-platform/apps/tenant-admin</code> &middot; Port 4520</p>
     </div>
 
@@ -931,9 +622,9 @@ async function renderTenantsDetail() {
 // Surface 3: Tenant Bootstrap (control-plane.tenants.bootstrap) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 function renderTenantsBootstrap() {
-  const plan = FIXTURES['effective-plans'].plans[0];
-  const markets = FIXTURES['legal-market-profiles'].items;
-  const bootstrapSource = FIXTURES['bootstrap-requests']._source || 'fixture-fallback';
+  const plan = DATA['effective-plans'].plans[0];
+  const markets = DATA['legal-market-profiles'].items;
+  const bootstrapSource = DATA['bootstrap-requests']._source || 'unavailable';
 
   document.getElementById('app').innerHTML = `
     <div class="breadcrumb">${navLink('#/tenants', 'Tenant Registry')} › ${navLink('#/tenants/detail', 'Tenant Detail')} › Bootstrap</div>
@@ -1056,8 +747,8 @@ function renderTenantsBootstrap() {
     <!-- Post-Provisioning Handoff -->
     <div class="card handoff-card" style="margin-top:16px;">
       <h3>After Provisioning</h3>
-      <p>Once this tenant is provisioned, operational setup (users, roles, facilities, VistA connections) continues in the <strong>Tenant Admin</strong> workspace.</p>
-      <button class="btn-handoff" onclick="openTenantAdmin('${t.id}')" title="Open Tenant Admin workspace for this tenant">Open Tenant Admin ↗</button>
+      <p>Once this tenant is provisioned, operational setup (users, roles, facilities, VistA connections) continues in the <strong>Site Administration</strong> workspace.</p>
+      <button class="btn-handoff" onclick="openTenantAdmin()" title="Open Site Administration workspace">Open Site Administration ↗</button>
       <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Port 4520 &middot; <code>apps/tenant-admin</code></p>
     </div>
   `;
@@ -1067,10 +758,10 @@ function renderTenantsBootstrap() {
 // Surface 4: Provisioning Runs (control-plane.provisioning.runs) — P0 GRADUATED
 // ---------------------------------------------------------------------------
 function renderProvisioningRuns() {
-  const data = FIXTURES['provisioning-runs'];
+  const data = DATA['provisioning-runs'];
   const items = data.items;
   const pg = data.pagination;
-  const source = data._source || 'fixture-fallback';
+  const source = data._source || 'unavailable';
 
   document.getElementById('app').innerHTML = `
     <div class="surface-header">
@@ -1202,7 +893,7 @@ function renderRunDetail(run) {
 // Surface 5: Market Management (control-plane.markets.management)
 // ---------------------------------------------------------------------------
 function renderMarketsManagement() {
-  const data = FIXTURES['legal-market-profiles'];
+  const data = DATA['legal-market-profiles'];
   const items = data.items;
   const pg = data.pagination;
 
@@ -1263,7 +954,7 @@ function renderMarketsManagement() {
 // Surface 6: Market Detail (control-plane.markets.detail)
 // ---------------------------------------------------------------------------
 function renderMarketsDetail() {
-  const market = FIXTURES['legal-market-profiles'].items[0]; // PH market
+  const market = DATA['legal-market-profiles'].items[0]; // PH market
 
   document.getElementById('app').innerHTML = `
     <div class="breadcrumb">${navLink('#/markets', 'Market Management')} › ${escHtml(market.displayName)}</div>
@@ -1389,10 +1080,10 @@ function renderMarketsDetail() {
 // Surface 7: Pack Catalog (control-plane.packs.catalog)
 // ---------------------------------------------------------------------------
 function renderPacksCatalog() {
-  const data = FIXTURES['packs'];
+  const data = DATA['packs'];
   const items = data.items;
   const pg = data.pagination;
-  const caps = FIXTURES['capabilities'].items;
+  const caps = DATA['capabilities'].items;
 
   document.getElementById('app').innerHTML = `
     <div class="surface-header">
@@ -1439,7 +1130,7 @@ function renderPacksCatalog() {
             <td>${escHtml(p.version)}</td>
             <td>${badge(p.lifecycleState)}</td>
             <td>${(p.eligibleMarkets && p.eligibleMarkets.length > 0) ? p.eligibleMarkets.join(', ') : 'All'}</td>
-            <td>${(p.capabilityContributions || []).map(c => `<code style="font-size:11px;">${escHtml(c.capabilityId)}</code>`).join(', ') || '—'}</td>
+            <td>${(p.capabilityContributions || []).length > 0 ? (p.capabilityContributions || []).map(c => `<code style="font-size:11px;">${escHtml(c.capabilityId)}</code>`).join(', ') : '—'}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -1450,50 +1141,54 @@ function renderPacksCatalog() {
       <span>Page ${pg.page} of ${pg.totalPages}</span>
     </div>
 
-    <!-- Pack Detail Panel (show first pack) -->
-    <div class="card" style="margin-top:16px;">
-      <h3>${escHtml(items[0].displayName)}</h3>
-      <dl class="kv-list">
-        <dt>Family</dt><dd>${badge(items[0].packFamily)}</dd>
-        <dt>Version</dt><dd>${escHtml(items[0].version)}</dd>
-        <dt>Lifecycle</dt><dd>${badge(items[0].lifecycleState)}</dd>
-        <dt>Owner</dt><dd>${escHtml(items[0].lifecycle.owner)}</dd>
-        <dt>Implementation</dt><dd>${escHtml(items[0].lifecycle.implementationLocus)}</dd>
-        <dt>Description</dt><dd style="font-size:12px;">${escHtml(items[0].description)}</dd>
-      </dl>
-      <p class="meta-secondary" style="margin-top:4px;">Pack ID: ${escHtml(items[0].packId)}</p>
+      <!-- Pack Detail Panel (show first pack) -->
+    ${items.length > 0 ? (() => {
+      const p0 = items[0];
+      const lc = p0.lifecycle || {};
+      return `<div class="card" style="margin-top:16px;">
+        <h3>${escHtml(p0.displayName)}</h3>
+        <dl class="kv-list">
+          <dt>Family</dt><dd>${badge(p0.packFamily)}</dd>
+          <dt>Version</dt><dd>${escHtml(p0.version)}</dd>
+          <dt>Lifecycle</dt><dd>${badge(p0.lifecycleState)}</dd>
+          ${lc.owner ? `<dt>Owner</dt><dd>${escHtml(lc.owner)}</dd>` : ''}
+          ${lc.implementationLocus ? `<dt>Implementation</dt><dd>${escHtml(lc.implementationLocus)}</dd>` : ''}
+          <dt>Description</dt><dd style="font-size:12px;">${escHtml(p0.description)}</dd>
+        </dl>
+        <p class="meta-secondary" style="margin-top:4px;">Pack ID: ${escHtml(p0.packId)}</p>
 
-      ${(items[0].dependencies && items[0].dependencies.length > 0) ? `
-        <h3 style="margin-top:12px;">Dependencies</h3>
-        <table>
-          <thead><tr><th>Pack ID</th><th>Type</th><th>Rationale</th></tr></thead>
-          <tbody>
-            ${items[0].dependencies.map(d => `
-              <tr><td><code>${escHtml(d.packId)}</code></td><td>${badge(d.type)}</td><td style="font-size:12px;">${escHtml(d.rationale || '')}</td></tr>
-            `).join('')}
-          </tbody>
-        </table>
-      ` : ''}
+        ${(p0.dependencies && p0.dependencies.length > 0) ? `
+          <h3 style="margin-top:12px;">Dependencies</h3>
+          <table>
+            <thead><tr><th>Pack ID</th><th>Type</th><th>Rationale</th></tr></thead>
+            <tbody>
+              ${p0.dependencies.map(d => `
+                <tr><td><code>${escHtml(d.packId)}</code></td><td>${badge(d.type)}</td><td style="font-size:12px;">${escHtml(d.rationale || '')}</td></tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
 
-      ${(items[0].adapterRequirements && items[0].adapterRequirements.length > 0) ? `
-        <h3 style="margin-top:12px;">Adapter Requirements</h3>
-        <table>
-          <thead><tr><th>Adapter ID</th><th>Type</th><th>Required</th><th>Fallback</th></tr></thead>
-          <tbody>
-            ${items[0].adapterRequirements.map(a => `
-              <tr><td><code>${escHtml(a.adapterId)}</code></td><td>${escHtml(a.adapterType)}</td><td>${a.required ? 'Yes' : 'No'}</td><td>${escHtml(a.fallbackBehavior || '—')}</td></tr>
-            `).join('')}
-          </tbody>
-        </table>
-      ` : ''}
+        ${(p0.adapterRequirements && p0.adapterRequirements.length > 0) ? `
+          <h3 style="margin-top:12px;">Adapter Requirements</h3>
+          <table>
+            <thead><tr><th>Adapter ID</th><th>Type</th><th>Required</th><th>Fallback</th></tr></thead>
+            <tbody>
+              ${p0.adapterRequirements.map(a => `
+                <tr><td><code>${escHtml(a.adapterId)}</code></td><td>${escHtml(a.adapterType)}</td><td>${a.required ? 'Yes' : 'No'}</td><td>${escHtml(a.fallbackBehavior || '—')}</td></tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : ''}
 
-      <div style="margin-top:12px;">
-        <div class="btn-group">
-          <button class="btn" onclick="reviewUpdatePackDraft('${escHtml(items[0].packId)}')">Update Draft</button>
-          <button class="btn" onclick="reviewSubmitPackForReview('${escHtml(items[0].packId)}')">Submit for Review</button>
+        <div style="margin-top:12px;">
+          <div class="btn-group">
+            <button class="btn" onclick="reviewUpdatePackDraft('${escHtml(p0.packId)}')">Update Draft</button>
+            <button class="btn" onclick="reviewSubmitPackForReview('${escHtml(p0.packId)}')">Submit for Review</button>
+          </div>
         </div>
-      </div>
-    </div>
+      </div>`;
+    })() : ''}
   `;
 }
 
@@ -1501,10 +1196,18 @@ function renderPacksCatalog() {
 // Surface 8: System Configuration (control-plane.system.config)
 // ---------------------------------------------------------------------------
 function renderSystemConfig() {
-  const config = FIXTURES['system-config'];
-  const dp = config.deploymentProfile;
-  const flags = config.featureFlags;
-  const params = config.systemParameters;
+  const raw = DATA['system-config'] || {};
+  // Support both the new flat format {ok, _source, config:{...}} and legacy format with deploymentProfile
+  const cfg = raw.config || raw;
+  const source = raw._source || 'unavailable';
+
+  // Normalize to display-friendly KV pairs from whatever the API returns
+  const identity = cfg.identity || {};
+  const envs = cfg.environments || [];
+  const provDefaults = cfg.provisioningDefaults || {};
+  const retentionDays = cfg.retentionDays || '—';
+  const flags = cfg.featureFlags || [];
+  const params = cfg.systemParameters || [];
 
   // Group params by category
   const grouped = {};
@@ -1517,21 +1220,24 @@ function renderSystemConfig() {
     <div class="surface-header">
       <h1>System Configuration</h1>
       <div class="btn-group">
+        ${sourceBadge(source)}
         <button class="btn" onclick="navigate()">↻ Refresh</button>
       </div>
     </div>
 
-    <!-- Deployment Profile -->
+    <!-- Runtime Settings -->
     <div class="card">
-      <h3>Deployment Profile</h3>
+      <h3>Runtime Settings</h3>
       <dl class="kv-list">
-        <dt>Profile Name</dt><dd>${escHtml(dp.profileName)}</dd>
-        <dt>Runtime Mode</dt><dd>${badge(dp.runtimeMode)}</dd>
-        <dt>API Version</dt><dd>${escHtml(dp.apiVersion)}</dd>
-        <dt>Platform Version</dt><dd>${escHtml(dp.platformVersion)}</dd>
+        <dt>Identity Provider</dt><dd>${badge(identity.provider || 'vista-xwb')}</dd>
+        <dt>OIDC</dt><dd>${identity.oidcEnabled ? '<span style="color:var(--success);">Enabled</span>' : '<span style="color:var(--text-muted);">Disabled</span>'}</dd>
+        <dt>Environments</dt><dd>${(Array.isArray(envs) ? envs : [envs]).map(e => badge(e)).join(' ') || '—'}</dd>
+        <dt>Provisioning Topology</dt><dd>${escHtml(provDefaults.topology || 'single-site')}</dd>
+        <dt>Retention (days)</dt><dd>${escHtml(String(retentionDays))}</dd>
       </dl>
     </div>
 
+    ${flags.length > 0 ? `
     <!-- Feature Flags -->
     <div class="card">
       <h3>Feature Flags (${flags.length})</h3>
@@ -1543,7 +1249,7 @@ function renderSystemConfig() {
               <td><code>${escHtml(f.flagKey)}</code></td>
               <td>${escHtml(f.displayName)}</td>
               <td>${f.enabled ? '<span style="color:var(--success);font-weight:600;">ON</span>' : '<span style="color:var(--text-muted);">OFF</span>'}</td>
-              <td>${escHtml(f.scope)}</td>
+              <td>${escHtml(f.scope || '—')}</td>
               <td>${fmtDate(f.updatedAt)}</td>
               <td><button class="btn" onclick="reviewToggleFeatureFlag('${escHtml(f.flagKey)}', ${f.enabled})">Toggle</button></td>
             </tr>
@@ -1551,7 +1257,15 @@ function renderSystemConfig() {
         </tbody>
       </table>
     </div>
+    ` : `
+    <div class="card">
+      <h3>Feature Flags</h3>
+      <p style="color:var(--text-muted);font-size:13px;">Feature flags are managed via the Environments surface. No flags currently configured.</p>
+      <a href="#/environments" class="btn" style="display:inline-block;margin-top:8px;">Manage Feature Flags</a>
+    </div>
+    `}
 
+    ${params.length > 0 ? `
     <!-- System Parameters -->
     <div class="card">
       <h3>System Parameters (${params.length})</h3>
@@ -1575,39 +1289,14 @@ function renderSystemConfig() {
         </div>
       `).join('')}
     </div>
+    ` : ''}
 
     <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
-      Last updated: ${fmtDate(config.lastUpdatedAt)}
+      Last updated: ${fmtDate(raw.lastUpdatedAt)}
     </p>
   `;
 }
 
-// ---------------------------------------------------------------------------
-// Empty State Demo Surface (appended to tenants list when triggered)
-// ---------------------------------------------------------------------------
-function renderEmptyState() {
-  return `
-    <div class="empty-state">
-      <div class="empty-icon">📭</div>
-      <p>No tenants found matching the current filters.</p>
-      <p style="margin-top:8px;"><button class="btn btn-primary" onclick="location.hash='#/bootstrap'">Bootstrap First Tenant</button></p>
-    </div>
-  `;
-}
-
-// ---------------------------------------------------------------------------
-// Error State Demo (appended to provisioning runs detail)
-// ---------------------------------------------------------------------------
-function renderErrorState() {
-  return `
-    <div class="error-state">
-      <div class="error-icon">⚠️</div>
-      <p>Failed to load provisioning run data. The control-plane API returned an error.</p>
-      <p style="margin-top:8px;font-size:12px;color:var(--text-muted);">Error code: INTERNAL_ERROR · Correlation ID: err-0000-0000-0000</p>
-      <p style="margin-top:8px;"><button class="btn" onclick="navigate()">↻ Retry</button></p>
-    </div>
-  `;
-}
 
 // ---------------------------------------------------------------------------
 // Boot
@@ -1615,7 +1304,7 @@ function renderErrorState() {
 async function boot() {
   const sel = document.getElementById('role-selector');
   if (sel) sel.value = getActiveRole();
-  const ok = await loadFixtures();
+  const ok = await loadData();
   if (!ok) return;
   navigate();
 }
@@ -1657,14 +1346,14 @@ function renderStaticSurface(title, surfaceId, icon, description, domain, source
 // ---------------------------------------------------------------------------
 function renderHome() {
   const app = document.getElementById('app');
-  const tenantData = FIXTURES['tenants'] || { items: [] };
-  const runData = FIXTURES['provisioning-runs'] || { items: [] };
-  const bootstrapData = FIXTURES['bootstrap-requests'] || { items: [] };
+  const tenantData = DATA['tenants'] || { items: [] };
+  const runData = DATA['provisioning-runs'] || { items: [] };
+  const bootstrapData = DATA['bootstrap-requests'] || { items: [] };
   const tenants = tenantData.items || [];
   const runs = runData.items || [];
   const bootstrapReqs = bootstrapData.items || [];
 
-  const tenantSource = tenantData._source || 'fixture-fallback';
+  const tenantSource = tenantData._source || 'unavailable';
 
   // Card: Pending Requests
   const pendingRequests = bootstrapReqs.filter(r =>
@@ -1702,9 +1391,17 @@ function renderHome() {
   app.innerHTML = `
     <div class="surface-header">
       <div>
-        <h1>Home</h1>
-        <p style="font-size:13px;color:var(--text-muted);">What needs my attention right now?</p>
+        <h1>Operations Center</h1>
+        <p style="font-size:13px;color:var(--text-muted);">What requires action right now across tenants, provisioning, and operations?</p>
       </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-value">${tenants.length}</div><div class="stat-label">Total Tenants</div></div>
+      <div class="stat-box"><div class="stat-value" style="color:var(--success);">${activeTenants}</div><div class="stat-label">Active</div></div>
+      <div class="stat-box"><div class="stat-value" style="color:var(--warning);">${draftTenants}</div><div class="stat-label">Draft / Pending</div></div>
+      <div class="stat-box"><div class="stat-value" style="color:var(--danger);">${suspendedTenants}</div><div class="stat-label">Suspended</div></div>
+      <div class="stat-box"><div class="stat-value">${runs.length}</div><div class="stat-label">Provisioning Runs</div></div>
     </div>
 
     <div class="home-grid">
@@ -1759,14 +1456,14 @@ function renderHome() {
       <div class="home-card handoff-card" style="grid-column: 1 / -1;">
         <h3>Tenant Operational Admin</h3>
         <p>After onboarding and provisioning, day-to-day tenant configuration
-        moves to the <strong>Tenant Admin</strong> workspace (users, roles, facilities, VistA connections).</p>
-        <button class="btn-handoff" onclick="openTenantAdmin()" title="Open Tenant Admin workspace">Open Tenant Admin ↗</button>
+        moves to the <strong>Site Administration</strong> workspace (users, roles, facilities, VistA connections).</p>
+        <button class="btn-handoff" onclick="openTenantAdmin()" title="Open Site Administration workspace">Open Site Administration ↗</button>
         <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Port 4520 &middot; <code>apps/tenant-admin</code></p>
       </div>
     </div>
 
     <div style="margin-top:20px; text-align:center;">
-      <span class="meta-secondary">22 surfaces · 8 domains · 11 real + 11 planned · ${sourceBadge(tenantSource)} real-backend + fixture fallback</span>
+      <span class="meta-secondary">22 surfaces · 8 domains · 11 real + 11 planned · ${sourceBadge(tenantSource)} real-backend + contract-backed</span>
     </div>
   `;
 }
@@ -1778,7 +1475,7 @@ async function renderIdentityInvitations() {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading invitations…</p>';
   let invitations = [];
-  let source = 'fixture-fallback';
+  let source = 'unavailable';
   try {
     const r = await apiFetch(`${API_BASE}/operator/invitations`);
     if (r.ok) {
@@ -1875,88 +1572,6 @@ function renderEligibilitySimulator() {
 }
 
 // ---------------------------------------------------------------------------
-// Surface: Operations Center (control-plane.operations.center)
-// ---------------------------------------------------------------------------
-// Surface: Operations Center (control-plane.operations.center) — P0 GRADUATED
-// ---------------------------------------------------------------------------
-function renderOperationsCenter() {
-  const app = document.getElementById('app');
-  const tenantData = FIXTURES['tenants'] || { items: [] };
-  const runData = FIXTURES['provisioning-runs'] || { items: [] };
-  const tenants = tenantData.items || [];
-  const runs = runData.items || [];
-  const config = FIXTURES['system-config'] || {};
-
-  const tenantSource = tenantData._source || 'fixture-fallback';
-  const runSource = runData._source || 'fixture-fallback';
-
-  const activeRuns = runs.filter(r => r.status === 'in-progress');
-  const failedRuns = runs.filter(r => r.status === 'failed');
-  const blockedRuns = runs.filter(r => (r.blockers || []).length > 0);
-
-  app.innerHTML = `
-    <div class="surface-header">
-      <div>
-        <div class="breadcrumb">${navLink('#/home', 'Home')} / Operations</div>
-        <h1>Operations Center</h1>
-      </div>
-      <div class="btn-group">
-        ${sourceBadge(tenantSource)}
-      </div>
-    </div>
-
-    <p class="meta-secondary" style="margin:8px 0;">${sourceBadge(tenantSource)} Tenants · ${sourceBadge(runSource)} Provisioning</p>
-
-    <div class="stat-row">
-      <div class="stat-box">
-        <div class="stat-value">${tenants.length}</div>
-        <div class="stat-label">Total Tenants</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${activeRuns.length}</div>
-        <div class="stat-label">Active Runs</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${failedRuns.length}</div>
-        <div class="stat-label">Failed Runs</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${blockedRuns.length}</div>
-        <div class="stat-label">Blocked Runs</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Provisioning Activity</h3>
-      <table>
-        <thead><tr><th>Run ID</th><th>Tenant</th><th>Status</th><th>Blockers</th><th>Started</th></tr></thead>
-        <tbody>
-          ${runs.map(r => `
-            <tr class="clickable" onclick="location.hash='#/provisioning'">
-              <td><code style="font-size:11px;">${escHtml(r.provisioningRunId?.substring(0, 8) || '—')}...</code></td>
-              <td>${escHtml(r.tenantId?.substring(0, 8) || '—')}...</td>
-              <td>${badge(r.status)}</td>
-              <td>${(r.blockers || []).length > 0 ? `<span style="color:var(--warning);font-weight:600;">${r.blockers.length} blocker(s)</span>` : '—'}</td>
-              <td>${fmtDate(r.startedAt)}</td>
-            </tr>
-          `).join('')}
-          ${runs.length === 0 ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No provisioning runs</td></tr>' : ''}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h3>System Posture</h3>
-      <dl class="kv-list">
-        <dt>Auth Mode</dt><dd>${escHtml(config.systemParameters?.find(p => p.paramKey === 'auth-mode')?.value || '—')}</dd>
-        <dt>OTel Enabled</dt><dd>${escHtml(config.systemParameters?.find(p => p.paramKey === 'otel-enabled')?.value || '—')}</dd>
-        <dt>VistA Instance</dt><dd>${escHtml(config.systemParameters?.find(p => p.paramKey === 'vista-instance-id')?.value || '—')}</dd>
-        <dt>Platform Version</dt><dd>${escHtml(config.deploymentProfile?.platformVersion || '—')}</dd>
-      </dl>
-    </div>
-  `;
-}
-
 // ---------------------------------------------------------------------------
 // Surface: Alert Center (control-plane.ops.alerts)
 // ---------------------------------------------------------------------------
@@ -1964,7 +1579,7 @@ async function renderAlertCenter() {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading alerts…</p>';
   let alerts = [];
-  let source = 'fixture-fallback';
+  let source = 'unavailable';
   try {
     const r = await apiFetch(`${API_BASE}/operator/alerts?openOnly=1`);
     if (r.ok) {
@@ -2068,7 +1683,7 @@ async function renderEnvironmentsFlags() {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading feature flags…</p>';
   let flags = [];
-  let source = 'fixture-fallback';
+  let source = 'unavailable';
   try {
     const r = await apiFetch(`${API_BASE}/operator/feature-flags`);
     if (r.ok) {
@@ -2131,15 +1746,23 @@ window.cpUpsertFlagPrompt = async function () {
 // ---------------------------------------------------------------------------
 async function renderBillingEntitlements() {
   const app = document.getElementById('app');
-  const tenants = FIXTURES['tenants']?.items || [];
+  const tenants = DATA['tenants']?.items || [];
   let entitlements = [];
-  let entSource = 'fixture-fallback';
+  let entSource = 'unavailable';
+  let billingStatus = { configured: false, provider: 'lago', model: 'usage-based + subscription' };
   try {
     const r = await apiFetch(`${API_BASE}/operator/entitlements`);
     if (r.ok) {
       const d = await r.json();
       entitlements = d.entitlements || [];
       entSource = d._source || 'real-backend';
+    }
+  } catch (_) { /* ignore */ }
+  try {
+    const bs = await apiFetch(`${API_BASE}/billing/status`);
+    if (bs.ok) {
+      const bd = await bs.json();
+      if (bd.billing) billingStatus = bd.billing;
     }
   } catch (_) { /* ignore */ }
 
@@ -2152,7 +1775,25 @@ async function renderBillingEntitlements() {
     </div>
 
     <div class="card">
-      <h3>Commercial entitlements (stub)</h3>
+      <h3>Billing Engine</h3>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="flex:1;min-width:180px;padding:12px;background:var(--surface-alt,#f9fafb);border-radius:6px;">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Provider</div>
+          <div style="font-weight:600;margin-top:2px;">${escHtml(billingStatus.provider || 'lago')} (self-hosted)</div>
+        </div>
+        <div style="flex:1;min-width:180px;padding:12px;background:var(--surface-alt,#f9fafb);border-radius:6px;">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Model</div>
+          <div style="font-weight:600;margin-top:2px;">${escHtml(billingStatus.model || 'usage-based + subscription')}</div>
+        </div>
+        <div style="flex:1;min-width:180px;padding:12px;background:var(--surface-alt,#f9fafb);border-radius:6px;">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Connection</div>
+          <div style="font-weight:600;margin-top:2px;color:${billingStatus.configured ? 'var(--success)' : '#92400e'};">${billingStatus.configured ? 'Connected' : 'Awaiting deployment'}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Commercial Entitlements</h3>
       <table>
         <thead><tr><th>Tenant</th><th>SKU</th><th>Status</th><th>Provider</th></tr></thead>
         <tbody>
@@ -2160,9 +1801,9 @@ async function renderBillingEntitlements() {
             <tr>
               <td><code>${escHtml(String(e.tenant_id || e.tenantId || '—'))}</code></td>
               <td>${escHtml(e.sku || '—')}</td>
-              <td>${badge(e.status || 'stub')}</td>
-              <td>${escHtml(e.billing_provider || e.billingProvider || '—')}</td>
-            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No entitlement rows</td></tr>'}
+              <td>${badge(e.status || 'pending')}</td>
+              <td>${escHtml(e.billing_provider || e.billingProvider || 'lago')}</td>
+            </tr>`).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No entitlement rows yet. Entitlements are created when a tenant subscription is activated in Lago.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2170,7 +1811,7 @@ async function renderBillingEntitlements() {
     <div class="card">
       <h3>Tenant Entitlement Summary</h3>
       <table>
-        <thead><tr><th>Tenant</th><th>Status</th><th>Market</th><th>Launch Tier</th><th>Active Packs</th><th>Billing Status</th></tr></thead>
+        <thead><tr><th>Tenant</th><th>Status</th><th>Market</th><th>Launch Tier</th><th>Active Packs</th><th>Billing</th></tr></thead>
         <tbody>
           ${tenants.map(t => `
             <tr>
@@ -2179,13 +1820,13 @@ async function renderBillingEntitlements() {
               <td>${escHtml(t.legalMarketId || '—')}</td>
               <td>${badge(t.effectiveLaunchTier || 'T0')}</td>
               <td>${(t.activePacks || []).length}</td>
-              <td>${badge('stripe-pending')}</td>
+              <td>${badge('lago-pending')}</td>
             </tr>
           `).join('')}
           ${tenants.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);">No tenants</td></tr>' : ''}
         </tbody>
       </table>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Stripe/Paddle integration is research-only; PG table <code>commercial_entitlement</code> holds stubs.</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Lago billing adapter will sync subscription + usage data. PG table <code>commercial_entitlement</code> stores the mapping.</p>
     </div>
   `;
 }
@@ -2197,7 +1838,7 @@ async function renderUsageMetering() {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading usage events…</p>';
   let events = [];
-  let source = 'fixture-fallback';
+  let source = 'unavailable';
   try {
     const r = await apiFetch(`${API_BASE}/operator/usage-events`);
     if (r.ok) {
@@ -2282,7 +1923,7 @@ async function renderAuditTrail() {
   const app = document.getElementById('app');
   app.innerHTML = '<p class="meta-secondary" style="padding:12px;">Loading audit events…</p>';
   let events = [];
-  let source = 'fixture-fallback';
+  let source = 'unavailable';
   try {
     const r = await apiFetch(`${API_BASE}/audit/events?limit=75`);
     if (r.ok) {
@@ -2357,94 +1998,3 @@ function renderRunbooksHub() {
 boot();
 window.addEventListener('hashchange', navigate);
 
-// ---------------------------------------------------------------------------
-// AI Operator Copilot — drawer UI (disabled by default)
-// ---------------------------------------------------------------------------
-const COPILOT_API = '/api/copilot/v1';
-let copilotHistory = [];
-let copilotReady = false;
-
-async function initCopilot() {
-  try {
-    const resp = await apiFetch(`${COPILOT_API}/status`);
-    if (!resp.ok) { setCopilotStatus('error', 'unreachable'); return; }
-    const data = await resp.json();
-    copilotReady = data.operational;
-    const fab = document.getElementById('copilot-fab');
-    if (fab) fab.style.display = 'flex';
-    setCopilotStatus(
-      data.operational ? 'operational' : 'disabled',
-      data.statusLabel || (data.operational ? 'operational' : 'disabled')
-    );
-    if (!data.operational) {
-      addCopilotMessage('assistant', `Copilot is currently ${escHtml(data.statusLabel || 'disabled')}. Configure COPILOT_ENABLED=true and a provider to activate.`);
-    }
-  } catch {
-    setCopilotStatus('error', 'error');
-  }
-}
-
-function setCopilotStatus(cls, label) {
-  const el = document.getElementById('copilot-status-badge');
-  if (el) { el.className = 'copilot-status ' + cls; el.textContent = label; }
-}
-
-function toggleCopilotDrawer() {
-  const drawer = document.getElementById('copilot-drawer');
-  if (!drawer) return;
-  const visible = drawer.style.display !== 'none';
-  drawer.style.display = visible ? 'none' : 'flex';
-}
-
-function addCopilotMessage(role, text) {
-  const container = document.getElementById('copilot-messages');
-  if (!container) return;
-  const div = document.createElement('div');
-  const isDraft = typeof text === 'string' && text.includes('AI-ASSISTED DRAFT');
-  div.className = 'copilot-msg ' + (isDraft ? 'draft' : role);
-  if (isDraft) {
-    div.innerHTML = '<span class="draft-label">AI-ASSISTED DRAFT</span>' + escHtml(text);
-  } else {
-    div.textContent = text;
-  }
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-}
-
-async function sendCopilotMessage() {
-  const input = document.getElementById('copilot-input');
-  if (!input) return;
-  const msg = input.value.trim();
-  if (!msg) return;
-  input.value = '';
-  addCopilotMessage('user', msg);
-
-  if (!copilotReady) {
-    addCopilotMessage('error', 'Copilot is not operational. Check /api/copilot/v1/status.');
-    return;
-  }
-
-  copilotHistory.push({ role: 'user', content: msg });
-
-  try {
-    const resp = await apiFetch(`${COPILOT_API}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg, history: copilotHistory.slice(-10) }),
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      addCopilotMessage('error', err.message || `Error: ${resp.status}`);
-      return;
-    }
-    const data = await resp.json();
-    const reply = data.content || '(no response)';
-    addCopilotMessage('assistant', reply);
-    copilotHistory.push({ role: 'assistant', content: reply });
-  } catch (e) {
-    addCopilotMessage('error', 'Network error — could not reach copilot API.');
-  }
-}
-
-// Initialize copilot status on load
-initCopilot();

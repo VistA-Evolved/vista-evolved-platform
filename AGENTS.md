@@ -19,6 +19,25 @@
 
 ## 0. NON-NEGOTIABLE RULES
 
+**RULE ZERO — DOCKER-FIRST VERIFICATION (OVERRIDES EVERYTHING ELSE)**
+
+Before writing ANY code, running ANY task, or making ANY changes to this repo:
+
+1. **Verify Docker Desktop is running:** `docker ps --format "table {{.Names}}\t{{.Status}}"`
+2. **Verify VistA container is healthy:** Must see `local-vista-utf8` with status `Up ... (healthy)`
+3. **Verify Platform DB is healthy:** Must see `ve-platform-db` with status `Up ... (healthy)`
+4. **If containers are not running, start them FIRST:**
+   - `docker start local-vista-utf8` (or start from distro compose)
+   - `docker compose -f apps/control-plane-api/docker-compose.yml up -d`
+5. **If Docker Desktop is not running at all:** Start it and wait for initialization before proceeding.
+
+**Code that was never tested against the live Docker runtime is NOT done. Period.**
+**No exceptions. No deferrals. No "looks correct." No "should work."**
+
+See `.cursor/rules/01-docker-first-mandatory.mdc` for the full protocol including startup commands, health checks, and verification procedures.
+
+---
+
 1. **No uncontrolled feature generation.** Work one slice at a time. Complete verification and human review before the next slice.
 2. **No claiming done without proof.** Proof = exact files changed + exact commands run + exact outputs + pass/fail. See `docs/reference/doc-governance.md` and `migrated-process-assets/verification-standard.md`.
 3. **No silent mocks or stubs.** If real infrastructure is unavailable, return explicit `integration-pending` state. Never silently fake success.
@@ -123,6 +142,6 @@ Every AI task response MUST include:
 
 ## 7. BOUNDARIES
 
-- Bounded contexts in CODEOWNERS: `apps/control-plane/`, `apps/admin-console/`, `packages/contracts/`, `packages/config/`, `packages/domain/`, `packages/ui/`.
+- Bounded contexts in CODEOWNERS: `apps/control-plane/`, `apps/tenant-admin/`, `packages/contracts/`, `packages/config/`, `packages/domain/`, `packages/ui/`.
 - Cross-boundary access via contracts only (OpenAPI, AsyncAPI, schemas). No direct imports between apps.
 - Domain packages do not depend on apps or infrastructure.

@@ -3,20 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Operator Console — Local Review Runtime</title>
+  <title>Platform Operations — VistA Evolved</title>
+  <link rel="stylesheet" href="/design-system/tokens.css">
+  <link rel="stylesheet" href="/design-system/layout.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div style="display:flex;flex-direction:column;width:100%;">
-    <!-- REVIEW BANNER — compact posture pill -->
-    <div class="review-banner">
-      <span class="review-pill review-pill-local">Local Review</span>
-      <span class="review-pill review-pill-reads">Reads: live + fixture fallback</span>
-      <span class="review-pill review-pill-writes">Writes: review-only</span>
+    <div class="status-banner">
+      <span class="status-pill status-pill-label">Platform Operations</span>
+      <span class="status-pill status-pill-reads">Reads: real backend + contract-backed</span>
+      <span class="status-pill status-pill-writes">Writes: lifecycle actions via platform API</span>
       <span class="role-switcher">
         Role: <select id="role-selector" onchange="switchRole(this.value)">
           <option value="platform-operator">Platform Operator</option>
-          <option value="tenant-admin">Tenant Admin</option>
+          <option value="tenant-admin">Site Admin</option>
           <option value="clinician">Clinician</option>
           <option value="ancillary-staff">Ancillary Staff</option>
           <option value="revenue-cycle-staff">Revenue Cycle</option>
@@ -27,82 +28,56 @@
     </div>
 
     <div class="shell">
-      <!-- Left navigation — 8 operator-console domains (design-contract-v3) -->
       <nav class="nav-sidebar">
-        <h2>Operator Console</h2>
+        <h2>Platform Operations</h2>
 
-        <a href="#/home" data-route="home" class="nav-home">Home</a>
-
-        <div class="nav-group">
-          <div class="nav-group-label">Requests &amp; Onboarding</div>
-          <a href="#/bootstrap" data-route="bootstrap">Onboarding Requests</a>
-          <a href="#/provisioning" data-route="provisioning">Provisioning Runs</a>
-        </div>
+        <a href="#/home" data-route="home" class="nav-home">Operations Center</a>
 
         <div class="nav-group">
           <div class="nav-group-label">Tenants</div>
           <a href="#/tenants" data-route="tenants">Tenant Registry</a>
-          <a href="#/tenants/detail" data-route="tenants-detail">Tenant Detail</a>
+          <a href="#/bootstrap" data-route="bootstrap">New Tenant Bootstrap</a>
         </div>
 
         <div class="nav-group">
-          <div class="nav-group-label">Operations</div>
-          <a href="#/operations" data-route="operations">Operations Center</a>
+          <div class="nav-group-label">Provisioning</div>
+          <a href="#/provisioning" data-route="provisioning">Jobs &amp; Runs</a>
+          <a href="#/templates" data-route="templates">Templates &amp; Presets</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Readiness</div>
+          <a href="#/markets" data-route="markets">Markets Registry</a>
+          <a href="#/payer-readiness" data-route="payer-readiness">Payer Readiness</a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group-label">Packs &amp; Entitlements</div>
+          <a href="#/packs" data-route="packs">Pack Catalog</a>
+          <a href="#/eligibility-simulator" data-route="eligibility-simulator">Eligibility Simulator</a>
+          <a href="#/identity" data-route="identity">Identity &amp; Invitations</a>
           <a href="#/billing" data-route="billing">Billing &amp; Entitlements</a>
         </div>
 
         <div class="nav-group">
-          <div class="nav-group-label">Catalogs &amp; Governance</div>
-          <a href="#/markets" data-route="markets">Market Management</a>
-          <a href="#/markets/detail" data-route="markets-detail">Market Detail</a>
-          <a href="#/packs" data-route="packs">Pack Catalog</a>
-          <a href="#/system-config" data-route="system-config">System Configuration</a>
+          <div class="nav-group-label">Operations</div>
+          <a href="#/support" data-route="support">Support Console</a>
+          <a href="#/audit" data-route="audit">Audit Trail</a>
+          <a href="#/alerts" data-route="alerts">Alert Center</a>
+          <a href="#/backup-dr" data-route="backup-dr">Backup &amp; DR</a>
         </div>
 
-        <div class="nav-divider"></div>
-
-        <div class="nav-group nav-group-planned">
-          <div class="nav-group-label">Planned</div>
-          <a href="#/identity" data-route="identity" class="nav-planned">Identity &amp; Invitations</a>
-          <a href="#/alerts" data-route="alerts" class="nav-planned">Alert Center</a>
-          <a href="#/backup-dr" data-route="backup-dr" class="nav-planned">Backup &amp; DR</a>
-          <a href="#/environments" data-route="environments" class="nav-planned">Environments &amp; Flags</a>
-          <a href="#/support" data-route="support" class="nav-planned">Support Console</a>
-          <a href="#/usage" data-route="usage" class="nav-planned">Usage &amp; Metering</a>
-          <a href="#/payer-readiness" data-route="payer-readiness" class="nav-planned">Payer Readiness</a>
-          <a href="#/eligibility-simulator" data-route="eligibility-simulator" class="nav-planned">Eligibility Simulator</a>
-          <a href="#/audit" data-route="audit" class="nav-planned">Audit Trail</a>
-          <a href="#/templates" data-route="templates" class="nav-planned">Templates &amp; Presets</a>
-          <a href="#/runbooks" data-route="runbooks" class="nav-planned">Runbooks Hub</a>
+        <div class="nav-group">
+          <div class="nav-group-label">System</div>
+          <a href="#/system-config" data-route="system-config">System Configuration</a>
+          <a href="#/environments" data-route="environments">Feature Flags</a>
+          <a href="#/usage" data-route="usage">Usage &amp; Metering</a>
+          <a href="#/runbooks" data-route="runbooks">Runbooks Hub</a>
         </div>
       </nav>
 
-      <!-- Main content area -->
-      <main class="main-content" id="app">
-        <!-- Rendered by app.js -->
-      </main>
+      <main class="main-content" id="app"></main>
     </div>
-  </div>
-
-  <!-- Review dialog overlay (populated by app.js) -->
-  <div id="review-dialog-overlay" class="review-overlay" style="display:none;">
-    <div class="review-dialog" id="review-dialog"></div>
-  </div>
-
-  <!-- Copilot side drawer (hidden by default, toggled by FAB) -->
-  <button id="copilot-fab" class="copilot-fab" onclick="toggleCopilotDrawer()" title="AI Operator Copilot" style="display:none;">&#x1f916;</button>
-  <div id="copilot-drawer" class="copilot-drawer" style="display:none;">
-    <div class="copilot-header">
-      <span class="copilot-title">&#x1f916; Operator Copilot</span>
-      <span id="copilot-status-badge" class="copilot-status"></span>
-      <button class="copilot-close" onclick="toggleCopilotDrawer()">&times;</button>
-    </div>
-    <div id="copilot-messages" class="copilot-messages"></div>
-    <div class="copilot-input-row">
-      <input id="copilot-input" type="text" class="copilot-input" placeholder="Ask the operator copilot…" onkeydown="if(event.key==='Enter')sendCopilotMessage()">
-      <button class="copilot-send" onclick="sendCopilotMessage()">&#x27A4;</button>
-    </div>
-    <div class="copilot-footer">Read-only + draft-only &middot; No PHI &middot; Operator review required</div>
   </div>
 
   <script src="app.js"></script>

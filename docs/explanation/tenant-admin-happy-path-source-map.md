@@ -10,35 +10,34 @@
 
 | Code | Meaning |
 |------|---------|
-| **V** | VistA-first (live RPC via XWB broker) |
-| **F** | Fixture-first (JSON file loaded at startup) |
+| **V** | VistA-only (live RPC via XWB broker — DDR + ZVE* overlay RPCs) |
 | **C** | Contract-backed (derived from `packages/contracts/`) |
 | **R** | Real-backend proxy (control-plane-api at port 4510) |
-| **S** | Static/hardcoded server data |
-| **T** | Terminal-driven (user executes in VistA terminal, not API-served) |
 
 ## Tenant-admin surfaces
 
-### Summary
+### Summary (updated 2026-03-22 — post-VistA-only rewrite)
 
-| # | Surface | Current primary | Current fallback | Acceptable? | Target primary |
-|---|---------|----------------|-----------------|-------------|---------------|
-| 1 | Dashboard counts | V | F | **Yes** | V (already correct) |
-| 2 | VistA connection status | V | — | **Yes** | V (already correct) |
-| 3 | User list | V | F | **Yes** | V (already correct) |
-| 4 | User detail | V (by IEN) | F | **Yes** | V → F (corrected) |
-| 5 | Role assignment | F | — | **Yes** | F + `integration-pending` (corrected) |
-| 6 | Key inventory | F (cross-ref) | — | **Yes** | F + `integration-pending` (corrected) |
-| 7 | E-sig status | F | — | **Yes** | F + `integration-pending` (corrected) |
-| 8 | Facility list | V | F | **Yes** | V (already correct) |
-| 9 | Facility detail | V (by IEN) | F | **Yes** | V → F (corrected) |
-| 10 | Clinic list | V | F | **Yes** | V (already correct) |
-| 11 | Ward list | V | F | **Yes** | V (already correct) |
-| 12 | Topology | V | F | **Yes** | V (assembled from divs+clinics+wards) → F (corrected) |
-| 13 | Guided write workflows | S | — | **Yes** | S (platform catalog, correct) |
+> **All fixtures removed.** Every surface reads from and writes to live VistA exclusively.
+> No JSON fallback files exist. If VistA is unreachable, routes return `{ok: false, source: "error"}`.
 
-**All 13 surfaces now have correct source labeling.** ✓
-**Previously requiring correction: 6 — all fixed.**
+| # | Surface | Source | Verified? | Notes |
+|---|---------|--------|-----------|-------|
+| 1 | Dashboard counts | V | **PASS-LIVE** | Probes VistA for user/clinic/ward counts |
+| 2 | VistA connection status | V | **PASS-LIVE** | TCP probe + `XUS GET USER INFO` |
+| 3 | User list | V | **PASS-LIVE** | `ORWU NEWPERS` + DDR LISTER File 200 (118 users) |
+| 4 | User detail | V | **PASS-LIVE** | DDR GETS File 200 (30+ fields) |
+| 5 | Role assignment / keys | V | **PASS-LIVE** | DDR LISTER File 19.1 (688 keys) |
+| 6 | Key inventory | V | **PASS-LIVE** | DDR LISTER File 19.1 + per-user subfile 200.051 |
+| 7 | E-sig status | V | **PASS-LIVE** | DDR LISTER File 200 field 20.4 (118 users) |
+| 8 | Facility list | V | **PASS-LIVE** | `XUS DIVISION GET` + `ORWU CLINLOC` |
+| 9 | Facility detail | V | **PASS-LIVE** | DDR GETS on matched IEN |
+| 10 | Clinic list | V | **PASS-LIVE** | DDR LISTER File 44 (937 clinics) |
+| 11 | Ward list | V | **PASS-LIVE** | DDR LISTER File 42 (62 wards) |
+| 12 | Topology | V | **PASS-LIVE** | Assembled from div/clinic/ward VistA reads |
+| 13 | DDR probe | V | **PASS-LIVE** | Live probes DDR GETS/LISTER/VALIDATOR/FIND1 |
+
+**All 13 surfaces are VistA-only. Zero fixtures. Zero integration-pending.**
 
 ---
 
@@ -46,104 +45,29 @@
 
 #### 1. Dashboard (`/api/tenant-admin/v1/dashboard`)
 
-- **Current primary:** VistA — probes connection, then `Promise.all([fetchVistaUsers, fetchVistaClinics, fetchVistaWards])` to compute counts
-- **Current fallback:** Fixture — recursive count from `facilities.json` hierarchy + `users.json` extraction
-- **Honest labeling:** `source: 'vista'` or `source: 'fixture'`
-- **Acceptable:** Yes
-- **Required correction:** None
+- **Source:** VistA — probes connection, then DDR LISTER for user/clinic/ward counts
+- **Fallback:** Returns `{ok: false, source: "error"}` if VistA unreachable
+- **Status:** PASS-LIVE
 
-#### 2. VistA Status (`/api/tenant-admin/v1/vista-status`)
+#### 2–13. All remaining surfaces
 
-- **Current primary:** VistA — TCP probe + `fetchVistaCurrentUser()` for session context
-- **Current fallback:** Returns `ok: false` with error details
-- **Acceptable:** Yes
-- **Required correction:** None
+All surfaces follow the same pattern: **VistA-only source, no fixture fallback.**
+If VistA is unreachable, the route returns `{ok: false, source: "error"}`.
 
-#### 3. User List (`/api/tenant-admin/v1/users`)
-
-- **Current primary:** VistA — `fetchVistaUsers(search)` via RPC
-- **Current fallback:** Fixture — `fixtures/users.json` with `source: 'fixture'` label
-- **Honest labeling:** `source: 'vista'` or `source: 'fixture'` + `vistaStatus` in fallback
-- **Acceptable:** Yes
-- **Required correction:** None
-
-#### 4. User Detail (`/api/tenant-admin/v1/users/:userId`)
-
-- **Current primary:** VistA — tries `fetchVistaUsers('')` then filters by IEN
-- **Current fallback:** Fixture — searches `fixtures/users.json` by synthetic ID (`user-001`)
-- **Honest labeling:** `source: 'vista'` or `source: 'fixture'`
-- **Acceptable:** **Yes — corrected.** VistA-first lookup by IEN, fixture fallback with honest labeling.
-- **Required correction:** ~~Invert to VistA-first.~~ Done.
-
-#### 5. Role Assignment (`/api/tenant-admin/v1/roles`)
-
-- **Current primary:** Fixture — `fixtures/roles.json` enriched with user count from `fixtures/users.json`
-- **Current fallback:** None
-- **Honest labeling:** `source: 'fixture'`, `sourceStatus: 'integration-pending'`, `integrationNote` explaining the blocker
-- **Acceptable:** **Yes — corrected.** Explicit integration-pending labeling with technical justification.
-- **Required correction:** ~~Mark as integration-pending.~~ Done.
-- **Blocker note:** No single RPC enumerates all security keys from File 19.1. Requires either DDR global read or a custom M routine. Marked integration-pending.
-
-#### 6. Key Inventory (`/api/tenant-admin/v1/key-inventory`)
-
-- **Current primary:** Fixture cross-reference — roles from `fixtures/roles.json` mapped to user holders from `fixtures/users.json`
-- **Current fallback:** None
-- **Honest labeling:** `source: 'fixture'`, `sourceStatus: 'integration-pending'`, `integrationNote` explaining the blocker
-- **Acceptable:** **Yes — corrected.** Explicit integration-pending labeling.
-- **Required correction:** ~~Mark as integration-pending.~~ Done.
-
-#### 7. E-Sig Status (`/api/tenant-admin/v1/esig-status`)
-
-- **Current primary:** Fixture — extracts `vistaGrounding.electronicSignature` from `fixtures/users.json`
-- **Current fallback:** None
-- **Honest labeling:** `source: 'fixture'`, `sourceStatus: 'integration-pending'`, `integrationNote` explaining the blocker
-- **Acceptable:** **Yes — corrected.** Explicit integration-pending labeling.
-- **Required correction:** ~~Mark as integration-pending.~~ Done.
-- **Blocker note:** RPC-based bulk e-sig status checking is not straightforward. Marked integration-pending.
-
-#### 8. Facility List (`/api/tenant-admin/v1/facilities`)
-
-- **Current primary:** VistA — assembles topology from `fetchVistaDivisions()` + `fetchVistaClinics()` + `fetchVistaWards()`
-- **Current fallback:** Fixture — `fixtures/facilities.json` hierarchy
-- **Honest labeling:** `source: 'vista'` or `source: 'fixture'`
-- **Acceptable:** Yes
-- **Required correction:** None
-
-#### 9. Facility Detail (`/api/tenant-admin/v1/facilities/:facilityId`)
-
-- **Current primary:** VistA — matches `loc-{ien}` IDs against ORWU CLINLOC and ORQPT WARDS results
-- **Current fallback:** Fixture — recursive tree search in `fixtures/facilities.json`
-- **Acceptable:** **Yes — corrected.** VistA-first lookup, fixture fallback.
-- **Required correction:** ~~Add VistA lookup.~~ Done.
-
-#### 10. Clinic List (`/api/tenant-admin/v1/clinics`)
-
-- **Current primary:** VistA — `fetchVistaClinics(search)`
-- **Current fallback:** Fixture — extracts clinics from `fixtures/facilities.json` hierarchy
-- **Acceptable:** Yes
-- **Required correction:** None
-
-#### 11. Ward List (`/api/tenant-admin/v1/wards`)
-
-- **Current primary:** VistA — `fetchVistaWards()` with computed bed stats
-- **Current fallback:** Fixture — extracts wards from `fixtures/facilities.json` hierarchy
-- **Acceptable:** Yes
-- **Required correction:** None
-
-#### 12. Topology (`/api/tenant-admin/v1/topology`)
-
-- **Current primary:** VistA — assembles hierarchy from `XUS DIVISION GET` + `ORWU CLINLOC` + `ORQPT WARDS`
-- **Current fallback:** Fixture — recursive hierarchy from `fixtures/facilities.json`
-- **Honest labeling:** `source: 'vista'` or `source: 'fixture'` with `integrationNote`
-- **Acceptable:** **Yes — corrected.** VistA-first assembly, fixture fallback.
-- **Required correction:** ~~Build topology from VistA data.~~ Done.
-
-#### 13. VistA tools — DDR probe (`GET /api/tenant-admin/v1/vista/ddr-probe`)
-
-- **Current primary:** Live XWB calls probing **DDR GETS ENTRY DATA**, **DDR VALIDATOR**, **DDR LISTER**, **DDR FIND1** (plus `not_probed` placeholders for filer/delete/lock family members that need real file context)
-- **Current fallback:** Returns `integration-pending` when VistA is unreachable
-- **Acceptable:** **Yes.** Replaces the retired `/guided-tasks` catalog; surfaces real RPC availability for direct-write architecture.
-- **Required correction:** None (re-audit when expanding write coverage)
+| Surface | VistA mechanism | Key data |
+|---------|----------------|----------|
+| VistA Status | TCP probe + `XUS GET USER INFO` | Connection health |
+| User List | `ORWU NEWPERS` + DDR LISTER File 200 | 118 users |
+| User Detail | DDR GETS File 200 (30+ fields) | Full user record |
+| Roles / Keys | DDR LISTER File 19.1 | 688 security keys |
+| Key Inventory | DDR LISTER File 19.1 + subfile 200.051 | Key-to-holder cross-ref |
+| E-Sig Status | DDR LISTER File 200 field 20.4 | Bulk e-sig check |
+| Facilities | `XUS DIVISION GET` + `ORWU CLINLOC` | 3 divisions + 44 clinics |
+| Facility Detail | DDR GETS on matched IEN | Single-record deep read |
+| Clinics | DDR LISTER File 44 | 937 clinics |
+| Wards | DDR LISTER File 42 | 62 wards |
+| Topology | Assembled from div/clinic/ward reads | Hierarchical view |
+| DDR Probe | Live probes DDR GETS/LISTER/VALIDATOR/FIND1 | Capability check |
 
 ---
 
@@ -153,36 +77,21 @@
 
 | # | Surface | Current primary | Acceptable? | Notes |
 |---|---------|----------------|-------------|-------|
-| 1 | Tenant list/detail | R (real-backend) | Yes | Proxy to control-plane-api, fixture fallback |
-| 2 | Bootstrap requests | R (real-backend) | Yes | Proxy to control-plane-api, fixture fallback |
-| 3 | Provisioning runs | R (real-backend) | Yes | Proxy to control-plane-api, fixture fallback |
+| 1 | Tenant list/detail | R (real-backend) | Yes | Proxy to control-plane-api |
+| 2 | Bootstrap requests | R (real-backend) | Yes | Proxy to control-plane-api |
+| 3 | Provisioning runs | R (real-backend) | Yes | Proxy to control-plane-api |
 | 4 | Legal market profiles | C (contracts) | Yes | 100% contract-derived |
 | 5 | Packs | C (contracts) | Yes | 8 from contracts, 1 demo |
 | 6 | Capabilities | C (contracts) | Yes | 100% contract-derived |
 | 7 | Effective plans | C (contracts) | Yes | Contract resolution output |
-| 8 | System config | F (fixture) | Yes | Platform-owned config, not VistA data |
+| 8 | System config | C (config) | Yes | Platform-owned config, not VistA data |
 | 9 | Review writes (15 actions) | Local review | Yes | No persistence, `mode: 'local-review'` |
 | 10 | Lifecycle writes (15 actions) | R (real-backend) | Yes | Proxied to control-plane-api, 503 if down |
 
-**No control-plane surface claims VistA data ownership.** All control-plane fixtures are platform-owned or contract-derived. No corrections needed.
+**No control-plane surface claims VistA data ownership.** All control-plane data is platform-owned or contract-derived. No corrections needed.
 
 ---
 
-## Correction plan summary
+## Correction history
 
-### All corrections completed ✓
-
-All 6 surfaces that previously required correction have been fixed:
-
-| Priority | Surface | Was | Fix Applied | Status |
-|----------|---------|-----|-------------|--------|
-| P0 | User detail | F→V | Inverted to V→F | ✓ Done |
-| P0 | Facility detail | F only | Added VistA lookup → F fallback | ✓ Done |
-| P1 | Topology | F only | Assembled from VistA div/clinic/ward → F fallback | ✓ Done |
-| P1 | E-sig status | F only | Marked `integration-pending` with `integrationNote` | ✓ Done |
-| P2 | Role assignment | F only | Marked `integration-pending` with `integrationNote` | ✓ Done |
-| P2 | Key inventory | F cross-ref | Marked `integration-pending` with `integrationNote` | ✓ Done |
-
-### Surfaces already correct — no changes needed
-
-Dashboard, VistA status, user list, facility list, clinic list, ward list, VistA tools (DDR probe), devices/kernel params where wired, and all control-plane surfaces.
+All 6 originally-identified corrections were completed 2026-03-22. The tenant-admin rewrite eliminated all fixtures and fixture fallbacks. See `tenant-admin-blocker-ledger.md` for the full resolution record.

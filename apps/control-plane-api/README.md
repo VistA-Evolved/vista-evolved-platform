@@ -1,9 +1,8 @@
 # Control Plane Admin API
 
 Postgres-backed operator-state engine for tenant lifecycle, bootstrap,
-provisioning, and audit. This is the real write-side backend for the
-control plane — separate from the fixture-backed review runtime at
-`apps/control-plane`.
+provisioning, and audit. This is the write-side backend for the
+operator console at `apps/control-plane`.
 
 ## Quick Start
 
@@ -31,21 +30,25 @@ npm start
 src/
   domain/types.mjs       — State enums, transition maps, validation
   db/pool.mjs            — PG connection pool
-  db/migrate.mjs         — Forward-only idempotent migrations (8 versions)
+  db/migrate.mjs         — Forward-only idempotent migrations (10 versions)
   repos/                 — Direct SQL persistence (no ORM)
     tenant-repo.mjs      — Tenant CRUD + transactional status transitions
     bootstrap-repo.mjs   — Bootstrap draft + request persistence
     provisioning-repo.mjs — Provisioning run + canonical steps
     audit-repo.mjs       — Append-only audit trail + outbox
+    operator-surface-repo.mjs — Invitations, alerts, usage, entitlements, flags
   services/              — Guarded commands with audit + outbox
     tenant-service.mjs   — Tenant lifecycle (create, activate, suspend, reactivate, archive)
     bootstrap-service.mjs — Draft editing, validation, submission, approval
     provisioning-service.mjs — Run creation, queueing, cancellation
+    billing-adapter.mjs  — Lago REST API wrapper (customers, subscriptions, events, invoices)
   routes/                — HTTP handlers
     tenant-routes.mjs    — /api/control-plane-admin/v1/tenants/*
     bootstrap-routes.mjs — /api/control-plane-admin/v1/bootstrap/*
     provisioning-routes.mjs — /api/control-plane-admin/v1/provisioning/*
     audit-routes.mjs     — /api/control-plane-admin/v1/audit/*
+    operator-surface-routes.mjs — /api/control-plane-admin/v1/operator/*
+    billing-routes.mjs   — /api/control-plane/v1/billing/*
   server.mjs             — Fastify server entry point (port 4510)
 ```
 
@@ -90,6 +93,35 @@ src/
 | Method | Path | Description |
 |--------|------|-------------|
 | GET    | `/api/control-plane-admin/v1/audit/events` | List audit events |
+
+### Operator Surfaces
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/api/control-plane-admin/v1/operator/invitations` | List invitations |
+| POST   | `/api/control-plane-admin/v1/operator/invitations` | Create invitation |
+| GET    | `/api/control-plane-admin/v1/operator/alerts` | List alerts |
+| POST   | `/api/control-plane-admin/v1/operator/alerts` | Create alert |
+| POST   | `/api/control-plane-admin/v1/operator/alerts/:id/ack` | Acknowledge alert |
+| GET    | `/api/control-plane-admin/v1/operator/usage-events` | List usage events |
+| POST   | `/api/control-plane-admin/v1/operator/usage-events` | Record usage event |
+| GET    | `/api/control-plane-admin/v1/operator/entitlements` | List entitlements |
+| POST   | `/api/control-plane-admin/v1/operator/entitlements` | Create entitlement |
+| GET    | `/api/control-plane-admin/v1/operator/feature-flags` | List feature flags |
+| PUT    | `/api/control-plane-admin/v1/operator/feature-flags` | Update feature flags |
+
+### Billing (Lago)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/api/control-plane/v1/billing/status` | Billing engine status |
+| GET    | `/api/control-plane/v1/billing/customers/:tenantId` | Get Lago customer |
+| POST   | `/api/control-plane/v1/billing/customers` | Create Lago customer |
+| POST   | `/api/control-plane/v1/billing/subscriptions` | Create subscription |
+| DELETE | `/api/control-plane/v1/billing/subscriptions/:externalId` | Terminate subscription |
+| POST   | `/api/control-plane/v1/billing/events` | Send usage event |
+| GET    | `/api/control-plane/v1/billing/invoices` | List invoices |
+| GET    | `/api/control-plane/v1/billing/invoices/:invoiceId` | Get invoice |
+
+Requires `LAGO_API_URL` and `LAGO_API_KEY` env vars. Returns `{ok:false, pending:true}` when unconfigured.
 
 ## State Machines
 

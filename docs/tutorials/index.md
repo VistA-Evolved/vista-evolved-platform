@@ -1,5 +1,5 @@
 # Tutorials
 
-Step-by-step learning paths.
+Step-by-step learning paths for VistA Evolved Platform development.
 
-*No tutorials yet. Tutorials will be added as development workflows are established.*
+- [Getting Started](getting-started.md) — Set up the development environment and run the platform

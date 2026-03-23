@@ -1,14 +1,18 @@
-# Docker Compose for the control-plane-api PostgreSQL dependency.
+# Docker Compose for the platform-api PostgreSQL dependency.
 #
 # Usage:
 #   docker compose -f apps/control-plane-api/docker-compose.yml up -d
 #
 # Connection string:
 #   postgresql://cp_admin:cp_admin_dev@127.0.0.1:5433/control_plane
+#
+# PRODUCTION: Change POSTGRES_PASSWORD to a strong random secret.
+#   openssl rand -base64 32
+# Do NOT expose port 5433 publicly. Use Docker internal networking.
 services:
-  control-plane-db:
+  platform-db:
     image: postgres:16-alpine
-    container_name: ve-control-plane-db
+    container_name: ve-platform-db
     environment:
       POSTGRES_DB: control_plane
       POSTGRES_USER: cp_admin
@@ -16,7 +20,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - cp-pgdata:/var/lib/postgresql/data
+      - platform-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cp_admin -d control_plane"]
       interval: 5s
@@ -24,4 +28,4 @@ services:
       retries: 5
 
 volumes:
-  cp-pgdata:
+  platform-pgdata:

@@ -226,5 +226,5 @@ Per the governed build protocol, the following were intentionally excluded:
 1. **Verify terminal proof under UTF-8 lane** — Rerun browser terminal proof against `local-vista-utf8` (port 2226). The CHSET mismatch from M-mode is resolved in the UTF-8 lane, but terminal sign-off (sign-on, browser behavior, multilingual input) is still pending. See `vista-evolved-vista-distro/docs/reference/runtime-truth.md`.
 2. **Test `D ^ZU`** — VistA roll-and-scroll sign-on menu under UTF-8 lane
 3. **Add session auth** — port the session middleware pattern when control-plane is ready
-4. **Migrate to React/xterm** — when `apps/admin-console` is scaffolded, port the proven pattern into a proper component
+4. **Migrate to React/xterm** — when `apps/tenant-admin` UI matures, port the proven terminal pattern into a proper component
 5. **Add audit logging** — every terminal session should be logged (who, when, duration)

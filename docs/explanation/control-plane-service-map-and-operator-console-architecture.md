@@ -1,5 +1,7 @@
 # Control-Plane Service Map and Operator Console Architecture
 
+> **Status (2026-03-22):** The control-plane API (`apps/control-plane-api/`) is operational with PostgreSQL-backed persistence. Fixture data has been removed. The operator console reads from the real backend or contract data only.
+
 > **Status:** Canonical architecture specification.
 > **Date:** 2026-03-20.
 > **Type:** Explanation — architecture rationale and service decomposition.

@@ -1,8 +1,10 @@
 # Control-Plane Local Operator-Access Foundation — Wave 1
 
+> **HISTORICAL (2026-03-22):** The review-only runtime described here has been superseded. The operator console now uses real-backend proxy routes and lifecycle actions. This document is retained as historical reference.
+
 > **Category:** explanation
 > **Scope:** `apps/control-plane/` local review runtime only
-> **Status:** active
+> **Status:** historical
 
 ## What "local operator context" means in this runtime
 

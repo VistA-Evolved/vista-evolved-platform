@@ -7,14 +7,22 @@
 
 Read and follow `/AGENTS.md` in full before any task.
 
+## RULE ZERO — Docker-first (mandatory)
+
+**Before writing ANY code:** verify Docker is running and all containers are healthy.
+Run `docker ps` and confirm `local-vista-utf8` and `ve-platform-db` are up.
+If they are not running, start them FIRST. No exceptions. No deferrals.
+See `.cursor/rules/01-docker-first-mandatory.mdc` for the full protocol.
+
 ## Key rules
 
-1. Terminal-first. No broad GUI feature work unless explicitly instructed.
-2. Contract-first. APIs defined in OpenAPI/AsyncAPI before implementation.
-3. No documentation sprawl. Only approved categories in `/docs`.
-4. No claiming done without proof. Evidence goes in `/artifacts`.
-5. Stop after each slice. Report what was done and wait for instruction.
-6. Task responses must use the format defined in AGENTS.md section 5.
+1. Docker-first. Verify live runtime before ANY code changes. See Rule Zero above.
+2. Terminal-first. No broad GUI feature work unless explicitly instructed.
+3. Contract-first. APIs defined in OpenAPI/AsyncAPI before implementation.
+4. No documentation sprawl. Only approved categories in `/docs`.
+5. No claiming done without proof. Evidence goes in `/artifacts`.
+6. Stop after each slice. Report what was done and wait for instruction.
+7. Task responses must use the format defined in AGENTS.md section 5.
 
 ## Key references
 

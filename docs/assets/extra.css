@@ -1,0 +1,71 @@
+/* VistA Evolved MkDocs custom styles */
+
+:root {
+  --md-primary-fg-color: #4051b5;
+  --md-primary-fg-color--light: #5c6bc0;
+  --md-primary-fg-color--dark: #303f9f;
+  --md-accent-fg-color: #2979ff;
+}
+
+/* Admonition custom colors */
+.md-typeset .admonition.warning {
+  border-left-color: #ff9800;
+}
+.md-typeset .admonition.danger {
+  border-left-color: #f44336;
+}
+
+/* Code blocks: slightly larger font */
+.md-typeset code {
+  font-size: 0.85em;
+}
+
+/* Navigation tabs */
+.md-tabs {
+  background-color: var(--md-primary-fg-color);
+}
+
+/* Table improvements */
+.md-typeset table:not([class]) {
+  font-size: 0.875em;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--md-code-bg-color);
+  font-weight: 600;
+}
+
+/* Status badges in tables */
+.status-live {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+.status-pending {
+  background-color: #fff8e1;
+  color: #f57f17;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+/* Dark mode overrides */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0f1117;
+  --md-default-bg-color--light: #1a1e2e;
+}
+
+/* Runbook header */
+.runbook-meta {
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  margin-bottom: 1rem;
+  font-size: 0.8em;
+  color: var(--md-default-fg-color--light);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}

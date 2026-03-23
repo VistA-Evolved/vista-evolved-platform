@@ -3,20 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tenant Admin — VistA Evolved</title>
+  <title>Site Administration — VistA Evolved</title>
+  <link rel="stylesheet" href="/design-system/tokens.css">
+  <link rel="stylesheet" href="/design-system/layout.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="tenant-admin-root">
     <!-- TENANT BANNER -->
     <div class="tenant-banner">
-      <span class="tenant-banner-name" id="tenant-name">Tenant Admin</span>
+      <span class="tenant-banner-name" id="tenant-name">Site Administration</span>
       <span class="tenant-banner-status" id="tenant-status"></span>
       <span class="tenant-banner-source" id="tenant-source">Source: checking VistA…</span>
     </div>
 
     <div class="shell">
-      <!-- Left navigation — 7 domain groups per blueprint -->
+      <!-- Left navigation — 9 domain groups mirroring VistA EVE menu -->
       <nav class="left-nav" id="left-nav">
         <a href="#/dashboard" data-surface="dashboard" class="nav-link active">Dashboard</a>
 
@@ -33,6 +35,8 @@
             <a href="#/esig-status" class="nav-link">E-Sig Status</a>
             <a href="#/access-profiles" class="nav-link">Access Profiles</a>
             <a href="#/file-access" class="nav-link">File Access Security</a>
+            <a href="#/access-audit" class="nav-link">Access Audit</a>
+            <a href="#/titles" class="nav-link">Titles</a>
           </div>
         </div>
 
@@ -47,20 +51,7 @@
             <a href="#/wards" class="nav-link">Wards</a>
             <a href="#/beds" class="nav-link">Room-Bed Management</a>
             <a href="#/treating-specialties" class="nav-link">Treating Specialties</a>
-            <a href="#/scheduling-config" class="nav-link">Scheduling Config</a>
-          </div>
-        </div>
-
-        <div class="nav-group" data-group="devices">
-          <div class="nav-group-header" data-toggle="devices">
-            <span class="nav-group-icon">&#9662;</span>
-            <span>DEVICES &amp; CONNECTIVITY</span>
-          </div>
-          <div class="nav-group-items" id="nav-items-devices">
-            <a href="#/devices" class="nav-link">Devices (Printers)</a>
-            <a href="#/terminal-types" class="nav-link">Terminal Types</a>
-            <a href="#/hl7-interfaces" class="nav-link">HL7 Interfaces</a>
-            <a href="#/rpc-status" class="nav-link">RPC Broker Status</a>
+            <a href="#/appointment-types" class="nav-link">Appointment Types</a>
           </div>
         </div>
 
@@ -96,16 +87,29 @@
         <div class="nav-group" data-group="system">
           <div class="nav-group-header" data-toggle="system">
             <span class="nav-group-icon">&#9662;</span>
-            <span>SYSTEM &amp; PARAMETERS</span>
+            <span>SYSTEM &amp; KERNEL</span>
           </div>
           <div class="nav-group-items" id="nav-items-system">
             <a href="#/params/kernel" class="nav-link">Kernel Site Params</a>
-            <a href="#/mailman-config" class="nav-link">MailMan</a>
             <a href="#/taskman" class="nav-link">TaskMan</a>
+            <a href="#/mailman-config" class="nav-link">MailMan Config</a>
             <a href="#/menu-management" class="nav-link">Menu Management</a>
-            <a href="#/error-trap" class="nav-link">Error Processing</a>
             <a href="#/packages" class="nav-link">Installed Packages</a>
+            <a href="#/error-trap" class="nav-link">Error Processing</a>
             <a href="#/modules" class="nav-link">Module Entitlements</a>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="devices">
+          <div class="nav-group-header" data-toggle="devices">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>DEVICES &amp; CONNECTIVITY</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-devices">
+            <a href="#/devices" class="nav-link">Devices (Printers)</a>
+            <a href="#/terminal-types" class="nav-link">Terminal Types</a>
+            <a href="#/hl7-interfaces" class="nav-link">HL7 Interfaces</a>
+            <a href="#/rpc-status" class="nav-link">RPC Broker Status</a>
           </div>
         </div>
 
@@ -122,11 +126,33 @@
             <a href="#/reports/lab" class="nav-link">Lab Report</a>
             <a href="#/reports/radiology" class="nav-link">Radiology Report</a>
             <a href="#/reports/nursing" class="nav-link">Nursing Report</a>
-            <a href="#/vista-tools" class="nav-link">VistA Tools (DDR)</a>
           </div>
         </div>
 
-        <div class="nav-role-badge" id="role-badge">Role: Tenant Admin</div>
+        <div class="nav-group" data-group="vistatools">
+          <div class="nav-group-header" data-toggle="vistatools">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>VISTA TOOLS</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-vistatools">
+            <a href="#/vista-tools" class="nav-link">DDR Probe</a>
+            <a href="#/raw-fileman" class="nav-link">Raw FileMan</a>
+            <a href="#/capacity-planning" class="nav-link">Capacity Planning</a>
+          </div>
+        </div>
+
+        <div class="nav-group" data-group="settings">
+          <div class="nav-group-header" data-toggle="settings">
+            <span class="nav-group-icon">&#9662;</span>
+            <span>SETTINGS</span>
+          </div>
+          <div class="nav-group-items" id="nav-items-settings">
+            <a href="#/settings/market" class="nav-link">Market &amp; Locale</a>
+            <a href="#/topology" class="nav-link">Facility Topology</a>
+          </div>
+        </div>
+
+        <div class="nav-role-badge" id="role-badge">Role: Site Admin</div>
       </nav>
 
       <!-- Main content area -->
@@ -138,7 +164,7 @@
     <!-- STATUS BAR -->
     <div class="status-bar">
       <span id="tenant-id-display"></span>
-      <a href="#" id="return-to-cp" class="return-link" style="display:none">← Return to Operator Console</a>
+      <a href="#" id="return-to-cp" class="return-link" style="display:none">← Return to Platform Operations</a>
     </div>
   </div>
   <script src="app.js"></script>

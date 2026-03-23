@@ -471,7 +471,7 @@ The general direction recommended for the platform repo is:
 vista-evolved-platform/
   apps/
     control-plane/
-    admin-console/
+    tenant-admin/
     clinician-web/        # later
     patient-portal/       # later
   services/

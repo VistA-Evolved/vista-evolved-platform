@@ -224,9 +224,9 @@ The operator-facing control plane manages system-wide concerns that are above an
 Per-tenant administrative configuration managed by the tenant's own administrators.
 
 - **Scope:** Facility structure (departments, wards, beds), user management, printer/device defaults, site parameters, module enablement within tenant's entitlement.
-- **Lives in:** `apps/tenant-admin/` on current public `main`. `apps/admin-console/` remains a reserved placeholder path.
+- **Lives in:** `apps/tenant-admin/`.
 - **Auth:** Tenant-admin scoped. Cannot affect other tenants or system-wide config.
-- **Status:** Architecture defined (VE-PLAT-ADR-0003). A bounded dual-mode prototype exists, but a live VistA-proven tenant-admin happy path is not yet established.
+- **Status:** Architecture defined (VE-PLAT-ADR-0003). VistA-only operational shell with 70+ routes and 44 E2E tests verified against live VistA Docker.
 
 ### 7.6 Workspace plane (separated operational surfaces)
 

@@ -1,8 +1,13 @@
 # Public Main Reality Reconciliation
 
-> **Status:** Accepted reconciliation note for current public `main`.
-> **Date:** 2026-03-21.
+> **Status:** ARCHIVED — superseded by [Three-Repo Reality Reconciliation v2](public-main-and-three-repo-reality-reconciliation-v2.md).
+> **Date:** 2026-03-21 (point-in-time snapshot).
 > **Scope:** Reconciles Task 0 claims against actual public repo state in `vista-evolved-platform`, `vista-evolved-vista-distro`, and `VistA-Evolved`.
+>
+> **Staleness warning:** The git SHAs, tenant-admin description, and "missing" claims below
+> are frozen at their 2026-03-21 state. Since then, the tenant-admin was rewritten as a
+> VistA-only operational shell with 70+ live routes, full CRUD user lifecycle, and E2E tests.
+> Consult the v2 reconciliation and `README.md` for current truth.
 
 ---
 
@@ -75,7 +80,7 @@ Public `main` in `vista-evolved-platform` contains:
 - `apps/control-plane/` - operator console review runtime
 - `apps/control-plane-api/` - PG-backed control-plane backend
 - `apps/tenant-admin/` - dual-mode prototype shell on port 4520
-- `apps/admin-console/` - placeholder only
+- ~~`apps/admin-console/`~~ - **DELETED 2026-03-22.** Was placeholder only.
 - tenant-admin explanation docs and grounded discovery docs
 - tenant-admin screen-contract JSON files
 
@@ -128,7 +133,7 @@ The following are still missing from both local and public `main` and must not b
 
 1. A public proof package showing tenant-admin working against live running VistA end-to-end.
 2. A public proof package showing the first tenant-admin write or guided-write path with read-back verification.
-3. A non-placeholder implementation in `apps/admin-console/`.
+3. ~~A non-placeholder implementation in `apps/admin-console/`.~~ **RESOLVED 2026-03-22:** directory deleted; `apps/tenant-admin/` is the sole path.
 4. Public evidence that the current tenant-admin prototype has passed browser plus live-runtime validation.
 
 ---
@@ -140,6 +145,6 @@ The truthful public-main statement is:
 - the platform repo is **not** just a starter scaffold
 - it **does** publicly contain tenant-admin docs, contracts, a prototype shell, and a control-plane backend
 - but the current tenant-admin runtime remains **prototype-grade and not yet live-proven against VistA**
-- `apps/admin-console/` is placeholder-only and must not be described as the active tenant-admin runtime
+- ~~`apps/admin-console/` is placeholder-only~~ **RESOLVED 2026-03-22:** directory deleted
 
 This note is the reconciliation baseline for the next queue steps. Task 1 may proceed from this truth.

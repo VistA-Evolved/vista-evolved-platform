@@ -18,6 +18,7 @@ import bootstrapRoutes from './routes/bootstrap-routes.mjs';
 import provisioningRoutes from './routes/provisioning-routes.mjs';
 import auditRoutes from './routes/audit-routes.mjs';
 import operatorSurfaceRoutes from './routes/operator-surface-routes.mjs';
+import billingRoutes from './routes/billing-routes.mjs';
 
 const PORT = parseInt(process.env.PORT || '4510', 10);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -50,6 +51,7 @@ async function main() {
   await server.register(provisioningRoutes);
   await server.register(auditRoutes);
   await server.register(operatorSurfaceRoutes);
+  await server.register(billingRoutes);
 
   // ---- Graceful shutdown ----
   const shutdown = async (signal) => {

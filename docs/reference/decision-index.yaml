@@ -39,6 +39,41 @@ decisions:
     date: 2026-03-12
     legacy_id: ADR-0003
 
+  - id: VE-PLAT-ADR-0004
+    title: Lago as the billing and metering engine
+    status: accepted
+    file: docs/adrs/VE-PLAT-ADR-0004-billing-system-lago.md
+    repo: vista-evolved-platform
+    date: 2026-03-22
+
+  - id: VE-PLAT-ADR-0005
+    title: Rename ve-control-plane-db to ve-platform-db
+    status: accepted
+    file: docs/adrs/VE-PLAT-ADR-0005-platform-db-naming.md
+    repo: vista-evolved-platform
+    date: 2026-03-22
+
+  - id: VE-PLAT-ADR-0006
+    title: Offline-capable architecture for site administration
+    status: accepted
+    file: docs/adrs/VE-PLAT-ADR-0006-offline-capable-architecture.md
+    repo: vista-evolved-platform
+    date: 2026-03-23
+
+  - id: VE-PLAT-ADR-0007
+    title: Unified admin UI (apps/admin-ui)
+    status: accepted
+    file: docs/adrs/VE-PLAT-ADR-0007-unified-admin-ui.md
+    repo: vista-evolved-platform
+    date: 2026-03-23
+
+  - id: VE-PLAT-ADR-0008
+    title: IT support system integration strategy
+    status: proposed
+    file: docs/adrs/VE-PLAT-ADR-0008-it-support-integration.md
+    repo: vista-evolved-platform
+    date: 2026-03-23
+
   # --- Distro repo decisions (tracked here for cross-repo visibility) ---
   - id: VE-DISTRO-ADR-0001
     title: Upstream overlay policy

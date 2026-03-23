@@ -1,175 +1,45 @@
 openapi: 3.0.3
 info:
-  title: Tenant Admin API (VistA-first shell)
-  version: 0.3.0
+  title: Site Administration Console API
+  version: 1.0.0
   description: |
-    Served by `apps/tenant-admin/server.mjs` under `/api/tenant-admin/v1`.
-    All routes accept `tenantId` query parameter (required).
+    VistA-first administration API served by `apps/tenant-admin/server.mjs`.
+    All routes require `tenantId` query parameter.
+    Reads use DDR LISTER/GETS or standard VistA RPCs.
     Writes use DDR VALIDATOR/FILER or distro overlay RPCs (ZVE*).
+    Routes returning 501 indicate the required M routine is not installed.
 servers:
   - url: http://127.0.0.1:4520/api/tenant-admin/v1
+tags:
+  - name: Auth
+    description: Session authentication via VistA XWB broker
+  - name: System Status
+    description: VistA connectivity and dashboard
+  - name: Users & Access
+    description: User management, keys, e-signatures (File 200, 19.1)
+  - name: Facilities & Locations
+    description: Facilities, clinics, wards, beds, specialties (Files 4, 44, 42, 405.4, 44.1)
+  - name: Clinical Config
+    description: Orders, TIU, pharmacy, lab, radiology, nursing, health summary
+  - name: Billing & Insurance
+    description: Billing parameters, insurance, encounter forms, claims
+  - name: System & Kernel
+    description: Kernel params, TaskMan, MailMan, menus, packages, error trap
+  - name: Devices & Connectivity
+    description: Devices, terminal types, HL7, RPC broker
+  - name: Monitoring & Reports
+    description: Audit, reports, error logs
+  - name: VistA Tools
+    description: DDR probe, raw FileMan, capacity planning
+
 paths:
-  /vista-status:
-    get:
-      summary: Broker connectivity + current user
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-      responses:
-        '200':
-          description: OK
-  /vista/ddr-probe:
-    get:
-      summary: DDR RPC family probe (read-safe)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-      responses:
-        '200':
-          description: OK
-  /dashboard:
-    get:
-      summary: Dashboard counts and VistA grounding status
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-      responses:
-        '200':
-          description: OK
-  /users:
-    get:
-      summary: List users (ORWU NEWPERS or fixture)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: search
-          in: query
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
+  # === Auth ===
+  /auth/login:
     post:
-      summary: Create user (ZVE USMG ADD when registered)
+      tags: [Auth]
+      summary: Login via VistA XWB broker
       parameters:
         - $ref: '#/components/parameters/tenantId'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name: { type: string }
-                accessCode: { type: string }
-                verifyCode: { type: string }
-      responses:
-        '200':
-          description: Created
-        '501':
-          description: RPC not registered
-  /users/{ien}:
-    get:
-      summary: User detail (DDR GETS File 200 preferred)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: ien
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-    put:
-      summary: Allow-listed File 200 contact field update (DDR VALIDATOR + DDR FILER)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: ien
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [field, value]
-              properties:
-                field: { type: string, enum: ['.132', '.133', '.134', '.151'] }
-                value: { type: string }
-      responses:
-        '200':
-          description: OK
-        '400':
-          description: Validation failed or field not allow-listed
-        '503':
-          description: VistA unavailable
-  /users/{targetDuz}/keys:
-    post:
-      summary: Assign key (ZVE USMG KEYS)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: targetDuz
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [keyName]
-              properties:
-                keyName: { type: string }
-      responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
-  /users/{targetDuz}/keys/{keyId}:
-    delete:
-      summary: Remove key (ZVE USMG KEYS DEL)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: targetDuz
-          in: path
-          required: true
-          schema: { type: string }
-        - name: keyId
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
-  /users/{duz}/esig:
-    post:
-      summary: Set e-sig (ZVE USMG ESIG)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: duz
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [code]
-              properties:
-                code: { type: string }
-      responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
-  /users/{duz}/credentials:
-    put:
-      summary: Set access/verify (ZVE USMG CRED)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: duz
-          in: path
-          required: true
-          schema: { type: string }
       requestBody:
         content:
           application/json:
@@ -180,89 +50,427 @@ paths:
                 accessCode: { type: string }
                 verifyCode: { type: string }
       responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
+        '200': { description: Session created with Bearer token }
+        '401': { description: Invalid credentials }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Destroy session
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Session destroyed }
+  /auth/session:
+    get:
+      tags: [Auth]
+      summary: Current session info (DUZ, keys, user name)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Session details }
+        '401': { description: No active session }
+
+  # === System Status ===
+  /vista-status:
+    get:
+      tags: [System Status]
+      summary: Broker connectivity + current user
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: VistA connection status }
+  /vista/ddr-probe:
+    get:
+      tags: [System Status]
+      summary: DDR RPC family probe (read-safe)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: DDR capability results }
+  /dashboard:
+    get:
+      tags: [System Status]
+      summary: Dashboard counts and VistA grounding status
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Aggregate counts by domain }
+
+  # === Users & Access ===
+  /users:
+    get:
+      tags: [Users & Access]
+      summary: List users (ORWU NEWPERS)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200': { description: User list }
+    post:
+      tags: [Users & Access]
+      summary: Create user (ZVE USMG ADD)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newName]
+              properties:
+                newName: { type: string }
+      responses:
+        '200': { description: User created }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{userId}:
+    get:
+      tags: [Users & Access]
+      summary: User detail (DDR GETS File 200)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/userId'
+      responses:
+        '200': { description: User detail with identity, contact, keys }
+  /users/{ien}:
+    put:
+      tags: [Users & Access]
+      summary: Edit user contact fields (DDR VALIDATOR + DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: ien, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, value]
+              properties:
+                field: { type: string }
+                value: { type: string }
+      responses:
+        '200': { description: Field updated }
+        '400': { description: Validation failed }
+  /users/clone:
+    post:
+      tags: [Users & Access]
+      summary: Clone user with keys (ZVE USMG ADD + ZVE USER CLONE)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newName, sourceDuz]
+              properties:
+                newName: { type: string }
+                sourceDuz: { type: string }
+      responses:
+        '200': { description: User cloned }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{targetDuz}/keys:
+    post:
+      tags: [Users & Access]
+      summary: Assign security key (ZVE USMG KEYS)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: targetDuz, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keyName]
+              properties:
+                keyName: { type: string }
+      responses:
+        '200': { description: Key assigned }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{targetDuz}/keys/{keyId}:
+    delete:
+      tags: [Users & Access]
+      summary: Remove security key (ZVE USMG KEYS DEL)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: targetDuz, in: path, required: true, schema: { type: string } }
+        - { name: keyId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Key removed }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{duz}/esig:
+    post:
+      tags: [Users & Access]
+      summary: Set e-signature code (ZVE USMG ESIG)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        '200': { description: E-sig set }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{duz}/credentials:
+    put:
+      tags: [Users & Access]
+      summary: Reset access/verify codes (ZVE USMG CRED)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accessCode, verifyCode]
+              properties:
+                accessCode: { type: string }
+                verifyCode: { type: string }
+      responses:
+        '200': { description: Credentials reset }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{duz}/rename:
+    put:
+      tags: [Users & Access]
+      summary: Rename user (ZVE USMG RENAME)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newName]
+              properties:
+                newName: { type: string }
+      responses:
+        '200': { description: User renamed }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{duz}/provider:
+    post:
+      tags: [Users & Access]
+      summary: Edit provider credentials (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                npi: { type: string }
+                dea: { type: string }
+                taxId: { type: string }
+      responses:
+        '200': { description: Provider info updated }
   /users/{duz}/deactivate:
     post:
-      summary: Deactivate (ZVE USMG DEACT)
+      tags: [Users & Access]
+      summary: Deactivate user (ZVE USMG DEACT)
       parameters:
         - $ref: '#/components/parameters/tenantId'
-        - name: duz
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/duz'
       responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
+        '200': { description: User deactivated }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
   /users/{duz}/reactivate:
     post:
-      summary: Reactivate (ZVE USMG REACT)
+      tags: [Users & Access]
+      summary: Reactivate user (ZVE USMG REACT)
       parameters:
         - $ref: '#/components/parameters/tenantId'
-        - name: duz
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/duz'
       responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
+        '200': { description: User reactivated }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{duz}/terminate:
+    post:
+      tags: [Users & Access]
+      summary: Terminate user (ZVE USMG TERM)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      responses:
+        '200': { description: User terminated }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /users/{duz}/file-access:
+    get:
+      tags: [Users & Access]
+      summary: User file access security (DDR GETS File 200)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      responses:
+        '200': { description: File access permissions }
+  /users/{duz}/access-audit:
+    get:
+      tags: [Users & Access]
+      summary: User access audit trail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/duz'
+      responses:
+        '200': { description: Audit entries for user }
+  /roles:
+    get:
+      tags: [Users & Access]
+      summary: Security key list (DDR LISTER File 19.1)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Key/role list }
+  /key-inventory:
+    get:
+      tags: [Users & Access]
+      summary: Key inventory with holder counts
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: category, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Key inventory }
+  /key-holders/{keyName}:
+    get:
+      tags: [Users & Access]
+      summary: Users holding a specific key
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: keyName, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Holder list }
+  /key-impact:
+    post:
+      tags: [Users & Access]
+      summary: Key impact preview (nav groups, role cluster)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keys]
+              properties:
+                keys: { type: array, items: { type: string } }
+      responses:
+        '200': { description: Impact analysis }
+  /esig-status:
+    get:
+      tags: [Users & Access]
+      summary: E-signature status summary across all users
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: E-sig status list }
+  /security-keys:
+    post:
+      tags: [Users & Access]
+      summary: Create security key (DDR FILER File 19.1)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '200': { description: Key created }
+  /titles:
+    get:
+      tags: [Users & Access]
+      summary: Title list (DDR LISTER File 3.1)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Title list }
+    post:
+      tags: [Users & Access]
+      summary: Create title (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200': { description: Title created }
+  /titles/{ien}:
+    get:
+      tags: [Users & Access]
+      summary: Title detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Title detail }
+    put:
+      tags: [Users & Access]
+      summary: Edit title (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        '200': { description: Title updated }
+
+  # === Facilities & Locations ===
   /facilities:
     get:
-      summary: Facility list (divisions + clinics from VistA or fixture)
+      tags: [Facilities & Locations]
+      summary: Facility list (DDR LISTER File 4)
       parameters:
         - $ref: '#/components/parameters/tenantId'
       responses:
-        '200':
-          description: OK
+        '200': { description: Facility list }
   /facilities/{facilityId}:
     get:
-      summary: Facility detail by ID
+      tags: [Facilities & Locations]
+      summary: Facility detail
       parameters:
         - $ref: '#/components/parameters/tenantId'
-        - name: facilityId
-          in: path
-          required: true
-          schema: { type: string }
+        - { name: facilityId, in: path, required: true, schema: { type: string } }
       responses:
-        '200':
-          description: OK
+        '200': { description: Facility detail }
   /topology:
     get:
+      tags: [Facilities & Locations]
       summary: Facility topology hierarchy
       parameters:
         - $ref: '#/components/parameters/tenantId'
       responses:
-        '200':
-          description: OK
-  /roles:
-    get:
-      summary: Role/key list (DDR LISTER File 19.1 or fixture)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-      responses:
-        '200':
-          description: OK
+        '200': { description: Hierarchy tree }
   /clinics:
     get:
-      summary: Clinic list (ORWU CLINLOC or fixture)
+      tags: [Facilities & Locations]
+      summary: Clinic list (DDR LISTER File 44)
       parameters:
         - $ref: '#/components/parameters/tenantId'
-        - name: search
-          in: query
-          schema: { type: string }
-        - name: type
-          in: query
-          schema: { type: string }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string } }
       responses:
-        '200':
-          description: OK
+        '200': { description: Clinic list }
     post:
+      tags: [Facilities & Locations]
       summary: Create clinic (ZVE CLNM ADD)
       parameters:
         - $ref: '#/components/parameters/tenantId'
@@ -275,91 +483,97 @@ paths:
               properties:
                 name: { type: string }
       responses:
-        '200':
-          description: Created
-        '501':
-          description: RPC not registered
+        '200': { description: Clinic created }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
   /clinics/{ien}:
-    put:
-      summary: Edit clinic name (ZVE CLNM EDIT)
+    get:
+      tags: [Facilities & Locations]
+      summary: Clinic detail (DDR GETS File 44)
       parameters:
         - $ref: '#/components/parameters/tenantId'
-        - name: ien
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Clinic detail }
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit clinic (ZVE CLNM EDIT or DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
       requestBody:
         content:
           application/json:
             schema:
               type: object
-              required: [name]
               properties:
                 name: { type: string }
       responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
+        '200': { description: Clinic updated }
+        '501': { $ref: '#/components/responses/RpcNotRegistered' }
+  /clinics/{ien}/fields:
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit clinic fields (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, value]
+              properties:
+                field: { type: string }
+                value: { type: string }
+      responses:
+        '200': { description: Field updated }
+  /clinics/{ien}/availability:
+    get:
+      tags: [Facilities & Locations]
+      summary: Clinic availability slots
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Availability data }
+    post:
+      tags: [Facilities & Locations]
+      summary: Set clinic availability
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Availability updated }
+  /clinics/{ien}/inactivate:
+    post:
+      tags: [Facilities & Locations]
+      summary: Inactivate clinic
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Clinic inactivated }
+  /clinics/{ien}/reactivate:
+    post:
+      tags: [Facilities & Locations]
+      summary: Reactivate clinic
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Clinic reactivated }
   /wards:
     get:
-      summary: Ward list (ORQPT WARDS or fixture)
+      tags: [Facilities & Locations]
+      summary: Ward list (DDR LISTER File 42)
       parameters:
         - $ref: '#/components/parameters/tenantId'
       responses:
-        '200':
-          description: OK
-  /wards/{ien}:
-    put:
-      summary: Edit ward name (ZVE WRDM EDIT)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: ien
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name: { type: string }
-      responses:
-        '200':
-          description: OK
-        '501':
-          description: RPC not registered
-  /key-inventory:
-    get:
-      summary: Key inventory with holder counts
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-        - name: category
-          in: query
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-  /esig-status:
-    get:
-      summary: E-signature status summary
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-      responses:
-        '200':
-          description: OK
-  /devices:
-    get:
-      summary: Device list (DDR LISTER File 3.5)
-      parameters:
-        - $ref: '#/components/parameters/tenantId'
-      responses:
-        '200':
-          description: OK
+        '200': { description: Ward list }
     post:
-      summary: Create device (DDR FILER ADD File 3.5)
+      tags: [Facilities & Locations]
+      summary: Create ward (DDR FILER)
       parameters:
         - $ref: '#/components/parameters/tenantId'
       requestBody:
@@ -371,19 +585,62 @@ paths:
               properties:
                 name: { type: string }
       responses:
-        '200':
-          description: Created
-        '400':
-          description: Validation failed
-  /devices/{ien}:
+        '200': { description: Ward created }
+  /wards/{ien}:
+    get:
+      tags: [Facilities & Locations]
+      summary: Ward detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Ward detail }
     put:
-      summary: Rename device (DDR FILER EDIT .01)
+      tags: [Facilities & Locations]
+      summary: Edit ward (ZVE WRDM EDIT or DDR FILER)
       parameters:
         - $ref: '#/components/parameters/tenantId'
-        - name: ien
-          in: path
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/ien'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        '200': { description: Ward updated }
+  /wards/{ien}/fields:
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit ward fields (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, value]
+              properties:
+                field: { type: string }
+                value: { type: string }
+      responses:
+        '200': { description: Field updated }
+  /room-beds:
+    get:
+      tags: [Facilities & Locations]
+      summary: Room-bed list (DDR LISTER File 405.4)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Room-bed list }
+    post:
+      tags: [Facilities & Locations]
+      summary: Create room-bed (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
       requestBody:
         content:
           application/json:
@@ -393,20 +650,466 @@ paths:
               properties:
                 name: { type: string }
       responses:
-        '200':
-          description: OK
-        '400':
-          description: Validation failed
+        '200': { description: Room-bed created }
+  /room-beds/{ien}:
+    get:
+      tags: [Facilities & Locations]
+      summary: Room-bed detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Room-bed detail }
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit room-bed (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Room-bed updated }
+  /treating-specialties:
+    get:
+      tags: [Facilities & Locations]
+      summary: Treating specialties (DDR LISTER File 45.7)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Specialty list }
+  /treating-specialties/{ien}:
+    get:
+      tags: [Facilities & Locations]
+      summary: Specialty detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Specialty detail }
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit specialty (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Specialty updated }
+  /appointment-types:
+    get:
+      tags: [Facilities & Locations]
+      summary: Appointment type list (DDR LISTER File 409.1)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Appointment type list }
+    post:
+      tags: [Facilities & Locations]
+      summary: Create appointment type (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Appointment type created }
+  /appointment-types/{ien}:
+    get:
+      tags: [Facilities & Locations]
+      summary: Appointment type detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit appointment type
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /appointment-types/{ien}/inactivate:
+    post:
+      tags: [Facilities & Locations]
+      summary: Inactivate appointment type
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Inactivated }
+  /appointment-types/{ien}/reactivate:
+    post:
+      tags: [Facilities & Locations]
+      summary: Reactivate appointment type
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Reactivated }
+  /stop-codes:
+    get:
+      tags: [Facilities & Locations]
+      summary: Stop code list
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Stop code list }
+  /nursing-locations:
+    get:
+      tags: [Facilities & Locations]
+      summary: Nursing location list
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Nursing locations }
+  /nursing-locations/{ien}:
+    get:
+      tags: [Facilities & Locations]
+      summary: Nursing location detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Facilities & Locations]
+      summary: Edit nursing location
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+
+  # === Clinical Config ===
+  /quick-orders:
+    get:
+      tags: [Clinical Config]
+      summary: Quick order list (DDR LISTER File 101.41)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Quick order list }
+  /quick-orders/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: Quick order detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Quick order detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit quick order
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /order-sets:
+    get:
+      tags: [Clinical Config]
+      summary: Order set list (DDR LISTER File 101.44)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Order set list }
+  /order-sets/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: Order set detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Order set detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit order set
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /orderable-items:
+    get:
+      tags: [Clinical Config]
+      summary: Orderable item list (DDR LISTER File 101.43)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Orderable items }
+  /tiu-document-defs:
+    get:
+      tags: [Clinical Config]
+      summary: TIU document definition list (DDR LISTER File 8925.1)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: TIU document defs }
+  /tiu-document-defs/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: TIU document def detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: TIU def detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit TIU document def
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /drug-file:
+    get:
+      tags: [Clinical Config]
+      summary: Drug file list (DDR LISTER File 50)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Drug list }
+  /drug-file/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: Drug detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Drug detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit drug entry
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /drug-file/{ien}/inactivate:
+    post:
+      tags: [Clinical Config]
+      summary: Inactivate drug
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Drug inactivated }
+  /drug-file/{ien}/reactivate:
+    post:
+      tags: [Clinical Config]
+      summary: Reactivate drug
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Drug reactivated }
+  /lab-tests:
+    get:
+      tags: [Clinical Config]
+      summary: Lab test list (DDR LISTER File 60)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Lab test list }
+  /lab-tests/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: Lab test detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Lab test detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit lab test
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /radiology-procedures:
+    get:
+      tags: [Clinical Config]
+      summary: Radiology procedure list (DDR LISTER File 71)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Radiology procedures }
+  /radiology-procedures/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: Radiology procedure detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Procedure detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit radiology procedure
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /health-summary-types:
+    get:
+      tags: [Clinical Config]
+      summary: Health summary type list (DDR LISTER File 142)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Health summary types }
+  /health-summary-types/{ien}:
+    get:
+      tags: [Clinical Config]
+      summary: Health summary type detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Clinical Config]
+      summary: Edit health summary type
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /health-summary-types/{ien}/components:
+    get:
+      tags: [Clinical Config]
+      summary: Health summary components
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Component list }
+    post:
+      tags: [Clinical Config]
+      summary: Add health summary component
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Component added }
+  /health-summary-types/{ien}/components/{compIen}:
+    delete:
+      tags: [Clinical Config]
+      summary: Remove health summary component
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+        - { name: compIen, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Component removed }
+
+  # === Billing & Insurance ===
+  /billing-params:
+    get:
+      tags: [Billing & Insurance]
+      summary: Billing parameters (DDR GETS)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Billing params }
+    put:
+      tags: [Billing & Insurance]
+      summary: Edit billing parameters (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Params updated }
+  /insurance-companies:
+    get:
+      tags: [Billing & Insurance]
+      summary: Insurance company list (DDR LISTER File 36)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Insurance list }
+    post:
+      tags: [Billing & Insurance]
+      summary: Create insurance company (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Created }
+  /insurance-companies/{ien}:
+    get:
+      tags: [Billing & Insurance]
+      summary: Insurance company detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Billing & Insurance]
+      summary: Edit insurance company (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /encounter-forms:
+    get:
+      tags: [Billing & Insurance]
+      summary: Encounter form list
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Encounter forms }
+  /encounter-forms/{ien}:
+    get:
+      tags: [Billing & Insurance]
+      summary: Encounter form detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Billing & Insurance]
+      summary: Edit encounter form
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /claims-tracking:
+    get:
+      tags: [Billing & Insurance]
+      summary: Claims tracking list
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Claims list }
+  /claims-tracking/{ien}:
+    get:
+      tags: [Billing & Insurance]
+      summary: Claim detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Claim detail }
+
+  # === System & Kernel ===
   /params/kernel:
     get:
+      tags: [System & Kernel]
       summary: Kernel site parameters (DDR GETS File 8989.3)
       parameters:
         - $ref: '#/components/parameters/tenantId'
       responses:
-        '200':
-          description: OK
+        '200': { description: Kernel params }
     put:
-      summary: Allow-listed kernel param (DDR VALIDATOR + DDR FILER)
+      tags: [System & Kernel]
+      summary: Edit kernel parameter (DDR VALIDATOR + DDR FILER)
       parameters:
         - $ref: '#/components/parameters/tenantId'
       requestBody:
@@ -416,15 +1119,492 @@ paths:
               type: object
               required: [field, value]
               properties:
-                field: { type: string, enum: ['.01', '.02', '.03', '.04', '.05'] }
+                field: { type: string }
                 value: { type: string }
       responses:
-        '200':
-          description: OK
-        '400':
-          description: Validation failed or field not allow-listed
-        '503':
-          description: VistA unavailable
+        '200': { description: Param updated }
+        '400': { description: Validation failed }
+  /taskman-tasks:
+    get:
+      tags: [System & Kernel]
+      summary: TaskMan task list (DDR LISTER File 14.4)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Task list }
+  /taskman-tasks/{ien}:
+    get:
+      tags: [System & Kernel]
+      summary: TaskMan task detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Task detail }
+  /taskman/status:
+    get:
+      tags: [System & Kernel]
+      summary: TaskMan status (ZVETMCTL)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: TaskMan status }
+  /taskman/scheduled:
+    get:
+      tags: [System & Kernel]
+      summary: TaskMan scheduled tasks
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Scheduled tasks }
+  /menu-options:
+    get:
+      tags: [System & Kernel]
+      summary: Menu option list (DDR LISTER File 19)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Menu options }
+  /menu-options/{ien}:
+    get:
+      tags: [System & Kernel]
+      summary: Menu option detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Menu detail }
+    put:
+      tags: [System & Kernel]
+      summary: Edit menu option
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /menu-options/{ien}/children:
+    get:
+      tags: [System & Kernel]
+      summary: Menu option child items
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Child menu items }
+  /packages:
+    get:
+      tags: [System & Kernel]
+      summary: Installed packages (DDR LISTER File 9.4)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Package list }
+  /packages/{ien}:
+    get:
+      tags: [System & Kernel]
+      summary: Package detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Package detail }
+  /error-trap:
+    get:
+      tags: [System & Kernel]
+      summary: Error trap entries
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Error entries }
+  /mail-groups:
+    get:
+      tags: [System & Kernel]
+      summary: Mail group list (DDR LISTER File 3.8)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Mail groups }
+  /mail-groups/{ien}:
+    get:
+      tags: [System & Kernel]
+      summary: Mail group detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [System & Kernel]
+      summary: Edit mail group
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /mail-groups/{ien}/members:
+    get:
+      tags: [System & Kernel]
+      summary: Mail group members
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Member list }
+    post:
+      tags: [System & Kernel]
+      summary: Add member to mail group
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Member added }
+  /mail-groups/{ien}/members/{duz}:
+    delete:
+      tags: [System & Kernel]
+      summary: Remove member from mail group
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+        - $ref: '#/components/parameters/duz'
+      responses:
+        '200': { description: Member removed }
+  /bulletins:
+    get:
+      tags: [System & Kernel]
+      summary: Bulletin list (DDR LISTER File 3.6)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Bulletin list }
+  /bulletins/{ien}:
+    get:
+      tags: [System & Kernel]
+      summary: Bulletin detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [System & Kernel]
+      summary: Edit bulletin
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /modules:
+    get:
+      tags: [System & Kernel]
+      summary: Module entitlements
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Module list }
+
+  # === Devices & Connectivity ===
+  /devices:
+    get:
+      tags: [Devices & Connectivity]
+      summary: Device list (DDR LISTER File 3.5)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Device list }
+    post:
+      tags: [Devices & Connectivity]
+      summary: Create device (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200': { description: Device created }
+  /devices/{ien}:
+    get:
+      tags: [Devices & Connectivity]
+      summary: Device detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Device detail }
+    put:
+      tags: [Devices & Connectivity]
+      summary: Edit device (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Devices & Connectivity]
+      summary: Delete device
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Deleted }
+  /devices/{ien}/fields:
+    put:
+      tags: [Devices & Connectivity]
+      summary: Edit device fields
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Field updated }
+  /devices/{ien}/test-print:
+    post:
+      tags: [Devices & Connectivity]
+      summary: Test print to device
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Test print sent }
+  /terminal-types:
+    get:
+      tags: [Devices & Connectivity]
+      summary: Terminal type list (DDR LISTER File 3.2)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Terminal types }
+  /terminal-types/{ien}:
+    get:
+      tags: [Devices & Connectivity]
+      summary: Terminal type detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Devices & Connectivity]
+      summary: Edit terminal type
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /hl7-interfaces:
+    get:
+      tags: [Devices & Connectivity]
+      summary: HL7 interface list (DDR LISTER File 771)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: HL7 interfaces }
+  /hl7-interfaces/{ien}:
+    get:
+      tags: [Devices & Connectivity]
+      summary: HL7 interface detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Detail }
+    put:
+      tags: [Devices & Connectivity]
+      summary: Edit HL7 interface
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Updated }
+  /hl7-interfaces/{ien}/shutdown:
+    post:
+      tags: [Devices & Connectivity]
+      summary: Shutdown HL7 link
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Link shut down }
+  /hl7-interfaces/{ien}/enable:
+    post:
+      tags: [Devices & Connectivity]
+      summary: Enable HL7 link
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Link enabled }
+  /hl7/filer-status:
+    get:
+      tags: [Devices & Connectivity]
+      summary: HL7 filer status
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Filer status }
+  /hl7/link-status/{ien}:
+    get:
+      tags: [Devices & Connectivity]
+      summary: HL7 link status
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Link status }
+  /rpc-status:
+    get:
+      tags: [Devices & Connectivity]
+      summary: RPC broker status
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: RPC status }
+
+  # === Monitoring & Reports ===
+  /audit/fileman:
+    get:
+      tags: [Monitoring & Reports]
+      summary: FileMan audit trail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: FileMan audit entries }
+  /audit/error-log:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Error log (DDR LISTER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Error log entries }
+  /audit/error-log/{ien}:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Error log detail
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - $ref: '#/components/parameters/ien'
+      responses:
+        '200': { description: Error detail }
+  /audit/signon-log:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Sign-on log
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Sign-on entries }
+  /audit/failed-access:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Failed access attempts
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Failed access entries }
+  /audit/programmer-mode:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Programmer mode access log
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Programmer mode entries }
+  /reports/scheduling:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Scheduling report
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Report data }
+  /reports/lab:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Lab report
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Report data }
+  /reports/radiology:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Radiology report
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Report data }
+  /reports/billing:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Billing report
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Report data }
+  /reports/nursing:
+    get:
+      tags: [Monitoring & Reports]
+      summary: Nursing report
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Report data }
+
+  # === VistA Tools ===
+  /fileman/list:
+    get:
+      tags: [VistA Tools]
+      summary: Raw FileMan list (DDR LISTER any file)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: file, in: query, required: true, schema: { type: string } }
+        - { name: fields, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string } }
+        - { name: max, in: query, schema: { type: string } }
+      responses:
+        '200': { description: FileMan list results }
+  /fileman/entry:
+    get:
+      tags: [VistA Tools]
+      summary: Raw FileMan entry (DDR GETS ENTRY DATA)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+        - { name: file, in: query, required: true, schema: { type: string } }
+        - { name: iens, in: query, required: true, schema: { type: string } }
+        - { name: fields, in: query, schema: { type: string } }
+      responses:
+        '200': { description: FileMan entry data }
+    put:
+      tags: [VistA Tools]
+      summary: Raw FileMan edit (DDR FILER)
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file, iens, field, value]
+              properties:
+                file: { type: string }
+                iens: { type: string }
+                field: { type: string }
+                value: { type: string }
+      responses:
+        '200': { description: Entry updated }
+  /capacity:
+    get:
+      tags: [VistA Tools]
+      summary: Capacity planning metrics
+      parameters:
+        - $ref: '#/components/parameters/tenantId'
+      responses:
+        '200': { description: Capacity data }
+
 components:
   parameters:
     tenantId:
@@ -432,3 +1612,33 @@ components:
       in: query
       required: true
       schema: { type: string }
+      description: Tenant identifier
+    ien:
+      name: ien
+      in: path
+      required: true
+      schema: { type: string }
+      description: VistA internal entry number
+    duz:
+      name: duz
+      in: path
+      required: true
+      schema: { type: string }
+      description: VistA user DUZ (File 200 IEN)
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string }
+      description: User identifier (DUZ)
+  responses:
+    RpcNotRegistered:
+      description: Required RPC not registered in VistA. Install the corresponding M routine.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok: { type: boolean, example: false }
+              integrationPending: { type: boolean, example: true }
+              error: { type: string }

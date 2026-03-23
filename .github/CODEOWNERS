@@ -10,7 +10,8 @@
 
 # Apps
 /apps/control-plane/     @vista-evolved/platform
-/apps/admin-console/     @vista-evolved/platform
+/apps/control-plane-api/ @vista-evolved/platform
+/apps/tenant-admin/      @vista-evolved/platform
 /apps/terminal-proof/    @vista-evolved/platform
 
 # Packages

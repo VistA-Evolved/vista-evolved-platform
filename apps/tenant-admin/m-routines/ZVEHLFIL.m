@@ -1,0 +1,66 @@
+ZVEHLFIL ;VE/KM - HL7 Filer Control;2026-03-22
+ ;;1.0;VistA-Evolved Tenant Admin;**1**;Mar 22, 2026;Build 1
+ ;
+ ; Exposes HL7 filer status and link control as RPCs.
+ ;
+ ; Entry points:
+ ;   D LINKSTAT^ZVEHLFIL - Check HL7 link status
+ ;   D FILERSTAT^ZVEHLFIL - Check filer (incoming/outgoing) status
+ ;
+ Q
+ ;
+LINKSTAT(RESULT,P1) ;
+ ; P1 = HL logical link IEN (File 870)
+ N LIEN,NODE0,NODE4,NM,PROTO,ADDR,PORT,STAT
+ S LIEN=+P1
+ I LIEN<1 S RESULT(0)="-1^Invalid link IEN" Q
+ I '$D(^HLCS(870,LIEN,0)) S RESULT(0)="-1^Link not found" Q
+ ;
+ S NODE0=$G(^HLCS(870,LIEN,0))
+ S NODE4=$G(^HLCS(870,LIEN,400))
+ S NM=$P(NODE0,U,1)
+ S PROTO=$P(NODE0,U,3)
+ S ADDR=$P(NODE4,U,1)
+ S PORT=$P(NODE4,U,2)
+ S STAT=$P(NODE4,U,15)
+ ;
+ S RESULT(0)="1^OK"
+ S RESULT(1)="NAME^"_NM
+ S RESULT(2)="PROTOCOL^"_PROTO
+ S RESULT(3)="ADDRESS^"_ADDR
+ S RESULT(4)="PORT^"_PORT
+ S RESULT(5)="STATUS^"_$S(STAT=1:"UP",STAT=0:"DOWN",1:"UNKNOWN")
+ Q
+ ;
+FILERSTAT(RESULT) ;
+ ; Check status of HL7 filers from ^HLCS(869.3,1)
+ N NODE,INFILER,OUTFILER
+ S NODE=$G(^HLCS(869.3,1,0))
+ S INFILER=$P(NODE,U,2)
+ S OUTFILER=$P(NODE,U,3)
+ S RESULT(0)="1^OK"
+ S RESULT(1)="INCOMING^"_$S(INFILER=1:"RUNNING",1:"STOPPED")
+ S RESULT(2)="OUTGOING^"_$S(OUTFILER=1:"RUNNING",1:"STOPPED")
+ Q
+ ;
+INSTALL ;
+ D REGONE("ZVE HL7 LINK STATUS","LINKSTAT","ZVEHLFIL","Check HL7 logical link status")
+ D REGONE("ZVE HL7 FILER STATUS","FILERSTAT","ZVEHLFIL","Check HL7 filer status")
+ W !,"ZVEHLFIL installed.",!
+ Q
+ ;
+REGONE(NAME,TAG,RTN,DESC) ;
+ N IEN,FDA,IENS,ERRS
+ S IEN=$$FIND1^DIC(8994,,"BX",NAME)
+ I IEN>0 W !,"RPC '"_NAME_"' already registered, skipping." Q
+ S IENS="+1,"
+ S FDA(8994,IENS,.01)=NAME
+ S FDA(8994,IENS,.02)=TAG
+ S FDA(8994,IENS,.03)=RTN
+ S FDA(8994,IENS,.04)=2
+ D UPDATE^DIE("E","FDA","","ERRS")
+ I $D(ERRS) W !,"ERROR: ",$G(ERRS("DIERR",1,"TEXT",1)) Q
+ S IEN=$$FIND1^DIC(8994,,"BX",NAME)
+ W !,"Registered "_NAME_" (IEN="_IEN_")"
+ I IEN>0 S ^XTV(8994,IEN,1,1,0)=DESC,^XTV(8994,IEN,1,0)="^^1^1^"_$$DT^XLFDT()
+ Q

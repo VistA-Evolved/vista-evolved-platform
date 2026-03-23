@@ -174,7 +174,7 @@ The following seven workspace families are the canonical top-level divisions of 
 | # | Workspace family | Audience | Primary concern domain | Bounded context | Separation rationale |
 |---|-----------------|----------|----------------------|----------------|---------------------|
 | 1 | **Control plane** | Platform operators, super-admins | Tenant lifecycle, legal-market selection, provisioning, system-wide configuration, pack eligibility, launch tiers | `apps/control-plane/` | Not tenant-scoped. Operates across all tenants. Different auth model from tenant workspaces. |
-| 2 | **Tenant operational admin** | Tenant administrators | Facility management, user management, module enablement, device/printer defaults, site parameters, operational configuration | `apps/admin-console/` | Always tenant-scoped. Different concerns from both control plane (system-wide) and clinical (patient care). |
+| 2 | **Tenant operational admin** | Tenant administrators | Facility management, user management, module enablement, device/printer defaults, site parameters, operational configuration | `apps/tenant-admin/` | Always tenant-scoped. Different concerns from both control plane (system-wide) and clinical (patient care). |
 | 3 | **Clinical** | Clinicians (physicians, nurses, pharmacists, therapists) | Patient care — encounters, orders, medications, notes, vitals, allergies, problems, results | Platform API / clinical workspace (future app) | Patient-scoped within tenant context. Real-time VistA data. PHI-intensive. Safety-critical. |
 | 4 | **Ancillary, operational, and integration** | Scheduling staff, billing/revenue cycle staff, IT operations, integration engineers | Scheduling, revenue cycle management, health information exchange, system integration, device management | Platform API / ancillary workspace (future app) | Operational but not direct patient care. May be PHI-adjacent. Cross-cuts multiple VistA packages. |
 | 5 | **Revenue cycle** | Billing specialists, coders, claims analysts, financial officers | Claims lifecycle, payer management, EDI pipeline, coding, charge capture, remittance | Platform API / RCM workspace (future app) | Financial data with PHI linkage. Regulatory compliance. Distinct from clinical care workflow. |
@@ -314,7 +314,7 @@ The control-plane workspace surfaces capability and readiness claims to operator
 
 The tenant-admin workspace is the per-tenant environment for tenant administrators to configure and manage their tenant's operational settings. Per VE-PLAT-ADR-0003 and global-architecture §13:
 
-> Tenant admin: per-tenant configuration, facility linkage, module enablement, tenant users. Exposed via admin console (`apps/admin-console/`) or APIs. All operations scoped to a tenant context.
+> Tenant admin: per-tenant configuration, facility linkage, module enablement, tenant users. Exposed via tenant-admin app (`apps/tenant-admin/`) or APIs. All operations scoped to a tenant context.
 
 ### 12.2 Primary concern areas
 
@@ -607,7 +607,7 @@ The following constraints are non-negotiable. They are not "best practices" or "
 | Mechanism | What it catches | Implementation status |
 |-----------|----------------|---------------------|
 | **Screen contract validation** | Surfaces with missing workspace affiliation, missing data classification, undeclared transitions | Requires artifact #7 |
-| **Nx module boundaries** | Code imports that cross bounded-context boundaries (e.g., admin-console importing from control-plane internals) | Planned (see nx-adoption-plan.md) |
+| **Nx module boundaries** | Code imports that cross bounded-context boundaries (e.g., tenant-admin importing from control-plane internals) | Planned (see nx-adoption-plan.md) |
 | **CI governance gates** | Structural checks on screen contracts, navigation manifests, and workspace declarations | Future (extends existing `scripts/governance/` pattern) |
 | **Architecture review** | New surfaces, new dashboards, new workspace transitions | Process-level (manual review) |
 

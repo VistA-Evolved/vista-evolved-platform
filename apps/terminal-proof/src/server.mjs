@@ -23,7 +23,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SSH_HOST = process.env.VISTA_SSH_HOST || '127.0.0.1';
 const SSH_PORT = parseInt(process.env.VISTA_SSH_PORT || '2225', 10);
 const SSH_USER = process.env.VISTA_SSH_USER || 'vista';
-const SSH_PASS = process.env.VISTA_SSH_PASSWORD || 'vista';
+const SSH_PASS = process.env.VISTA_SSH_PASSWORD;
+if (!SSH_PASS) {
+  console.error('[FATAL] VISTA_SSH_PASSWORD is not set. Set it in .env or environment variables.');
+  process.exit(1);
+}
 const PORT = parseInt(process.env.PORT || '4400', 10);
 
 const activeSessions = new Map();

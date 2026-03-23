@@ -233,6 +233,80 @@ const migrations = [
       );
     `,
   },
+  {
+    version: 10,
+    description: 'Schema hardening: cascades, uniqueness, updated_at triggers',
+    sql: `
+      -- 1. updated_at auto-maintenance trigger function
+      CREATE OR REPLACE FUNCTION ve_set_updated_at()
+      RETURNS TRIGGER AS $$
+      BEGIN NEW.updated_at = now(); RETURN NEW; END;
+      $$ LANGUAGE plpgsql;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_tenant_updated_at') THEN
+          CREATE TRIGGER trg_tenant_updated_at BEFORE UPDATE ON tenant
+            FOR EACH ROW EXECUTE FUNCTION ve_set_updated_at();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_bootstrap_draft_updated_at') THEN
+          CREATE TRIGGER trg_bootstrap_draft_updated_at BEFORE UPDATE ON bootstrap_draft
+            FOR EACH ROW EXECUTE FUNCTION ve_set_updated_at();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_bootstrap_request_updated_at') THEN
+          CREATE TRIGGER trg_bootstrap_request_updated_at BEFORE UPDATE ON bootstrap_request
+            FOR EACH ROW EXECUTE FUNCTION ve_set_updated_at();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_provisioning_run_updated_at') THEN
+          CREATE TRIGGER trg_provisioning_run_updated_at BEFORE UPDATE ON provisioning_run
+            FOR EACH ROW EXECUTE FUNCTION ve_set_updated_at();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_commercial_entitlement_updated_at') THEN
+          CREATE TRIGGER trg_commercial_entitlement_updated_at BEFORE UPDATE ON commercial_entitlement
+            FOR EACH ROW EXECUTE FUNCTION ve_set_updated_at();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_feature_flag_updated_at') THEN
+          CREATE TRIGGER trg_feature_flag_updated_at BEFORE UPDATE ON environment_feature_flag
+            FOR EACH ROW EXECUTE FUNCTION ve_set_updated_at();
+        END IF;
+      END $$;
+
+      -- 2. Prevent duplicate entitlements per tenant+SKU
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ce_tenant_sku
+        ON commercial_entitlement(tenant_id, sku);
+
+      -- 3. Prevent duplicate pending invitations per tenant+email
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_oi_pending_email
+        ON operator_invitation(tenant_id, email) WHERE status = 'pending';
+
+      -- 4. CASCADE child rows when parent tenant is deleted
+      ALTER TABLE tenant_lifecycle_transition
+        DROP CONSTRAINT IF EXISTS tenant_lifecycle_transition_tenant_id_fkey,
+        ADD CONSTRAINT tenant_lifecycle_transition_tenant_id_fkey
+          FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
+
+      -- 5. CASCADE provisioning steps when run is deleted
+      ALTER TABLE provisioning_step
+        DROP CONSTRAINT IF EXISTS provisioning_step_run_id_fkey,
+        ADD CONSTRAINT provisioning_step_run_id_fkey
+          FOREIGN KEY (run_id) REFERENCES provisioning_run(id) ON DELETE CASCADE;
+
+      -- 6. CASCADE operator records when tenant is deleted
+      ALTER TABLE operator_invitation
+        DROP CONSTRAINT IF EXISTS operator_invitation_tenant_id_fkey,
+        ADD CONSTRAINT operator_invitation_tenant_id_fkey
+          FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
+
+      ALTER TABLE operator_alert
+        DROP CONSTRAINT IF EXISTS operator_alert_tenant_id_fkey,
+        ADD CONSTRAINT operator_alert_tenant_id_fkey
+          FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
+
+      ALTER TABLE usage_meter_event
+        DROP CONSTRAINT IF EXISTS usage_meter_event_tenant_id_fkey,
+        ADD CONSTRAINT usage_meter_event_tenant_id_fkey
+          FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE;
+    `,
+  },
 ];
 
 /**

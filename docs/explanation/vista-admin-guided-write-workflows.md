@@ -645,17 +645,19 @@ EVE (System Manager Menu)
 
 ### 5.1 FileMan Write Patterns (MUMPS Layer)
 
-All VE* custom RPCs use one of three FileMan write patterns:
+All ZVE* custom RPCs use sanctioned FileMan and Kernel APIs:
 
 | Pattern | API | Use Case | Safety |
 |---------|-----|----------|--------|
-| `FILE^DIE("E")` | Edit existing field | Single-field updates (EDITUSER, CLINEDT, SVCEDT) | DD validation + input transforms fire |
-| `FILE^DIE("K")` | Internal edit | DISUSER flag, termination date (DEACTUSER, REACTUSER, CLINTOGL) | Bypasses input transforms; fields must be internal format |
-| `UPDATE^DIE("E")` | Add new entry/subentry | Key allocation (ADDKEY), service creation (SVCCRT), user creation (ZVECREUSER) | Full DD validation + cross-references |
-| `^DIK` | Delete subentry | Key removal (REMOVEKEY) | FileMan-managed deletion with cross-ref cleanup |
-| `^DIC` | Lookup/create | Clinic creation first-step (CLINCRT) | Resolves identifier conflicts that UPDATE^DIE can't |
+| `^DIC` LAYGO | Classic FileMan lookup/add | User creation (ZVEUSMG ADD) — matches VA Kernel `$$CREATE^XUSAP` pattern (ICR#4677) | DIC(0)="LMQ" skips interactive SOUNDEX prompt (`^XUA4A7` quits when "E" absent); XUNOTRIG=1 suppresses name-component trigger; exact-match duplicate check done pre-call via B-index |
+| `UPDATE^DIE` | DBS FileMan add/create | Clinic creation (ZVECLNM ADD), sub-file entry creation (menus, components, mail group members), RPC registration (File 8994) | Full DD validation + cross-references; no interactive SOUNDEX issue for File 44 or sub-files |
+| `^DIE` | Classic FileMan editor | Rename user/clinic/ward (.01), deactivate/reactivate (DISUSER), field edits | DR="field///value" stuffs values; DD validation + input transforms + cross-references fire |
+| `FILE^DIE` | DBS FileMan editor | Clear termination date (field 9.2), delete sub-file entries via `@` syntax | Works on entries that ^DIE also handles; "E" flag for external format |
+| `$$ADD^XQKEY` | Kernel security key API | Assign key to user (ZVEUSMG KEYS, ZVEUCLONE) | Manages File 200.051 sub-file AND ^XUSEC cross-reference atomically |
+| `$$DEL^XQKEY` | Kernel security key API | Remove key from user (ZVEUSMG KEYS) | Cleans up File 200.051 and ^XUSEC atomically |
+| `DDR FILER` | Data Dictionary Retrieval filer | Allow-listed field edits via tenant-admin API (phone, email, provider fields) | FileMan validation through VistA's DDR RPC interface |
 
-**Critical safety rule:** Never write `^VA(200,` or `^SC(` directly — always use FileMan APIs. Direct global sets bypass DD validation, input transforms, triggers, and cross-reference updates.
+**Critical safety rule:** Never write `^VA(200,` or `^SC(` or `^DIC(42,` directly — always use FileMan APIs. Direct global sets bypass DD validation, input transforms, triggers, and cross-reference updates. All ZVE* routines set `DUZ(0)="@"` (programmer access) for the duration of the FileMan call, then restore the original value.
 
 ### 5.2 Audit Trail Patterns
 
@@ -693,7 +695,7 @@ Every Mode B workflow uses post-write verification:
 | Reactivate | Deactivate | `VE USER DEACTIVATE` |
 | Assign key | Remove key | `VE USER REMOVE KEY` |
 | Remove key | Assign key | `VE USER ADD KEY` |
-| Create clinic | Inactivate | `VE CLIN TOGGLE INACTIVATE` (cannot delete File 44 entries safely) |
+| Create clinic | Inactivate | `VE CLIN TOGGLE INACTIVATE` (File 44 entries are inactivated, not deleted, per VistA convention) |
 | Edit clinic | Re-edit to previous value | Capture before-state from `VE CLIN DETAIL` |
 | Create service | N/A | File 49 entries cannot be safely deleted; mark inactive if needed |
 

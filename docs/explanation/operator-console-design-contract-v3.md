@@ -1,5 +1,7 @@
 # Operator Console Design Contract v3
 
+> **DESIGN TARGET (2026-03-22):** This is a design specification, not implementation status. The copilot subsystem has been removed from the current codebase.
+
 > **Status:** Canonical — supersedes design-contract-v2 for shell regions, badge system, and layout rules.
 > **Date:** 2026-03-20.
 > **Type:** Explanation — design contract for all operator console surfaces under the 8-domain model.
