@@ -5865,6 +5865,203 @@ async function main() {
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // MAILMAN INBOX (^XMB(3.7) / ^XMB(3.9))
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.get('/api/tenant-admin/v1/mailman/inbox', async (req, reply) => {
+    const folder = req.query.folder || 'IN';
+    const max = req.query.max || '50';
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE MM INBOX', [duz, folder, max]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return { ok: true, source: 'pending', data: [], message: 'ZVE MM INBOX not deployed' };
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const data = z.lines.slice(1).map(line => {
+        const p = line.split('^');
+        return { ien: p[0], from: p[1], subject: p[2], date: p[3], priority: (p[4] || 'NORMAL').toLowerCase(), read: p[5] === '1', basket: p[6] || '' };
+      }).filter(d => d.ien);
+      return { ok: true, source: 'zve', data };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.get('/api/tenant-admin/v1/mailman/message/:ien', async (req, reply) => {
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE MM READ', [duz, req.params.ien]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE MM READ not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const header = (z.lines[1] || '').split('^');
+      const body = z.lines.slice(2).join('\n');
+      return { ok: true, source: 'zve', data: { from: header[0], subject: header[1], date: header[2], priority: (header[3] || 'NORMAL').toLowerCase(), body } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/mailman/send', async (req, reply) => {
+    const { to, subject, body } = req.body || {};
+    if (!to || !subject) return reply.code(400).send({ ok: false, error: 'to and subject required' });
+    const duz = req.session?.duz || '0';
+    try {
+      const bodyText = (body || '').replace(/\n/g, '|');
+      const z = await callZveRpc('ZVE MM SEND', [duz, String(to), subject, bodyText]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE MM SEND not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve', messageId: z.lines[0]?.split('^')[1] || '' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/tenant-admin/v1/mailman/message/:ien', async (req, reply) => {
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE MM DELETE', [duz, req.params.ien]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE MM DELETE not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // TWO-PERSON INTEGRITY (^XTMP("ZVE2P"))
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.post('/api/tenant-admin/v1/config/2p', async (req, reply) => {
+    const { section, field, oldValue, newValue, reason } = req.body || {};
+    if (!section || !field) return reply.code(400).send({ ok: false, error: 'section and field required' });
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE 2P SUBMIT', [section, field, oldValue || '', newValue || '', reason || '', duz]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE 2P SUBMIT not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const reqId = z.lines[0]?.split('^')[1] || '';
+      return { ok: true, source: 'zve', requestId: reqId };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.get('/api/tenant-admin/v1/config/2p', async (req, reply) => {
+    const status = req.query.status || 'PENDING';
+    try {
+      const z = await callZveRpc('ZVE 2P LIST', [status]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return { ok: true, source: 'pending', data: [] };
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const data = z.lines.slice(1).map(line => {
+        const p = line.split('^');
+        return {
+          id: p[0], section: p[1], field: p[2], oldValue: p[3], newValue: p[4],
+          reason: p[5], submitterDuz: p[6], submitterName: p[7], submittedDate: p[8],
+          status: p[9], approverDuz: p[10] || '', approverName: p[11] || '', actionDate: p[12] || '',
+        };
+      }).filter(d => d.id);
+      return { ok: true, source: 'zve', data };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/config/2p/:id/approve', async (req, reply) => {
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE 2P ACTION', [req.params.id, 'APPROVE', duz]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE 2P ACTION not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/config/2p/:id/reject', async (req, reply) => {
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE 2P ACTION', [req.params.id, 'REJECT', duz]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE 2P ACTION not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // VITALS (GMV LATEST VM / File #120.5)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.get('/api/tenant-admin/v1/patients/:dfn/vitals', async (req, reply) => {
+    const { dfn } = req.params;
+    try {
+      const broker = await getBroker();
+      const lines = await broker.callRpc('GMV LATEST VM', [dfn]);
+      const vitals = [];
+      for (const line of lines) {
+        if (!line || !line.includes('^')) continue;
+        const p = line.split('^');
+        if (p.length >= 3) vitals.push({ type: p[0]?.trim(), datetime: p[1]?.trim(), value: p[2]?.trim(), unit: p[3]?.trim() || '', qualifier: p[4]?.trim() || '' });
+      }
+      return { ok: true, source: 'vista', data: vitals };
+    } catch (e) {
+      return { ok: true, source: 'vista', data: [], note: 'Vitals RPC unavailable: ' + e.message };
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/patients/:dfn/vitals', async (req, reply) => {
+    const { dfn } = req.params;
+    const { vitals } = req.body || {};
+    if (!Array.isArray(vitals) || vitals.length === 0) return reply.code(400).send({ ok: false, error: 'vitals array required' });
+    const duz = req.session?.duz || '0';
+    try {
+      const broker = await getBroker();
+      const results = [];
+      for (const v of vitals) {
+        const vitalStr = `${v.datetime || ''}^${v.type}^${v.value}^${v.unit || ''}^${v.qualifier || ''}^${dfn}^^${duz}`;
+        try {
+          await broker.callRpc('GMV ADD VM', [vitalStr]);
+          results.push({ type: v.type, ok: true });
+        } catch (err) {
+          results.push({ type: v.type, ok: false, error: err.message });
+        }
+      }
+      return { ok: results.every(r => r.ok), source: 'vista', results };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ALERT CREATION (XQALERT API)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.post('/api/tenant-admin/v1/alerts', async (req, reply) => {
+    const { to, subject, body, priority } = req.body || {};
+    if (!to || !subject) return reply.code(400).send({ ok: false, error: 'to and subject required' });
+    const duz = req.session?.duz || '0';
+    try {
+      const z = await callZveRpc('ZVE ALERT CREATE', [duz, String(to), subject, body || '', priority || 'NORMAL']);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE ALERT CREATE not deployed' });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
   // ---- SPA fallback ----
   app.setNotFoundHandler(async (_req, reply) => {
     return reply.sendFile('index.html');

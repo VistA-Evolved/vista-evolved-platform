@@ -403,4 +403,14 @@ export async function verifyInsuranceEligibility(dfn) {
   return tenantApi.post(`/patients/${dfn}/verify-eligibility`, { tenantId: 'local-dev' });
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ *  VITALS (GMV LATEST VM / GMV ADD VM via File #120.5)
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
+export async function getPatientVitals(dfn) {
+  return tenantApi.get(`/patients/${dfn}/vitals`, { tenantId: 'local-dev' });
+}
+
+export async function recordVitals(dfn, vitals) {
+  return tenantApi.post(`/patients/${dfn}/vitals`, { vitals, tenantId: 'local-dev' });
+}

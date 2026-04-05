@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
-import { getMasterConfig, updateMasterConfig, getSession } from '../../services/adminService';
+import { getMasterConfig, updateMasterConfig, getSession, submit2PChange, get2PRequests, approve2PRequest, reject2PRequest } from '../../services/adminService';
 import { parseKernelParams } from '../../utils/transforms';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -75,15 +75,30 @@ export default function MasterConfig() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [isVA, setIsVA] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [currentDuz, setCurrentDuz] = useState('');
 
   useEffect(() => {
     (async () => {
       try {
         const sess = await getSession();
         if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
+        if (sess?.user?.duz) setCurrentDuz(String(sess.user.duz));
       } catch { /* non-fatal */ }
     })();
   }, []);
+
+  const loadPending = useCallback(async () => {
+    setPendingLoading(true);
+    try {
+      const res = await get2PRequests('ALL');
+      setPendingRequests(res?.data || []);
+    } catch { setPendingRequests([]); }
+    finally { setPendingLoading(false); }
+  }, []);
+
+  useEffect(() => { loadPending(); }, [loadPending]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -130,10 +145,21 @@ export default function MasterConfig() {
     setSaving(true);
     setSaveError('');
     try {
-      await updateMasterConfig({ ...editedValues, reason: changeReason });
-      setEditedValues({});
-      setChangeReason('');
-      await loadData();
+      if (sectionMeta?.twoPersonRequired) {
+        for (const [fieldName, newVal] of Object.entries(editedValues)) {
+          const f = fields.find(ff => ff.name === fieldName);
+          await submit2PChange({ section: selectedSection, field: fieldName, oldValue: f?.value || '', newValue: String(newVal), reason: changeReason });
+        }
+        setEditedValues({});
+        setChangeReason('');
+        setSaveError('');
+        await loadPending();
+      } else {
+        await updateMasterConfig({ ...editedValues, reason: changeReason });
+        setEditedValues({});
+        setChangeReason('');
+        await loadData();
+      }
     } catch (err) {
       setSaveError(err.message || 'Failed to save configuration. Please try again.');
     } finally {
@@ -198,6 +224,47 @@ export default function MasterConfig() {
                 <strong>Two-person integrity required.</strong> Changes to {sectionMeta.label.toLowerCase()} generate a pending
                 change request that must be approved by a second administrator before taking effect.
               </CautionBanner>
+            )}
+
+            {pendingRequests.filter(r => r.status === 'PENDING').length > 0 && (
+              <div className="mb-6 p-4 bg-warning-bg border border-warning rounded-lg">
+                <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-warning text-[16px]">pending_actions</span>
+                  Pending Approval Requests ({pendingRequests.filter(r => r.status === 'PENDING').length})
+                </h3>
+                <div className="space-y-2">
+                  {pendingRequests.filter(r => r.status === 'PENDING').map(req => {
+                    const isSelf = String(req.submitterDuz) === currentDuz;
+                    return (
+                      <div key={req.id} className="p-3 bg-white rounded-md border border-border">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-text">{req.section} / {req.field}</span>
+                          <span className="text-[10px] text-text-muted">{req.submittedDate}</span>
+                        </div>
+                        <div className="text-[11px] text-text-secondary mb-1">
+                          <span className="font-mono">{req.oldValue || '—'}</span> → <span className="font-mono font-bold">{req.newValue}</span>
+                        </div>
+                        <div className="text-[10px] text-text-muted mb-2">
+                          Submitted by: {req.submitterName || req.submitterDuz}{req.reason ? ` — "${req.reason}"` : ''}
+                        </div>
+                        <div className="flex gap-2">
+                          <button disabled={isSelf || pendingLoading}
+                            onClick={async () => { setPendingLoading(true); try { await approve2PRequest(req.id); await loadPending(); await loadData(); } catch {} finally { setPendingLoading(false); } }}
+                            className="px-3 py-1.5 text-[11px] bg-[#2D6A4F] text-white rounded-md hover:bg-[#1B4332] disabled:opacity-40"
+                            title={isSelf ? 'Cannot approve your own request' : 'Approve and apply change'}>
+                            {isSelf ? 'Cannot self-approve' : 'Approve'}
+                          </button>
+                          <button disabled={isSelf || pendingLoading}
+                            onClick={async () => { setPendingLoading(true); try { await reject2PRequest(req.id); await loadPending(); } catch {} finally { setPendingLoading(false); } }}
+                            className="px-3 py-1.5 text-[11px] border border-[#CC3333] text-[#CC3333] rounded-md hover:bg-[#FDE8E8] disabled:opacity-40">
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             <h2 className="text-xl font-bold text-text mb-1">{sectionMeta?.label}</h2>

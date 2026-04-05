@@ -458,3 +458,51 @@ export async function setESignatureCode(duz, data) {
 export async function getAdminReport(reportType, params = {}) {
   return tenantApi.get(`/reports/admin/${reportType}`, params);
 }
+
+// ────────────────────────────────────────────────
+// MailMan Inbox (backend: ^XMB(3.7) / ^XMB(3.9))
+// ────────────────────────────────────────────────
+
+export async function getMailManInbox(folder = 'IN', max = 50) {
+  return tenantApi.get('/mailman/inbox', { folder, max });
+}
+
+export async function getMailManMessage(ien) {
+  return tenantApi.get(`/mailman/message/${ien}`);
+}
+
+export async function sendMailManMessage(to, subject, body) {
+  return tenantApi.post('/mailman/send', { to, subject, body });
+}
+
+export async function deleteMailManMessage(ien) {
+  return tenantApi.delete(`/mailman/message/${ien}`);
+}
+
+// ────────────────────────────────────────────────
+// Two-Person Integrity (backend: ^XTMP("ZVE2P"))
+// ────────────────────────────────────────────────
+
+export async function submit2PChange(data) {
+  return tenantApi.post('/config/2p', data);
+}
+
+export async function get2PRequests(status = 'PENDING') {
+  return tenantApi.get('/config/2p', { status });
+}
+
+export async function approve2PRequest(id) {
+  return tenantApi.post(`/config/2p/${id}/approve`);
+}
+
+export async function reject2PRequest(id) {
+  return tenantApi.post(`/config/2p/${id}/reject`);
+}
+
+// ────────────────────────────────────────────────
+// Alert Creation (backend: XQALERT API)
+// ────────────────────────────────────────────────
+
+export async function createAlert(data) {
+  return tenantApi.post('/alerts', data);
+}

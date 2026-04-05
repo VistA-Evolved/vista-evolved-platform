@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
-import { getPatient } from '../../services/patientService';
+import { getPatient, getPatientVitals, recordVitals } from '../../services/patientService';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  CWAD (Crisis / Warnings / Allergies / Advance Directives) helpers
@@ -375,31 +375,138 @@ function MedicationsPanel({ patient }) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 function VitalsPanel({ patient }) {
+  const [vitals, setVitals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showEntry, setShowEntry] = useState(false);
+
+  const loadVitals = useCallback(async () => {
+    if (!patient?.dfn) return;
+    setLoading(true);
+    try {
+      const res = await getPatientVitals(patient.dfn);
+      setVitals(res?.data || []);
+    } catch { setVitals([]); }
+    finally { setLoading(false); }
+  }, [patient?.dfn]);
+
+  useEffect(() => { loadVitals(); }, [loadVitals]);
+
+  const findVital = (type) => vitals.find(v => v.type?.toUpperCase().includes(type.toUpperCase()));
+
   return (
-    <Panel title="Recent Vitals" icon="ecg_heart">
-      <div className="mb-3 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-md">
-        <div className="flex items-center gap-2 text-amber-800">
-          <span className="material-symbols-outlined text-[16px]">info</span>
-          <span className="text-[12px] font-medium">
-            Vitals are not yet connected to VistA. Requires GMV LATEST VM RPC endpoint.
-          </span>
+    <Panel title="Recent Vitals" icon="ecg_heart"
+      action={<button onClick={() => setShowEntry(true)} className="text-[11px] text-steel hover:underline font-medium">Record Vitals</button>}>
+      {loading ? (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          {[...Array(8)].map((_, i) => <div key={i} className="h-10 animate-pulse bg-[#E2E4E8] rounded" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0">
+          {VITAL_FIELDS.map((v, i) => {
+            const match = findVital(v.name === 'SpO2' ? 'PULSE OX' : v.name);
+            const hasVal = match && match.value;
+            return (
+              <div key={i} className="flex items-center gap-2 py-1.5 border-b border-[#F0F0F0]">
+                <span className={`material-symbols-outlined text-[16px] ${hasVal ? 'text-steel' : 'text-[#CCC]'}`}>{v.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[11px] text-[#888]">{v.name}</span>
+                    <span className={`text-[12px] ${hasVal ? 'font-bold text-text' : 'text-[#CCC] italic'}`}>
+                      {hasVal ? match.value : '—'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-text-muted">{hasVal ? (match.datetime || match.unit || '') : 'No data'}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {vitals.length === 0 && !loading && (
+        <div className="text-center pt-3">
+          <button onClick={() => setShowEntry(true)} className="text-xs text-steel hover:underline">Record First Vitals</button>
+        </div>
+      )}
+      {showEntry && <VitalsEntryModal dfn={patient.dfn} onClose={() => setShowEntry(false)} onSaved={loadVitals} />}
+    </Panel>
+  );
+}
+
+function VitalsEntryModal({ dfn, onClose, onSaved }) {
+  const [vals, setVals] = useState({ bp_sys: '', bp_dia: '', pulse: '', resp: '', temp: '', spo2: '', pain: '', weight: '', height: '' });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const update = (k, v) => setVals(prev => ({ ...prev, [k]: v }));
+
+  const handleSave = async () => {
+    const vitals = [];
+    if (vals.bp_sys && vals.bp_dia) vitals.push({ type: 'BLOOD PRESSURE', value: `${vals.bp_sys}/${vals.bp_dia}`, unit: 'mmHg' });
+    if (vals.pulse) vitals.push({ type: 'PULSE', value: vals.pulse, unit: '/min' });
+    if (vals.resp) vitals.push({ type: 'RESPIRATION', value: vals.resp, unit: '/min' });
+    if (vals.temp) vitals.push({ type: 'TEMPERATURE', value: vals.temp, unit: 'F' });
+    if (vals.spo2) vitals.push({ type: 'PULSE OXIMETRY', value: vals.spo2, unit: '%' });
+    if (vals.pain) vitals.push({ type: 'PAIN', value: vals.pain, unit: '/10' });
+    if (vals.weight) vitals.push({ type: 'WEIGHT', value: vals.weight, unit: 'lb' });
+    if (vals.height) vitals.push({ type: 'HEIGHT', value: vals.height, unit: 'in' });
+    if (vitals.length === 0) { setErr('Enter at least one vital sign'); return; }
+    setSaving(true); setErr('');
+    try {
+      await recordVitals(dfn, vitals);
+      onSaved();
+      onClose();
+    } catch (e) { setErr(e.message || 'Failed to record vitals'); }
+    finally { setSaving(false); }
+  };
+
+  const Field = ({ label, k, unit, min, max, placeholder }) => (
+    <div>
+      <label className="block text-[10px] font-medium text-text-secondary mb-0.5">{label}</label>
+      <div className="flex items-center gap-1">
+        <input type="number" value={vals[k]} onChange={e => update(k, e.target.value)} min={min} max={max} placeholder={placeholder || ''}
+          className="w-full h-8 px-2 text-xs font-mono border border-border rounded focus:outline-none focus:border-steel" />
+        {unit && <span className="text-[10px] text-text-muted whitespace-nowrap">{unit}</span>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-[480px]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="font-semibold text-text">Record Vital Signs</h3>
+          <button onClick={onClose} className="text-text-muted hover:text-text"><span className="material-symbols-outlined text-[20px]">close</span></button>
+        </div>
+        <div className="px-5 py-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-[10px] font-medium text-text-secondary mb-0.5">Blood Pressure</label>
+              <div className="flex items-center gap-1">
+                <input type="number" value={vals.bp_sys} onChange={e => update('bp_sys', e.target.value)} placeholder="Sys" min={50} max={300}
+                  className="w-full h-8 px-2 text-xs font-mono border border-border rounded focus:outline-none focus:border-steel" />
+                <span className="text-text-muted">/</span>
+                <input type="number" value={vals.bp_dia} onChange={e => update('bp_dia', e.target.value)} placeholder="Dia" min={20} max={200}
+                  className="w-full h-8 px-2 text-xs font-mono border border-border rounded focus:outline-none focus:border-steel" />
+                <span className="text-[10px] text-text-muted">mmHg</span>
+              </div>
+            </div>
+            <Field label="Heart Rate" k="pulse" unit="bpm" min={20} max={250} placeholder="72" />
+            <Field label="Respiration" k="resp" unit="/min" min={4} max={60} placeholder="16" />
+            <Field label="Temperature" k="temp" unit="°F" min={90} max={110} placeholder="98.6" />
+            <Field label="SpO2" k="spo2" unit="%" min={50} max={100} placeholder="99" />
+            <Field label="Pain (0-10)" k="pain" unit="/10" min={0} max={10} placeholder="0" />
+            <Field label="Weight" k="weight" unit="lb" min={1} max={1000} placeholder="" />
+            <Field label="Height" k="height" unit="in" min={10} max={96} placeholder="" />
+          </div>
+          {err && <div className="mt-3 text-xs text-[#CC3333]">{err}</div>}
+        </div>
+        <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            className="px-4 py-2 text-sm bg-navy text-white rounded-md hover:bg-steel disabled:opacity-40">{saving ? 'Recording...' : 'Record Vitals'}</button>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-0">
-        {VITAL_FIELDS.map((v, i) => (
-          <div key={i} className="flex items-center gap-2 py-1.5 border-b border-[#F0F0F0]">
-            <span className="material-symbols-outlined text-[16px] text-[#CCC]">{v.icon}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[11px] text-[#888]">{v.name}</span>
-                <span className="text-[12px] text-[#CCC] italic">—</span>
-              </div>
-              <p className="text-[10px] text-[#DDD]">No data</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Panel>
+    </div>
   );
 }
 
