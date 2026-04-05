@@ -42,7 +42,7 @@ function buildSectionFields(kernelParams, sectionId) {
   }
   if (sectionId === 'session') {
     return [
-      { name: 'rpcTimeout', label: 'RPC Timeout', type: 'number', value: String(kernelParams.rpcTimeout?.value || 0), unit: 'seconds', hint: 'Timeout for remote procedure calls' },
+      { name: 'rpcTimeout', label: 'Response Timeout', type: 'number', value: String(kernelParams.rpcTimeout?.value || 0), unit: 'seconds', hint: 'Maximum wait time for server responses' },
     ];
   }
   if (sectionId === 'audit') {

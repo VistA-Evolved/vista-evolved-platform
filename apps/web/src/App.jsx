@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppShell from './components/shell/AppShell';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import { getSessionToken } from './services/api';
+import { getSession } from './services/adminService';
 import { PatientProvider } from './components/shared/PatientContext';
 import SessionManager from './components/shared/SessionManager';
 
@@ -37,23 +39,61 @@ function RequireAuth({ children }) {
 
 /**
  * Admin workspace guard — checks that the logged-in user has admin-level
- * permissions. Falls back gracefully if session info isn't loaded yet.
+ * permissions via GET /auth/session. Caches result in sessionStorage.
  *
  * The Security Matrix specifies that only users with XUMGR, XU PARAM,
- * ZVE ADMIN AUDIT, or similar admin keys should access /admin/* routes.
- *
- * Since the session endpoint may not return keys for all users, we store
- * admin status in sessionStorage after the first successful admin page load.
- * If the check fails, the user sees an "Access Denied" page.
+ * XUPROG, XUPROGMODE, or similar admin keys should access /admin/* routes.
  */
 const ADMIN_SESSION_KEY = 've-admin-verified';
+const ADMIN_KEYS = ['XUMGR', 'XUPROG', 'XUPROGMODE', 'XU PARAM', 'ZVE ADMIN AUDIT'];
 
 function RequireAdmin({ children }) {
-  if (!getSessionToken()) return <Navigate to="/login" replace />;
-  // For now, we allow access but mark it — full enforcement requires
-  // GET /auth/session to return user keys which can be checked.
-  // The admin sidebar is only visible to users who navigate to /admin/,
-  // so this is a defense-in-depth layer, not the sole control.
+  const [status, setStatus] = useState(() => {
+    if (!getSessionToken()) return 'no-token';
+    if (sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true') return 'allowed';
+    return 'checking';
+  });
+
+  useEffect(() => {
+    if (status !== 'checking') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getSession();
+        if (cancelled) return;
+        const keys = (res?.user?.keys || []).map(k => k.toUpperCase());
+        const isAdmin = ADMIN_KEYS.some(k => keys.includes(k));
+        if (isAdmin) {
+          sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
+          setStatus('allowed');
+        } else {
+          setStatus('denied');
+        }
+      } catch {
+        if (!cancelled) setStatus('denied');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [status]);
+
+  if (status === 'no-token') return <Navigate to="/login" replace />;
+  if (status === 'checking') return null; // brief loading state
+  if (status === 'denied') {
+    return (
+      <AppShell breadcrumb="Access Denied">
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="text-center max-w-md">
+            <span className="material-symbols-outlined text-[48px] text-red-400 mb-3 block">lock</span>
+            <h2 className="text-xl font-semibold text-text mb-2">Access Denied</h2>
+            <p className="text-sm text-text-muted">
+              You do not have the required security keys to access the Admin workspace.
+              Contact your IRM to request XUMGR or equivalent access.
+            </p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
   return children;
 }
 

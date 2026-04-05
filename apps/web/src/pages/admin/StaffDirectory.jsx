@@ -291,7 +291,7 @@ export default function StaffDirectory() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    const header = 'Name,DUZ,Status,Service,Division\n';
+                    const header = 'Name,Staff ID,Status,Service,Division\n';
                     const csv = (staffList || []).map(r => `"${r.name}","${r.duz}","${r.status}","${r.service || ''}","${r.division || ''}"`).join('\n');
                     const blob = new Blob([header + csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);

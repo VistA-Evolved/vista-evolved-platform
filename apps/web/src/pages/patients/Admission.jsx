@@ -161,9 +161,6 @@ export default function Admission() {
             <p className="text-[14px] text-[#666] mb-2">
               Admitted to <strong>{form.wardIen ? (units.find(u => u.ien === form.wardIen)?.name || form.wardIen) : ''}</strong> — Bed <strong>{form.roomBed}</strong>
             </p>
-            {successData.source === 'mock' && (
-              <p className="text-[12px] text-amber-600 mb-4">Data source: Mock (backend endpoint not yet available)</p>
-            )}
             <p className="text-[13px] text-[#888] mb-6">
               Movement ID: <span className="font-mono">{successData.movementId || '—'}</span>
             </p>

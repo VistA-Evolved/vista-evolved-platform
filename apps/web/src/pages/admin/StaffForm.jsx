@@ -71,7 +71,7 @@ const PERMISSION_GROUPS = [
       { key: 'ORES', label: 'Write clinical orders', roleDefault: ['provider'] },
       { key: 'ORES-SIGN', label: 'Sign orders electronically (requires e-signature)', roleDefault: ['provider'] },
       { key: 'ORELSE', label: 'Enter verbal / telephone orders (requires cosign)', roleDefault: ['nurse'] },
-      { key: 'OREMAS', label: 'Mark orders as signed on chart (ward clerk)', roleDefault: [] },
+      { key: 'OREMAS', label: 'Mark orders as signed on chart (unit clerk)', roleDefault: [] },
       { key: 'DG-RECORD', label: 'View patient records', roleDefault: ['provider', 'nurse', 'pharmacist', 'lab-tech'] },
       { key: 'TIU-WRITE', label: 'Write clinical notes', roleDefault: ['provider', 'nurse'] },
       { key: 'TIU-SIGN', label: 'Sign clinical notes (requires e-signature)', roleDefault: ['provider'] },

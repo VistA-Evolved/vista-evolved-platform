@@ -133,7 +133,7 @@ const KERNEL_FIELD_MAP = {
   '.02': { key: 'primaryHfsDir', label: 'Primary HFS Directory' },
   '205': { key: 'disableNewUser', label: 'Disable New User Creation' },
   '210': { key: 'autoSignOffDelay', label: 'Auto Sign-Off Delay (seconds)' },
-  '214': { key: 'rpcTimeout', label: 'RPC Timeout (seconds)' },
+  '214': { key: 'rpcTimeout', label: 'Response Timeout (seconds)' },
   '217': { key: 'siteNumber', label: 'Site Number / Name' },
   '230': { key: 'sessionTimeout', label: 'Session Timeout (seconds)' },
   '240': { key: 'welcomeMessage', label: 'Welcome Message' },

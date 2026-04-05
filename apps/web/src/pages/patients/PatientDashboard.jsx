@@ -647,9 +647,6 @@ export default function PatientDashboard() {
             <h1 className="text-[24px] font-bold text-[#1A1A2E]">Chart Overview</h1>
             <p className="text-[13px] text-[#888]">
               Cover sheet for {p.name}
-              {p.source === 'mock' && (
-                <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">MOCK DATA</span>
-              )}
             </p>
           </div>
           <div className="flex gap-2">

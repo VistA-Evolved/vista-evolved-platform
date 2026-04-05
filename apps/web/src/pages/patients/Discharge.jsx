@@ -140,8 +140,18 @@ export default function Discharge() {
                 Bed <strong>{patient.roomBed}</strong> has been freed and is now available
               </div>
             )}
-            {successData.source === 'mock' && (
-              <p className="text-[12px] text-amber-600 mb-4">Data source: Mock (backend endpoint not yet available)</p>
+            {patient?.admissionDateTime && form.dischargeDateTime && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#F0F4F8] border border-[#E2E4E8] rounded-md text-[13px] text-[#333] mb-4 ml-2">
+                <span className="material-symbols-outlined text-[14px]">schedule</span>
+                Length of Stay: <strong>{(() => {
+                  const admit = new Date(patient.admissionDateTime);
+                  const discharge = new Date(form.dischargeDateTime);
+                  const diffMs = discharge - admit;
+                  const days = Math.floor(diffMs / 86400000);
+                  const hours = Math.floor((diffMs % 86400000) / 3600000);
+                  return days > 0 ? `${days} day${days !== 1 ? 's' : ''}, ${hours} hr${hours !== 1 ? 's' : ''}` : `${hours} hour${hours !== 1 ? 's' : ''}`;
+                })()}</strong>
+              </div>
             )}
             <p className="text-[13px] text-[#888] mb-6">
               Movement ID: <span className="font-mono">{successData.movementId || '—'}</span>

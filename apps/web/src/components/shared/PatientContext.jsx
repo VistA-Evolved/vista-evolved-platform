@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { getPatient } from '../../services/patientService';
 
 const PatientContext = createContext(null);
 
@@ -19,6 +21,8 @@ const EMPTY_PATIENT = {
 
 export function PatientProvider({ children }) {
   const [patient, setPatientState] = useState(EMPTY_PATIENT);
+  const location = useLocation();
+  const loadingRef = useRef(null); // track in-flight DFN to avoid duplicates
 
   const setPatient = useCallback((data) => {
     if (!data) {
@@ -50,6 +54,36 @@ export function PatientProvider({ children }) {
   const clearPatient = useCallback(() => {
     setPatientState(EMPTY_PATIENT);
   }, []);
+
+  // URL-driven auto-fetch: if the URL contains /patients/:dfn/*, auto-load
+  // that patient so pages don't need to manually call getPatient() on mount.
+  useEffect(() => {
+    const match = location.pathname.match(/^\/patients\/(\d+)/);
+    const urlDfn = match ? match[1] : null;
+
+    // If we've left the patient context, clear it
+    if (!urlDfn) {
+      if (patient.dfn) clearPatient();
+      loadingRef.current = null;
+      return;
+    }
+
+    // Already loaded or loading this patient
+    if (urlDfn === String(patient.dfn) || urlDfn === loadingRef.current) return;
+
+    loadingRef.current = urlDfn;
+    (async () => {
+      try {
+        const res = await getPatient(urlDfn);
+        if (loadingRef.current !== urlDfn) return; // stale
+        if (res?.ok && res.data) {
+          setPatient(res.data);
+        }
+      } catch {
+        // Non-fatal — individual pages also fetch if needed
+      }
+    })();
+  }, [location.pathname, patient.dfn, clearPatient, setPatient]);
 
   return (
     <PatientContext.Provider value={{ patient, setPatient, clearPatient, hasPatient: !!patient.dfn }}>

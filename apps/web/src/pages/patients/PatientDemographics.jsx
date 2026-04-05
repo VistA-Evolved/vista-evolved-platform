@@ -500,6 +500,14 @@ export default function PatientDemographics() {
             >
               Open Chart
             </button>
+            {!isEdit && (
+              <button
+                onClick={() => navigate(`/patients/${dfn}/insurance`)}
+                className="px-5 py-2.5 border border-[#2E5984] text-[#2E5984] text-sm font-medium rounded-md hover:bg-[#F0F4F8] transition-colors"
+              >
+                Add Insurance
+              </button>
+            )}
             <button
               onClick={() => navigate(`/patients/${dfn}/schedule`)}
               className="px-5 py-2.5 border border-[#2E5984] text-[#2E5984] text-sm font-medium rounded-md hover:bg-[#F0F4F8] transition-colors"

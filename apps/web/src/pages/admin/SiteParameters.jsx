@@ -101,7 +101,7 @@ export default function SiteParameters() {
       return [
         { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. VHA Directive 6500: max 15 minutes (900 seconds).`, critical: true, enforcedMax: 900 },
         { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.`, critical: true, enforcedMax: 900 },
-        { key: 'rpcTimeout', name: 'RPC Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Timeout for remote procedure calls. Current: ${rpcTimeout} seconds.` },
+        { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.` },
       ];
     }
     return [{ key: 'stub', name: 'Parameters Not Available', value: '', type: 'readonly', description: 'These parameters require additional VistA package configuration. Only Kernel parameters are exposed via the current API.' }];

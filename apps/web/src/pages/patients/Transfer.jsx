@@ -147,9 +147,6 @@ export default function Transfer() {
             <p className="text-[14px] text-[#666] mb-2">
               Transferred from <strong>{currentWardName} — {currentBedName}</strong> to <strong>{selectedWardName} — {form.roomBed}</strong>
             </p>
-            {successData.source === 'mock' && (
-              <p className="text-[12px] text-amber-600 mb-4">Data source: Mock (backend endpoint not yet available)</p>
-            )}
             <p className="text-[13px] text-[#888] mb-6">
               Movement ID: <span className="font-mono">{successData.movementId || '—'}</span>
             </p>

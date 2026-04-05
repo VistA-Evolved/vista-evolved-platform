@@ -398,7 +398,7 @@ export default function RecordRestrictions() {
                     <thead>
                       <tr className="bg-[#1A1A2E] text-white text-left">
                         <th className="px-3 py-2 font-medium">Staff Name</th>
-                        <th className="px-3 py-2 font-medium">DUZ</th>
+                        <th className="px-3 py-2 font-medium">Staff ID</th>
                         <th className="px-3 py-2 font-medium">Role</th>
                         <th className="px-3 py-2 font-medium">Date Added</th>
                         <th className="px-3 py-2 font-medium">Added By</th>
@@ -456,7 +456,7 @@ export default function RecordRestrictions() {
                             type="text"
                             value={staffSearch}
                             onChange={e => handleStaffSearch(e.target.value)}
-                            placeholder="Search by name or DUZ..."
+                            placeholder="Search by name or ID..."
                             className="w-full pl-9 pr-3 py-2 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984]"
                             autoFocus
                           />
@@ -484,7 +484,7 @@ export default function RecordRestrictions() {
                             >
                               <div>
                                 <p className="text-[13px] font-medium text-[#1A1A2E]">{s.name}</p>
-                                <p className="text-[11px] text-[#888]">DUZ: {s.duz} · {s.role}</p>
+                                <p className="text-[11px] text-[#888]">ID: {s.duz} · {s.role}</p>
                               </div>
                               {alreadyAdded ? (
                                 <span className="text-[11px] text-green-700 font-medium">Already Added</span>
