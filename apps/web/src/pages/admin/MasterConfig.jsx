@@ -22,7 +22,12 @@ const CONFIG_SECTIONS = [
   { id: 'backup', label: 'Backup Verification', icon: 'backup', twoPersonRequired: false },
 ];
 
-// Maps parsed kernel params to config section fields
+const FIELD_TO_VISTA_PARAM = {
+  sessionTimeout: 'AUTOLOGOFF',
+  autoSignoff: 'AUTOLOGOFF',
+  rpcTimeout: 'BROKER TIMEOUT',
+};
+
 function buildSectionFields(kernelParams, sectionId, isVA = true) {
   if (!kernelParams) return [];
   const ts = Number(kernelParams.sessionTimeout?.value || 0);
@@ -148,12 +153,14 @@ export default function MasterConfig() {
       if (sectionMeta?.twoPersonRequired) {
         for (const [fieldName, newVal] of Object.entries(editedValues)) {
           const f = fields.find(ff => ff.name === fieldName);
-          await submit2PChange({ section: selectedSection, field: fieldName, oldValue: f?.value || '', newValue: String(newVal), reason: changeReason });
+          const vistaParam = FIELD_TO_VISTA_PARAM[fieldName] || fieldName.toUpperCase();
+          await submit2PChange({ section: selectedSection, field: vistaParam, oldValue: f?.value || '', newValue: String(newVal), reason: changeReason });
         }
         setEditedValues({});
         setChangeReason('');
-        setSaveError('');
+        setSaveError('submitted');
         await loadPending();
+        setTimeout(() => setSaveError(''), 4000);
       } else {
         await updateMasterConfig({ ...editedValues, reason: changeReason });
         setEditedValues({});
@@ -224,6 +231,13 @@ export default function MasterConfig() {
                 <strong>Two-person integrity required.</strong> Changes to {sectionMeta.label.toLowerCase()} generate a pending
                 change request that must be approved by a second administrator before taking effect.
               </CautionBanner>
+            )}
+
+            {saveError === 'submitted' && (
+              <div className="mb-4 p-3 bg-[#E8F5E9] border border-[#2D6A4F] rounded-lg text-[12px] text-[#2D6A4F] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                Change request submitted for approval. A second administrator must approve before the change takes effect.
+              </div>
             )}
 
             {pendingRequests.filter(r => r.status === 'PENDING').length > 0 && (
@@ -335,7 +349,7 @@ export default function MasterConfig() {
                     placeholder="Document the reason for this change"
                     className="w-full h-16 px-3 py-2 text-xs border border-border rounded-md resize-none focus:outline-none focus:border-steel" />
                 </div>
-                {saveError && (
+                {saveError && saveError !== 'submitted' && (
                   <div className="p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[11px] text-[#CC3333] flex items-start gap-2 mb-3">
                     <span className="material-symbols-outlined text-[14px] mt-0.5">error</span>
                     <span>{saveError}</span>

@@ -6006,10 +6006,12 @@ async function main() {
   app.get('/api/tenant-admin/v1/patients/:dfn/vitals', async (req, reply) => {
     const { dfn } = req.params;
     try {
-      const broker = await getBroker();
-      const lines = await broker.callRpc('GMV LATEST VM', [dfn]);
+      const lines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpc('GMV LATEST VM', [dfn]);
+      });
       const vitals = [];
-      for (const line of lines) {
+      for (const line of (Array.isArray(lines) ? lines : [lines])) {
         if (!line || !line.includes('^')) continue;
         const p = line.split('^');
         if (p.length >= 3) vitals.push({ type: p[0]?.trim(), datetime: p[1]?.trim(), value: p[2]?.trim(), unit: p[3]?.trim() || '', qualifier: p[4]?.trim() || '' });
@@ -6026,17 +6028,20 @@ async function main() {
     if (!Array.isArray(vitals) || vitals.length === 0) return reply.code(400).send({ ok: false, error: 'vitals array required' });
     const duz = req.session?.duz || '0';
     try {
-      const broker = await getBroker();
-      const results = [];
-      for (const v of vitals) {
-        const vitalStr = `${v.datetime || ''}^${v.type}^${v.value}^${v.unit || ''}^${v.qualifier || ''}^${dfn}^^${duz}`;
-        try {
-          await broker.callRpc('GMV ADD VM', [vitalStr]);
-          results.push({ type: v.type, ok: true });
-        } catch (err) {
-          results.push({ type: v.type, ok: false, error: err.message });
+      const results = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const out = [];
+        for (const v of vitals) {
+          const vitalStr = `${v.datetime || ''}^${v.type}^${v.value}^${v.unit || ''}^${v.qualifier || ''}^${dfn}^^${duz}`;
+          try {
+            await broker.callRpc('GMV ADD VM', [vitalStr]);
+            out.push({ type: v.type, ok: true });
+          } catch (err) {
+            out.push({ type: v.type, ok: false, error: err.message });
+          }
         }
-      }
+        return out;
+      });
       return { ok: results.every(r => r.ok), source: 'vista', results };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });

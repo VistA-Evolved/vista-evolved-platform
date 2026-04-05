@@ -39,7 +39,7 @@ function buildCwad(patient) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
- *  Vitals — Placeholder fields for when VistA vitals endpoint is available
+ *  Vitals — Field definitions for GMV LATEST VM display grid
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 const VITAL_FIELDS = [
@@ -459,8 +459,8 @@ function VitalsEntryModal({ dfn, onClose, onSaved }) {
     finally { setSaving(false); }
   };
 
-  const Field = ({ label, k, unit, min, max, placeholder }) => (
-    <div>
+  const vitalField = (label, k, unit, min, max, placeholder) => (
+    <div key={k}>
       <label className="block text-[10px] font-medium text-text-secondary mb-0.5">{label}</label>
       <div className="flex items-center gap-1">
         <input type="number" value={vals[k]} onChange={e => update(k, e.target.value)} min={min} max={max} placeholder={placeholder || ''}
@@ -490,13 +490,13 @@ function VitalsEntryModal({ dfn, onClose, onSaved }) {
                 <span className="text-[10px] text-text-muted">mmHg</span>
               </div>
             </div>
-            <Field label="Heart Rate" k="pulse" unit="bpm" min={20} max={250} placeholder="72" />
-            <Field label="Respiration" k="resp" unit="/min" min={4} max={60} placeholder="16" />
-            <Field label="Temperature" k="temp" unit="°F" min={90} max={110} placeholder="98.6" />
-            <Field label="SpO2" k="spo2" unit="%" min={50} max={100} placeholder="99" />
-            <Field label="Pain (0-10)" k="pain" unit="/10" min={0} max={10} placeholder="0" />
-            <Field label="Weight" k="weight" unit="lb" min={1} max={1000} placeholder="" />
-            <Field label="Height" k="height" unit="in" min={10} max={96} placeholder="" />
+            {vitalField('Heart Rate', 'pulse', 'bpm', 20, 250, '72')}
+            {vitalField('Respiration', 'resp', '/min', 4, 60, '16')}
+            {vitalField('Temperature', 'temp', '°F', 90, 110, '98.6')}
+            {vitalField('SpO2', 'spo2', '%', 50, 100, '99')}
+            {vitalField('Pain (0-10)', 'pain', '/10', 0, 10, '0')}
+            {vitalField('Weight', 'weight', 'lb', 1, 1000, '')}
+            {vitalField('Height', 'height', 'in', 10, 96, '')}
           </div>
           {err && <div className="mt-3 text-xs text-[#CC3333]">{err}</div>}
         </div>

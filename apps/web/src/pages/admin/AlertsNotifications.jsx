@@ -455,6 +455,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
     try {
       const res = await getMailManMessage(msg.ien);
       setMessageBody(res?.data || null);
+      setMessages(prev => prev.map(m => m.ien === msg.ien ? { ...m, read: true } : m));
     } catch { setMessageBody(null); }
     finally { setMessageBodyLoading(false); }
   };
