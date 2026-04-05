@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getSession } from '../../services/adminService';
-import { getSiteWorkspaces } from '../../services/adminService';
+import { getSession, getSiteWorkspaces } from '../../services/adminService';
 
 const workspaces = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },

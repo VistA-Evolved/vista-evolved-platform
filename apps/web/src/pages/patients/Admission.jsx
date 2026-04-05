@@ -231,7 +231,7 @@ export default function Admission() {
                         <option value="">Select provider...</option>
                         {providers.length > 0
                           ? providers.slice(0, 50).map(p => <option key={p.duz || p.ien || p.name} value={p.name}>{p.name}</option>)
-                          : <option value="DR. WILSON,SARAH">DR. WILSON,SARAH</option>
+                          : <option value="" disabled>No providers loaded</option>
                         }
                       </select>
                     )}

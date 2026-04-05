@@ -2585,6 +2585,22 @@ async function main() {
     return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '405.4', ien, fieldCount: result.fieldCount, lines: result.lines };
   });
 
+  app.delete('/api/tenant-admin/v1/room-beds/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const iens = `${ien},`;
+      const result = await ddrFilerEditMulti('405.4', iens, { '.01': '@' });
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', stage: 'DDR FILER DELETE', error: result.error, lines: result.lines });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER', file: '405.4', ien, action: 'deleted' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
   // ---- Title detail + edit (File 3.1) ----
 
   app.get('/api/tenant-admin/v1/titles/:ien', async (req, reply) => {

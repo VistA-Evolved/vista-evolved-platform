@@ -185,7 +185,7 @@ export default function RegistrationReports() {
               <p className="text-[13px] text-[#555]">
                 <span className="font-medium text-[#1A1A2E]">{report?.label}:</span> {report?.desc}
               </p>
-              {data?.source === 'mock' && null}
+              
             </div>
 
             {/* Data Table */}
