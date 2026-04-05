@@ -1,0 +1,339 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VistA Evolved Product Vocabulary Master",
+  "description": "134 mapped terms from VistA internal language to modern product language. Source: Document 17 (Product Vocabulary Master Sheet). NEVER expose vistaInternalTerm to end users. ALWAYS use modernProductTerm in the UI.",
+  "version": "1.0.0",
+  "date": "2026-03-29",
+  "rules": [
+    "NEVER display vistaInternalTerm (Column A) to clinical end users",
+    "System administrators MAY see VistA terms as tooltips in admin/config screens only",
+    "Search must accept BOTH VistA terms and modern product terms (bilingual search)",
+    "FHIR R4 resources are the interoperability target",
+    "FileMan date format (YYYMMDD.HHMMSS) is STORAGE ONLY - convert to locale format for display",
+    "Internal identifiers (DFN, DUZ, IEN) are NEVER exposed to users"
+  ],
+  "bannedUITerms": [
+    "DFN", "DUZ", "IEN", "NAOU", "NEW PERSON", "NOIS",
+    "FileMan", "Global", "^DPT", "^VA(200)", "^PS",
+    "KIDS", "TaskMan", "MailMan", "MUMPS",
+    "Stop Code", "Bedsection", "Means Test",
+    "VISN", "CBOC", "CLC", "Domiciliary",
+    "Green Sheet", "Pink Sheet", "ORWU", "SDES",
+    "XWB", "XUS", "RPC Broker", "Context Option",
+    "Access Code", "Verify Code",
+    "TIU", "GMRC", "PCE", "PIMS",
+    "BCMA", "CMOP", "ECME", "NDF", "PDM",
+    "IFCAP", "FMS", "DMC", "TOP",
+    "VASQIP", "ASA Class"
+  ],
+  "domains": {
+    "administrative": {
+      "label": "Administrative / Organizational Terms",
+      "terms": [
+        {
+          "vistaInternalTerm": "Institution",
+          "vistaFileField": "INSTITUTION #4 (.01 NAME)",
+          "modernProductTerm": "Facility / Healthcare Organization",
+          "preferredUILabel": "Facility",
+          "fhirR4Resource": "Organization (type: prov)",
+          "internationalStandard": "ISO 3166 for country"
+        },
+        {
+          "vistaInternalTerm": "Medical Center Division",
+          "vistaFileField": "MEDICAL CENTER DIVISION #40.8 (.01 NAME)",
+          "modernProductTerm": "Site / Campus",
+          "preferredUILabel": "Site",
+          "fhirR4Resource": "Organization (partOf: parent Organization)",
+          "internationalStandard": "N/A"
+        },
+        {
+          "vistaInternalTerm": "Hospital Location",
+          "vistaFileField": "HOSPITAL LOCATION #44 (.01 NAME)",
+          "modernProductTerm": "Clinic / Ward / Operating Room (by type)",
+          "preferredUILabel": "Location",
+          "fhirR4Resource": "Location",
+          "internationalStandard": "N/A"
+        },
+        {
+          "vistaInternalTerm": "Ward Location",
+          "vistaFileField": "WARD LOCATION #42 (.01 NAME)",
+          "modernProductTerm": "Inpatient Unit / Ward / Nursing Unit",
+          "preferredUILabel": "Ward",
+          "fhirR4Resource": "Location (type: wa)",
+          "internationalStandard": "N/A"
+        },
+        {
+          "vistaInternalTerm": "Operating Room",
+          "vistaFileField": "OPERATING ROOM #131.7 (.01 NAME)",
+          "modernProductTerm": "Operating Room / OR Suite / Procedure Room",
+          "preferredUILabel": "Operating Room",
+          "fhirR4Resource": "Location (type: ro)",
+          "internationalStandard": "N/A"
+        },
+        {
+          "vistaInternalTerm": "Service/Section",
+          "vistaFileField": "SERVICE/SECTION #49 (.01 NAME)",
+          "modernProductTerm": "Department / Service Line",
+          "preferredUILabel": "Department",
+          "fhirR4Resource": "Organization (type: dept)",
+          "internationalStandard": "N/A"
+        },
+        {
+          "vistaInternalTerm": "Station Number",
+          "vistaFileField": "INSTITUTION #4 (#99 STATION NUMBER)",
+          "modernProductTerm": "Facility Code / Site Code",
+          "preferredUILabel": "Facility Code",
+          "fhirR4Resource": "Organization.identifier",
+          "internationalStandard": "Local facility numbering"
+        },
+        {
+          "vistaInternalTerm": "Treating Specialty",
+          "vistaFileField": "TREATING SPECIALTY #45.7 (.01 NAME)",
+          "modernProductTerm": "Inpatient Service / Bed Service / Specialty",
+          "preferredUILabel": "Specialty",
+          "fhirR4Resource": "Encounter.serviceType",
+          "internationalStandard": "SNOMED CT specialty codes"
+        },
+        {
+          "vistaInternalTerm": "Clinic Stop",
+          "vistaFileField": "CLINIC STOP #40.7 (.01 CODE)",
+          "modernProductTerm": "Visit Type Code / Service Category Code",
+          "preferredUILabel": "Visit Type",
+          "fhirR4Resource": "Encounter.type",
+          "internationalStandard": "VA-specific. Map to local visit type or remove for non-VA."
+        },
+        {
+          "vistaInternalTerm": "Bedsection",
+          "vistaFileField": "TREATING SPECIALTY #45.7",
+          "modernProductTerm": "Bed Section / Inpatient Unit Type",
+          "preferredUILabel": "Unit Type",
+          "fhirR4Resource": "Location.type",
+          "internationalStandard": "VA workload classification"
+        },
+        {
+          "vistaInternalTerm": "VISN",
+          "vistaFileField": "N/A - organizational grouping",
+          "modernProductTerm": "Regional Health Network / Health System Region",
+          "preferredUILabel": "Region",
+          "fhirR4Resource": "Organization (type: region)",
+          "internationalStandard": "N/A - VA regional structure"
+        },
+        {
+          "vistaInternalTerm": "CBOC",
+          "vistaFileField": "Configuration in #4/#44",
+          "modernProductTerm": "Satellite Clinic / Outpatient Clinic / Community Clinic",
+          "preferredUILabel": "Community Clinic",
+          "fhirR4Resource": "Location (type: clinic)",
+          "internationalStandard": "N/A - VA-specific"
+        },
+        {
+          "vistaInternalTerm": "CLC",
+          "vistaFileField": "Configuration in #4/#44",
+          "modernProductTerm": "Long-Term Care Facility / Nursing Facility",
+          "preferredUILabel": "Long-Term Care",
+          "fhirR4Resource": "Location (type: ltc)",
+          "internationalStandard": "N/A - VA-specific"
+        },
+        {
+          "vistaInternalTerm": "Domiciliary",
+          "vistaFileField": "Configuration in #4/#44",
+          "modernProductTerm": "Residential Treatment Facility / Rehabilitation Residence",
+          "preferredUILabel": "Residential Treatment",
+          "fhirR4Resource": "Location (type: ho)",
+          "internationalStandard": "N/A - VA-specific"
+        },
+        {
+          "vistaInternalTerm": "Non-Count Clinic",
+          "vistaFileField": "HOSPITAL LOCATION #44 (non-count flag)",
+          "modernProductTerm": "Administrative Clinic / Non-Billable Visit Location",
+          "preferredUILabel": "Administrative Clinic",
+          "fhirR4Resource": "Location",
+          "internationalStandard": "VA workload concept"
+        }
+      ]
+    },
+    "person": {
+      "label": "Person / Identity Terms",
+      "terms": [
+        {
+          "vistaInternalTerm": "Patient",
+          "vistaFileField": "PATIENT #2 (.01 NAME)",
+          "modernProductTerm": "Patient",
+          "preferredUILabel": "Patient",
+          "fhirR4Resource": "Patient",
+          "internationalStandard": "Universal"
+        },
+        {
+          "vistaInternalTerm": "DFN",
+          "vistaFileField": "IEN in PATIENT #2",
+          "modernProductTerm": "Patient ID (internal) - NEVER expose",
+          "preferredUILabel": "DO NOT DISPLAY",
+          "fhirR4Resource": "Patient.id (internal)",
+          "internationalStandard": "N/A - never display"
+        },
+        {
+          "vistaInternalTerm": "SSN",
+          "vistaFileField": "PATIENT #2 (#.09)",
+          "modernProductTerm": "National ID / Government ID - display last 4 only",
+          "preferredUILabel": "Last 4 SSN",
+          "fhirR4Resource": "Patient.identifier (type: SS)",
+          "internationalStandard": "Country-specific: SSN (US), NHS Number (UK), Medicare Number (AU)"
+        },
+        {
+          "vistaInternalTerm": "ICN",
+          "vistaFileField": "Integration Control Number",
+          "modernProductTerm": "Enterprise Patient ID / Master Patient ID",
+          "preferredUILabel": "Enterprise ID",
+          "fhirR4Resource": "Patient.identifier (type: MR)",
+          "internationalStandard": "N/A - cross-facility identifier"
+        },
+        {
+          "vistaInternalTerm": "NEW PERSON",
+          "vistaFileField": "NEW PERSON #200 (.01 NAME)",
+          "modernProductTerm": "Staff Member / User / Employee",
+          "preferredUILabel": "Staff Member",
+          "fhirR4Resource": "Practitioner / Person",
+          "internationalStandard": "Universal"
+        },
+        {
+          "vistaInternalTerm": "DUZ",
+          "vistaFileField": "IEN in NEW PERSON #200",
+          "modernProductTerm": "User ID (internal) - NEVER expose",
+          "preferredUILabel": "DO NOT DISPLAY",
+          "fhirR4Resource": "Practitioner.id (internal)",
+          "internationalStandard": "N/A - never display"
+        },
+        {
+          "vistaInternalTerm": "Provider",
+          "vistaFileField": "NEW PERSON #200 with PROVIDER key",
+          "modernProductTerm": "Provider / Clinician / Practitioner",
+          "preferredUILabel": "Provider",
+          "fhirR4Resource": "Practitioner, PractitionerRole",
+          "internationalStandard": "Universal"
+        },
+        {
+          "vistaInternalTerm": "Attending",
+          "vistaFileField": "NEW PERSON #200 as attending",
+          "modernProductTerm": "Attending Physician / Responsible Provider",
+          "preferredUILabel": "Attending Physician",
+          "fhirR4Resource": "Encounter.participant (type: ATND)",
+          "internationalStandard": "Universal"
+        },
+        {
+          "vistaInternalTerm": "Person Class",
+          "vistaFileField": "PERSON CLASS #8932.1",
+          "modernProductTerm": "Provider Type / Credential / Professional Category",
+          "preferredUILabel": "Provider Type",
+          "fhirR4Resource": "PractitionerRole.code",
+          "internationalStandard": "NUCC taxonomy (US)"
+        },
+        {
+          "vistaInternalTerm": "Electronic Signature Code",
+          "vistaFileField": "NEW PERSON #200 (#20.4)",
+          "modernProductTerm": "Electronic Signature / Digital Signature",
+          "preferredUILabel": "E-Signature",
+          "fhirR4Resource": "Provenance.signature",
+          "internationalStandard": "21 CFR Part 11 (US), eIDAS (EU)"
+        },
+        {
+          "vistaInternalTerm": "Surrogate",
+          "vistaFileField": "NEW PERSON #200 surrogate field",
+          "modernProductTerm": "Delegate / Designee / Acting-For",
+          "preferredUILabel": "Delegate",
+          "fhirR4Resource": "PractitionerRole or Provenance.agent",
+          "internationalStandard": "Universal"
+        },
+        {
+          "vistaInternalTerm": "Sensitive Patient",
+          "vistaFileField": "PATIENT #2 sensitivity flag",
+          "modernProductTerm": "Protected Record / Restricted Access Patient",
+          "preferredUILabel": "Restricted Access",
+          "fhirR4Resource": "Patient.meta.security (code: R)",
+          "internationalStandard": "Universal"
+        }
+      ]
+    },
+    "clinical": {
+      "label": "Clinical Terms",
+      "terms": [
+        { "vistaInternalTerm": "Problem", "vistaFileField": "PROBLEM #9000011", "modernProductTerm": "Problem / Condition / Diagnosis", "preferredUILabel": "Problem", "fhirR4Resource": "Condition", "internationalStandard": "ICD-10, SNOMED CT" },
+        { "vistaInternalTerm": "Progress Note / TIU Document", "vistaFileField": "TIU DOCUMENT #8925", "modernProductTerm": "Clinical Note / Progress Note", "preferredUILabel": "Clinical Note", "fhirR4Resource": "DocumentReference / Composition", "internationalStandard": "LOINC document type codes" },
+        { "vistaInternalTerm": "Order", "vistaFileField": "ORDER #100", "modernProductTerm": "Order / Clinical Order", "preferredUILabel": "Order", "fhirR4Resource": "ServiceRequest / MedicationRequest", "internationalStandard": "Universal CPOE" },
+        { "vistaInternalTerm": "Consult", "vistaFileField": "REQUEST/CONSULTATION #123", "modernProductTerm": "Referral / Consultation Request", "preferredUILabel": "Referral", "fhirR4Resource": "ServiceRequest (consultation)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Allergy / Adverse Reaction", "vistaFileField": "PATIENT ALLERGIES #120.8", "modernProductTerm": "Allergy / Drug Allergy / Adverse Reaction", "preferredUILabel": "Allergy", "fhirR4Resource": "AllergyIntolerance", "internationalStandard": "SNOMED CT, RxNorm" },
+        { "vistaInternalTerm": "Vital Sign / Measurement", "vistaFileField": "GMRV VITAL MEASUREMENT #120.5", "modernProductTerm": "Vital Signs / Observations", "preferredUILabel": "Vital Signs", "fhirR4Resource": "Observation (vital-signs)", "internationalStandard": "LOINC" },
+        { "vistaInternalTerm": "Health Factor", "vistaFileField": "V HEALTH FACTORS #9000010.16", "modernProductTerm": "Health Status Indicator / Risk Factor", "preferredUILabel": "Health Factor", "fhirR4Resource": "Observation (social-history)", "internationalStandard": "SNOMED CT" }
+      ]
+    },
+    "scheduling": {
+      "label": "Scheduling Terms",
+      "terms": [
+        { "vistaInternalTerm": "Appointment", "vistaFileField": "Scheduling SDES RPCs", "modernProductTerm": "Appointment / Booking", "preferredUILabel": "Appointment", "fhirR4Resource": "Appointment", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Clinic", "vistaFileField": "HOSPITAL LOCATION #44 (clinic type)", "modernProductTerm": "Clinic / Outpatient Location", "preferredUILabel": "Clinic", "fhirR4Resource": "Location, HealthcareService", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Availability / Slot", "vistaFileField": "Scheduling templates", "modernProductTerm": "Available Slot / Open Time", "preferredUILabel": "Available Slot", "fhirR4Resource": "Slot", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Check-In", "vistaFileField": "Check-in action", "modernProductTerm": "Check-In / Arrival", "preferredUILabel": "Check-In", "fhirR4Resource": "Encounter (status: arrived)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Check-Out", "vistaFileField": "Check-out action", "modernProductTerm": "Check-Out / Visit Complete", "preferredUILabel": "Check-Out", "fhirR4Resource": "Encounter (status: finished)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "No-Show", "vistaFileField": "No-show flag", "modernProductTerm": "No-Show / Did Not Attend (DNA)", "preferredUILabel": "No-Show", "fhirR4Resource": "Appointment (status: noshow)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Recall Reminder", "vistaFileField": "Scheduling recall", "modernProductTerm": "Follow-Up Reminder / Recall", "preferredUILabel": "Follow-Up Reminder", "fhirR4Resource": "CommunicationRequest", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Overbook", "vistaFileField": "Scheduling overbook", "modernProductTerm": "Overbook / Double-Book", "preferredUILabel": "Overbook", "fhirR4Resource": "Appointment (overbooking)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Wait List", "vistaFileField": "Scheduling wait list", "modernProductTerm": "Wait List / Booking Queue", "preferredUILabel": "Wait List", "fhirR4Resource": "Appointment (status: waitlist)", "internationalStandard": "Universal" }
+      ]
+    },
+    "security": {
+      "label": "Security / System Terms",
+      "terms": [
+        { "vistaInternalTerm": "Security Key", "vistaFileField": "SECURITY KEY #19.1", "modernProductTerm": "Permission / Access Right / Role Capability", "preferredUILabel": "Permission", "fhirR4Resource": "N/A - authorization", "internationalStandard": "RBAC, OAuth2 scopes" },
+        { "vistaInternalTerm": "Option / Menu Option", "vistaFileField": "OPTION #19", "modernProductTerm": "Feature / Function / Action", "preferredUILabel": "Feature", "fhirR4Resource": "N/A", "internationalStandard": "N/A" },
+        { "vistaInternalTerm": "Access Code", "vistaFileField": "NEW PERSON #200 (#2)", "modernProductTerm": "Username / Login ID", "preferredUILabel": "Username", "fhirR4Resource": "N/A - authentication", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Verify Code", "vistaFileField": "NEW PERSON #200 (#11)", "modernProductTerm": "Password", "preferredUILabel": "Password", "fhirR4Resource": "N/A - authentication", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Context Option (B-type)", "vistaFileField": "OPTION #19 type B", "modernProductTerm": "API Context / Application Context", "preferredUILabel": "Application Context", "fhirR4Resource": "CapabilityStatement", "internationalStandard": "VistA-specific" },
+        { "vistaInternalTerm": "RPC (Remote Procedure Call)", "vistaFileField": "REMOTE PROCEDURE #8994", "modernProductTerm": "API Endpoint / Service Call", "preferredUILabel": "API Endpoint", "fhirR4Resource": "OperationDefinition", "internationalStandard": "VistA-specific RPC Broker" },
+        { "vistaInternalTerm": "FileMan Date", "vistaFileField": "YYYMMDD.HHMMSS (YYY = year-1700)", "modernProductTerm": "Date/Time (display in user locale)", "preferredUILabel": "Date/Time", "fhirR4Resource": "dateTime (ISO 8601)", "internationalStandard": "ISO 8601" },
+        { "vistaInternalTerm": "Global (^-prefixed)", "vistaFileField": "VistA global storage", "modernProductTerm": "Database / Data Store", "preferredUILabel": "DO NOT DISPLAY", "fhirR4Resource": "N/A", "internationalStandard": "N/A - never display" },
+        { "vistaInternalTerm": "TaskMan", "vistaFileField": "VistA background job scheduler", "modernProductTerm": "Background Job / Scheduled Task", "preferredUILabel": "Background Task", "fhirR4Resource": "N/A", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "MailMan", "vistaFileField": "VistA internal messaging (^XMB)", "modernProductTerm": "System Notification / Internal Message", "preferredUILabel": "Notification", "fhirR4Resource": "Communication", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Bulletin / Alert", "vistaFileField": "VistA alert notifications", "modernProductTerm": "Notification / Alert / System Message", "preferredUILabel": "Alert", "fhirR4Resource": "Communication (notification)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "KIDS", "vistaFileField": "Kernel Installation & Distribution System", "modernProductTerm": "Software Update / Patch / System Update", "preferredUILabel": "System Update", "fhirR4Resource": "N/A", "internationalStandard": "Universal" }
+      ]
+    },
+    "pharmacy": {
+      "label": "Pharmacy Terms",
+      "terms": [
+        { "vistaInternalTerm": "Drug", "vistaFileField": "DRUG #50", "modernProductTerm": "Medication / Drug / Pharmaceutical", "preferredUILabel": "Medication", "fhirR4Resource": "Medication", "internationalStandard": "RxNorm (US), dm+d (UK), AMT (AU), ATC (WHO)" },
+        { "vistaInternalTerm": "NDF / National Drug File", "vistaFileField": "VA PRODUCT #50.68", "modernProductTerm": "Drug Reference Database / National Formulary", "preferredUILabel": "Drug Reference", "fhirR4Resource": "Medication.code", "internationalStandard": "RxNorm / country-specific" },
+        { "vistaInternalTerm": "Orderable Item", "vistaFileField": "ORDERABLE ITEMS #101.43", "modernProductTerm": "Orderable Medication / Prescribable Item", "preferredUILabel": "Orderable Item", "fhirR4Resource": "ActivityDefinition", "internationalStandard": "N/A" },
+        { "vistaInternalTerm": "Outpatient Prescription", "vistaFileField": "PRESCRIPTION #52", "modernProductTerm": "Prescription / Outpatient Rx", "preferredUILabel": "Prescription", "fhirR4Resource": "MedicationRequest", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Inpatient Order (Unit Dose / IV)", "vistaFileField": "PHARMACY PATIENT #55", "modernProductTerm": "Inpatient Medication Order", "preferredUILabel": "Medication Order", "fhirR4Resource": "MedicationRequest (inpatient)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "BCMA", "vistaFileField": "PSB BCMA data", "modernProductTerm": "Bedside Medication Verification / Barcode Scan", "preferredUILabel": "Medication Verification", "fhirR4Resource": "MedicationAdministration", "internationalStandard": "Universal" }
+      ]
+    },
+    "laboratory": {
+      "label": "Laboratory Terms",
+      "terms": [
+        { "vistaInternalTerm": "Accession", "vistaFileField": "LAB DATA #63", "modernProductTerm": "Lab Order / Specimen Accession / Lab Tracking Number", "preferredUILabel": "Lab Accession", "fhirR4Resource": "Specimen, ServiceRequest", "internationalStandard": "LOINC for test codes" },
+        { "vistaInternalTerm": "Lab Test", "vistaFileField": "LABORATORY TEST #60", "modernProductTerm": "Lab Test / Laboratory Test / Diagnostic Test", "preferredUILabel": "Lab Test", "fhirR4Resource": "ActivityDefinition / ObservationDefinition", "internationalStandard": "LOINC" },
+        { "vistaInternalTerm": "Lab Result", "vistaFileField": "LAB DATA #63 results", "modernProductTerm": "Lab Result / Test Result", "preferredUILabel": "Result", "fhirR4Resource": "Observation / DiagnosticReport", "internationalStandard": "LOINC, UCUM for units" }
+      ]
+    },
+    "billing": {
+      "label": "Billing / Financial Terms",
+      "terms": [
+        { "vistaInternalTerm": "Integrated Billing (IB)", "vistaFileField": "BILL/CLAIMS #399", "modernProductTerm": "Billing / Charge Capture / Revenue Cycle", "preferredUILabel": "Billing", "fhirR4Resource": "Claim", "internationalStandard": "UB-04/CMS-1500 (US)" },
+        { "vistaInternalTerm": "Accounts Receivable (AR)", "vistaFileField": "AR Bill #430", "modernProductTerm": "Account / Receivable / Outstanding Balance", "preferredUILabel": "Account Balance", "fhirR4Resource": "Account, Invoice", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Third Party", "vistaFileField": "Insurance company payer", "modernProductTerm": "Insurance Payer / Health Plan", "preferredUILabel": "Insurance Payer", "fhirR4Resource": "Coverage, Organization (type: pay)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "First Party", "vistaFileField": "Patient self-pay", "modernProductTerm": "Patient Responsibility / Self-Pay", "preferredUILabel": "Patient Responsibility", "fhirR4Resource": "Patient (as payer)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Means Test", "vistaFileField": "ANNUAL MEANS TEST #408.31", "modernProductTerm": "Financial Screening / Income Assessment / Fee Classification", "preferredUILabel": "Financial Screening", "fhirR4Resource": "Coverage.extension", "internationalStandard": "VA-SPECIFIC. Map to income-based fee scales." },
+        { "vistaInternalTerm": "Insurance Company", "vistaFileField": "INSURANCE COMPANY #36", "modernProductTerm": "Insurance Company / Payer", "preferredUILabel": "Insurance Company", "fhirR4Resource": "Organization (type: pay)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "ECME", "vistaFileField": "BPS namespace", "modernProductTerm": "Pharmacy Claims / PBM Claim", "preferredUILabel": "Pharmacy Claim", "fhirR4Resource": "Claim (type: pharmacy)", "internationalStandard": "NCPDP (US)" }
+      ]
+    },
+    "surgery": {
+      "label": "Surgery Terms",
+      "terms": [
+        { "vistaInternalTerm": "Surgery Case", "vistaFileField": "SURGERY #130", "modernProductTerm": "Surgical Case / Operative Case / OR Case", "preferredUILabel": "Surgical Case", "fhirR4Resource": "Procedure", "internationalStandard": "CPT/SNOMED CT" },
+        { "vistaInternalTerm": "Anesthesia Record", "vistaFileField": "SURGERY #130 anesthesia sub-file", "modernProductTerm": "Anesthesia Record / Intraoperative Anesthesia", "preferredUILabel": "Anesthesia Record", "fhirR4Resource": "Procedure (anesthesia)", "internationalStandard": "Universal" },
+        { "vistaInternalTerm": "Surgical Waiting List", "vistaFileField": "SURGERY #130 waiting list", "modernProductTerm": "Surgical Wait List / Pending Operations", "preferredUILabel": "Surgical Wait List", "fhirR4Resource": "ServiceRequest (status: active)", "internationalStandard": "Universal" }
+      ]
+    }
+  }
+}

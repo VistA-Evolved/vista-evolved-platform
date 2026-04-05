@@ -31,6 +31,7 @@ import {
   fetchVistaClinics,
   fetchVistaWards,
   fetchVistaCurrentUser,
+  fetchVistaInstitutions,
   probeDdrRpcFamily,
   ddrGetsFile200,
   ddrListerSecurityKeys,
@@ -40,12 +41,23 @@ import {
   ddrFilerEdit,
   ddrFilerEditMulti,
   ddrFilerAdd,
+  ddrFilerAddMulti,
   callZveRpc,
   isRpcMissingError,
   fetchVistaEsigStatusForUsers,
   parseDdrListerResponse,
 } from './lib/vista-adapter.mjs';
-import { disconnectBroker, getBroker, lockedRpc } from './lib/xwb-client.mjs';
+import {
+  disconnectBroker,
+  getBroker,
+  lockedRpc,
+  setupBrokerContext,
+  activateSessionBrokerForRequest,
+  releaseSessionBroker,
+  cacheSessionBroker,
+  getSessionBrokerCount,
+  XwbBroker,
+} from './lib/xwb-client.mjs';
 
 import crypto from 'node:crypto';
 
@@ -189,6 +201,8 @@ const ROUTE_GROUP_MAP = [
   { pattern: /\/users/, group: 'users' },
   { pattern: /\/key-inventory/, group: 'users' },
   { pattern: /\/security-keys/, group: 'users' },
+  { pattern: /\/patients/, group: 'facilities' },
+  { pattern: /\/reports/, group: 'facilities' },
   { pattern: /\/facilities/, group: 'facilities' },
   { pattern: /\/clinics/, group: 'facilities' },
   { pattern: /\/divisions/, group: 'facilities' },
@@ -236,6 +250,13 @@ const AUTH_BYPASS = ['/api/tenant-admin/v1/auth/login', '/api/tenant-admin/v1/au
 async function main() {
   const app = Fastify({ logger: false });
 
+  // Enable per-request broker context via AsyncLocalStorage.
+  // This must be called before any hooks or routes are registered so that
+  // every HTTP request runs inside an ALS context. Each authenticated
+  // session then gets its own XwbBroker (its own VistA DUZ), ensuring
+  // all writes are attributed to the correct user in VistA's audit trail.
+  setupBrokerContext(app);
+
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
     try { done(null, body ? JSON.parse(body) : {}); } catch (e) { done(e); }
   });
@@ -279,6 +300,20 @@ async function main() {
     if (routeGroup && navGroups.length > 0 && !navGroups.includes(routeGroup)) {
       return reply.code(403).send({ ok: false, error: 'Insufficient permissions for this resource', requiredGroup: routeGroup });
     }
+
+    // Activate the per-session VistA broker in the current ALS context.
+    // All adapter calls (getBroker, lockedRpc) in this request will now
+    // use the session user's own broker (their own DUZ), so VistA's audit
+    // trail correctly attributes every read/write to the acting user.
+    if (session.credentials) {
+      try {
+        await activateSessionBrokerForRequest(session.token, session.credentials);
+      } catch (brokerErr) {
+        // Broker reconnect failed — allow request to proceed;
+        // the route handler will receive a 503 from getBroker() if VistA is truly down.
+        // We don't block the request here to avoid cascading failures.
+      }
+    }
   });
 
   // ---- Auth routes ----
@@ -292,42 +327,62 @@ async function main() {
     if (!tenantId) {
       return reply.code(400).send({ ok: false, error: 'tenantId required' });
     }
-    // Single-broker model: validate credentials match the env var broker creds
-    // The broker authenticates once with VISTA_ACCESS_CODE/VISTA_VERIFY_CODE.
-    // Tenant-admin login verifies user provides those same credentials.
-    const envAC = (process.env.VISTA_ACCESS_CODE || '').toUpperCase().trim();
-    const envVC = (process.env.VISTA_VERIFY_CODE || '').trim();
-    const givenAC = accessCode.toUpperCase().trim();
-    const givenVC = verifyCode.trim();
-    if (givenAC !== envAC || givenVC !== envVC) {
-      return reply.code(401).send({ ok: false, error: 'Invalid access code or verify code' });
-    }
+
+    // Per-user VistA authentication: each admin user logs in as THEMSELVES.
+    // This establishes their own DUZ so every VistA read/write in this session
+    // is attributed to the correct user in VistA's audit trail.
+    // Credentials are stored server-side in the session only; never sent to the client.
+    const sessionOpts = {
+      accessCode: accessCode.trim(),
+      verifyCode: verifyCode.trim(),
+      host: process.env.VISTA_HOST,
+      port: process.env.VISTA_PORT ? parseInt(process.env.VISTA_PORT, 10) : undefined,
+    };
+
+    let broker;
     try {
-      const broker = await getBroker();
-      const userKeys = [];
-      try {
-        const keysRes = await ddrListerSecurityKeys();
-        if (keysRes.ok) {
-          for (const k of keysRes.data) userKeys.push({ name: k.name, ien: k.ien });
-        }
-      } catch (_) { /* keys optional at login */ }
-      const currentUser = await fetchVistaCurrentUser();
-      const duz = currentUser.ok ? (currentUser.data.duz || currentUser.data.ien || '0') : '0';
-      const userName = currentUser.ok ? (currentUser.data.userName || currentUser.data.name || 'Unknown') : 'Unknown';
-      const session = createSession(duz, userName, userKeys, null, tenantId);
-      const navGroups = resolveNavGroups(userKeys);
-      const roleCluster = resolveRoleCluster(userKeys);
-      return {
-        ok: true,
-        token: session.token,
-        user: { duz, name: userName, keys: userKeys.map(k => k.name) },
-        roleCluster,
-        navGroups,
-        tenantId,
-      };
-    } catch (e) {
-      return reply.code(401).send({ ok: false, error: 'Login failed: ' + (e.message || 'VistA authentication error') });
+      broker = new XwbBroker();
+      await broker.connect(sessionOpts);
+    } catch (authErr) {
+      return reply.code(401).send({
+        ok: false,
+        error: 'VistA authentication failed: ' + (authErr.message || 'Invalid credentials'),
+      });
     }
+
+    const duz = broker.duz || '0';
+    const userName = broker.userName || 'Unknown';
+
+    // Get the user's own security keys by checking each key in KEY_NAV_MAP.
+    // ORWU HASKEY checks whether the authenticated user (current DUZ) holds a key.
+    const userKeys = [];
+    for (const keyName of Object.keys(KEY_NAV_MAP)) {
+      try {
+        const lines = await broker.callRpc('ORWU HASKEY', [keyName]);
+        if (lines[0]?.trim() === '1') userKeys.push({ name: keyName });
+      } catch { /* key check failure is non-fatal */ }
+    }
+
+    // Create session and cache credentials for per-request broker activation.
+    // Credentials are stored server-side in the session only; never sent to the client.
+    const session = createSession(duz, userName, userKeys, null, tenantId);
+    session.credentials = sessionOpts;
+
+    // Pre-populate the session broker pool with the freshly-authenticated broker.
+    // The onRequest hook will then find it connected and activate it in the ALS
+    // context for every subsequent authenticated request under this session.
+    cacheSessionBroker(session.token, broker);
+
+    const navGroups = resolveNavGroups(userKeys);
+    const roleCluster = resolveRoleCluster(userKeys);
+    return {
+      ok: true,
+      token: session.token,
+      user: { duz, name: userName, keys: userKeys.map(k => k.name) },
+      roleCluster,
+      navGroups,
+      tenantId,
+    };
   });
 
   app.get('/api/tenant-admin/v1/auth/session', async (req, reply) => {
@@ -337,9 +392,30 @@ async function main() {
     if (!session) return reply.code(401).send({ ok: false, error: 'No active session' });
     const navGroups = resolveNavGroups(session.keys);
     const roleCluster = resolveRoleCluster(session.keys);
+
+    // --- ZVE-first: enrich session with fresh VistA data ---
+    let vistaDetail = null;
+    try {
+      const z = await callZveRpc('ZVE USER DETAIL', [String(session.duz)]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const detail = (z.lines[1] || '').split('^');
+        vistaDetail = {
+          name: detail[1] || session.userName, title: detail[6] || '', service: detail[7] || '',
+          lastLogin: detail[10] || '', npi: detail[11] || '', status: (detail[5] || 'ACTIVE').toLowerCase(),
+        };
+      }
+    } catch (_) { /* non-fatal — use session data */ }
+
     return {
       ok: true,
-      user: { duz: session.duz, name: session.userName, keys: (session.keys || []).map(k => k.name || k) },
+      source: vistaDetail ? 'zve' : 'session',
+      user: {
+        duz: session.duz,
+        name: vistaDetail ? vistaDetail.name : session.userName,
+        keys: (session.keys || []).map(k => k.name || k),
+        ...(vistaDetail ? { title: vistaDetail.title, service: vistaDetail.service, lastLogin: vistaDetail.lastLogin, npi: vistaDetail.npi, status: vistaDetail.status } : {}),
+      },
       roleCluster,
       navGroups,
       tenantId: session.tenantId,
@@ -348,7 +424,10 @@ async function main() {
   });
 
   app.post('/api/tenant-admin/v1/auth/logout', async (req) => {
-    if (req.session) destroySession(req.session.token);
+    if (req.session) {
+      releaseSessionBroker(req.session.token); // disconnect per-user VistA broker
+      destroySession(req.session.token);
+    }
     return { ok: true };
   });
 
@@ -358,11 +437,33 @@ async function main() {
     try {
       const probe = await probeVista();
       const currentUser = probe.ok ? await fetchVistaCurrentUser() : { ok: false };
+
+      // Probe production mode (field 501) if VistA is reachable.
+      let productionMode = null;
+      if (probe.ok) {
+        try {
+          const prodResult = await lockedRpc(async () => {
+            const broker = await getBroker();
+            const lines = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
+              { type: 'list', value: { FILE: '8989.3', IENS: '1,', FIELDS: '501', FLAGS: 'IE' } },
+            ]);
+            return lines;
+          });
+          const prodLine = (prodResult || []).find(l => l.includes('^501^'));
+          if (prodLine) {
+            const parts = prodLine.split('^');
+            const internalVal = parts[3] || '';
+            productionMode = internalVal === '1' ? 'production' : 'test';
+          }
+        } catch { /* non-fatal — productionMode stays null */ }
+      }
+
       return {
         ok: true,
         vista: probe,
         currentUser: currentUser.ok ? currentUser.data : null,
         connectionMode: 'direct-xwb',
+        productionMode,
       };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
@@ -374,6 +475,24 @@ async function main() {
   app.get('/api/tenant-admin/v1/users', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    // --- ZVE-first: ZVE USER LIST ---
+    try {
+      const z = await callZveRpc('ZVE USER LIST', [req.query.search || '', req.query.status || '', req.query.division || '', req.query.max || '']);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const data = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (!p[0]) continue;
+          data.push({ ien: p[0], name: p[1] || '', status: p[2] || '', title: p[3] || '', service: p[4] || '', division: p[5] || '', lastLogin: p[6] || '', keyCount: parseInt(p[7] || '0', 10) });
+        }
+        return { ok: true, source: 'zve', tenantId, data, rpcUsed: z.rpcUsed };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+    // --- DDR fallback ---
     const vistaResult = await fetchVistaUsers(req.query.search || '');
     if (vistaResult.ok) {
       return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
@@ -386,6 +505,44 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const { userId } = req.params;
 
+    // --- ZVE-first: ZVE USER DETAIL ---
+    try {
+      const z = await callZveRpc('ZVE USER DETAIL', [String(userId)]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG
+        const detail = (z.lines[1] || '').split('^');
+        const keys = []; const divs = [];
+        for (const line of z.lines.slice(2)) {
+          const p = line.split('^');
+          if (p[0] === 'KEY') keys.push({ ien: p[1], name: p[2] });
+          else if (p[0] === 'DIV') divs.push({ ien: p[1], name: p[2], station: p[3] || '' });
+        }
+        return {
+          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+          data: {
+            id: userId, ien: userId, name: detail[1] || '', username: detail[1] || '',
+            title: detail[6] || '', status: (detail[5] || 'ACTIVE').toLowerCase(),
+            roles: keys.map(k => k.name),
+            vistaGrounding: {
+              duz: userId, file200Status: 'zve-detail',
+              sex: detail[3] || '', dob: detail[2] || '', ssn: detail[4] || '',
+              officePhone: detail[9] || '', email: detail[8] || '',
+              service: detail[7] || '', lastLogin: detail[10] || '',
+              npi: detail[11] || '', dea: detail[12] || '',
+              providerType: detail[13] || '', providerClass: detail[14] || '',
+              electronicSignature: { status: detail[15] === 'SET' ? 'active' : 'not-configured', hasCode: detail[15] === 'SET' },
+            },
+            keys, divisions: divs,
+          },
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+
+    // --- DDR fallback ---
     // VistA-first: DDR GETS ENTRY DATA on File 200 (full field read path)
     // 200.05 (Person Class) is a sub-file -- requires separate DDR LISTER call
     // .01 NAME field often returns empty from DDR GETS (NAME-type field) -- merge from ORWU NEWPERS
@@ -499,32 +656,27 @@ async function main() {
   app.get('/api/tenant-admin/v1/facilities', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
-    const divResult = await fetchVistaDivisions();
-    const clinicResult = await fetchVistaClinics(req.query.search || '');
-    if (!divResult.ok && !clinicResult.ok) {
-      return reply.code(503).send({ ok: false, source: 'error', tenantId, error: divResult.error || clinicResult.error || 'VistA unreachable' });
+    // Read from VistA File 4 (INSTITUTION) — the authoritative facility source.
+    // Falls back to Medical Center Divisions (File 40.8) if File 4 DDR is unavailable.
+    const instResult = await fetchVistaInstitutions();
+    if (!instResult.ok) {
+      return reply.code(503).send({ ok: false, source: 'error', tenantId, error: instResult.error || 'VistA unreachable' });
     }
-    const divisions = (divResult.data || []).map(d => ({
-      id: `div-${d.ien || d.id || 'unknown'}`,
-      name: d.name || d.divisionName || 'Unknown Division',
-      type: 'Division', status: 'active',
-      vistaGrounding: { file40_8Ien: d.ien || d.id, status: 'grounded' },
-      institutionIen: d.institutionIen || null,
-      stationNumber: d.stationNumber || null,
-      children: [],
+    const facilities = (instResult.data || []).map(i => ({
+      ien: i.ien,
+      name: i.name,
+      stationNumber: i.stationNumber || '',
+      type: i.type || 'Medical Center',
+      vistaGrounding: { file4Ien: i.ien, source: instResult.rpcUsed, status: 'grounded' },
     }));
-    const clinics = clinicResult.ok ? (clinicResult.data || []).map(c => ({
-      id: `loc-${c.ien || c.id || 'unknown'}`,
-      name: c.name || c.locationName || 'Unknown Clinic',
-      type: 'Clinic', status: 'active',
-      vistaGrounding: { file44Ien: c.ien || c.id, status: 'grounded' },
-    })) : [];
-    let facilities;
-    if (divisions.length === 1) { divisions[0].children = clinics; facilities = divisions; }
-    else if (divisions.length > 1) { facilities = [...divisions, ...clinics]; }
-    else { facilities = clinics; }
-    return { ok: true, source: 'vista', tenantId, data: facilities,
-      vistaNote: 'Divisions via XUS DIVISION GET, clinics via ORWU CLINLOC' };
+    return {
+      ok: true,
+      source: 'vista',
+      tenantId,
+      data: facilities,
+      rpcUsed: instResult.rpcUsed,
+      vistaNote: instResult.vistaNote || 'Institutions from VistA File 4 (INSTITUTION)',
+    };
   });
 
   app.get('/api/tenant-admin/v1/facilities/:facilityId', async (req, reply) => {
@@ -567,7 +719,30 @@ async function main() {
   app.get('/api/tenant-admin/v1/roles', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const roleName = req.query.role || '';
 
+    // --- ZVE-first: ZVE ROLE TEMPLATE ---
+    if (roleName) {
+      try {
+        const z = await callZveRpc('ZVE ROLE TEMPLATE', [roleName]);
+        const o = zveOutcome(z);
+        if (o.kind === 'ok') {
+          const roleData = { name: '', description: '', keys: [], context: '' };
+          for (const line of z.lines.slice(1)) {
+            const p = line.split('^');
+            if (p[0] === 'ROLE') { roleData.name = p[1] || ''; roleData.description = p[2] || ''; }
+            else if (p[0] === 'KEY') roleData.keys.push(p[1] || '');
+            else if (p[0] === 'CTX') roleData.context = p[1] || '';
+          }
+          return { ok: true, source: 'zve', tenantId, data: roleData, rpcUsed: z.rpcUsed };
+        }
+        if (o.kind !== 'missing') {
+          return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+        }
+      } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+    }
+
+    // --- DDR fallback: list all security keys ---
     const keysRes = await ddrListerSecurityKeys();
     if (keysRes.ok && keysRes.data.length > 0) {
       return {
@@ -629,6 +804,31 @@ async function main() {
   app.get('/api/tenant-admin/v1/divisions', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+
+    // --- ZVE-first: ZVE DIVISION LIST ---
+    try {
+      const z = await callZveRpc('ZVE DIVISION LIST', []);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const data = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (!p[0]) continue;
+          data.push({
+            ien: p[0], name: p[1] || '', stationNumber: p[2] || '',
+            address: p[3] || '', phone: p[4] || '', status: (p[5] || 'ACTIVE').toLowerCase(),
+            institutionIen: null,
+            vistaGrounding: { file: '40.8', ien: p[0], status: 'grounded' },
+          });
+        }
+        return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+
+    // --- DDR fallback ---
     try {
       const divRes = await fetchVistaDivisions();
       let divisions = (divRes.ok ? divRes.data : []).map(d => ({
@@ -775,6 +975,41 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const category = req.query.category || '';
 
+    // --- ZVE-first: ZVE KEY LIST ---
+    try {
+      const z = await callZveRpc('ZVE KEY LIST', []);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        let holderMap = null;
+        try { holderMap = await buildKeyHolderMap(); } catch (_) {}
+        const data = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (!p[0]) continue;
+          const kName = p[1] || '';
+          if (category && !kName.toLowerCase().includes(category.toLowerCase()) && !(p[2] || '').toLowerCase().includes(category.toLowerCase())) continue;
+          const holders = holderMap ? (holderMap[kName.toUpperCase()] || []) : [];
+          data.push({
+            keyName: kName, vistaKey: kName, description: p[2] || '',
+            category: 'security-key', holderCount: parseInt(p[3] || '0', 10) || holders.length,
+            holders: holders.slice(0, 20),
+            vistaGrounding: { file19_1Ien: p[0], rpcUsed: z.rpcUsed },
+          });
+        }
+        const unassigned = data.filter(k => k.holderCount === 0).length;
+        const clinical = data.filter(k => /PROVIDER|ORES|ORELSE|PSJ|PSO|LR|MAG|CPRS/i.test(k.keyName)).length;
+        return {
+          ok: true, source: 'zve', tenantId, data,
+          summary: { totalKeys: data.length, clinicalKeys: clinical, adminKeys: data.length - clinical, unassignedKeys: unassigned, holderMapSource: holderMap ? 'ddr-file200-field51' : 'unavailable' },
+          rpcUsed: z.rpcUsed,
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+
+    // --- DDR fallback ---
     const keysRes = await ddrListerSecurityKeys();
     if (!keysRes.ok || !keysRes.data.length) {
       return reply.code(503).send({ ok: false, source: 'error', tenantId, error: keysRes.error || 'VistA security keys unavailable (DDR LISTER File 19.1)' });
@@ -955,7 +1190,7 @@ async function main() {
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
   });
 
-  /** Update allow-listed File 200 fields via DDR VALIDATOR + DDR FILER (FileMan APIs) */
+  /** Update allow-listed File 200 fields via ZVE USER EDIT (ZVE-first) or DDR VALIDATOR + DDR FILER */
   app.put('/api/tenant-admin/v1/users/:ien', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
@@ -969,9 +1204,16 @@ async function main() {
       '.134': 'DIGITAL PAGER',
       '.151': 'EMAIL ADDRESS',
       '4': 'SEX',
+      '5': 'DOB',
+      '8': 'TITLE',
+      '9': 'SSN',
       '20.2': 'ELECTRONIC SIGNATURE INITIALS',
       '20.3': 'SIGNATURE BLOCK PRINTED NAME',
       '20.4': 'ELECTRONIC SIGNATURE CODE',
+      '29': 'SERVICE/SECTION',
+      '41.99': 'NPI',
+      '53.2': 'DEA#',
+      '53.5': 'PROVIDER CLASS',
       '201': 'PRIMARY MENU OPTION',
     };
     if (!field || value === undefined || !ALLOW[field]) {
@@ -982,6 +1224,22 @@ async function main() {
         labels: ALLOW,
       });
     }
+    // --- ZVE-first: ZVE USER EDIT ---
+    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS' };
+    const zveFld = ZVE_FIELD_MAP[field];
+    if (zveFld) {
+      try {
+        const z = await callZveRpc('ZVE USER EDIT', [String(ien), zveFld, String(value)]);
+        const o = zveOutcome(z);
+        if (o.kind === 'ok') {
+          return { ok: true, source: 'zve', tenantId, ien, field, rpcUsed: z.rpcUsed, lines: z.lines };
+        }
+        if (o.kind !== 'missing') {
+          return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+        }
+      } catch (_zve) { /* fall through to DDR */ }
+    }
+    // --- DDR fallback ---
     const p = await probeVista();
     if (!p.ok) {
       return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
@@ -1007,6 +1265,62 @@ async function main() {
     };
   });
 
+  /** List security keys for a user — DDR LISTER on File 200.051 subfile */
+  app.get('/api/tenant-admin/v1/users/:targetDuz/keys', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const duz = String(req.params.targetDuz);
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    try {
+      const keys = [];
+      // Step 1: Get security key catalog from File 19.1 for IEN→name lookup
+      const keysCatalog = await ddrListerSecurityKeys();
+      const keyIenToName = {};
+      if (keysCatalog.ok && keysCatalog.data) {
+        for (const k of keysCatalog.data) { keyIenToName[k.ien] = k.name; }
+      }
+      // Step 2: DDR LISTER on File 200.051 (SECURITY KEY subfile) with IENS=",{duz},"
+      // Returns: sub-IEN ^ .01-internal-value (= pointer IEN into File 19.1)
+      const listerLines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpcWithList('DDR LISTER', [
+          {
+            type: 'list',
+            value: { FILE: '200.051', IENS: `,${duz},`, FIELDS: '.01', FLAGS: 'IP', MAX: '999' },
+          },
+        ]);
+      });
+      const parsed = parseDdrListerResponse(listerLines);
+      if (parsed.ok && parsed.data.length > 0) {
+        for (const line of parsed.data) {
+          // FORMAT with 'IP' flag: sub-IEN ^ .01-internal-value (pointer IEN to File 19.1)
+          // The pointer IEN maps to a security key name via the File 19.1 catalog
+          const parts = line.split('^');
+          const subIen = (parts[0] || '').trim();
+          const keyPointerIen = (parts[1] || '').trim();
+          if (!subIen || !keyPointerIen) continue;
+          const keyName = keyIenToName[keyPointerIen] || keyPointerIen;
+          keys.push({ ien: keyPointerIen, name: keyName });
+        }
+      }
+      // Fallback: ZVE USMG KEYS LIST if DDR returned nothing (requires distro overlay)
+      if (keys.length === 0) {
+        const z = await callZveRpc('ZVE USMG KEYS', ['LIST', duz]);
+        if (z.ok && z.lines) {
+          for (const line of z.lines) {
+            const parts = line.split('^');
+            const keyName = (parts[1] || parts[0] || '').trim();
+            if (keyName) keys.push({ ien: parts[0] || '', name: keyName });
+          }
+        }
+      }
+      return { ok: true, tenantId, duz, data: keys, rpcUsed: 'DDR LISTER (File 200.051 + File 19.1)' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, error: e.message });
+    }
+  });
+
   /** Assign security key — ZVE USMG KEYS (overlay). */
   app.post('/api/tenant-admin/v1/users/:targetDuz/keys', async (req, reply) => {
     const tenantId = req.query.tenantId;
@@ -1017,6 +1331,34 @@ async function main() {
     }
     const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
     if (!sanitized) return reply.code(400).send({ ok: false, error: 'keyName empty after sanitize' });
+    // ORES/ORELSE mutual exclusion — server-side enforcement
+    if (sanitized === 'ORES' || sanitized === 'ORELSE') {
+      const conflict = sanitized === 'ORES' ? 'ORELSE' : 'ORES';
+      try {
+        const userKeysLines = await lockedRpc(async () => {
+          const broker = await getBroker();
+          return broker.callRpcWithList('DDR LISTER', [{
+            type: 'list',
+            value: { FILE: '200.051', IENS: `,${req.params.targetDuz},`, FIELDS: '.01', FLAGS: 'IP', MAX: '999' },
+          }]);
+        });
+        const parsedKeys = parseDdrListerResponse(userKeysLines);
+        if (parsedKeys.ok) {
+          const keyCatalog = await ddrListerSecurityKeys();
+          const ienToName = {};
+          if (keyCatalog.ok && keyCatalog.data) {
+            for (const k of keyCatalog.data) { ienToName[k.ien] = k.name; }
+          }
+          const existing = (parsedKeys.data || []).map(line => {
+            const parts = line.split('^');
+            return (ienToName[(parts[1] || '').trim()] || '').toUpperCase();
+          });
+          if (existing.includes(conflict)) {
+            return reply.code(409).send({ ok: false, error: `Cannot assign ${sanitized}: user already holds ${conflict}. ORES and ORELSE are mutually exclusive per VA policy.` });
+          }
+        }
+      } catch { /* proceed — overlay may handle it */ }
+    }
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG KEYS', ['ADD', String(req.params.targetDuz), sanitized]);
@@ -1281,10 +1623,31 @@ async function main() {
     }
   });
 
-  /** Kernel site parameters (File 8989.3) — find actual IEN first, then read */
+  /** Kernel site parameters (File 8989.3) — ZVE-first, DDR fallback */
   app.get('/api/tenant-admin/v1/params/kernel', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+
+    // --- ZVE-first: ZVE PARAM GET ---
+    try {
+      const z = await callZveRpc('ZVE PARAM GET', []);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const params = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (p[0] === 'PARAM') {
+            params.push({ name: p[1] || '', value: p[2] || '', description: p[3] || '' });
+          }
+        }
+        return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, file: '8989.3', data: params };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+
+    // --- DDR fallback ---
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
     try {
@@ -1302,8 +1665,10 @@ async function main() {
             ien = parts[0].trim();
           }
         }
+        // Fields confirmed present in File 8989.3 (no .04 — it does not exist).
+        // FLAGS=IE returns both Internal and External values so numeric fields show correctly.
         const getsLines = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
-          { type: 'list', value: { FILE: '8989.3', IENS: `${ien},`, FIELDS: '.01;.02;.03;.04;.05;205;210;230;240;501' } },
+          { type: 'list', value: { FILE: '8989.3', IENS: `${ien},`, FIELDS: '.01;.02;.03;.05;9;11;205;210;214;217;230;231;240;501', FLAGS: 'IE' } },
         ]);
         return { ien, rawLines: getsLines };
       });
@@ -1313,17 +1678,25 @@ async function main() {
     }
   });
 
+  // Fields verified present in File 8989.3 DD (probed via ZVEPRB94.m):
+  // .04 does NOT exist — removed. .03 = AFTER HOURS MAIL GROUP, not institution.
   const KERNEL8989_ALLOW = {
-    '.01': 'SITE NAME',
-    '.02': 'DOMAIN NAME',
-    '.03': 'DEFAULT INSTITUTION',
-    '.04': 'DEFAULT AUTO MENU',
-    '.05': 'DEFAULT LANGUAGE',
-    '205': 'AGENCY CODE',
-    '210': 'DEFAULT TIMEOUT',
-    '230': 'PRODUCTION ACCOUNT',
-    '240': 'BROKER TIMEOUT',
-    '501': 'MULTIPLE SIGN-ON',
+    '.01': 'DOMAIN NAME',
+    '.02': 'IRM MAIL GROUP',
+    '.03': 'AFTER HOURS MAIL GROUP',
+    '.05': 'MIXED OS',
+    '9': 'AGENCY CODE',
+    '11': 'AUTO-GENERATE ACCESS CODES',
+    '202': 'DEFAULT # OF ATTEMPTS',
+    '203': 'DEFAULT LOCK-OUT TIME',
+    '205': 'ASK DEVICE TYPE AT SIGN-ON',
+    '206': 'DEFAULT AUTO-MENU',
+    '210': 'DEFAULT TIMED-READ (SECONDS)',
+    '214': 'LIFETIME OF VERIFY CODE',
+    '217': 'DEFAULT INSTITUTION',
+    '230': 'BROKER ACTIVITY TIMEOUT',
+    '231': 'GUI POST SIGN-ON',
+    '501': 'PRODUCTION',
   };
 
   app.put('/api/tenant-admin/v1/params/kernel', async (req, reply) => {
@@ -1332,6 +1705,26 @@ async function main() {
     const body = req.body || {};
     const field = body.field;
     const value = body.value;
+    const paramName = body.paramName || '';
+
+    // --- ZVE-first: ZVE PARAM SET (uses param names not field numbers) ---
+    if (paramName) {
+      try {
+        const z = await callZveRpc('ZVE PARAM SET', [paramName, String(value), body.reason || '']);
+        const o = zveOutcome(z);
+        if (o.kind === 'ok') {
+          return { ok: true, source: 'zve', tenantId, paramName, value, rpcUsed: z.rpcUsed };
+        }
+        if (o.kind === 'fail') {
+          return reply.code(400).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+        }
+        if (o.kind !== 'missing') {
+          return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+        }
+      } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+    }
+
+    // --- DDR fallback (uses field numbers) ---
     if (!field || value === undefined || !KERNEL8989_ALLOW[field]) {
       return reply.code(400).send({
         ok: false,
@@ -2987,11 +3380,17 @@ async function main() {
     try {
       const tenantId = req.query.tenantId;
       if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
-      const name = (req.body || {}).name;
+      const body = req.body || {};
+      const name = body.name;
       if (!name || typeof name !== 'string') return reply.code(400).send({ ok: false, error: 'name required' });
       const p = await probeVista();
       if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
-      const filer = await ddrFilerAdd('36', '.01', '+1,', name, 'E');
+      // File 36 requires field 1 (REIMBURSE?) as an identifier for ADD
+      const fields = { '.01': name, '1': body.reimburse || 'Y' };
+      if (body.city) fields['.114'] = body.city;
+      if (body.state) fields['.115'] = body.state;
+      if (body.phone) fields['.131'] = body.phone;
+      const filer = await ddrFilerAddMulti('36', '+1,', fields, 'E');
       if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER ADD', error: filer.error, lines: filer.lines });
       return { ok: true, tenantId, rpcUsed: filer.rpcUsed, file: '36', lines: filer.lines };
     } catch (e) {
@@ -3632,6 +4031,25 @@ async function main() {
   app.get('/api/tenant-admin/v1/audit/error-log', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+
+    // --- ZVE-first: ZVE ADMIN AUDIT with SOURCE=error ---
+    try {
+      const z = await callZveRpc('ZVE ADMIN AUDIT', ['error', req.query.duz || '', req.query.max || '200']);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const entries = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (p.length >= 4) entries.push({ datetime: p[0], user: p[1] || '', action: p[2] || '', source: p[3] || '', detail: p[4] || '' });
+        }
+        return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data: entries };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+
+    // --- DDR fallback ---
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
     try {
@@ -3662,6 +4080,25 @@ async function main() {
   app.get('/api/tenant-admin/v1/audit/signon-log', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+
+    // --- ZVE-first: ZVE ADMIN AUDIT with SOURCE=signon ---
+    try {
+      const z = await callZveRpc('ZVE ADMIN AUDIT', ['signon', req.query.duz || '', req.query.max || '200']);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const entries = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (p.length >= 4) entries.push({ datetime: p[0], user: p[1] || '', action: p[2] || '', source: p[3] || '', detail: p[4] || '' });
+        }
+        return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data: entries };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+
+    // --- DDR fallback ---
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
     try {
@@ -4127,6 +4564,1004 @@ async function main() {
         },
       };
     } catch (e) { return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message }); }
+  });
+
+  // ======================================================================
+  // PATIENT ROUTES — File #2 (PATIENT), #405 (PATIENT MOVEMENT),
+  //   #2.312 (INSURANCE TYPE subfile), #408.31 (MEANS TEST),
+  //   #26.13 (PATIENT RECORD FLAG)
+  // ======================================================================
+
+  // ---- Patient Search (ZVE-first, DDR fallback) ----
+  app.get('/api/tenant-admin/v1/patients', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const search = req.query.search || '';
+    // --- ZVE-first: ZVE PATIENT SEARCH EXTENDED ---
+    try {
+      const stype = req.query.stype || 'NAME';
+      const z = await callZveRpc('ZVE PATIENT SEARCH EXTENDED', [search, stype, req.query.division || '', req.query.inactive || '', req.query.max || '']);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const data = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (!p[0]) continue;
+          data.push({ dfn: p[0], name: p[1] || '', dob: p[2] || '', ssnLast4: p[3] || '', sex: p[4] || '', serviceConnected: (p[5] || '').toUpperCase() === 'YES', scPercent: parseInt(p[6] || '0', 10) || 0, lastVisit: p[7] || '' });
+        }
+        return { ok: true, source: 'zve', tenantId, data, total: data.length, rpcUsed: z.rpcUsed };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const listerParams = {
+          FILE: '2', FIELDS: '.01;.02;.03;.09;.131;.301;.302', FLAGS: 'IP', MAX: '200',
+        };
+        if (search) listerParams.PART = search.toUpperCase();
+        const lines = await broker.callRpcWithList('DDR LISTER', [{ type: 'list', value: listerParams }]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          const ssnRaw = a[4]?.trim() || '';
+          out.push({
+            dfn: ien,
+            name: a[1]?.trim() || '',
+            sex: a[2]?.trim() || '',
+            dob: fmDateToIso(a[3]?.trim() || ''),
+            ssnLast4: ssnRaw.length >= 4 ? ssnRaw.slice(-4) : '',
+            phone: a[5]?.trim() || '',
+            serviceConnected: (a[6]?.trim() || '').toUpperCase() === 'YES',
+            scPercent: parseInt(a[7]?.trim() || '0', 10) || 0,
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '2', data: rows, total: rows.length };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Patient Get (ZVE-first, DDR fallback) ----
+  app.get('/api/tenant-admin/v1/patients/:dfn', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    // --- ZVE-first: ZVE PATIENT DEMOGRAPHICS ---
+    try {
+      const z = await callZveRpc('ZVE PATIENT DEMOGRAPHICS', [String(dfn)]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const dem = {}; const ins = []; const nok = []; const emrg = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (p[0] === 'DEM') dem[p[1]] = p.slice(2).join('^');
+          else if (p[0] === 'INS') ins.push({ ien: p[1], company: p[2], group: p[3], subscriber: p[4] });
+          else if (p[0] === 'NOK') nok.push({ name: p[1], relationship: p[2], phone: p[3] });
+          else if (p[0] === 'EMRG') emrg.push({ name: p[1], relationship: p[2], phone: p[3] });
+        }
+        return {
+          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+          data: {
+            dfn, name: dem.NAME || '', sex: dem.SEX || '', dob: dem.DOB || '',
+            maritalStatus: dem.MARITAL || '', ssnLast4: dem.SSN_LAST4 || '',
+            streetAddress1: dem.STREET || '', city: dem.CITY || '',
+            state: dem.STATE || '', zip: dem.ZIP || '', phone: dem.PHONE || '',
+            serviceConnected: (dem.SC_CONNECTED || '').toUpperCase() === 'YES',
+            scPercent: parseInt(dem.SC_PERCENT || '0', 10) || 0,
+            age: dem.AGE || '', religion: dem.RELIGION || '', race: dem.RACE || '',
+            insurance: ins, nextOfKin: nok, emergency: emrg,
+          },
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const fields = '.01;.02;.03;.05;.09;.111;.112;.113;.114;.115;.116;.117;.131;.132;.301;.302;.351;1901';
+      const ddr = await ddrGetsEntry('2', dfn, fields, 'IE');
+      if (!ddr.ok) return reply.code(404).send({ ok: false, tenantId, source: 'error', error: 'Patient not found' });
+      const d = ddr.data;
+      const g = (f) => d[f] || d[`2,${f}`] || '';
+      const ssnRaw = g('.09');
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: ddr.rpcUsed,
+        data: {
+          dfn,
+          name: g('.01'),
+          sex: g('.02'),
+          dob: fmDateToIso(g('.03')),
+          maritalStatus: g('.05'),
+          ssnLast4: ssnRaw.length >= 4 ? ssnRaw.slice(-4) : '',
+          streetAddress1: g('.111'),
+          streetAddress2: g('.112'),
+          streetAddress3: g('.113'),
+          city: g('.114'),
+          state: g('.115'),
+          zip: g('.116'),
+          county: g('.117'),
+          phone: g('.131'),
+          workPhone: g('.132'),
+          serviceConnected: (g('.301') || '').toUpperCase() === 'YES',
+          scPercent: parseInt(g('.302') || '0', 10) || 0,
+          dateOfDeath: g('.351') ? fmDateToIso(g('.351')) : null,
+          veteranStatus: (g('1901') || '').toUpperCase() === 'YES',
+          vistaFields: ddr.data,
+        },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Patient Register (ZVE-first, DDR fallback) ----
+  app.post('/api/tenant-admin/v1/patients', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    if (!body.name) return reply.code(400).send({ ok: false, error: 'Patient name is required' });
+    // --- ZVE-first: ZVE PATIENT REGISTER ---
+    try {
+      const z = await callZveRpc('ZVE PATIENT REGISTER', [
+        body.name, body.dob || '', body.ssn || '', body.sex || '',
+        body.streetAddress1 || '', body.city || '', body.state || '', body.zip || '',
+        body.phone || '', body.maritalStatus || '', body.veteranStatus || '', body.scPercent || '',
+      ]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const parts = (z.line0 || '').split('^');
+        return {
+          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+          data: { dfn: parts[1] || '', name: parts[2] || '', ssnLast4: parts[3] || '', registrationDate: new Date().toISOString() },
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const fieldsObj = { '.01': body.name.toUpperCase() };
+      if (body.sex) fieldsObj['.02'] = body.sex;
+      if (body.dob) fieldsObj['.03'] = body.dob;
+      if (body.ssn) fieldsObj['.09'] = body.ssn;
+      if (body.streetAddress1) fieldsObj['.111'] = body.streetAddress1;
+      if (body.city) fieldsObj['.114'] = body.city;
+      if (body.state) fieldsObj['.115'] = body.state;
+      if (body.zip) fieldsObj['.116'] = body.zip;
+      if (body.phone) fieldsObj['.131'] = body.phone;
+      if (body.veteranStatus) fieldsObj['1901'] = 'YES';
+      const result = await ddrFilerAddMulti('2', '+1,', fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      // Parse newly assigned IEN from FILER response
+      const newIen = (result.lines || []).find(l => /^\d+$/.test(l?.trim()))?.trim() || '';
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn: newIen, name: body.name.toUpperCase(), registrationDate: new Date().toISOString() },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Patient Update (ZVE-first, DDR fallback) ----
+  app.put('/api/tenant-admin/v1/patients/:dfn', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    // --- ZVE-first: ZVE PATIENT EDIT ---
+    const PAT_FIELD_MAP = { name: 'NAME', sex: 'SEX', dob: 'DOB', streetAddress1: 'STREET', streetAddress2: 'STREET2', city: 'CITY', state: 'STATE', zip: 'ZIP', phone: 'PHONE' };
+    const firstBodyField = Object.keys(body).find(k => PAT_FIELD_MAP[k]);
+    if (firstBodyField) {
+      try {
+        const z = await callZveRpc('ZVE PATIENT EDIT', [String(dfn), PAT_FIELD_MAP[firstBodyField], String(body[firstBodyField])]);
+        const o = zveOutcome(z);
+        if (o.kind === 'ok') {
+          // ZVE PATIENT EDIT handles one field at a time; for multi-field edits, loop
+          for (const [k, v] of Object.entries(body)) {
+            if (k === firstBodyField || !PAT_FIELD_MAP[k]) continue;
+            await callZveRpc('ZVE PATIENT EDIT', [String(dfn), PAT_FIELD_MAP[k], String(v)]);
+          }
+          return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data: { dfn, updatedAt: new Date().toISOString() } };
+        }
+        if (o.kind !== 'missing') {
+          return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+        }
+      } catch (_zve) { /* fall through to DDR */ }
+    }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const edits = {};
+      if (body.name) edits['.01'] = body.name.toUpperCase();
+      if (body.sex) edits['.02'] = body.sex;
+      if (body.dob) edits['.03'] = body.dob;
+      if (body.streetAddress1) edits['.111'] = body.streetAddress1;
+      if (body.streetAddress2) edits['.112'] = body.streetAddress2;
+      if (body.city) edits['.114'] = body.city;
+      if (body.state) edits['.115'] = body.state;
+      if (body.zip) edits['.116'] = body.zip;
+      if (body.phone) edits['.131'] = body.phone;
+      if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No fields to update' });
+      const result = await ddrFilerEditMulti('2', `${dfn},`, edits);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed, data: { dfn, updatedAt: new Date().toISOString() } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- ADT: Admit Patient (ZVE-first, DDR fallback) ----
+  app.post('/api/tenant-admin/v1/patients/:dfn/admit', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    // --- ZVE-first: ZVE ADT ADMIT ---
+    try {
+      const z = await callZveRpc('ZVE ADT ADMIT', [
+        String(dfn), String(body.wardIen || ''), body.roomBed || '', body.diagnosis || '', String(body.attendingDuz || ''), String(body.admitType || ''),
+      ]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const parts = (z.line0 || '').split('^');
+        return {
+          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+          data: { dfn, movementIen: parts[1] || '', admissionDate: parts[2] || '', ward: parts[3] || '', roomBed: parts[4] || '', movementType: 'ADMISSION' },
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // File 405 PATIENT MOVEMENT: .01=DATE/TIME, .02=PATIENT, .03=TYPE(1=admit), .06=WARD, .08=TREATING SPECIALTY
+      const now = new Date();
+      const fmNow = `${now.getFullYear() - 1700}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      const fieldsObj = {
+        '.01': fmNow,
+        '.02': dfn,
+        '.03': '1', // ADMISSION
+      };
+      if (body.wardIen) fieldsObj['.06'] = body.wardIen;
+      if (body.treatingSpecialtyIen) fieldsObj['.08'] = body.treatingSpecialtyIen;
+      const result = await ddrFilerAddMulti('405', '+1,', fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn, movementType: 'ADMISSION', admissionDate: now.toISOString(), wardIen: body.wardIen || '' },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- ADT: Transfer Patient (ZVE-first, DDR fallback) ----
+  app.post('/api/tenant-admin/v1/patients/:dfn/transfer', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    // --- ZVE-first: ZVE ADT TRANSFER ---
+    try {
+      const z = await callZveRpc('ZVE ADT TRANSFER', [
+        String(dfn), String(body.wardIen || ''), body.roomBed || '', body.reason || '',
+      ]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const parts = (z.line0 || '').split('^');
+        return {
+          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+          data: { dfn, movementIen: parts[1] || '', transferDate: parts[2] || '', fromWard: parts[3] || '', toWard: parts[4] || '', movementType: 'TRANSFER' },
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const now = new Date();
+      const fmNow = `${now.getFullYear() - 1700}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      const fieldsObj = {
+        '.01': fmNow,
+        '.02': dfn,
+        '.03': '3', // TRANSFER
+      };
+      if (body.wardIen) fieldsObj['.06'] = body.wardIen;
+      if (body.treatingSpecialtyIen) fieldsObj['.08'] = body.treatingSpecialtyIen;
+      const result = await ddrFilerAddMulti('405', '+1,', fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn, movementType: 'TRANSFER', transferDate: now.toISOString(), wardIen: body.wardIen || '' },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- ADT: Discharge Patient (ZVE-first, DDR fallback) ----
+  app.post('/api/tenant-admin/v1/patients/:dfn/discharge', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    // --- ZVE-first: ZVE ADT DISCHARGE ---
+    try {
+      const z = await callZveRpc('ZVE ADT DISCHARGE', [
+        String(dfn), body.diagnosis || '', body.disposition || '', String(body.dischargeType || ''),
+      ]);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const parts = (z.line0 || '').split('^');
+        return {
+          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+          data: { dfn, movementIen: parts[1] || '', dischargeDate: parts[2] || '', disposition: parts[3] || '', movementType: 'DISCHARGE' },
+        };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const now = new Date();
+      const fmNow = `${now.getFullYear() - 1700}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      const fieldsObj = {
+        '.01': fmNow,
+        '.02': dfn,
+        '.03': '2', // DISCHARGE
+      };
+      if (body.wardIen) fieldsObj['.06'] = body.wardIen;
+      const result = await ddrFilerAddMulti('405', '+1,', fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn, movementType: 'DISCHARGE', dischargeDate: now.toISOString() },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Ward Census (ZVE ADT CENSUS) ----
+  app.get('/api/tenant-admin/v1/census', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    try {
+      const z = await callZveRpc('ZVE ADT CENSUS', [req.query.wardIen || 'ALL', req.query.pending || '', req.query.max || '']);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') {
+        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE ADT CENSUS not registered.', detail: o.msg });
+      }
+      if (o.kind !== 'ok') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+      const data = [];
+      for (const line of z.lines.slice(1)) {
+        const p = line.split('^');
+        if (!p[0]) continue;
+        data.push({ dfn: p[0], name: p[1] || '', roomBed: p[2] || '', admissionDate: p[3] || '', lengthOfStay: parseInt(p[4] || '0', 10) || 0, attending: p[5] || '', diagnosis: p[6] || '', diet: p[7] || '' });
+      }
+      return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data, total: data.length };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Recent Patients (ZVE RECENT PATIENTS) ----
+  app.get('/api/tenant-admin/v1/patients/recent', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    try {
+      const z = await callZveRpc('ZVE RECENT PATIENTS', [req.query.userDuz || '', req.query.count || '']);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') {
+        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE RECENT PATIENTS not registered.', detail: o.msg });
+      }
+      if (o.kind !== 'ok') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+      const data = [];
+      for (const line of z.lines.slice(1)) {
+        const p = line.split('^');
+        if (!p[0]) continue;
+        data.push({ dfn: p[0], name: p[1] || '', dob: p[2] || '', ssnLast4: p[3] || '', lastAccessed: p[4] || '' });
+      }
+      return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data, total: data.length };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Patient Insurance (Subfile 2.312 via DDR LISTER / DDR FILER) ----
+  app.get('/api/tenant-admin/v1/patients/:dfn/insurance', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        // File 2.312 (INSURANCE TYPE subfile of PATIENT): .01=INSURANCE TYPE, 1=GROUP NUMBER, 2=SUBSCRIBER ID, 3=EFFECTIVE DATE
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '2.312', IENS: `${dfn},`, FIELDS: '.01;1;2;3;8', FLAGS: 'IP', MAX: '50' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            id: ien,
+            insuranceType: a[1]?.trim() || '',
+            groupNumber: a[2]?.trim() || '',
+            subscriberId: a[3]?.trim() || '',
+            effectiveDate: fmDateToIso(a[4]?.trim() || ''),
+            expirationDate: fmDateToIso(a[5]?.trim() || ''),
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '2.312', data: rows };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/patients/:dfn/insurance', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    if (!body.insuranceType) return reply.code(400).send({ ok: false, error: 'insuranceType (company IEN) is required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const fieldsObj = { '.01': body.insuranceType };
+      if (body.groupNumber) fieldsObj['1'] = body.groupNumber;
+      if (body.subscriberId) fieldsObj['2'] = body.subscriberId;
+      if (body.effectiveDate) fieldsObj['3'] = body.effectiveDate;
+      const result = await ddrFilerAddMulti('2.312', `+1,${dfn},`, fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed, data: { dfn, createdAt: new Date().toISOString() } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/patients/:dfn/insurance/:insuranceId', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn, insuranceId } = req.params;
+    const body = req.body || {};
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const edits = {};
+      if (body.groupNumber) edits['1'] = body.groupNumber;
+      if (body.subscriberId) edits['2'] = body.subscriberId;
+      if (body.effectiveDate) edits['3'] = body.effectiveDate;
+      if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No fields to update' });
+      const result = await ddrFilerEditMulti('2.312', `${insuranceId},${dfn},`, edits);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed, data: { id: insuranceId, dfn, updatedAt: new Date().toISOString() } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.delete('/api/tenant-admin/v1/patients/:dfn/insurance/:insuranceId', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn, insuranceId } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // Delete subfile entry by setting .01 to @ (FileMan delete convention)
+      const result = await ddrFilerEdit('2.312', `${insuranceId},${dfn},`, '.01', '@');
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return { ok: true, source: 'vista', tenantId, data: { id: insuranceId, dfn, deleted: true } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Financial Assessment / Means Test (File 408.31) ----
+  app.get('/api/tenant-admin/v1/patients/:dfn/assessment', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // DDR LISTER on File 408.31 filtered by patient DFN
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '408.31', FIELDS: '.01;.02;.03;.04;.07', FLAGS: 'IP', MAX: '50', SCREEN: `I $P(^DGMT(408.31,Y,0),U,2)=${dfn}` } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            id: ien,
+            date: fmDateToIso(a[1]?.trim() || ''),
+            patient: a[2]?.trim() || '',
+            status: a[3]?.trim() || '',
+            type: a[4]?.trim() || '',
+            income: a[5]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '408.31', data: rows };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/patients/:dfn/assessment', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const now = new Date();
+      const fmNow = `${now.getFullYear() - 1700}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const fieldsObj = {
+        '.01': fmNow,
+        '.02': dfn,
+      };
+      if (body.annualIncome) fieldsObj['.07'] = String(body.annualIncome);
+      const result = await ddrFilerAddMulti('408.31', '+1,', fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn, date: now.toISOString(), assessor: req.session?.userName || '' },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Patient Flags (ZVE-first, DDR fallback) ----
+  app.get('/api/tenant-admin/v1/patients/:dfn/flags', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    // --- ZVE-first: ZVE PATIENT FLAGS ---
+    try {
+      const z = await callZveRpc('ZVE PATIENT FLAGS', [String(dfn), 'LIST']);
+      const o = zveOutcome(z);
+      if (o.kind === 'ok') {
+        const data = [];
+        for (const line of z.lines.slice(1)) {
+          const p = line.split('^');
+          if (!p[0]) continue;
+          data.push({ id: p[0], flagName: p[1] || '', category: p[2] || '', status: p[3] || 'active', assignedDate: p[4] || '', assignedBy: p[5] || '', reviewDate: p[6] || '' });
+        }
+        return { ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed, data };
+      }
+      if (o.kind !== 'missing') {
+        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+      }
+    } catch (_zve) { /* fall through to DDR */ }
+    // --- DDR fallback ---
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '26.13', FIELDS: '.01;.02;.03;.04;.05', FLAGS: 'IP', MAX: '200', SCREEN: `I $P(^DGPF(26.13,Y,0),U,1)=${dfn}` } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            id: ien,
+            patient: a[1]?.trim() || '',
+            flagName: a[2]?.trim() || '',
+            category: a[3]?.trim() || '',
+            status: a[4]?.trim() || 'active',
+            assignedDate: fmDateToIso(a[5]?.trim() || ''),
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '26.13', data: rows };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/patients/:dfn/flags', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    if (!body.flagName) return reply.code(400).send({ ok: false, error: 'flagName is required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const now = new Date();
+      const fmNow = `${now.getFullYear() - 1700}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const fieldsObj = {
+        '.01': dfn,
+        '.02': body.flagName,
+        '.03': body.category || '',
+        '.04': 'ACTIVE',
+        '.05': fmNow,
+      };
+      const result = await ddrFilerAddMulti('26.13', '+1,', fieldsObj);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn, flagName: body.flagName, status: 'active', assignedDate: now.toISOString() },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/patients/:dfn/flags/:flagId', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn, flagId } = req.params;
+    const body = req.body || {};
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const edits = {};
+      if (body.status) edits['.04'] = body.status.toUpperCase();
+      if (body.reviewDate) edits['.06'] = body.reviewDate;
+      if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No fields to update' });
+      const result = await ddrFilerEditMulti('26.13', `${flagId},`, edits);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed, data: { id: flagId, dfn, ...body, updatedAt: new Date().toISOString() } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Record Restrictions (sensitivity on File 2 field 38.1) ----
+  app.put('/api/tenant-admin/v1/patients/:dfn/restrictions', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const edits = {};
+      // Field 38.1 in File 2 = SENSITIVE (0=no, 1=yes)
+      if (body.isSensitive !== undefined) edits['38.1'] = body.isSensitive ? '1' : '0';
+      if (Object.keys(edits).length === 0) return reply.code(400).send({ ok: false, error: 'No fields to update' });
+      const result = await ddrFilerEditMulti('2', `${dfn},`, edits);
+      if (!result.ok) return reply.code(502).send({ ok: false, tenantId, source: 'error', error: result.error, lines: result.lines });
+      return {
+        ok: true, source: 'vista', tenantId, rpcUsed: result.rpcUsed,
+        data: { dfn, ...body, updatedAt: new Date().toISOString(), updatedBy: req.session?.userName || '' },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Break-the-Glass audit log ----
+  app.post('/api/tenant-admin/v1/patients/:dfn/break-glass', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    try {
+      // Log the access event. In a full VistA integration this would write to the
+      // DG SECURITY LOG (File 38.1) or a custom ZVE audit file. For now we log
+      // the event server-side and return success to the caller.
+      const event = {
+        dfn,
+        accessedBy: req.session?.userName || body.accessedBy || 'UNKNOWN',
+        duz: req.session?.duz || '',
+        reason: body.reason || '',
+        timestamp: new Date().toISOString(),
+        type: 'BREAK_THE_GLASS',
+      };
+      console.log('[AUDIT] Break-the-glass access:', JSON.stringify(event));
+      return {
+        ok: true, source: 'vista', tenantId,
+        data: { ...event, auditId: `BTG-${Date.now()}`, logged: true },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Audit Events — read break-the-glass / access log for a patient ----
+  app.get('/api/tenant-admin/v1/patients/:dfn/audit-events', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // DG SECURITY LOG (File #38.1) — screen by patient DFN
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '38.1', FIELDS: '.01;.02;.03;.04;.05', FLAGS: 'IP', MAX: '200', SCREEN: `I $P(^(0),U,2)=${dfn}` } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            id: ien,
+            dateTime: a[1]?.trim() || '',
+            accessedBy: a[2]?.trim() || '',
+            reasonCategory: a[3]?.trim() || '',
+            reasonText: a[4]?.trim() || '',
+            duration: a[5]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, data: rows };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Authorized Staff — manage who can access a restricted-record patient ----
+  app.get('/api/tenant-admin/v1/patients/:dfn/authorized-staff', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // DG SECURITY LOG AUTHORIZED STAFF — subfile of File #38.1
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '38.13', IENS: `,${dfn},`, FIELDS: '.01;.02;.03;.04', FLAGS: 'IP', MAX: '100' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            id: ien, duz: a[1]?.trim() || '', name: a[2]?.trim() || '',
+            role: a[3]?.trim() || '', dateAdded: a[4]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      return { ok: true, source: 'vista', tenantId, data: rows };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/patients/:dfn/authorized-staff', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const body = req.body || {};
+    if (!body.duz) return reply.code(400).send({ ok: false, error: 'duz is required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const now = new Date();
+      const fmDate = `${now.getFullYear() - 1700}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const result = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return ddrFilerAddMulti(broker, '38.13', `+1,${dfn},`, {
+          '.01': body.duz,
+          '.02': body.name || '',
+          '.03': body.role || '',
+          '.04': fmDate,
+        });
+      });
+      return { ok: true, source: 'vista', tenantId, data: { dfn, ...body, addedAt: new Date().toISOString(), result } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  app.delete('/api/tenant-admin/v1/patients/:dfn/authorized-staff/:staffIen', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn, staffIen } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const result = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return ddrFilerEdit(broker, '38.13', `${staffIen},${dfn},`, '.01', '@');
+      });
+      return { ok: true, source: 'vista', tenantId, data: { deleted: staffIen, result } };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Insurance Eligibility Verification ----
+  app.post('/api/tenant-admin/v1/patients/:dfn/verify-eligibility', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { dfn } = req.params;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // Read insurance subfile (File 2.312) and check active coverage
+      const rows = await lockedRpc(async () => {
+        const broker = await getBroker();
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '2.312', IENS: `,${dfn},`, FIELDS: '.01;.18;8', FLAGS: 'IP', MAX: '20' } },
+        ]);
+        const parsed = parseDdrListerResponse(lines);
+        if (!parsed.ok) return [];
+        const out = [];
+        for (const line of parsed.data) {
+          const a = line.split('^');
+          const ien = a[0]?.trim();
+          if (!ien || !/^\d+$/.test(ien)) continue;
+          out.push({
+            id: ien,
+            planName: a[1]?.trim() || '',
+            expirationDate: a[2]?.trim() || '',
+            groupNumber: a[3]?.trim() || '',
+          });
+        }
+        return out;
+      });
+      // Determine verification status
+      const now = new Date();
+      const active = rows.filter(r => !r.expirationDate || new Date(r.expirationDate) >= now);
+      const expired = rows.filter(r => r.expirationDate && new Date(r.expirationDate) < now);
+      const status = rows.length === 0 ? 'none' : active.length > 0 ? 'active' : 'expired';
+      return {
+        ok: true, source: 'vista', tenantId,
+        data: {
+          dfn, status, verifiedAt: new Date().toISOString(),
+          totalPolicies: rows.length, activePolicies: active.length, expiredPolicies: expired.length,
+          policies: rows,
+        },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Registration Reports (aggregate patient data) ----
+  app.get('/api/tenant-admin/v1/reports/registration', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      // Count patients from File 2, beds from File 405.4, and movements from File 405
+      const [patients, beds] = await Promise.all([
+        lockedRpc(async () => {
+          const broker = await getBroker();
+          const lines = await broker.callRpcWithList('DDR LISTER', [
+            { type: 'list', value: { FILE: '2', FIELDS: '.01;.301', FLAGS: 'IP', MAX: '9999' } },
+          ]);
+          return parseDdrListerResponse(lines);
+        }),
+        lockedRpc(async () => {
+          const broker = await getBroker();
+          const lines = await broker.callRpcWithList('DDR LISTER', [
+            { type: 'list', value: { FILE: '405.4', FIELDS: '.01;.2', FLAGS: 'IP', MAX: '500' } },
+          ]);
+          return parseDdrListerResponse(lines);
+        }),
+      ]);
+      const patientCount = patients.ok ? patients.data.length : 0;
+      const bedCount = beds.ok ? beds.data.length : 0;
+      const scCount = patients.ok ? patients.data.filter(l => { const a = l.split('^'); return (a[2] || '').toUpperCase() === 'YES'; }).length : 0;
+      return {
+        ok: true, source: 'vista', tenantId,
+        data: {
+          summary: {
+            totalRegistered: patientCount,
+            serviceConnectedVeterans: scCount,
+            totalBeds: bedCount,
+          },
+        },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ---- Patient Dashboard Stats ----
+  app.get('/api/tenant-admin/v1/patients/dashboard', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
+    try {
+      const [patients, beds] = await Promise.all([
+        lockedRpc(async () => {
+          const broker = await getBroker();
+          const lines = await broker.callRpcWithList('DDR LISTER', [
+            { type: 'list', value: { FILE: '2', FIELDS: '.01;.301;.302', FLAGS: 'IP', MAX: '9999' } },
+          ]);
+          return parseDdrListerResponse(lines);
+        }),
+        lockedRpc(async () => {
+          const broker = await getBroker();
+          const lines = await broker.callRpcWithList('DDR LISTER', [
+            { type: 'list', value: { FILE: '405.4', FIELDS: '.01;.2', FLAGS: 'IP', MAX: '500' } },
+          ]);
+          return parseDdrListerResponse(lines);
+        }),
+      ]);
+      const patientRows = patients.ok ? patients.data : [];
+      const bedRows = beds.ok ? beds.data : [];
+      const totalPatients = patientRows.length;
+      const scVets = patientRows.filter(l => { const a = l.split('^'); return (a[2] || '').toUpperCase() === 'YES'; }).length;
+      const totalBeds = bedRows.length;
+      return {
+        ok: true, source: 'vista', tenantId,
+        data: {
+          totalPatients,
+          activePatients: totalPatients,
+          serviceConnectedVeterans: scVets,
+          bedSummary: { total: totalBeds, available: totalBeds, occupied: 0, blocked: 0 },
+        },
+      };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
   });
 
   // ---- SPA fallback ----

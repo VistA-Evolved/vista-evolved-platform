@@ -1,0 +1,203 @@
+{
+  "generatedAt": "2026-03-24",
+  "source": "VistA Kernel TM, Scheduling TM, CPRS TM, MailMan TM, live VEHU probe",
+  "domains": [
+    {
+      "id": "users",
+      "label": "User Management",
+      "vistaMenuPath": "EVE > User Management",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "users-list",    "label": "List Users",      "file": "200",     "adminUiPage": "/tenant/users",           "status": "done",    "rpcs": ["ORWU NEWPERS"] },
+        { "id": "user-detail",   "label": "User Detail",     "file": "200",     "adminUiPage": "/tenant/users/[userId]",  "status": "done",    "rpcs": ["DDR GETS ENTRY DATA"] },
+        { "id": "user-edit",     "label": "Edit User",       "file": "200",     "adminUiPage": "/tenant/users/[userId]",  "status": "partial", "rpcs": ["DDR VALIDATOR", "DDR FILER"] },
+        { "id": "user-create",   "label": "New Person",      "file": "200",     "adminUiPage": "/tenant/users",           "status": "partial", "rpcs": ["ZVE USMG ADD"] },
+        { "id": "user-keys",     "label": "Security Keys",   "file": "200.051", "adminUiPage": "/tenant/users/[userId]",  "status": "done",    "rpcs": ["DDR LISTER", "ZVE USMG KEYS"] },
+        { "id": "user-menu",     "label": "Menu Options",    "file": "200",     "adminUiPage": "/tenant/users/[userId]",  "status": "stub",    "rpcs": ["DDR FILER"] },
+        { "id": "user-esig",     "label": "E-Signature",     "file": "200",     "adminUiPage": "/tenant/esig",            "status": "partial", "rpcs": ["ORWU PARAM"] },
+        { "id": "user-audit",    "label": "Access Audit",    "file": "200",     "adminUiPage": "/tenant/audit",           "status": "partial", "rpcs": ["ORWU PARAM"] },
+        { "id": "user-clone",    "label": "User Clone",      "file": "200",     "adminUiPage": null,                      "status": "missing", "rpcs": ["ZVE USER CLONE"] }
+      ]
+    },
+    {
+      "id": "devices",
+      "label": "Device Management",
+      "vistaMenuPath": "EVE > Device Management",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "devices-list",   "label": "List Devices",      "file": "3.5", "adminUiPage": "/tenant/devices",        "status": "done",    "rpcs": ["DDR LISTER"] },
+        { "id": "device-detail",  "label": "Device Detail",     "file": "3.5", "adminUiPage": "/tenant/devices/[ien]",  "status": "done",    "rpcs": ["DDR GETS ENTRY DATA", "DDR FILER"] },
+        { "id": "device-create",  "label": "New Device",        "file": "3.5", "adminUiPage": null,                     "status": "missing", "rpcs": ["DDR FILER ADD"] },
+        { "id": "terminal-types", "label": "Terminal Types",    "file": "3.2", "adminUiPage": "/tenant/terminal-types", "status": "done",    "rpcs": ["DDR LISTER"] }
+      ]
+    },
+    {
+      "id": "facilities",
+      "label": "Institution / Facility",
+      "vistaMenuPath": "EVE > Institution Management",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "institutions",   "label": "Institutions",  "file": "4",    "adminUiPage": "/tenant/facilities",  "status": "done",    "rpcs": ["DDR LISTER File 4"] },
+        { "id": "divisions",      "label": "Divisions",     "file": "40.8", "adminUiPage": "/tenant/divisions",   "status": "done",    "rpcs": ["XUS DIVISION GET"] },
+        { "id": "topology",       "label": "Topology",      "file": "multi","adminUiPage": "/tenant/topology",    "status": "partial", "rpcs": ["DDR LISTER"] },
+        { "id": "edit-facility",  "label": "Edit Facility", "file": "4",    "adminUiPage": null,                  "status": "missing", "rpcs": ["DDR FILER"] }
+      ]
+    },
+    {
+      "id": "wards",
+      "label": "Ward Management",
+      "vistaMenuPath": "EVE > Ward Management",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "wards-list",        "label": "List Wards",           "file": "42",   "adminUiPage": "/tenant/wards",                    "status": "done",    "rpcs": ["DDR LISTER"] },
+        { "id": "ward-detail",       "label": "Ward Detail",          "file": "42",   "adminUiPage": "/tenant/wards/[ien]",              "status": "done",    "rpcs": ["DDR GETS ENTRY DATA", "DDR FILER"] },
+        { "id": "ward-create",       "label": "New Ward",             "file": "42",   "adminUiPage": null,                               "status": "missing", "rpcs": ["ZVE WARD ADD"] },
+        { "id": "treating-specs",    "label": "Treating Specialties", "file": "45.7", "adminUiPage": "/tenant/treating-specialties",     "status": "done",    "rpcs": ["DDR LISTER"] },
+        { "id": "room-beds",         "label": "Room/Bed Assignment",  "file": "405.4","adminUiPage": "/tenant/room-beds",               "status": "stub",    "rpcs": ["DGPM BED ASSIGN"] }
+      ]
+    },
+    {
+      "id": "clinics",
+      "label": "Clinic Management",
+      "vistaMenuPath": "EVE > Scheduling > Clinic Setup",
+      "vistaKey": "SD SUPERVISOR",
+      "options": [
+        { "id": "clinics-list",     "label": "List Clinics",      "file": "44",    "adminUiPage": "/tenant/clinics",          "status": "done",    "rpcs": ["DDR LISTER"] },
+        { "id": "clinic-detail",    "label": "Clinic Detail",     "file": "44",    "adminUiPage": "/tenant/clinics/[ien]",    "status": "done",    "rpcs": ["DDR GETS ENTRY DATA", "DDR FILER"] },
+        { "id": "clinic-create",    "label": "New Clinic",        "file": "44",    "adminUiPage": "/tenant/clinics",          "status": "partial", "rpcs": ["ZVE CLINIC ADD"] },
+        { "id": "clinic-avail",     "label": "Availability",      "file": "409.1", "adminUiPage": null,                       "status": "stub",    "rpcs": ["SDEC FIND APPT SLOTS"] },
+        { "id": "clinic-inact",     "label": "Inactivate Clinic", "file": "44",    "adminUiPage": "/tenant/clinics/[ien]",    "status": "stub",    "rpcs": ["DDR FILER"] },
+        { "id": "stop-codes",       "label": "Stop Codes",        "file": "44",    "adminUiPage": "/tenant/clinics/[ien]",    "status": "done",    "rpcs": ["DDR FILER"] },
+        { "id": "appt-types",       "label": "Appointment Types", "file": "409.1", "adminUiPage": "/tenant/appointment-types", "status": "done",    "rpcs": ["DDR LISTER", "DDR GETS ENTRY DATA", "DDR FILER"] }
+      ]
+    },
+    {
+      "id": "scheduling",
+      "label": "Scheduling Configuration",
+      "vistaMenuPath": "EVE > Scheduling > Scheduling Manager Options",
+      "vistaKey": "SD SUPERVISOR",
+      "options": [
+        { "id": "appt-types-mgr",   "label": "Appointment Types",  "file": "409.1","adminUiPage": null, "status": "missing", "rpcs": ["SDES GET APPT TYPES"] },
+        { "id": "holidays",         "label": "Holiday Setup",       "file": "40.5", "adminUiPage": null, "status": "missing", "rpcs": ["DDR LISTER File 40.5"] },
+        { "id": "wait-list",        "label": "Wait List Config",    "file": "409",  "adminUiPage": null, "status": "missing", "rpcs": ["SDOE LIST ENCOUNTERS FOR PAT"] },
+        { "id": "sched-mode",       "label": "Scheduling Mode",     "file": null,   "adminUiPage": "/tenant/system", "status": "partial", "rpcs": ["SDES GET APPT TYPES probe"] }
+      ]
+    },
+    {
+      "id": "kernel",
+      "label": "Kernel Site Parameters",
+      "vistaMenuPath": "EVE > Kernel Management > Site Parameters",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "kernel-display", "label": "View Site Params", "file": "8989.3", "adminUiPage": "/tenant/system", "status": "done",  "rpcs": ["DDR LISTER", "DDR GETS ENTRY DATA"] },
+        { "id": "kernel-edit",    "label": "Edit Site Params", "file": "8989.3", "adminUiPage": "/tenant/system",  "status": "done",  "rpcs": ["DDR VALIDATOR", "DDR FILER"] }
+      ]
+    },
+    {
+      "id": "taskman",
+      "label": "TaskMan",
+      "vistaMenuPath": "EVE > TaskMan",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "taskman-list",   "label": "TaskMan Status",    "file": "14.4", "adminUiPage": "/tenant/taskman",      "status": "stub",    "rpcs": ["XTMTASK STATUS", "DDR LISTER"] },
+        { "id": "taskman-detail", "label": "Task Detail",       "file": "14.4", "adminUiPage": null,                   "status": "missing", "rpcs": ["DDR GETS ENTRY DATA"] },
+        { "id": "taskman-start",  "label": "Start TaskMan",     "file": null,   "adminUiPage": null,                   "status": "missing", "rpcs": ["ZTMGRSET (direct MUMPS)"] },
+        { "id": "taskman-sched",  "label": "Schedule Task",     "file": "14.4", "adminUiPage": null,                   "status": "missing", "rpcs": ["XTMTASK QUEUE"] }
+      ]
+    },
+    {
+      "id": "mailman",
+      "label": "MailMan",
+      "vistaMenuPath": "EVE > MailMan > Manager",
+      "vistaKey": "XMGR",
+      "options": [
+        { "id": "mailman-config", "label": "MailMan Config",  "file": "4.2",  "adminUiPage": null,                 "status": "missing", "rpcs": ["XMA2^XMGAPI"] },
+        { "id": "mail-groups",   "label": "Mail Groups",     "file": "3.8",  "adminUiPage": "/tenant/mail-groups","status": "done",    "rpcs": ["DDR LISTER File 3.8", "DDR GETS ENTRY DATA", "DDR FILER"] },
+        { "id": "bulletins",     "label": "Bulletins",       "file": "3.6",  "adminUiPage": "/tenant/bulletins",  "status": "done",    "rpcs": ["DDR LISTER File 3.6", "DDR GETS ENTRY DATA", "DDR FILER"] }
+      ]
+    },
+    {
+      "id": "cprs",
+      "label": "CPRS Manager Options",
+      "vistaMenuPath": "EVE > CPRS Manager Menu",
+      "vistaKey": "ORES",
+      "options": [
+        { "id": "order-checks",  "label": "Order Check Params",    "file": "100.8",  "adminUiPage": "/tenant/clinical",  "status": "stub",    "rpcs": ["ORWOR CATS", "ORQQOX LIST"] },
+        { "id": "order-sets",    "label": "Order Sets",            "file": "101",    "adminUiPage": null,                "status": "missing", "rpcs": ["ORWUL FV4DG", "DDR LISTER 101"] },
+        { "id": "tiu-defs",      "label": "TIU Document Classes",  "file": "8925.1", "adminUiPage": "/tenant/clinical",  "status": "partial", "rpcs": ["TIU GET DOCUMENT DEFINITION"] },
+        { "id": "quick-orders",  "label": "Quick Orders",          "file": "101.41", "adminUiPage": null,                "status": "missing", "rpcs": ["ORWDXA FINDBYNAME"] },
+        { "id": "patient-teams", "label": "Patient Teams",         "file": "100.21", "adminUiPage": null,                "status": "missing", "rpcs": ["ORP TEAM LIST"] },
+        { "id": "notifications", "label": "Notifications Config",  "file": "8992",   "adminUiPage": null,                "status": "missing", "rpcs": ["ORB SORT METHOD", "ORB LIST"] }
+      ]
+    },
+    {
+      "id": "packages",
+      "label": "Package Management",
+      "vistaMenuPath": "EVE > Programmer Options > Package Management",
+      "vistaKey": "XUPROG",
+      "options": [
+        { "id": "packages-list",  "label": "Package List",   "file": "9.4",  "adminUiPage": "/tenant/packages",        "status": "partial", "rpcs": ["DDR LISTER File 9.4"] },
+        { "id": "package-detail", "label": "Package Detail", "file": "9.4",  "adminUiPage": null,                      "status": "missing", "rpcs": ["DDR GETS ENTRY DATA"] },
+        { "id": "rpc-status",     "label": "RPC Status",     "file": "8994", "adminUiPage": null,                      "status": "missing", "rpcs": ["DDR LISTER File 8994"] }
+      ]
+    },
+    {
+      "id": "security-keys",
+      "label": "Security Keys",
+      "vistaMenuPath": "EVE > User Management > Security Keys",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "key-catalog",    "label": "Key Catalog",   "file": "19.1",   "adminUiPage": "/tenant/security-keys",   "status": "done",    "rpcs": ["DDR LISTER File 19.1"] },
+        { "id": "key-inventory",  "label": "Key Inventory", "file": "200.051","adminUiPage": "/tenant/audit",           "status": "partial", "rpcs": ["DDR LISTER 200.051"] },
+        { "id": "assign-key",     "label": "Assign Key",    "file": "200.051","adminUiPage": "/tenant/users/[userId]",  "status": "done",    "rpcs": ["ZVE USMG KEYS ADD"] },
+        { "id": "remove-key",     "label": "Remove Key",    "file": "200.051","adminUiPage": "/tenant/users/[userId]",  "status": "done",    "rpcs": ["ZVE USMG KEYS DEL"] }
+      ]
+    },
+    {
+      "id": "error-trap",
+      "label": "Error Trap",
+      "vistaMenuPath": "EVE > Kernel Management > Error Trap",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "error-log", "label": "Error Log", "file": "3.075", "adminUiPage": "/tenant/error-trap", "status": "done", "rpcs": ["DDR LISTER ^XTER global"] }
+      ]
+    },
+    {
+      "id": "hl7",
+      "label": "HL7 Interfaces",
+      "vistaMenuPath": "EVE > HL7 > Interface Management",
+      "vistaKey": "XUMGR",
+      "options": [
+        { "id": "hl7-list",   "label": "HL7 Logical Links", "file": "870",   "adminUiPage": "/tenant/hl7",         "status": "partial", "rpcs": ["DDR LISTER File 870"] },
+        { "id": "hl7-detail", "label": "Link Detail",       "file": "870",   "adminUiPage": "/tenant/hl7/[ien]",   "status": "done",    "rpcs": ["DDR GETS ENTRY DATA", "DDR FILER"] },
+        { "id": "hl7-events", "label": "Event Monitoring",  "file": "869.3", "adminUiPage": null,                  "status": "missing", "rpcs": ["HL LISTER"] }
+      ]
+    },
+    {
+      "id": "billing",
+      "label": "Billing / Insurance",
+      "vistaMenuPath": "EVE > IB Manager",
+      "vistaKey": "PSORPH",
+      "options": [
+        { "id": "insurance-list",   "label": "Insurance Companies", "file": "36",    "adminUiPage": "/tenant/insurance",  "status": "partial", "rpcs": ["DDR LISTER File 36"] },
+        { "id": "insurance-detail", "label": "Insurance Detail",    "file": "36",    "adminUiPage": null,                 "status": "missing", "rpcs": ["DDR GETS ENTRY DATA"] },
+        { "id": "billing-params",   "label": "Billing Parameters",  "file": "350.9", "adminUiPage": "/tenant/billing",    "status": "stub",    "rpcs": ["DDR GETS ENTRY DATA 350.9"] }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 64,
+    "done": 25,
+    "partial": 12,
+    "stub": 6,
+    "missing": 21
+  },
+  "priorityNext": [
+    { "page": "/tenant/appointment-types", "file": "409.1", "rpc": "SDES GET APPT TYPES", "impact": "high" },
+    { "page": "/tenant/tiu-config",        "file": "8925.1","rpc": "TIU GET DOCUMENT DEFINITION", "impact": "high" },
+    { "page": "/tenant/rpc-status",        "file": "8994",  "rpc": "DDR LISTER File 8994", "impact": "medium" },
+    { "page": "/tenant/order-sets",        "file": "101",   "rpc": "ORWUL FV4DG", "impact": "high" },
+    { "page": "/tenant/mailman-config",    "file": "4.2",   "rpc": "XMA2^XMGAPI", "impact": "medium" },
+    { "page": "/tenant/hl7/[ien]",         "file": "870",   "rpc": "DDR GETS ENTRY DATA", "impact": "medium" }
+  ]
+}

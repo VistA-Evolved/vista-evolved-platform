@@ -17,6 +17,7 @@
  */
 
 import { createConnection } from 'node:net';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 // ---- Configuration -------------------------------------------------------
 
@@ -27,6 +28,32 @@ const VISTA_VERIFY_CODE = process.env.VISTA_VERIFY_CODE || '';
 const VISTA_CONTEXT = process.env.VISTA_CONTEXT || 'OR CPRS GUI CHART';
 const TIMEOUT_MS = parseInt(process.env.VISTA_TIMEOUT_MS || '10000', 10);
 const DEBUG = process.env.VISTA_DEBUG === 'true';
+
+// ---- Per-request broker context (AsyncLocalStorage) ----------------------
+// Each HTTP request gets its own ALS store so concurrent sessions never
+// share broker state. The store holds { broker, brokerOpts, token }.
+
+const _brokerStore = new AsyncLocalStorage();
+
+// ---- Per-session broker pool ---------------------------------------------
+// Maps session token → authenticated XwbBroker instance.
+// Each session authenticates as the actual VistA user (per-user DUZ).
+
+const _sessionBrokerPool = new Map();
+
+// ---- Per-broker sequential lock queues -----------------------------------
+// Prevents concurrent RPC calls on the same socket from corrupting responses.
+// One queue per broker instance (GC-able via WeakMap).
+
+const _brokerLocks = new WeakMap();
+
+function _withBrokerLock(broker, fn) {
+  const prev = _brokerLocks.get(broker) || Promise.resolve();
+  let release;
+  const next = new Promise(res => { release = res; });
+  _brokerLocks.set(broker, next);
+  return prev.then(() => fn().finally(release));
+}
 
 // ---- Constants -----------------------------------------------------------
 
@@ -399,27 +426,23 @@ export class XwbBroker {
   }
 }
 
-// ---- Async mutex for broker serialization --------------------------------
+// ---- Global lock queue (singleton / probe fallback only) -----------------
 
-let _lockQueue = Promise.resolve();
+let _globalLockQueue = Promise.resolve();
 
-function withBrokerLock(fn) {
+function _withGlobalBrokerLock(fn) {
   let release;
   const next = new Promise(res => { release = res; });
-  const wait = _lockQueue;
-  _lockQueue = next;
+  const wait = _globalLockQueue;
+  _globalLockQueue = next;
   return wait.then(() => fn().finally(release));
 }
 
-// ---- Singleton broker instance -------------------------------------------
+// ---- Singleton broker instance (fallback / startup probes) --------------
 
 let _broker = null;
 
-/**
- * Get or create the singleton broker connection.
- * Automatically connects if not already connected.
- */
-export async function getBroker() {
+async function _connectSingleton() {
   if (_broker && _broker.connected) return _broker;
   if (_broker) { _broker.disconnect(); }
   const MAX_RETRIES = 3;
@@ -445,11 +468,132 @@ export async function getBroker() {
 }
 
 /**
- * Execute an RPC call under the broker mutex.
- * Prevents concurrent TCP socket corruption.
+ * Get the active broker for the current execution context.
+ *
+ * Priority:
+ *  1. ALS context broker (per-session, per-user DUZ)
+ *  2. Reconnect ALS broker if disconnected (using stored opts)
+ *  3. Singleton broker (startup probes, non-request contexts)
+ */
+export async function getBroker() {
+  const store = _brokerStore.getStore();
+  if (store) {
+    const ctxBroker = store.broker;
+    if (ctxBroker && ctxBroker.connected) return ctxBroker;
+    if (ctxBroker && store.brokerOpts) {
+      dbg('RECONNECT', `session broker for token ${(store.token || '').slice(0, 8)}...`);
+      try {
+        await ctxBroker.connect(store.brokerOpts);
+        return ctxBroker;
+      } catch (reconnErr) {
+        dbg('RECONNECT FAIL', reconnErr.message);
+      }
+    }
+  }
+  return _connectSingleton();
+}
+
+/**
+ * Execute fn under the appropriate sequential lock for the active broker.
+ * - Per-session requests: per-broker lock (concurrent sessions don't block each other)
+ * - Non-session contexts: global lock (singleton broker)
  */
 export function lockedRpc(fn) {
-  return withBrokerLock(fn);
+  const store = _brokerStore.getStore();
+  const activeBroker = store?.broker;
+  if (activeBroker) {
+    return _withBrokerLock(activeBroker, fn);
+  }
+  return _withGlobalBrokerLock(fn);
+}
+
+// ---- Per-request broker context setup ------------------------------------
+
+/**
+ * Wrap a Fastify app so every HTTP request runs inside an ALS context.
+ * This allows getBroker() to automatically use the session broker without
+ * changing any adapter function signatures.
+ *
+ * Call once after creating the Fastify instance, before registering routes.
+ */
+export function setupBrokerContext(fastifyApp) {
+  const origEmit = fastifyApp.server.emit.bind(fastifyApp.server);
+  fastifyApp.server.emit = function emit(event, ...args) {
+    if (event === 'request') {
+      return _brokerStore.run(Object.create(null), () => origEmit(event, ...args));
+    }
+    return origEmit(event, ...args);
+  };
+  dbg('SETUP', 'Per-request broker context enabled via ALS');
+}
+
+/**
+ * Activate a session-specific broker for the current ALS context.
+ * Must be called from within a setupBrokerContext-wrapped request
+ * (i.e., from within a Fastify hook or handler).
+ *
+ * If a broker already exists in the pool for this token and is connected,
+ * reuses it. Otherwise creates a new broker and authenticates.
+ *
+ * @param {string} token - Session token (pool key)
+ * @param {{ accessCode: string, verifyCode: string, host?: string, port?: number, context?: string }} opts
+ * @returns {Promise<XwbBroker|null>}
+ */
+export async function activateSessionBrokerForRequest(token, opts) {
+  const store = _brokerStore.getStore();
+  if (!store) {
+    dbg('WARN', 'activateSessionBrokerForRequest called outside ALS context');
+    return null;
+  }
+
+  let broker = _sessionBrokerPool.get(token);
+  if (!broker || !broker.connected) {
+    if (broker) {
+      try { broker.disconnect(); } catch {}
+    }
+    broker = new XwbBroker();
+    await broker.connect({
+      host: opts.host || VISTA_HOST,
+      port: opts.port || VISTA_PORT,
+      accessCode: opts.accessCode,
+      verifyCode: opts.verifyCode,
+      context: opts.context || VISTA_CONTEXT,
+    });
+    _sessionBrokerPool.set(token, broker);
+    dbg('SESSION', `New broker for token ${token.slice(0, 8)}... DUZ=${broker.duz}`);
+  }
+
+  store.broker = broker;
+  store.brokerOpts = opts;
+  store.token = token;
+  return broker;
+}
+
+/**
+ * Pre-populate the session broker pool with an already-authenticated broker.
+ * Used by the login route (which runs outside the ALS request context) to
+ * register the newly created broker so activateSessionBrokerForRequest can
+ * reuse it on the first authenticated request.
+ */
+export function cacheSessionBroker(token, broker) {
+  _sessionBrokerPool.set(token, broker);
+}
+
+/**
+ * Release and disconnect a session broker (call on logout or session expiry).
+ */
+export function releaseSessionBroker(token) {
+  const broker = _sessionBrokerPool.get(token);
+  if (broker) {
+    try { broker.disconnect(); } catch {}
+    _sessionBrokerPool.delete(token);
+    dbg('SESSION', `Released broker for token ${token.slice(0, 8)}...`);
+  }
+}
+
+/** Returns count of active session brokers (for health monitoring). */
+export function getSessionBrokerCount() {
+  return _sessionBrokerPool.size;
 }
 
 /**

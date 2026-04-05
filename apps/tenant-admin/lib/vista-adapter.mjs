@@ -15,6 +15,80 @@
 import { getBroker, probeBroker, lockedRpc, VISTA_HOST, VISTA_PORT } from './xwb-client.mjs';
 
 /**
+ * Fetch institutions from VistA File 4 (INSTITUTION) via DDR LISTER.
+ * File 4 is the canonical source for facility records.
+ * Fields: .01=NAME, 99=STATION NUMBER, 3=INSTITUTION TYPE (set: 1=VAMC, 2=CLINIC, etc.)
+ * Falls back to divisions (File 40.8) if DDR LISTER on File 4 fails.
+ */
+export async function fetchVistaInstitutions() {
+  return lockedRpc(async () => {
+    try {
+      const broker = await getBroker();
+      // Attempt 1: DDR LISTER on File 4 with name + station number + type
+      const tryLister = async (fields) => {
+        const lines = await broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '4', FIELDS: fields, FLAGS: 'IP', MAX: '500' } },
+        ]);
+        return parseDdrListerResponse(lines);
+      };
+      let parsed = await tryLister('.01;99;3');
+      if (!parsed.ok || parsed.data.length === 0) {
+        parsed = await tryLister('.01;99');   // Retry without type field (field 3 absent in some VistA versions)
+      }
+      if (!parsed.ok || parsed.data.length === 0) {
+        parsed = await tryLister('.01');       // Minimal: name only
+      }
+      if (parsed.ok && parsed.data.length > 0) {
+        const institutions = parsed.data
+          .map(line => {
+            const parts = line.split('^');
+            const ien = parts[0]?.trim();
+            if (!ien || !/^\d+$/.test(ien)) return null;
+            return {
+              ien,
+              name: parts[1]?.trim() || 'Unknown',
+              stationNumber: parts[2]?.trim() || '',
+              type: parts[3]?.trim() || 'Medical Center',
+            };
+          })
+          .filter(Boolean);
+        if (institutions.length > 0) {
+          return { ok: true, source: 'vista', rpcUsed: 'DDR LISTER File 4', data: institutions };
+        }
+      }
+      // Fallback: divisions (File 40.8) via XUS DIVISION GET
+      const divLines = await broker.callRpc('XUS DIVISION GET');
+      const divisions = [];
+      for (const l of (Array.isArray(divLines) ? divLines : [])) {
+        if (!l || !l.includes('^')) continue;
+        const p = l.split('^');
+        const ien = p[0]?.trim();
+        const name = p[1]?.trim();
+        if (ien && name) {
+          divisions.push({ ien, name, stationNumber: p[2]?.trim() || '', type: 'Division' });
+        }
+      }
+      if (divisions.length > 0) {
+        return { ok: true, source: 'vista', rpcUsed: 'XUS DIVISION GET (fallback)', data: divisions,
+          vistaNote: 'File 4 DDR unavailable; returning Medical Center Divisions (File 40.8)' };
+      }
+      // Last resort: return the site institution using ORWU PARAM
+      const siteLines = await broker.callRpc('ORWU PARAM', ['DIVNUM']);
+      const divNum = (siteLines[0] || '').trim();
+      if (divNum) {
+        return { ok: true, source: 'vista', rpcUsed: 'ORWU PARAM DIVNUM (last-resort)', data: [
+          { ien: '1', name: 'Current Site', stationNumber: divNum, type: 'Medical Center' },
+        ], vistaNote: 'File 4 DDR and XUS DIVISION GET unavailable; showing station number only' };
+      }
+      return { ok: true, source: 'vista', rpcUsed: 'none', data: [],
+        vistaNote: 'No institution data available from VistA File 4, XUS DIVISION GET, or ORWU PARAM' };
+    } catch (err) {
+      return { ok: false, source: 'unavailable', error: err.message };
+    }
+  });
+}
+
+/**
  * Check whether VistA broker is reachable.
  */
 export async function probeVista() {
@@ -590,6 +664,43 @@ export async function ddrFilerAdd(file, field, iens, value, flags = 'E') {
         { type: 'literal', value: flags },
       ]);
       return { ok: true, rpcUsed: 'DDR FILER', lines };
+    } catch (err) {
+      return { ok: false, error: err.message, rpcUsed: 'DDR FILER' };
+    }
+  });
+}
+
+/**
+ * DDR FILER ADD mode — multi-field: { fieldNum: value, ... } in a single call.
+ */
+export async function ddrFilerAddMulti(file, iens, fieldsObj, flags = 'E') {
+  return lockedRpc(async () => {
+    try {
+      const broker = await getBroker();
+      const entries = Object.entries(fieldsObj);
+      const listVal = {};
+      for (let i = 0; i < entries.length; i++) {
+        const [field, value] = entries[i];
+        listVal[String(i + 1)] = `${file}^${field}^${iens}^${value}`;
+      }
+      const lines = await broker.callRpcWithList('DDR FILER', [
+        { type: 'literal', value: 'ADD' },
+        { type: 'list', value: listVal },
+        { type: 'literal', value: flags },
+      ]);
+      const hasError = lines.some(l => l.includes('[BEGIN_diERRORS]'));
+      if (hasError) {
+        const errLines = [];
+        let inErr = false;
+        for (const l of lines) {
+          if (l.includes('[BEGIN_diERRORS]')) { inErr = true; continue; }
+          if (l.includes('[END_diERRORS]')) { inErr = false; continue; }
+          if (inErr) errLines.push(l);
+        }
+        const msg = errLines.filter(l => !l.startsWith('FIELD^') && !l.startsWith('FILE^') && !l.startsWith('IENS^') && !l.match(/^\d+\^/)).join('; ') || 'DDR FILER ADD error';
+        return { ok: false, rpcUsed: 'DDR FILER', error: msg, lines };
+      }
+      return { ok: true, rpcUsed: 'DDR FILER', lines, fieldCount: entries.length };
     } catch (err) {
       return { ok: false, error: err.message, rpcUsed: 'DDR FILER' };
     }

@@ -30,13 +30,18 @@ Thumbs.db
 
 # Test / probe artifacts
 cookies.txt
+*-cookies.txt
 probe-temp.json
 login-body.json
 login.json
 auth-token.txt
+.ve-token.txt
 req.json
 test-results/
 playwright-report/
+
+# Archived code (local reference only)
+_archived/
 
 # Lago secrets
 services/lago/.env

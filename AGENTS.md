@@ -142,6 +142,55 @@ Every AI task response MUST include:
 
 ## 7. BOUNDARIES
 
-- Bounded contexts in CODEOWNERS: `apps/control-plane/`, `apps/tenant-admin/`, `packages/contracts/`, `packages/config/`, `packages/domain/`, `packages/ui/`.
+- Bounded contexts in CODEOWNERS: `apps/control-plane/`, `apps/tenant-admin/`, `apps/web/`, `packages/contracts/`, `packages/config/`, `packages/domain/`.
 - Cross-boundary access via contracts only (OpenAPI, AsyncAPI, schemas). No direct imports between apps.
 - Domain packages do not depend on apps or infrastructure.
+
+---
+
+## 8. PLANNING DOCUMENTS & SPECIFICATION AUTHORITY
+
+The authoritative specifications for all UI/UX work live in `docs/specs/` — 63 Markdown files
+converted from the original `.docx` planning documents. **Read these before writing any frontend code.**
+
+### Where to start
+
+1. **`docs/specs/0.-master-delivery-plan-&-team-handoff-guide.md`** — the project plan, build phases, artifact inventory
+2. **`docs/specs/17.-product-vocabulary-master-sheet.md`** — 134 term translations from VistA → modern product language. **This is the Rosetta Stone.**
+3. **`docs/specs/30.-design-system-specification.md`** — design tokens, components, accessibility (Section 508, WCAG 2.2 AA)
+4. **`docs/specs/2.-page-inventory-matrix-+-screen-contracts-v1.md`** — field-level specs for Admin (12 pages) and Scheduling (20 pages)
+5. **The wireframe spec for your workspace** — `docs/specs/31.` through `docs/specs/46.` (WF-01 through WF-16)
+
+### Vocabulary enforcement
+
+A machine-readable vocabulary file lives at `packages/contracts/vocabulary/vista-vocabulary.json`.
+
+**ABSOLUTE RULES:**
+- **NEVER** display VistA internal terms to clinical end users. Use the `modernProductTerm` / `preferredUILabel` from the vocabulary file.
+- Terms in the `bannedUITerms` array must **never** appear in any user-facing string: `DFN`, `DUZ`, `IEN`, `NEW PERSON`, `MUMPS`, `FileMan`, `TaskMan`, `MailMan`, `Access Code`, `Verify Code`, `Security Key` (use "Permission"), `BCMA`, `CMOP`, `Stop Code`, `Means Test`, `VISN`, `CBOC`, etc.
+- System administrators MAY see VistA internal terms as **secondary labels or tooltips only** when configuring VistA-backed features.
+- Search must be **bilingual** — accept both VistA terms and modern product terms.
+
+### New frontend architecture
+
+The replacement frontend lives in `apps/web/` (React + Vite + Tailwind). It connects to two backends:
+- `apps/tenant-admin/server.mjs` (port 4520) — VistA XWB/DDR integration, no mocks
+- `apps/control-plane-api/` (port 4510) — tenant lifecycle, billing, PostgreSQL
+
+The old frontends (`apps/admin-ui/`, `apps/control-plane/public/`, `apps/tenant-admin/public/`)
+have been archived to `_archived/`. Do not use them for new work.
+
+### Page naming convention
+
+Page components use **descriptive modern names**, not design reference IDs:
+- `StaffDirectory.jsx`, not `AD01_UserManagement.jsx`
+- `PermissionsCatalog.jsx`, not `AD03_SecurityKeys.jsx`
+- `SiteManagement.jsx`, not `AD06_DivisionManagement.jsx`
+
+The spec cross-reference IDs (AD-01, ADM-01, WF-11, etc.) belong in **JSDoc comments only** for traceability.
+
+### Reference repos
+
+- **Vista-Evolved** (frozen) — RPC broker knowledge, Vivian data, broker protocol. Consult when building ZVE wrappers.
+- **Vista-Evolved-Vista-Distro** — Docker VistA runtime on YottaDB. No changes needed. This is the real backend truth.
+- **vista-evolved-admin_1** — Google Stitch design reference. Use as visual inspiration, not code source.
