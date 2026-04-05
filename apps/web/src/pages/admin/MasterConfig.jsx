@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
-import { getMasterConfig, updateMasterConfig } from '../../services/adminService';
+import { getMasterConfig, updateMasterConfig, getSession } from '../../services/adminService';
 import { parseKernelParams } from '../../utils/transforms';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -23,14 +23,15 @@ const CONFIG_SECTIONS = [
 ];
 
 // Maps parsed kernel params to config section fields
-function buildSectionFields(kernelParams, sectionId) {
+function buildSectionFields(kernelParams, sectionId, isVA = true) {
   if (!kernelParams) return [];
   const ts = Number(kernelParams.sessionTimeout?.value || 0);
   const so = Number(kernelParams.autoSignOffDelay?.value || 0);
+  const policyLabel = isVA ? 'VHA Directive 6500' : 'Security Policy';
 
   if (sectionId === 'auth') {
     return [
-      { name: 'sessionTimeout', label: 'Session Timeout Duration', type: 'number', value: String(ts), unit: 'seconds', enforcedMax: 900, hint: `VHA Directive 6500: ≤ 15 min (900s). Current: ${Math.round(ts/60)} min` },
+      { name: 'sessionTimeout', label: 'Session Timeout Duration', type: 'number', value: String(ts), unit: 'seconds', enforcedMax: 900, hint: `${policyLabel}: ≤ 15 min (900s). Current: ${Math.round(ts/60)} min` },
       { name: 'autoSignoff', label: 'Auto Sign-Off Duration', type: 'number', value: String(so), unit: 'seconds', enforcedMax: 900, hint: `Inactive terminal disconnection. Current: ${Math.round(so/60)} min` },
     ];
   }
@@ -73,6 +74,16 @@ export default function MasterConfig() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [isVA, setIsVA] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const sess = await getSession();
+        if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
+      } catch { /* non-fatal */ }
+    })();
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -94,7 +105,7 @@ export default function MasterConfig() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const sectionMeta = CONFIG_SECTIONS.find(s => s.id === selectedSection);
-  const fields = buildSectionFields(kernelParams, selectedSection);
+  const fields = buildSectionFields(kernelParams, selectedSection, isVA);
   const hasChanges = Object.keys(editedValues).length > 0;
 
   const hasViolation = Object.entries(editedValues).some(([name, val]) => {
@@ -235,7 +246,7 @@ export default function MasterConfig() {
                       {isViolation && (
                         <div className="mt-2 text-xs text-[#CC3333] font-semibold flex items-center gap-1">
                           <span className="material-symbols-outlined text-[14px]">block</span>
-                          Exceeds VHA Directive 6500 limit. Save blocked.
+                          Exceeds {isVA ? 'VHA Directive 6500' : 'security policy'} limit. Save blocked.
                         </div>
                       )}
                     </div>
@@ -266,7 +277,7 @@ export default function MasterConfig() {
                 {hasViolation && (
                   <div className="p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[11px] text-[#CC3333] flex items-start gap-2 mb-3">
                     <span className="material-symbols-outlined text-[14px] mt-0.5">block</span>
-                    <span>Save blocked — VHA Directive 6500 violation.</span>
+                    <span>Save blocked — {isVA ? 'VHA Directive 6500' : 'security policy'} violation.</span>
                   </div>
                 )}
                 <div className="flex gap-3">

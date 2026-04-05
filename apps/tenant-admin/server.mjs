@@ -5803,7 +5803,7 @@ async function main() {
 
     try {
       if (reportType === 'staff-access') {
-        const usersRes = await fetchVistaUsers({ status: 'ACTIVE' }, '');
+        const usersRes = await fetchVistaUsers('');
         if (!usersRes.ok) return reply.code(502).send({ ok: false, error: 'Failed to fetch users' });
         const users = usersRes.data || [];
         const now = new Date();
@@ -5839,7 +5839,7 @@ async function main() {
       }
 
       if (reportType === 'inactive-accounts') {
-        const usersRes = await fetchVistaUsers({ status: 'ACTIVE' }, '');
+        const usersRes = await fetchVistaUsers('');
         if (!usersRes.ok) return reply.code(502).send({ ok: false, error: 'Failed to fetch users' });
         const now = new Date();
         const inactive = (usersRes.data || []).filter(u => {

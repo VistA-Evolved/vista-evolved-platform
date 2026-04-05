@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePatient } from './PatientContext';
+import { getSession } from '../../services/adminService';
 
 function formatDob(dob) {
   if (!dob) return '';
@@ -10,6 +11,7 @@ function formatDob(dob) {
 export default function PatientBanner() {
   const { patient, hasPatient } = usePatient();
   const [collapsed, setCollapsed] = useState(false);
+  const [isVA, setIsVA] = useState(true);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,6 +19,15 @@ export default function PatientBanner() {
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const sess = await getSession();
+        if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
+      } catch { /* non-fatal */ }
+    })();
   }, []);
 
   if (!hasPatient) return null;
@@ -41,7 +52,7 @@ export default function PatientBanner() {
         <span className="text-[11px] font-mono text-[#666]">
           ***{(patient.ssn || patient.govId || '').slice(-4)}
         </span>
-        {patient.serviceConnected && (
+        {isVA && patient.serviceConnected && (
           <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
             SC {patient.scPercent || 0}%
           </span>
@@ -96,7 +107,7 @@ export default function PatientBanner() {
               {patient.status === 'inactive' && (
                 <span className="bg-gray-400 text-white text-[10px] font-bold px-2 py-0.5 rounded">INACTIVE</span>
               )}
-              {patient.serviceConnected && (
+              {isVA && patient.serviceConnected && (
                 <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded">
                   SC {patient.scPercent || 0}%
                 </span>
@@ -108,7 +119,7 @@ export default function PatientBanner() {
               <span>{sexDisplay}</span>
               <span className="text-[#ccc]">|</span>
               <span className="font-mono text-[12px]">***{(patient.ssn || patient.govId || '').slice(-4)}</span>
-              {patient.veteranStatus && (
+              {isVA && patient.veteranStatus && (
                 <>
                   <span className="text-[#ccc]">|</span>
                   <span className="text-[#2E5984] font-medium">Veteran</span>

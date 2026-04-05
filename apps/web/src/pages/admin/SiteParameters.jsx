@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
-import { getSiteParameters, updateSiteParameters, getPackageParams, updatePackageParams } from '../../services/adminService';
+import { getSiteParameters, updateSiteParameters, getPackageParams, updatePackageParams, getSession } from '../../services/adminService';
 import { parseKernelParams } from '../../utils/transforms';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -64,7 +64,7 @@ const PARAM_TREE = [
   },
 ];
 
-// VHA Directive 6500 enforcement rules (client-side)
+// Security policy enforcement rules — max values enforced regardless of facility type
 const VHA_RULES = {
   sessionTimeout: { max: 900, maxLabel: '15 minutes (900 seconds)', param: 'Session Timeout' },
   autoSignOffDelay: { max: 900, maxLabel: '15 minutes (900 seconds)', param: 'Auto Sign-Off Delay' },
@@ -79,6 +79,16 @@ export default function SiteParameters() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [isVA, setIsVA] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const sess = await getSession();
+        if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
+      } catch { /* non-fatal */ }
+    })();
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -142,8 +152,9 @@ export default function SiteParameters() {
       const timeoutSec = Number(kernelParams.sessionTimeout?.value || 0);
       const signoffSec = Number(kernelParams.autoSignOffDelay?.value || 0);
       const rpcTimeout = Number(kernelParams.rpcTimeout?.value || 0);
+      const policyLabel = isVA ? 'VHA Directive 6500' : 'Security Policy';
       return [
-        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. Security Policy: max 15 minutes (900 seconds).`, critical: true, enforcedMax: 900 },
+        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. ${policyLabel}: max 15 minutes (900 seconds).`, critical: true, enforcedMax: 900 },
         { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.`, critical: true, enforcedMax: 900 },
         { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.` },
       ];
