@@ -62,10 +62,11 @@ decisions:
 
   - id: VE-PLAT-ADR-0007
     title: Unified admin UI (apps/admin-ui)
-    status: accepted
+    status: superseded
     file: docs/adrs/VE-PLAT-ADR-0007-unified-admin-ui.md
     repo: vista-evolved-platform
     date: 2026-03-23
+    note: Archived 2026-04-04. Replaced by apps/web/ (React + Vite + Tailwind, port 3000).
 
   - id: VE-PLAT-ADR-0008
     title: IT support system integration strategy

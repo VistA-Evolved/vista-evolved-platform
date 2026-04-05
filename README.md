@@ -1,22 +1,55 @@
 # VistA Evolved Platform
 
-Control plane, tenant-admin operational shell, contracts, config, and domain for the VistA Evolved rebuild.
+Control plane, tenant-admin APIs, and unified web UI for the VistA Evolved rebuild.
+
+## Quick start
+
+```powershell
+# 1. Start Docker Desktop, then:
+docker start local-vista-utf8                                          # VistA broker on :9434
+docker compose -f apps/control-plane-api/docker-compose.yml up -d      # Postgres on :5433
+
+# 2. Start backend APIs
+cd apps/tenant-admin   && node --env-file=.env server.mjs &            # :4520
+cd apps/control-plane-api && node --env-file=.env src/server.mjs &     # :4510
+cd apps/control-plane  && node server.mjs &                            # :4500
+
+# 3. Start the web UI
+cd apps/web && npm run dev                                             # :3000
+```
+
+Open **http://localhost:3000** to access the UI.
 
 ## Repo layout
 
-- **apps/** - control-plane, control-plane-api, tenant-admin
-- **packages/** — contracts (OpenAPI, AsyncAPI, schemas), config (ports, modules, tenants), domain (admin, tenancy), ui (design-system)
-- **docs/** — tutorials, how-to, reference, explanation, ADRs, runbooks
-- **prompts/** — active prompts, templates
-- **.github/** — CODEOWNERS, workflows
-- **artifacts/** — build/verification outputs (gitignored where appropriate)
+| Path | Purpose | Status |
+|------|---------|--------|
+| **`apps/web/`** | React + Vite + Tailwind unified UI (port 3000) | **Active — current frontend** |
+| `apps/tenant-admin/` | VistA XWB broker API — 70+ routes, 7 domains (port 4520) | Active backend |
+| `apps/control-plane-api/` | PG-backed tenant lifecycle, billing, provisioning (port 4510) | Active backend |
+| `apps/control-plane/` | Operator console review runtime (port 4500) | Active backend |
+| `apps/terminal-proof/` | SSH terminal proxy for browser terminal | Active |
+| `packages/` | Contracts (OpenAPI, AsyncAPI, schemas), config, domain, UI design-system | Active |
+| `docs/` | Tutorials, how-to, reference, explanation, ADRs, runbooks | Active |
+| `prompts/` | Active prompts, templates | Active |
+| `_archived/` | Archived frontends (admin-ui, old SPAs) — reference only, gitignored | **Archived** |
 
-## Current public-main posture
+### Archived frontends (do not use for new work)
 
-Public `main` is not a blank scaffold. It currently contains:
+The following old UIs have been moved to `_archived/`:
 
-- `apps/control-plane/` - operator console review runtime
-- `apps/control-plane-api/` - PG-backed control-plane backend
-- `apps/tenant-admin/` - VistA-only tenant-admin operational shell with live XWB broker adapter. All routes read from and write to the live VistA system exclusively — no fixture files, no JSON fallbacks, no alternate data sources. If VistA is unreachable, routes return `{ok: false, error: ...}`.
+- `_archived/apps/admin-ui/` — Next.js 15 unified admin (port 4530) — archived 2026-04-04
+- `_archived/apps/control-plane/public/` — vanilla JS operator SPA
+- `_archived/apps/tenant-admin/public/` — vanilla JS tenant admin SPA
 
-Tenant-admin covers 7 domains (70+ routes): users, facilities, clinical config, billing, system params, HL7 interfaces, and monitoring/audit. Full CRUD lifecycle for users (create, rename, deactivate, reactivate, terminate) is live-verified against the UTF-8 VistA distro. See `docs/reference/source-of-truth-index.md` and `docs/explanation/governed-build-protocol.md`.
+The replacement frontend is **`apps/web/`** (React + Vite + Tailwind on port 3000).
+It proxies API calls to the backend services (tenant-admin :4520, control-plane-api :4510).
+
+## Related repos
+
+| Repo | Purpose |
+|------|---------|
+| **vista-evolved-vista-distro** | VistA Docker runtime (UTF-8 lane), upstream pins, overlay routines |
+| VistA-Evolved | **Frozen/archived** — original monorepo, reference only |
+
+See `docs/reference/source-of-truth-index.md` and `AGENTS.md` for full governance.

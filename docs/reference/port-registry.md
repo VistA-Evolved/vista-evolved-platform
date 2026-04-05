@@ -12,8 +12,9 @@
 
 | Service / component | Port (default) | Protocol | Owner | Docker container |
 |---------------------|----------------|----------|--------|-----------------|
-| **Admin UI (Next.js)** | **4530** | HTTP | platform | — (node) |
-| Operator console (legacy SPA) | 4500 | HTTP | platform | — (node) |
+| **Web UI (React + Vite)** | **3000** | HTTP | platform | — (node/vite) |
+| ~~Admin UI (Next.js)~~ | ~~4530~~ | ~~HTTP~~ | ~~platform~~ | **ARCHIVED — moved to `_archived/apps/admin-ui/`** |
+| Operator console API | 4500 | HTTP | platform | — (node) |
 | Platform API (admin backend) | 4510 | HTTP | platform | — (node) |
 | Tenant admin API | 4520 | HTTP | platform | — (node) |
 | Platform PostgreSQL | 5433 | TCP | platform | ve-platform-db |
@@ -21,9 +22,12 @@
 | Lago billing API | 3040 | HTTP | platform | ve-lago-api |
 | Lago billing UI (admin) | 3041 | HTTP | platform | ve-lago-front |
 
-> **Admin UI (port 4530)** is the primary UI serving both `/tenant/*` (site admin) and `/operator/*` (platform ops) via Next.js route namespacing. It proxies API calls to port 4520 (`/api/ta/v1/*`) and port 4510 (`/api/op/v1/*`). The tenant admin SPA on 4520 also serves its own static UI as a lightweight fallback. The operator console on 4500 is the legacy SPA for platform operations.
+> **Web UI (port 3000)** is the active unified frontend (React + Vite + Tailwind).
+> It proxies `/api/ta/v1/*` to tenant admin API on port 4520 and `/api/op/v1/*`
+> to the platform API on port 4510.
 >
-> Set `NEXT_PUBLIC_TENANT_ID` env var to override the default tenant (`default-tenant`) for multi-tenant deployments.
+> The old Admin UI (Next.js, port 4530) and the old vanilla SPAs served from
+> ports 4500 and 4520 have been archived to `_archived/`. Do not use them.
 
 Port assignments are documented in this file and enforced by convention. Override via environment variables or deployment config. Future: `packages/config/ports/` for programmatic port resolution.
 

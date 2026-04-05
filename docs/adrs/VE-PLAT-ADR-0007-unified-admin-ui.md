@@ -1,8 +1,14 @@
 # VE-PLAT-ADR-0007: Unified Admin UI (apps/admin-ui)
 
-**Status:** accepted
+**Status:** superseded
+**Superseded by:** `apps/web/` (React + Vite + Tailwind on port 3000). See `_archived/README.md`.
 **Date:** 2026-03-23
 **Deciders:** Platform team
+
+> **Note:** `apps/admin-ui/` was archived on 2026-04-04 due to excessive VistA terminology,
+> ~70 confusing routes, and direct exposure of implementation details. The replacement
+> frontend is `apps/web/`. The backends (tenant-admin on 4520, control-plane-api on 4510)
+> remain active and are consumed by `apps/web/` via Vite proxy.
 
 ## Context
 
