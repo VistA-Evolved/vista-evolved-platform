@@ -4595,24 +4595,26 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const search = req.query.search || '';
-    // --- ZVE-first: ZVE PATIENT SEARCH EXTENDED ---
-    try {
-      const stype = req.query.stype || 'NAME';
-      const z = await callZveRpc('ZVE PATIENT SEARCH EXTENDED', [search, stype, req.query.division || '', req.query.inactive || '', req.query.max || '']);
-      const o = zveOutcome(z);
-      if (o.kind === 'ok') {
-        const data = [];
-        for (const line of z.lines.slice(1)) {
-          const p = line.split('^');
-          if (!p[0]) continue;
-          data.push({ dfn: p[0], name: p[1] || '', dob: p[2] || '', ssnLast4: p[3] || '', sex: p[4] || '', serviceConnected: (p[5] || '').toUpperCase() === 'YES', scPercent: parseInt(p[6] || '0', 10) || 0, lastVisit: p[7] || '' });
+    // --- ZVE-first: ZVE PATIENT SEARCH EXTENDED (skip for empty search — VistA RPC rejects it) ---
+    if (search) {
+      try {
+        const stype = req.query.stype || 'NAME';
+        const z = await callZveRpc('ZVE PATIENT SEARCH EXTENDED', [search, stype, req.query.division || '', req.query.inactive || '', req.query.max || '']);
+        const o = zveOutcome(z);
+        if (o.kind === 'ok') {
+          const data = [];
+          for (const line of z.lines.slice(1)) {
+            const p = line.split('^');
+            if (!p[0]) continue;
+            data.push({ dfn: p[0], name: p[1] || '', dob: p[2] || '', ssnLast4: p[3] || '', sex: p[4] || '', serviceConnected: (p[5] || '').toUpperCase() === 'YES', scPercent: parseInt(p[6] || '0', 10) || 0, lastVisit: p[7] || '' });
+          }
+          return { ok: true, source: 'zve', tenantId, data, total: data.length, rpcUsed: z.rpcUsed };
         }
-        return { ok: true, source: 'zve', tenantId, data, total: data.length, rpcUsed: z.rpcUsed };
-      }
-      if (o.kind !== 'missing') {
-        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
-      }
-    } catch (_zve) { /* fall through to DDR */ }
+        if (o.kind !== 'missing') {
+          return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
+        }
+      } catch (_zve) { /* fall through to DDR */ }
+    }
     // --- DDR fallback ---
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
