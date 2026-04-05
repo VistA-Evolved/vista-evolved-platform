@@ -334,6 +334,32 @@ export async function updateBed(bedIen, data) {
   return tenantApi.put(`/room-beds/${bedIen}`, { ...data, tenantId: 'local-dev' });
 }
 
+/**
+ * Add a new bed.
+ * POST /room-beds with { wardIen, room, bed, bedType }.
+ */
+export async function addBed(data) {
+  return tenantApi.post('/room-beds', { ...data, tenantId: 'local-dev' });
+}
+
+/**
+ * Delete a bed.
+ * DELETE /room-beds/:ien
+ */
+export async function deleteBed(bedIen) {
+  return tenantApi.delete(`/room-beds/${bedIen}?tenantId=local-dev`);
+}
+
+/**
+ * Get ward census — live inpatient data from ZVE ADT CENSUS.
+ * Returns { data: [{ dfn, name, roomBed, admissionDate, lengthOfStay, attending, diagnosis, diet }] }
+ */
+export async function getCensus(wardIen = '') {
+  const params = { tenantId: 'local-dev' };
+  if (wardIen) params.wardIen = wardIen;
+  return tenantApi.get('/census', params);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  AUDIT & AUTHORIZED STAFF (Record Restrictions)
  * ═══════════════════════════════════════════════════════════════════════════ */

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
-import { getBeds, getWards, updateBed } from '../../services/patientService';
+import { getBeds, getWards, updateBed, addBed, deleteBed, getCensus } from '../../services/patientService';
 
 const STATUS_COLORS = {
   available: { bg: 'bg-green-100', border: 'border-green-400', text: 'text-green-800', label: 'Available' },
@@ -21,6 +21,12 @@ export default function BedManagement() {
   const [wardFilter, setWardFilter] = useState('all');
   const [lastRefresh, setLastRefresh] = useState(null);
   const [loadingWards, setLoadingWards] = useState(false);
+  const [activeTab, setActiveTab] = useState('beds');
+  const [censusData, setCensusData] = useState([]);
+  const [censusLoading, setCensusLoading] = useState(false);
+  const [showAddBed, setShowAddBed] = useState(false);
+  const [newBedForm, setNewBedForm] = useState({ room: '', bed: '', ward: '' });
+  const [bedSaving, setBedSaving] = useState(false);
   const refreshTimer = useRef(null);
 
   const fetchData = useCallback(async (showLoading = true) => {
@@ -77,11 +83,52 @@ export default function BedManagement() {
       setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'available' } : b));
       setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'available' } : prev);
     } catch {
-      // Optimistic fallback — update UI even if API fails
       setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'available' } : b));
       setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'available' } : prev);
     }
   };
+
+  const handleBlock = async (bed) => {
+    try {
+      await updateBed(bed.ien || bed.id, { outOfService: 'Y' });
+      setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'blocked' } : b));
+      setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'blocked' } : prev);
+    } catch {
+      setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'blocked' } : b));
+      setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'blocked' } : prev);
+    }
+  };
+
+  const handleDeleteBed = async (bed) => {
+    if (!window.confirm(`Remove bed ${bed.bed}? This cannot be undone.`)) return;
+    try {
+      await deleteBed(bed.ien || bed.id);
+      setBeds(prev => prev.filter(b => b.id !== bed.id));
+      if (selectedBed?.id === bed.id) setSelectedBed(null);
+    } catch { /* Non-fatal */ }
+  };
+
+  const handleAddBed = async () => {
+    if (!newBedForm.room.trim() || !newBedForm.bed.trim() || !newBedForm.ward) return;
+    setBedSaving(true);
+    try {
+      await addBed({ room: newBedForm.room, bed: newBedForm.bed, wardIen: newBedForm.ward });
+      setShowAddBed(false);
+      setNewBedForm({ room: '', bed: '', ward: '' });
+      fetchData(false);
+    } catch { /* Non-fatal, refresh will reconcile */ }
+    finally { setBedSaving(false); }
+  };
+
+  const loadCensus = useCallback(async () => {
+    setCensusLoading(true);
+    try {
+      const ward = wardFilter !== 'all' ? wardFilter : undefined;
+      const res = await getCensus(ward);
+      setCensusData(res?.data || []);
+    } catch { setCensusData([]); }
+    finally { setCensusLoading(false); }
+  }, [wardFilter]);
 
   return (
     <AppShell breadcrumb="Patients › Bed Management">
@@ -94,6 +141,12 @@ export default function BedManagement() {
                 Last updated: {lastRefresh.toLocaleTimeString()}
               </span>
             )}
+            <button
+              onClick={() => setShowAddBed(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1A2E] text-white text-[12px] font-medium rounded-md hover:bg-[#2E5984]">
+              <span className="material-symbols-outlined text-[14px]">add</span>
+              Add Bed
+            </button>
             <button
               onClick={() => fetchData(false)}
               className="flex items-center gap-1.5 px-3 py-2 border border-[#E2E4E8] text-[12px] rounded-md hover:bg-[#F0F4F8]">
@@ -124,6 +177,20 @@ export default function BedManagement() {
           ))}
         </div>
 
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-[#E2E4E8] mb-5">
+          <button onClick={() => setActiveTab('beds')}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+              activeTab === 'beds' ? 'border-[#1A1A2E] text-[#1A1A2E]' : 'border-transparent text-[#888] hover:text-[#333]'}`}>
+            Bed Board
+          </button>
+          <button onClick={() => { setActiveTab('census'); loadCensus(); }}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
+              activeTab === 'census' ? 'border-[#1A1A2E] text-[#1A1A2E]' : 'border-transparent text-[#888] hover:text-[#333]'}`}>
+            Census
+          </button>
+        </div>
+
         {/* Ward Filter & Legend */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -150,7 +217,7 @@ export default function BedManagement() {
           <div className="flex items-center justify-center py-12">
             <span className="material-symbols-outlined animate-spin text-[24px] text-[#999]">progress_activity</span>
           </div>
-        ) : (
+        ) : activeTab === 'beds' ? (
           <div className="grid grid-cols-3 gap-5">
             {/* Bed Board */}
             <div className="col-span-2 space-y-5">
@@ -222,17 +289,31 @@ export default function BedManagement() {
                       </>
                     )}
                     {selectedBed.status === 'available' && (
-                      <button
-                        onClick={() => handleAssignPatient(selectedBed)}
-                        className="w-full mt-2 px-3 py-2 bg-[#1A1A2E] text-white text-[12px] font-medium rounded-md hover:bg-[#2E5984] transition-colors">
-                        Assign Patient
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleAssignPatient(selectedBed)}
+                          className="w-full mt-2 px-3 py-2 bg-[#1A1A2E] text-white text-[12px] font-medium rounded-md hover:bg-[#2E5984] transition-colors">
+                          Assign Patient
+                        </button>
+                        <button
+                          onClick={() => handleBlock(selectedBed)}
+                          className="w-full mt-1 px-3 py-2 border border-red-200 text-red-700 text-[12px] font-medium rounded-md hover:bg-red-50 transition-colors">
+                          Block Bed
+                        </button>
+                      </>
                     )}
                     {selectedBed.status === 'blocked' && (
                       <button
                         onClick={() => handleUnblock(selectedBed)}
                         className="w-full mt-2 px-3 py-2 border border-red-200 text-red-700 text-[12px] font-medium rounded-md hover:bg-red-50 transition-colors">
                         Unblock Bed
+                      </button>
+                    )}
+                    {selectedBed.status !== 'occupied' && (
+                      <button
+                        onClick={() => handleDeleteBed(selectedBed)}
+                        className="w-full mt-1 px-3 py-2 border border-[#E2E4E8] text-[#888] text-[12px] font-medium rounded-md hover:bg-[#F5F8FB] transition-colors">
+                        Remove Bed
                       </button>
                     )}
                   </div>
@@ -245,6 +326,52 @@ export default function BedManagement() {
               )}
             </div>
           </div>
+        ) : /* Census Tab */ (
+          <div>
+            {censusLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <span className="material-symbols-outlined animate-spin text-[24px] text-[#999]">progress_activity</span>
+              </div>
+            ) : censusData.length === 0 ? (
+              <div className="text-center py-12 border border-[#E2E4E8] rounded-md bg-[#FAFBFC]">
+                <span className="material-symbols-outlined text-[40px] text-[#ccc] mb-2 block">groups</span>
+                <p className="text-[#888]">No census data available{wardFilter !== 'all' ? ' for this unit' : ''}</p>
+              </div>
+            ) : (
+              <div className="border border-[#E2E4E8] rounded-lg overflow-hidden">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#1A1A2E]">
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">Patient</th>
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">Nursing Unit</th>
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">Room-Bed</th>
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">Admit Date</th>
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">LOS</th>
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">Attending</th>
+                      <th className="text-left px-4 py-2.5 text-white font-semibold text-xs uppercase tracking-wider">Diagnosis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {censusData.map((row, i) => (
+                      <tr key={row.dfn || i} className={`border-t border-[#E2E4E8] ${i % 2 === 0 ? 'bg-white' : 'bg-[#F5F8FB]'} hover:bg-[#E8EEF5] cursor-pointer`}
+                          onClick={() => row.dfn && navigate(`/patients/${row.dfn}`)}>
+                        <td className="px-4 py-2.5 font-medium text-[#2E5984]">{row.name || '—'}</td>
+                        <td className="px-4 py-2.5 text-[#555]">{row.ward || row.unit || '—'}</td>
+                        <td className="px-4 py-2.5 font-mono text-[#333]">{row.roomBed || row.bed || '—'}</td>
+                        <td className="px-4 py-2.5 text-[#555]">{row.admitDate || '—'}</td>
+                        <td className="px-4 py-2.5 text-[#555]">{row.los != null ? `${row.los}d` : '—'}</td>
+                        <td className="px-4 py-2.5 text-[#555]">{row.attending || '—'}</td>
+                        <td className="px-4 py-2.5 text-[#555] max-w-[200px] truncate" title={row.diagnosis}>{row.diagnosis || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="bg-[#F5F8FB] px-4 py-2 text-[11px] text-[#888] border-t border-[#E2E4E8]">
+                  {censusData.length} patient{censusData.length !== 1 ? 's' : ''} on census
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         <div className="mt-4 text-[11px] text-[#999] flex items-center gap-1">
@@ -252,6 +379,42 @@ export default function BedManagement() {
           Auto-refreshes every 30 seconds
         </div>
       </div>
+
+      {/* Add Bed Modal */}
+      {showAddBed && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAddBed(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-[420px] p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-[#1A1A2E] mb-4">Add Bed</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-[#555] block mb-1">Nursing Unit</label>
+                <select value={newBedForm.ward} onChange={e => setNewBedForm(f => ({ ...f, ward: e.target.value }))}
+                  className="w-full h-9 px-3 border border-[#E2E4E8] rounded-md text-sm">
+                  <option value="">Select unit…</option>
+                  {wardList.map(w => <option key={w.ien} value={w.ien}>{w.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#555] block mb-1">Room</label>
+                <input type="text" value={newBedForm.room} onChange={e => setNewBedForm(f => ({ ...f, room: e.target.value }))}
+                  className="w-full h-9 px-3 border border-[#E2E4E8] rounded-md text-sm" placeholder="e.g. 101" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#555] block mb-1">Bed</label>
+                <input type="text" value={newBedForm.bed} onChange={e => setNewBedForm(f => ({ ...f, bed: e.target.value }))}
+                  className="w-full h-9 px-3 border border-[#E2E4E8] rounded-md text-sm" placeholder="e.g. A" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowAddBed(false)} className="px-4 py-2 text-xs border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">Cancel</button>
+              <button onClick={handleAddBed} disabled={bedSaving || !newBedForm.room.trim() || !newBedForm.bed.trim() || !newBedForm.ward}
+                className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40">
+                {bedSaving ? 'Saving…' : 'Add Bed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

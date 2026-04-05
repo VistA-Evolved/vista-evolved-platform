@@ -7,6 +7,7 @@ import { getSessionToken } from './services/api';
 import { getSession } from './services/adminService';
 import { PatientProvider } from './components/shared/PatientContext';
 import SessionManager from './components/shared/SessionManager';
+import ESignatureSetup from './components/shared/ESignatureSetup';
 
 import StaffDirectory from './pages/admin/StaffDirectory';
 import StaffForm from './pages/admin/StaffForm';
@@ -32,9 +33,45 @@ import PatientFlags from './pages/patients/PatientFlags';
 import RecordRestrictions from './pages/patients/RecordRestrictions';
 import RegistrationReports from './pages/patients/RegistrationReports';
 
+const ESIG_DISMISSED_KEY = 've-esig-dismissed';
+const PROVIDER_KEYS = ['ORES', 'ORELSE', 'PROVIDER', 'OR CPRS GUI CHART'];
+
 function RequireAuth({ children }) {
+  const [showEsig, setShowEsig] = useState(false);
+  const [esigUser, setEsigUser] = useState(null);
+
+  useEffect(() => {
+    if (!getSessionToken() || sessionStorage.getItem(ESIG_DISMISSED_KEY)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getSession();
+        if (cancelled) return;
+        const keys = (res?.user?.keys || []).map(k => k.toUpperCase());
+        const isProvider = PROVIDER_KEYS.some(k => keys.includes(k));
+        if (isProvider && res?.user?.hasEsig === false) {
+          setEsigUser(res.user);
+          setShowEsig(true);
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   if (!getSessionToken()) return <Navigate to="/login" replace />;
-  return children;
+  return (
+    <>
+      {showEsig && esigUser && (
+        <ESignatureSetup
+          duz={esigUser.duz}
+          userName={esigUser.name}
+          onComplete={() => setShowEsig(false)}
+          onSkip={() => { sessionStorage.setItem(ESIG_DISMISSED_KEY, 'true'); setShowEsig(false); }}
+        />
+      )}
+      {children}
+    </>
+  );
 }
 
 /**

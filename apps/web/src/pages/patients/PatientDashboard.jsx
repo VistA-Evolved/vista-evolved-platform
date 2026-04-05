@@ -640,6 +640,34 @@ export default function PatientDashboard() {
         </div>
       )}
 
+      {/* Inpatient status banner */}
+      {!isDeceased && p.wardLocation && (
+        <div className="bg-blue-700 text-white py-2.5 px-6 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-[13px]">
+            <span className="material-symbols-outlined text-[18px]">local_hospital</span>
+            <span className="font-semibold">Inpatient</span>
+            <span className="text-blue-200">Ward: {p.wardLocation}</span>
+            {p.roomBed && <span className="text-blue-200">Bed: {p.roomBed}</span>}
+            {p.admitDate && (
+              <span className="text-blue-200">
+                Admitted: {new Date(p.admitDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {(() => { const days = Math.floor((Date.now() - new Date(p.admitDate + 'T00:00:00').getTime()) / 86400000); return days > 0 ? ` (${days}d)` : ''; })()}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => navigate(`/patients/${p.dfn || patientId}/transfer`)}
+              className="px-3 py-1 text-[11px] font-medium bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors">
+              Transfer
+            </button>
+            <button onClick={() => navigate(`/patients/${p.dfn || patientId}/discharge`)}
+              className="px-3 py-1 text-[11px] font-medium bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors">
+              Discharge
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="px-6 py-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">

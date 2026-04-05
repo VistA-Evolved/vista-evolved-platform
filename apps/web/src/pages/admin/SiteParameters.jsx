@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
-import { getSiteParameters, updateSiteParameters } from '../../services/adminService';
+import { getSiteParameters, updateSiteParameters, getPackageParams, updatePackageParams } from '../../services/adminService';
 import { parseKernelParams } from '../../utils/transforms';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -29,19 +29,37 @@ const PARAM_TREE = [
   {
     section: 'Clinical',
     groups: [
-      { id: 'clinical-stub', label: 'Order Entry Settings', icon: 'clinical_notes' },
+      { id: 'order-entry', label: 'Order Entry Settings', icon: 'clinical_notes', vistaFile: '100.99' },
     ],
   },
   {
     section: 'Pharmacy',
     groups: [
-      { id: 'pharmacy-stub', label: 'Pharmacy Settings', icon: 'medication' },
+      { id: 'pharmacy', label: 'Pharmacy Settings', icon: 'medication', vistaFile: '59.7' },
     ],
   },
   {
     section: 'Laboratory',
     groups: [
-      { id: 'lab-stub', label: 'Lab Settings', icon: 'science' },
+      { id: 'lab', label: 'Lab Settings', icon: 'science', vistaFile: '69.9' },
+    ],
+  },
+  {
+    section: 'Scheduling',
+    groups: [
+      { id: 'scheduling', label: 'Scheduling Settings', icon: 'calendar_month', vistaFile: '44' },
+    ],
+  },
+  {
+    section: 'Radiology',
+    groups: [
+      { id: 'radiology', label: 'Radiology Settings', icon: 'radiology', vistaFile: '79.1' },
+    ],
+  },
+  {
+    section: 'Surgery',
+    groups: [
+      { id: 'surgery', label: 'Surgery Settings', icon: 'surgical', vistaFile: '136' },
     ],
   },
 ];
@@ -82,6 +100,32 @@ export default function SiteParameters() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const [packageParams, setPackageParams] = useState({});
+  const [pkgLoading, setPkgLoading] = useState(false);
+
+  // Load package-specific params when group changes
+  useEffect(() => {
+    const group = selectedGroup;
+    if (group === 'kernel' || group === 'session') return;
+    // If we already loaded this package, skip
+    if (packageParams[group]) return;
+
+    let cancelled = false;
+    setPkgLoading(true);
+    (async () => {
+      try {
+        const res = await getPackageParams(group);
+        if (cancelled) return;
+        setPackageParams(prev => ({ ...prev, [group]: res }));
+      } catch (err) {
+        if (!cancelled) setPackageParams(prev => ({ ...prev, [group]: { ok: false, error: err.message } }));
+      } finally {
+        if (!cancelled) setPkgLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedGroup]);
+
   // Build display params from parsed kernel data
   const getParamsForGroup = () => {
     if (!kernelParams) return [];
@@ -99,12 +143,37 @@ export default function SiteParameters() {
       const signoffSec = Number(kernelParams.autoSignOffDelay?.value || 0);
       const rpcTimeout = Number(kernelParams.rpcTimeout?.value || 0);
       return [
-        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. VHA Directive 6500: max 15 minutes (900 seconds).`, critical: true, enforcedMax: 900 },
+        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. Security Policy: max 15 minutes (900 seconds).`, critical: true, enforcedMax: 900 },
         { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.`, critical: true, enforcedMax: 900 },
         { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.` },
       ];
     }
-    return [{ key: 'stub', name: 'Parameters Not Available', value: '', type: 'readonly', description: 'These parameters require additional VistA package configuration. Only Kernel parameters are exposed via the current API.' }];
+    // Package-specific params
+    const pkgData = packageParams[selectedGroup];
+    if (!pkgData || pkgData.error) {
+      return [{ key: 'loading', name: pkgData?.error || 'Loading...', value: '', type: 'readonly', description: pkgData?.note || 'Connecting to VistA package file...' }];
+    }
+    // Parse raw DDR lines into editable fields
+    const rawLines = pkgData.rawLines || [];
+    if (rawLines.length === 0) {
+      const groupDef = PARAM_TREE.flatMap(s => s.groups).find(g => g.id === selectedGroup);
+      return [{ key: 'empty', name: `${groupDef?.label || selectedGroup}`, value: 'No records found', type: 'readonly', description: `VistA file #${groupDef?.vistaFile || '?'} has no entries in this system. Parameters can be configured once the package is initialized.` }];
+    }
+    return rawLines.map((line, i) => {
+      const parts = line.split('^');
+      // DDR GETS ENTRY format: FILE^IEN^FIELD^INTERNAL^EXTERNAL
+      const fieldNum = parts[2] || `${i}`;
+      const internal = parts[3] || '';
+      const external = parts[4] || internal;
+      return {
+        key: `${selectedGroup}-${fieldNum}`,
+        fieldNum,
+        name: external || `Field ${fieldNum}`,
+        value: internal,
+        type: 'text',
+        description: `File #${pkgData.file || '?'}, field ${fieldNum}`,
+      };
+    });
   };
 
   const params = getParamsForGroup();
@@ -133,10 +202,25 @@ export default function SiteParameters() {
     setSaving(true);
     setSaveError('');
     try {
-      await updateSiteParameters({ ...editedValues, reason: changeReason });
+      if (selectedGroup === 'kernel' || selectedGroup === 'session') {
+        await updateSiteParameters({ ...editedValues, reason: changeReason });
+      } else {
+        // Package-specific save
+        const payload = {};
+        for (const [key, val] of Object.entries(editedValues)) {
+          const param = params.find(p => p.key === key);
+          if (param?.fieldNum) payload[param.fieldNum] = val;
+          else payload[key] = val;
+        }
+        payload.reason = changeReason;
+        await updatePackageParams(selectedGroup, payload);
+        // Reload package params
+        const res = await getPackageParams(selectedGroup);
+        setPackageParams(prev => ({ ...prev, [selectedGroup]: res }));
+      }
       setEditedValues({});
       setChangeReason('');
-      await loadData();
+      if (selectedGroup === 'kernel' || selectedGroup === 'session') await loadData();
     } catch (err) {
       setSaveError(err.message || 'Failed to save parameters. Please try again.');
     } finally {
@@ -235,7 +319,7 @@ export default function SiteParameters() {
                     {isViolation && (
                       <div className="mt-2 text-xs text-[#CC3333] font-semibold flex items-center gap-1">
                         <span className="material-symbols-outlined text-[14px]">block</span>
-                        Exceeds VHA Directive 6500 maximum of {rule.maxLabel}. Save will be blocked.
+                        Exceeds security policy maximum of {rule.maxLabel}. Save will be blocked.
                       </div>
                     )}
                   </div>
@@ -282,7 +366,7 @@ export default function SiteParameters() {
                 {hasViolation && (
                   <div className="p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[11px] text-[#CC3333] flex items-start gap-2">
                     <span className="material-symbols-outlined text-[14px] mt-0.5">block</span>
-                    <span>Save blocked — VHA Directive 6500 violation.</span>
+                    <span>Save blocked — security policy violation.</span>
                   </div>
                 )}
                 <button disabled={!changeReason.trim() || hasViolation || saving} onClick={handleSave}

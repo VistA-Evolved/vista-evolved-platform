@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import { SearchBar } from '../../components/shared/SharedComponents';
-import { getSites, getSite, getTopology } from '../../services/adminService';
+import { getSites, getSite, getTopology, updateSite, createSite, getSiteWorkspaces, updateSiteWorkspace } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
 /**
@@ -28,6 +28,12 @@ export default function SiteManagement() {
   const [editMode, setEditMode] = useState(false);
   const [siteDetail, setSiteDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [toggleSaving, setToggleSaving] = useState('');
+  const [showAddSite, setShowAddSite] = useState(false);
+  const [newSiteForm, setNewSiteForm] = useState({ name: '', stationNumber: '', type: 'Medical Center' });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -46,11 +52,25 @@ export default function SiteManagement() {
       setAllSites(sites);
       if (sites.length > 0) {
         setSelectedSite(sites[0]);
+        // Load workspace visibility from VistA per division
         const toggles = {};
-        sites.forEach(s => {
-          toggles[s.id] = {};
-          ALL_WORKSPACES.forEach(ws => { toggles[s.id][ws] = true; });
-        });
+        for (const s of sites) {
+          try {
+            const wsRes = await getSiteWorkspaces(s.id);
+            if (wsRes?.data) {
+              toggles[s.id] = {};
+              ALL_WORKSPACES.forEach(ws => {
+                toggles[s.id][ws] = wsRes.data[ws] !== false;
+              });
+            } else {
+              toggles[s.id] = {};
+              ALL_WORKSPACES.forEach(ws => { toggles[s.id][ws] = true; });
+            }
+          } catch {
+            toggles[s.id] = {};
+            ALL_WORKSPACES.forEach(ws => { toggles[s.id][ws] = true; });
+          }
+        }
         setWorkspaceToggles(toggles);
       }
     } catch (err) {
@@ -75,11 +95,24 @@ export default function SiteManagement() {
     'Residential Treatment': 'cottage',
   };
 
-  const toggleWorkspace = (siteId, ws) => {
+  const toggleWorkspace = async (siteId, ws) => {
+    const newState = !(workspaceToggles[siteId]?.[ws]);
+    setToggleSaving(ws);
+    // Optimistic update
     setWorkspaceToggles(prev => ({
       ...prev,
-      [siteId]: { ...(prev[siteId] || {}), [ws]: !(prev[siteId]?.[ws]) },
+      [siteId]: { ...(prev[siteId] || {}), [ws]: newState },
     }));
+    try {
+      await updateSiteWorkspace(siteId, ws, newState);
+    } catch {
+      // Revert on failure
+      setWorkspaceToggles(prev => ({
+        ...prev,
+        [siteId]: { ...(prev[siteId] || {}), [ws]: !newState },
+      }));
+    }
+    setToggleSaving('');
   };
 
   if (error) {
@@ -155,14 +188,21 @@ export default function SiteManagement() {
                         setDetailLoading(true);
                         try {
                           const res = await getSite(selectedSite.id);
-                          setSiteDetail(res?.data || {});
-                        } catch { setSiteDetail({}); }
+                          const d = res?.data || {};
+                          setSiteDetail(d);
+                          setEditForm({ name: d.name || selectedSite.name, phone: d.phone || '', address: d.address || '', city: d.city || '', state: d.state || '', zip: d.zip || '' });
+                        } catch { setSiteDetail({}); setEditForm({}); }
                         finally { setDetailLoading(false); }
                       }
+                      setSaveMsg('');
                       setEditMode(!editMode);
                     }}
                     className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
                     {editMode ? 'Cancel Edit' : 'Edit Site'}
+                  </button>
+                  <button onClick={() => setShowAddSite(true)}
+                    className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
+                    Add Site
                   </button>
                   <button onClick={() => navigate('/admin/parameters')}
                     className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
@@ -179,12 +219,68 @@ export default function SiteManagement() {
               )}
 
               {editMode && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800 mb-4">
-                  <span className="material-symbols-outlined text-[18px] mt-0.5">info</span>
-                  <div>
-                    <p className="font-medium">View Only</p>
-                    <p className="text-xs mt-0.5">Site detail editing requires a backend endpoint (PUT /api/ta/v1/divisions/:ien) that has not been built yet. Changes to workspace toggles are visual only and will not persist.</p>
-                  </div>
+                <div className="space-y-4 mb-4">
+                  {saveMsg && (
+                    <div className={`p-3 rounded-md text-sm ${saveMsg.includes('Success') ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+                      {saveMsg}
+                    </div>
+                  )}
+                  <Section title="Edit Site Profile">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-medium text-text-muted uppercase">Name</label>
+                        <input type="text" value={editForm.name || ''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                          className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-text-muted uppercase">Phone</label>
+                        <input type="text" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                          className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] font-medium text-text-muted uppercase">Address</label>
+                        <input type="text" value={editForm.address || ''} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                          className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-text-muted uppercase">City</label>
+                        <input type="text" value={editForm.city || ''} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))}
+                          className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-text-muted uppercase">State</label>
+                        <input type="text" value={editForm.state || ''} onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))}
+                          className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        disabled={saving}
+                        onClick={async () => {
+                          setSaving(true);
+                          setSaveMsg('');
+                          try {
+                            const res = await updateSite(selectedSite.id, editForm);
+                            if (res.ok) {
+                              setSaveMsg('Success — Site details saved to VistA.');
+                              await loadData();
+                            } else {
+                              setSaveMsg(`Error: ${res.error || 'Save failed'}`);
+                            }
+                          } catch (err) {
+                            setSaveMsg(`Error: ${err.message}`);
+                          }
+                          setSaving(false);
+                        }}
+                        className="px-4 py-2 text-sm font-medium bg-navy text-white rounded-md hover:bg-steel disabled:opacity-50">
+                        {saving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                      <button onClick={() => { setEditMode(false); setSaveMsg(''); }}
+                        className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
+                        Cancel
+                      </button>
+                    </div>
+                  </Section>
                 </div>
               )}
 
@@ -214,12 +310,16 @@ export default function SiteManagement() {
                     return (
                       <div key={ws} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#F5F8FB]">
                         <span className={`text-[13px] ${isActive ? 'text-[#222] font-medium' : 'text-[#999]'}`}>{ws}</span>
-                        <button
-                          onClick={() => toggleWorkspace(selectedSite.id, ws)}
-                          className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${isActive ? 'bg-[#1B7D3A]' : 'bg-[#DDD]'}`}
-                        >
-                          <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isActive ? 'left-[18px]' : 'left-0.5'}`} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {toggleSaving === ws && <span className="material-symbols-outlined text-[14px] text-steel animate-spin">progress_activity</span>}
+                          <button
+                            onClick={() => toggleWorkspace(selectedSite.id, ws)}
+                            disabled={!!toggleSaving}
+                            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${isActive ? 'bg-[#1B7D3A]' : 'bg-[#DDD]'} ${toggleSaving ? 'opacity-50' : ''}`}
+                          >
+                            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isActive ? 'left-[18px]' : 'left-0.5'}`} />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -265,6 +365,57 @@ export default function SiteManagement() {
           )}
         </div>
       </div>
+
+      {/* Add Site Modal */}
+      {showAddSite && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAddSite(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-[450px] p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-text text-lg mb-4">Add New Site</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase">Site Name *</label>
+                <input type="text" value={newSiteForm.name} onChange={e => setNewSiteForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase">Station Number</label>
+                <input type="text" value={newSiteForm.stationNumber} onChange={e => setNewSiteForm(f => ({ ...f, stationNumber: e.target.value }))}
+                  className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-text-muted uppercase">Type</label>
+                <select value={newSiteForm.type} onChange={e => setNewSiteForm(f => ({ ...f, type: e.target.value }))}
+                  className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1">
+                  <option>Medical Center</option>
+                  <option>Community Clinic</option>
+                  <option>Long-Term Care</option>
+                  <option>Residential Treatment</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setShowAddSite(false)} className="px-4 py-2 text-sm border border-border rounded-md">Cancel</button>
+              <button
+                disabled={!newSiteForm.name || saving}
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    await createSite(newSiteForm);
+                    setShowAddSite(false);
+                    setNewSiteForm({ name: '', stationNumber: '', type: 'Medical Center' });
+                    await loadData();
+                  } catch (err) {
+                    alert(err.message || 'Failed to create site');
+                  }
+                  setSaving(false);
+                }}
+                className="px-4 py-2 text-sm font-medium bg-navy text-white rounded-md hover:bg-steel disabled:opacity-40">
+                {saving ? 'Creating...' : 'Create Site'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

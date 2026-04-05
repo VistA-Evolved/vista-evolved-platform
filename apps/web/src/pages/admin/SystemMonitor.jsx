@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
-import { getTaskManStatus, getTaskManTasks, getTaskManScheduled, getErrorTrap, getVistaStatus, getHL7FilerStatus, getSchedulingReport } from '../../services/adminService';
+import { getTaskManStatus, getTaskManTasks, getTaskManScheduled, getErrorTrap, getVistaStatus, getHL7FilerStatus, getAdminReport } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 import { transformErrorTrap, formatDateTime } from '../../utils/transforms';
 
@@ -313,9 +313,7 @@ export default function SystemMonitor() {
                               e.stopPropagation();
                               setReportLoading(true);
                               try {
-                                // Admin reports use the scheduling report endpoint as a generic report API.
-                                // Dedicated admin report endpoints are not yet built on the backend.
-                                const res = await getSchedulingReport({ type: report.id });
+                                const res = await getAdminReport(report.id);
                                 setReportData({ name: report.name, data: res?.data || res });
                               } catch (err) {
                                 const msg = err?.message || 'Failed to generate report';
@@ -324,7 +322,7 @@ export default function SystemMonitor() {
                                   name: report.name,
                                   data: null,
                                   error: needsBackend
-                                    ? `This report requires a dedicated backend endpoint that has not been built yet: GET /api/ta/v1/reports/admin/${report.id}`
+                                    ? `Report endpoint unavailable. Ensure the tenant-admin server is running.`
                                     : msg,
                                 });
                               }
@@ -364,9 +362,27 @@ export default function SystemMonitor() {
                   <p className="text-sm text-danger">{reportData.error}</p>
                 ) : !reportData.data ? (
                   <p className="text-sm text-text-muted">No data returned.</p>
-                ) : (
-                  <pre className="text-[11px] font-mono text-text-secondary bg-surface-alt p-3 rounded-md overflow-auto max-h-60">{JSON.stringify(reportData.data, null, 2)}</pre>
-                )}
+                ) : (() => {
+                  const rows = Array.isArray(reportData.data) ? reportData.data : [reportData.data];
+                  if (rows.length === 0) return <p className="text-sm text-text-muted">Report returned 0 rows.</p>;
+                  const keys = Object.keys(rows[0]);
+                  return (
+                    <div className="border border-border rounded-md overflow-hidden max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead><tr className="bg-navy">
+                          {keys.map(k => <th key={k} className="text-left px-3 py-2 text-white font-semibold uppercase tracking-wider">{k.replace(/([A-Z])/g, ' $1').trim()}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {rows.map((row, i) => (
+                            <tr key={i} className={`border-t border-border ${i % 2 === 0 ? 'bg-white' : 'bg-surface-alt'}`}>
+                              {keys.map(k => <td key={k} className="px-3 py-2 text-text-secondary">{typeof row[k] === 'object' ? JSON.stringify(row[k]) : String(row[k] ?? '—')}</td>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

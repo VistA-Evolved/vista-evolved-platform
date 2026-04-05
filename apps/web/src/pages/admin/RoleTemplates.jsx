@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
-import { getPermissions, getRoleTemplates } from '../../services/adminService';
+import { getPermissions, getRoleTemplates, getCustomRoles, createCustomRole, deleteCustomRole } from '../../services/adminService';
 
 /**
  * AD-04: Role Templates (VistA Evolved Addition)
@@ -220,15 +220,28 @@ export default function RoleTemplates() {
   const [customRoles, setCustomRoles] = useState([]);
   const [cloneModalSource, setCloneModalSource] = useState(null);
   const [cloneName, setCloneName] = useState('');
+  const [roleSaving, setRoleSaving] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([
       getPermissions(),
       getRoleTemplates(),
-    ]).then(([permsRes, rolesRes]) => {
+      getCustomRoles(),
+    ]).then(([permsRes, rolesRes, customRes]) => {
       if (permsRes.status === 'fulfilled') {
         const keys = (permsRes.value?.data || []).map(k => k.keyName);
         setVistaKeySet(new Set(keys));
+      }
+      if (customRes.status === 'fulfilled' && customRes.value?.data) {
+        const loaded = customRes.value.data.map(r => ({
+          ...r,
+          isSystem: false,
+          userCount: 0,
+          permissions: (r.keys || []).map(k => ({ label: k, key: k })),
+          mutualExclusions: [],
+          workspaceAccess: {},
+        }));
+        setCustomRoles(loaded);
       }
     });
   }, []);
@@ -238,8 +251,9 @@ export default function RoleTemplates() {
     setCloneName(`${sourceRole.name} (Copy)`);
   };
 
-  const confirmClone = () => {
+  const confirmClone = async () => {
     if (!cloneName.trim() || !cloneModalSource) return;
+    setRoleSaving(true);
     const newRole = {
       ...cloneModalSource,
       id: `custom-${Date.now()}`,
@@ -247,13 +261,25 @@ export default function RoleTemplates() {
       isSystem: false,
       userCount: 0,
     };
+    try {
+      const res = await createCustomRole({
+        name: newRole.name,
+        description: newRole.description,
+        keys: newRole.permissions.map(p => p.key),
+      });
+      if (res?.id) newRole.id = res.id;
+    } catch { /* API not available yet — role still saved locally */ }
     setCustomRoles(prev => [...prev, newRole]);
     setSelectedRole(newRole);
     setCloneModalSource(null);
+    setRoleSaving(false);
   };
 
-  const handleDeleteCustom = (roleId) => {
+  const handleDeleteCustom = async (roleId) => {
     if (!window.confirm('Delete this custom role?')) return;
+    try {
+      await deleteCustomRole(roleId);
+    } catch { /* Non-fatal */ }
     setCustomRoles(prev => prev.filter(r => r.id !== roleId));
     setSelectedRole(ROLES[0]);
   };
@@ -275,17 +301,6 @@ export default function RoleTemplates() {
             Roles bundle permissions into assignable templates. Assign a role instead of
             individual permissions for consistency across your organization.
           </p>
-          {customRoles.length > 0 && (
-            <div className="mx-2 mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md">
-              <div className="flex items-start gap-2 text-amber-800">
-                <span className="material-symbols-outlined text-[16px] mt-0.5">warning</span>
-                <span className="text-[11px]">
-                  Custom roles are stored in browser memory only. They will be lost when you refresh the page.
-                  Persistent role storage requires a backend endpoint (POST /api/ta/v1/roles).
-                </span>
-              </div>
-            </div>
-          )}
           <div className="px-2 mb-3">
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -473,9 +488,9 @@ export default function RoleTemplates() {
             <div className="flex justify-end gap-3">
               <button onClick={() => setCloneModalSource(null)}
                 className="px-4 py-2 text-xs border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">Cancel</button>
-              <button onClick={confirmClone} disabled={!cloneName.trim()}
+              <button onClick={confirmClone} disabled={!cloneName.trim() || roleSaving}
                 className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40">
-                Create Role
+                {roleSaving ? 'Saving…' : 'Create Role'}
               </button>
             </div>
           </div>

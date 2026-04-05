@@ -10,6 +10,7 @@ import {
   searchPatients,
   getDivisions,
 } from '../../services/patientService';
+import { getSession } from '../../services/adminService';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  CONSTANTS — reference lists per spec
@@ -199,6 +200,7 @@ export default function PatientDemographics() {
   const [expandedSections, setExpandedSections] = useState(['identity']);
   const [ssnVisible, setSsnVisible] = useState(false);
   const [identityWarnings, setIdentityWarnings] = useState([]);
+  const [isVA, setIsVA] = useState(true);
 
   // Duplicate check state (register mode)
   const [dupSearchDone, setDupSearchDone] = useState(false);
@@ -229,6 +231,10 @@ export default function PatientDemographics() {
       } catch {
         setDivisions([]);
       }
+      try {
+        const sess = await getSession();
+        if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
+      } catch { /* non-fatal */ }
     })();
   }, []);
 
@@ -729,11 +735,13 @@ export default function PatientDemographics() {
               </Field>
             </div>
             <div className="grid grid-cols-3 gap-4">
-              <Field label="Veteran Status" changed={isChanged('veteranStatus')}>
-                <div className="h-10 flex items-center">
-                  <Toggle checked={form.veteranStatus} onChange={v => set('veteranStatus', v)} label={form.veteranStatus ? 'Yes' : 'No'} />
-                </div>
-              </Field>
+              {isVA && (
+                <Field label="Veteran Status" changed={isChanged('veteranStatus')}>
+                  <div className="h-10 flex items-center">
+                    <Toggle checked={form.veteranStatus} onChange={v => set('veteranStatus', v)} label={form.veteranStatus ? 'Yes' : 'No'} />
+                  </div>
+                </Field>
+              )}
             </div>
           </AccordionSection>
 
@@ -922,8 +930,8 @@ export default function PatientDemographics() {
             </div>
           </AccordionSection>
 
-          {/* ─────── SECTION 5: MILITARY SERVICE (Veteran Status = Yes) ─────── */}
-          {form.veteranStatus && (
+          {/* ─────── SECTION 5: MILITARY SERVICE (VA tenant + Veteran Status = Yes) ─────── */}
+          {isVA && form.veteranStatus && (
             <AccordionSection
               id="military" title="Military Service" icon="military_tech"
               expanded={expandedSections.includes('military')}

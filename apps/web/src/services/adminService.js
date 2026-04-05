@@ -385,3 +385,76 @@ export async function getMailGroups(params = {}) {
 export async function getPackages(params = {}) {
   return tenantApi.get('/packages', params);
 }
+
+// ────────────────────────────────────────────────
+// Workspace Visibility per Division (backend: ^XTMP("ZVE-WKSP"))
+// ────────────────────────────────────────────────
+
+export async function getSiteWorkspaces(divisionIen) {
+  const params = divisionIen ? { divisionIen } : {};
+  return tenantApi.get('/workspaces', params);
+}
+
+export async function updateSiteWorkspace(divisionIen, workspace, enabled) {
+  return tenantApi.put('/workspaces', { divisionIen, workspace, enabled });
+}
+
+// ────────────────────────────────────────────────
+// Division CRUD (backend: File #40.8)
+// ────────────────────────────────────────────────
+
+export async function updateSite(ien, data) {
+  return tenantApi.put(`/divisions/${ien}`, data);
+}
+
+export async function createSite(data) {
+  return tenantApi.post('/divisions', data);
+}
+
+// ────────────────────────────────────────────────
+// Package-specific Parameters (backend: per-package VistA files)
+// ────────────────────────────────────────────────
+
+export async function getPackageParams(packageId) {
+  return tenantApi.get(`/params/${packageId}`);
+}
+
+export async function updatePackageParams(packageId, data) {
+  return tenantApi.put(`/params/${packageId}`, data);
+}
+
+// ────────────────────────────────────────────────
+// Custom Role Persistence (backend: ^XTMP("ZVE-ROLES"))
+// ────────────────────────────────────────────────
+
+export async function getCustomRoles() {
+  return tenantApi.get('/roles/custom');
+}
+
+export async function createCustomRole(data) {
+  return tenantApi.post('/roles/custom', data);
+}
+
+export async function updateCustomRole(roleId, data) {
+  return tenantApi.put(`/roles/custom/${roleId}`, data);
+}
+
+export async function deleteCustomRole(roleId) {
+  return tenantApi.delete(`/roles/custom/${roleId}`);
+}
+
+// ────────────────────────────────────────────────
+// E-Signature SET (backend: ZVE ESIG MANAGE with SET action)
+// ────────────────────────────────────────────────
+
+export async function setESignatureCode(duz, data) {
+  return tenantApi.post(`/users/${duz}/esig/set`, data);
+}
+
+// ────────────────────────────────────────────────
+// System Reports (aggregation endpoints)
+// ────────────────────────────────────────────────
+
+export async function getAdminReport(reportType, params = {}) {
+  return tenantApi.get(`/reports/admin/${reportType}`, params);
+}

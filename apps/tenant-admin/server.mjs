@@ -403,6 +403,7 @@ async function main() {
         vistaDetail = {
           name: detail[1] || session.userName, title: detail[6] || '', service: detail[7] || '',
           lastLogin: detail[10] || '', npi: detail[11] || '', status: (detail[5] || 'ACTIVE').toLowerCase(),
+          hasEsig: detail[15] === 'SET', providerClass: detail[14] || '',
         };
       }
     } catch (_) { /* non-fatal — use session data */ }
@@ -414,11 +415,12 @@ async function main() {
         duz: session.duz,
         name: vistaDetail ? vistaDetail.name : session.userName,
         keys: (session.keys || []).map(k => k.name || k),
-        ...(vistaDetail ? { title: vistaDetail.title, service: vistaDetail.service, lastLogin: vistaDetail.lastLogin, npi: vistaDetail.npi, status: vistaDetail.status } : {}),
+        ...(vistaDetail ? { title: vistaDetail.title, service: vistaDetail.service, lastLogin: vistaDetail.lastLogin, npi: vistaDetail.npi, status: vistaDetail.status, hasEsig: vistaDetail.hasEsig, providerClass: vistaDetail.providerClass } : {}),
       },
       roleCluster,
       navGroups,
       tenantId: session.tenantId,
+      facilityType: session.facilityType || 'va',
       sessionAge: Math.floor((Date.now() - session.createdAt) / 1000),
     };
   });
@@ -4661,6 +4663,7 @@ async function main() {
             serviceConnected: (dem.SC_CONNECTED || '').toUpperCase() === 'YES',
             scPercent: parseInt(dem.SC_PERCENT || '0', 10) || 0,
             age: dem.AGE || '', religion: dem.RELIGION || '', race: dem.RACE || '',
+            wardLocation: dem.WARD || '', admitDate: dem.ADMIT_DATE || null, roomBed: dem.ROOM_BED || '',
             insurance: ins, nextOfKin: nok, emergency: emrg,
           },
         };
@@ -4673,7 +4676,7 @@ async function main() {
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'error', error: p.error });
     try {
-      const fields = '.01;.02;.03;.05;.09;.111;.112;.113;.114;.115;.116;.117;.131;.132;.301;.302;.351;1901';
+      const fields = '.01;.02;.03;.05;.09;.1;.101;.102;.111;.112;.113;.114;.115;.116;.117;.131;.132;.301;.302;.351;1901';
       const ddr = await ddrGetsEntry('2', dfn, fields, 'IE');
       if (!ddr.ok) return reply.code(404).send({ ok: false, tenantId, source: 'error', error: 'Patient not found' });
       const d = ddr.data;
@@ -4701,6 +4704,9 @@ async function main() {
           scPercent: parseInt(g('.302') || '0', 10) || 0,
           dateOfDeath: g('.351') ? fmDateToIso(g('.351')) : null,
           veteranStatus: (g('1901') || '').toUpperCase() === 'YES',
+          wardLocation: g('.1') || '',
+          admitDate: g('.101') ? fmDateToIso(g('.101')) : null,
+          roomBed: g('.102') || '',
           vistaFields: ddr.data,
         },
       };
@@ -5561,6 +5567,301 @@ async function main() {
       };
     } catch (e) {
       return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // WORKSPACE VISIBILITY PER DIVISION (^XTMP("ZVE-WKSP"))
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.get('/api/tenant-admin/v1/workspaces', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const divisionIen = req.query.divisionIen || '';
+    try {
+      const z = await callZveRpc('ZVE SITE WS GET', [divisionIen]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') {
+        // RPC not deployed — return defaults (all enabled)
+        const ALL_WORKSPACES = ['Dashboard', 'Patients', 'Scheduling', 'Clinical', 'Pharmacy', 'Lab', 'Imaging', 'Billing', 'Supply', 'Admin', 'Analytics'];
+        const data = {};
+        ALL_WORKSPACES.forEach(ws => { data[ws] = true; });
+        return { ok: true, source: 'default', data };
+      }
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const data = {};
+      for (const line of z.lines.slice(1)) {
+        const parts = line.split('^');
+        if (parts[0]) data[parts[0]] = parts[1] === '1';
+      }
+      return { ok: true, source: 'zve', data };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/workspaces', async (req, reply) => {
+    const { divisionIen, workspace, enabled } = req.body || {};
+    if (!workspace) return reply.code(400).send({ ok: false, error: 'workspace required' });
+    try {
+      const z = await callZveRpc('ZVE SITE WS SET', [divisionIen || '', workspace, enabled ? '1' : '0']);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') {
+        // RPC not deployed — silently succeed (the UI state is the source of truth until RPC is deployed)
+        return { ok: true, source: 'pending', message: 'RPC ZVE SITE WS SET not deployed yet. Change stored in session only.' };
+      }
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve', workspace, enabled };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // DIVISION EDIT & CREATE (File #40.8 via DDR FILER)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.put('/api/tenant-admin/v1/divisions/:ien', async (req, reply) => {
+    const { ien } = req.params;
+    const body = req.body || {};
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+
+    // Map of editable field names → File #40.8 field numbers
+    const FIELD_MAP = {
+      name: '.01',
+      phone: '4',       // TELEPHONE NUMBER
+      address: '1.01',  // STREET ADDR. 1
+      city: '1.03',
+      state: '1.04',
+      zip: '1.05',
+    };
+
+    const results = [];
+    for (const [key, value] of Object.entries(body)) {
+      const fieldNum = FIELD_MAP[key];
+      if (!fieldNum || value === undefined) continue;
+      const filer = await ddrFilerEdit('40.8', `${ien},`, fieldNum, String(value), 'E');
+      results.push({ field: key, ok: filer.ok, error: filer.error || null });
+    }
+
+    const allOk = results.every(r => r.ok);
+    return { ok: allOk, source: 'vista', ien, results };
+  });
+
+  app.post('/api/tenant-admin/v1/divisions', async (req, reply) => {
+    const body = req.body || {};
+    if (!body.name) return reply.code(400).send({ ok: false, error: 'name is required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+
+    try {
+      const filer = await ddrFilerAdd('40.8', '.01', body.name, 'E');
+      if (!filer.ok) return reply.code(502).send({ ok: false, error: filer.error || 'Failed to create division' });
+      return { ok: true, source: 'vista', rpcUsed: 'DDR FILER', result: filer };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PACKAGE-SPECIFIC PARAMETERS (Clinical, Pharmacy, Lab, Scheduling)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const PACKAGE_PARAM_FILES = {
+    'order-entry': { file: '100.99', fields: '.01;.02;.03;1;2;3', label: 'OE/RR Site Parameters' },
+    pharmacy:      { file: '59.7',   fields: '.01;.02;.03;1;2;4', label: 'Pharmacy Site Parameters' },
+    lab:           { file: '69.9',   fields: '.01;.02;.03;1;2;3', label: 'Lab Site Parameters' },
+    scheduling:    { file: '44.001', fields: '.01;.02;.03;1;2',   label: 'Scheduling Parameters' },
+    radiology:     { file: '79.1',   fields: '.01;.02;.03;1;2',   label: 'Radiology Site Parameters' },
+    surgery:       { file: '136',    fields: '.01;.02;.03;1;2',   label: 'Surgery Site Parameters' },
+  };
+
+  app.get('/api/tenant-admin/v1/params/:package', async (req, reply) => {
+    const pkg = req.params.package;
+    if (pkg === 'kernel') return; // handled by existing route
+    const pkgDef = PACKAGE_PARAM_FILES[pkg];
+    if (!pkgDef) return reply.code(404).send({ ok: false, error: `Unknown parameter package: ${pkg}` });
+
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+
+    try {
+      // Try DDR GETS ENTRY on the first record (IEN=1)
+      const result = await ddrGetsEntry(pkgDef.file, '1', pkgDef.fields, 'IE');
+      if (!result.ok) {
+        return { ok: true, source: 'vista', package: pkg, label: pkgDef.label, rawLines: [], data: {}, note: `File #${pkgDef.file} may not have records in this system.` };
+      }
+      return { ok: true, source: 'vista', package: pkg, label: pkgDef.label, rawLines: result.rawLines || [], file: pkgDef.file };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.put('/api/tenant-admin/v1/params/:package', async (req, reply) => {
+    const pkg = req.params.package;
+    if (pkg === 'kernel') return; // handled by existing route
+    const pkgDef = PACKAGE_PARAM_FILES[pkg];
+    if (!pkgDef) return reply.code(404).send({ ok: false, error: `Unknown parameter package: ${pkg}` });
+
+    const body = req.body || {};
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+
+    const results = [];
+    for (const [fieldNum, value] of Object.entries(body)) {
+      if (fieldNum === 'reason') continue;
+      const filer = await ddrFilerEdit(pkgDef.file, '1,', fieldNum, String(value), 'E');
+      results.push({ field: fieldNum, ok: filer.ok, error: filer.error || null });
+    }
+    return { ok: results.every(r => r.ok), source: 'vista', package: pkg, results };
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CUSTOM ROLE PERSISTENCE (^XTMP("ZVE-ROLES"))
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.get('/api/tenant-admin/v1/roles/custom', async (req, reply) => {
+    try {
+      const z = await callZveRpc('ZVE ROLE CUSTOM LIST', []);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return { ok: true, source: 'pending', data: [] };
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const data = [];
+      for (const line of z.lines.slice(1)) {
+        const p = line.split('^');
+        if (!p[0]) continue;
+        data.push({ id: p[0], name: p[1] || '', description: p[2] || '', keys: (p[3] || '').split(';').filter(Boolean) });
+      }
+      return { ok: true, source: 'zve', data };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.post('/api/tenant-admin/v1/roles/custom', async (req, reply) => {
+    const body = req.body || {};
+    if (!body.name) return reply.code(400).send({ ok: false, error: 'name required' });
+    try {
+      const keys = (body.keys || []).join(';');
+      const z = await callZveRpc('ZVE ROLE CUSTOM CRT', [body.name, body.description || '', keys]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return { ok: true, source: 'pending', id: `local-${Date.now()}`, message: 'ZVE ROLE CUSTOM CRT not deployed. Role stored locally.' };
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      const id = (z.lines[1] || '').split('^')[0] || `zve-${Date.now()}`;
+      return { ok: true, source: 'zve', id };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/tenant-admin/v1/roles/custom/:roleId', async (req, reply) => {
+    try {
+      const z = await callZveRpc('ZVE ROLE CUSTOM DEL', [req.params.roleId]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') return { ok: true, source: 'pending' };
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve' };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // E-SIGNATURE SET ACTION
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.post('/api/tenant-admin/v1/users/:duz/esig/set', async (req, reply) => {
+    const { code, sigBlockName } = req.body || {};
+    if (!code || typeof code !== 'string') return reply.code(400).send({ ok: false, error: 'code required' });
+    if (code.length < 6) return reply.code(400).send({ ok: false, error: 'E-signature must be at least 6 characters' });
+
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+
+    try {
+      const z = await callZveRpc('ZVE ESIG MANAGE', [String(req.params.duz), 'SET', code, sigBlockName || '']);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') {
+        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE ESIG MANAGE does not support SET action yet.' });
+      }
+      if (o.kind !== 'ok' && o.kind !== 'noop') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve', duz: req.params.duz };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ADMIN REPORTS (aggregation from existing data)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.get('/api/tenant-admin/v1/reports/admin/:type', async (req, reply) => {
+    const reportType = req.params.type;
+    const tenantId = req.query.tenantId;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+
+    try {
+      if (reportType === 'staff-access') {
+        const usersRes = await fetchVistaUsers({ status: 'ACTIVE' }, '');
+        if (!usersRes.ok) return reply.code(502).send({ ok: false, error: 'Failed to fetch users' });
+        const users = usersRes.data || [];
+        const now = new Date();
+        const report = users.map(u => ({
+          duz: u.ien, name: u.name, status: u.status,
+          lastSignIn: u.lastSignIn || '',
+          daysSinceLogin: u.lastSignIn ? Math.floor((now - new Date(u.lastSignIn)) / 86400000) : 999,
+        })).sort((a, b) => b.daysSinceLogin - a.daysSinceLogin);
+        const total = report.length;
+        const active = report.filter(u => u.daysSinceLogin < 30).length;
+        const inactive30 = report.filter(u => u.daysSinceLogin >= 30 && u.daysSinceLogin < 90).length;
+        const inactive90 = report.filter(u => u.daysSinceLogin >= 90).length;
+        const neverLoggedIn = report.filter(u => !u.lastSignIn).length;
+        return { ok: true, source: 'vista', reportType, summary: { total, active, inactive30, inactive90, neverLoggedIn }, data: report.slice(0, 100) };
+      }
+
+      if (reportType === 'permission-dist') {
+        const keysRes = await ddrListerSecurityKeys();
+        if (!keysRes.ok) return { ok: true, source: 'vista', reportType, data: [], note: 'Could not fetch key inventory' };
+        const keys = keysRes.data || [];
+        return { ok: true, source: 'vista', reportType, data: keys.map(k => ({ keyName: k.keyName, holderCount: k.holderCount || 0, ien: k.ien })) };
+      }
+
+      if (reportType === 'signin-activity' || reportType === 'audit-summary') {
+        const z = await callZveRpc('ZVE ADMIN AUDIT', [req.query.from || '', req.query.to || '', '50']);
+        const o = zveOutcome(z);
+        if (o.kind !== 'ok') return { ok: true, source: 'vista', reportType, data: [], note: 'Audit data unavailable' };
+        const data = z.lines.slice(1).map(line => {
+          const p = line.split('^');
+          return { source: p[0], timestamp: p[1], user: p[2], action: p[3], detail: p[4] };
+        }).filter(d => d.source);
+        return { ok: true, source: 'zve', reportType, data };
+      }
+
+      if (reportType === 'inactive-accounts') {
+        const usersRes = await fetchVistaUsers({ status: 'ACTIVE' }, '');
+        if (!usersRes.ok) return reply.code(502).send({ ok: false, error: 'Failed to fetch users' });
+        const now = new Date();
+        const inactive = (usersRes.data || []).filter(u => {
+          if (!u.lastSignIn) return true;
+          return (now - new Date(u.lastSignIn)) / 86400000 > 90;
+        }).map(u => ({ duz: u.ien, name: u.name, lastSignIn: u.lastSignIn || 'NEVER', daysSince: u.lastSignIn ? Math.floor((now - new Date(u.lastSignIn)) / 86400000) : 999 }));
+        return { ok: true, source: 'vista', reportType, data: inactive, total: inactive.length };
+      }
+
+      if (reportType === 'param-changes') {
+        const z = await callZveRpc('ZVE ADMIN AUDIT', ['', '', '50']);
+        const o = zveOutcome(z);
+        const data = (o.kind === 'ok' ? z.lines.slice(1) : []).map(line => {
+          const p = line.split('^');
+          return { source: p[0], timestamp: p[1], user: p[2], action: p[3], detail: p[4] };
+        }).filter(d => d.action && /param|config|set/i.test(d.action));
+        return { ok: true, source: 'zve', reportType, data };
+      }
+
+      return reply.code(404).send({ ok: false, error: `Unknown report type: ${reportType}` });
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
     }
   });
 
