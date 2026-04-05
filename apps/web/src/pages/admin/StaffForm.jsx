@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff } from '../../services/adminService';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments } from '../../services/adminService';
 import { inferModule } from '../../utils/transforms';
 
 /**
@@ -137,6 +137,7 @@ export default function StaffForm() {
   const [validationErrors, setValidationErrors] = useState({});
   const [liveSites, setLiveSites] = useState([]);
   const [livePermissions, setLivePermissions] = useState([]);
+  const [liveDepartments, setLiveDepartments] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [esigStatus, setEsigStatus] = useState({ hasCode: false, sigBlockName: '' });
   const [clearingEsig, setClearingEsig] = useState(false);
@@ -146,7 +147,7 @@ export default function StaffForm() {
     const loadRefData = async () => {
       setDataLoading(true);
       try {
-        const [sitesRes, permsRes] = await Promise.all([getSites(), getPermissions()]);
+        const [sitesRes, permsRes, deptRes] = await Promise.all([getSites(), getPermissions(), getDepartments()]);
         const sites = (sitesRes?.data || []).map(d => ({
           value: d.ien, label: `${d.name} — ${d.stationNumber}`, type: d.name.includes('CBOC') ? 'Community Clinic' : 'Medical Center',
         }));
@@ -156,8 +157,12 @@ export default function StaffForm() {
           key: k.keyName, label: k.keyName, module: inferModule(k.keyName), holderCount: k.holderCount || 0,
         }));
         setLivePermissions(perms);
+
+        const depts = (deptRes?.data || []).map(d => d.name).filter(Boolean);
+        setLiveDepartments(depts.length > 0 ? depts : DEPARTMENTS_FALLBACK);
       } catch {
         setLiveSites(LOCATIONS_FALLBACK);
+        setLiveDepartments(DEPARTMENTS_FALLBACK);
       } finally {
         setDataLoading(false);
       }
@@ -343,7 +348,15 @@ export default function StaffForm() {
             return (
               <button
                 key={s.id}
-                onClick={() => setCurrentStep(stepIndex)}
+                onClick={() => {
+                  if (stepIndex > currentStep) {
+                    for (let si = 0; si < stepIndex; si++) {
+                      const vs = STEPS[si];
+                      if (visibleSteps.includes(vs) && !validateStep(vs.id)) return;
+                    }
+                  }
+                  setCurrentStep(stepIndex);
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   currentStep === stepIndex
                     ? 'bg-navy text-white'
@@ -450,11 +463,11 @@ export default function StaffForm() {
                   ))}
                 </div>
               </FormField>
-              <FormField label="Department" required hint="Organizational grouping for this staff member. Type to search or enter a custom department.">
+              <FormField label="Department" required hint="Loaded from VistA SERVICE/SECTION file (#49). Type to search or enter a custom department.">
                 <input type="text" list="department-list" value={form.department} onChange={e => updateField('department', e.target.value)}
                   placeholder="Select or type department..." className="form-input" />
                 <datalist id="department-list">
-                  {DEPARTMENTS_FALLBACK.map(d => <option key={d} value={d} />)}
+                  {liveDepartments.map(d => <option key={d} value={d} />)}
                 </datalist>
               </FormField>
               <label className="flex items-center gap-3 p-3 bg-surface-alt rounded-lg cursor-pointer">

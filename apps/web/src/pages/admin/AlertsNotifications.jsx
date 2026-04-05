@@ -249,24 +249,34 @@ export default function AlertsNotifications() {
         {tab === 'config' && (
           <div className="max-w-2xl space-y-6">
             <div className="bg-white border border-border rounded-lg p-5">
-              <h3 className="font-semibold text-sm text-text mb-3">Escalation Rules</h3>
+              <h3 className="font-semibold text-sm text-text mb-3">Alert Configuration</h3>
               <p className="text-xs text-text-secondary mb-4">
-                Configure how unresolved alerts escalate through the chain of responsibility.
+                VistA alert routing is controlled by the BULLETIN file and MailMan distribution groups. 
+                Escalation paths are determined by the alert type configuration in each VistA package.
               </p>
               <div className="space-y-3">
-                {[
-                  { type: 'Critical Lab Result', delay: '30 min', chain: 'Ordering Provider → Covering Provider → Department Chief → Facility Director' },
-                  { type: 'Unsigned Orders', delay: '2 hours', chain: 'Ordering Provider → Cosigner → Department Chief' },
-                  { type: 'System Interface Failure', delay: '15 min', chain: 'IT On-Call → IT Manager → CIO' },
-                ].map(rule => (
-                  <div key={rule.type} className="p-3 bg-surface-alt rounded-md">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-xs text-text">{rule.type}</span>
-                      <span className="text-[10px] text-text-muted">Escalate after: {rule.delay}</span>
-                    </div>
-                    <div className="text-[10px] text-text-secondary">{rule.chain}</div>
+                <div className="p-3 bg-surface-alt rounded-md">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="material-symbols-outlined text-[16px] text-info">info</span>
+                    <span className="font-medium text-xs text-text">Alert Delivery</span>
                   </div>
-                ))}
+                  <div className="text-[10px] text-text-secondary">
+                    Alerts are delivered via the VistA bulletin system. Each package (Lab, Pharmacy, Orders, etc.) 
+                    defines its own alert types and routing rules. Modify alert routing through the individual 
+                    package parameter files or via the MailMan mail group management.
+                  </div>
+                </div>
+                <div className="p-3 bg-surface-alt rounded-md">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="material-symbols-outlined text-[16px] text-warning">warning</span>
+                    <span className="font-medium text-xs text-text">Unprocessed Alert Behavior</span>
+                  </div>
+                  <div className="text-[10px] text-text-secondary">
+                    VistA alerts that remain unacknowledged follow the surrogacy chain defined in the 
+                    NEW PERSON file (#200, field 20.6). Ensure surrogate entries are configured for 
+                    all providers who receive clinical alerts.
+                  </div>
+                </div>
               </div>
             </div>
           </div>

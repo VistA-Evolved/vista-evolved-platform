@@ -13,13 +13,14 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
     }
   };
 
+  const safeData = Array.isArray(data) ? data : [];
   const sorted = sortCol
-    ? [...data].sort((a, b) => {
+    ? [...safeData].sort((a, b) => {
         const av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
         const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
         return sortDir === 'asc' ? cmp : -cmp;
       })
-    : data;
+    : safeData;
 
   return (
     <div className="border border-border rounded-md overflow-hidden">

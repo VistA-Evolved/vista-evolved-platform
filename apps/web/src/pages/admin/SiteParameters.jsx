@@ -117,8 +117,8 @@ export default function SiteParameters() {
   useEffect(() => {
     const group = selectedGroup;
     if (group === 'kernel' || group === 'session') return;
-    // If we already loaded this package, skip
-    if (packageParams[group]) return;
+    // If we already loaded this package successfully, skip
+    if (packageParams[group]?.ok !== false && packageParams[group]) return;
 
     let cancelled = false;
     setPkgLoading(true);
@@ -153,10 +153,11 @@ export default function SiteParameters() {
       const signoffSec = Number(kernelParams.autoSignOffDelay?.value || 0);
       const rpcTimeout = Number(kernelParams.rpcTimeout?.value || 0);
       const policyLabel = isVA ? 'VHA Directive 6500' : 'Security Policy';
+      const zeroWarning = (val, param) => val === 0 ? ` ⚠ Currently 0 — ${param} is not enforced. Set a value to enable.` : '';
       return [
-        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. ${policyLabel}: max 15 minutes (900 seconds).`, critical: true, enforcedMax: 900 },
-        { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.`, critical: true, enforcedMax: 900 },
-        { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.` },
+        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. ${policyLabel}: max 15 minutes (900 seconds).${zeroWarning(timeoutSec, 'session timeout')}`, critical: true, enforcedMax: 900 },
+        { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.${zeroWarning(signoffSec, 'auto sign-off')}`, critical: true, enforcedMax: 900 },
+        { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.${zeroWarning(rpcTimeout, 'RPC timeout')}` },
       ];
     }
     // Package-specific params
@@ -278,7 +279,7 @@ export default function SiteParameters() {
             Verify changes carefully and document your reason before saving.
           </CautionBanner>
 
-          {loading ? (
+          {(loading || pkgLoading) ? (
             <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 animate-pulse bg-[#E2E4E8] rounded-lg" />)}</div>
           ) : (
             <div className="space-y-5">

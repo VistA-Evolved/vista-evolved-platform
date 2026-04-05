@@ -23,7 +23,7 @@ const ROLES = [
   {
     id: 'physician', name: 'Physician', isSystem: true,
     description: 'Licensed independent practitioner. Full order entry, prescribing, note signing.',
-    userCount: 18,
+    userCount: 0,
     permissions: [
       { label: 'Write clinical orders', key: 'ORES' },
       { label: 'Sign orders electronically', key: 'OR CPRS GUI CHART' },
@@ -40,7 +40,7 @@ const ROLES = [
   {
     id: 'nurse-practitioner', name: 'Nurse Practitioner', isSystem: true,
     description: 'Mid-level provider with prescriptive authority. Independent order entry and cosignature capability.',
-    userCount: 8,
+    userCount: 0,
     permissions: [
       { label: 'Write clinical orders', key: 'ORES' },
       { label: 'Prescribe medications', key: 'PROVIDER' },
@@ -54,7 +54,7 @@ const ROLES = [
   {
     id: 'nurse', name: 'Registered Nurse', isSystem: true,
     description: 'Clinical documentation, medication administration, verbal order entry.',
-    userCount: 52,
+    userCount: 0,
     permissions: [
       { label: 'Enter verbal / telephone orders', key: 'ORELSE' },
       { label: 'Document nursing assessments', key: 'TIU WRITE' },
@@ -69,7 +69,7 @@ const ROLES = [
   {
     id: 'pharmacist', name: 'Staff Pharmacist', isSystem: true,
     description: 'Outpatient and inpatient pharmacy operations, medication verification.',
-    userCount: 12,
+    userCount: 0,
     permissions: [
       { label: 'Process outpatient prescriptions', key: 'PSO PHARMACIST' },
       { label: 'Verify inpatient medication orders', key: 'PSJ PHARMACIST' },
@@ -83,7 +83,7 @@ const ROLES = [
   {
     id: 'pharm-tech', name: 'Pharmacy Technician', isSystem: true,
     description: 'Assists pharmacist with dispensing, inventory, and label printing.',
-    userCount: 9,
+    userCount: 0,
     permissions: [
       { label: 'Fill prescriptions', key: 'PSO TECH' },
       { label: 'Print labels', key: 'PSO LABEL' },
@@ -95,7 +95,7 @@ const ROLES = [
   {
     id: 'lab-tech', name: 'Lab Technologist', isSystem: true,
     description: 'Specimen processing, result entry, quality control.',
-    userCount: 22,
+    userCount: 0,
     permissions: [
       { label: 'Process specimens', key: 'LR TECH' },
       { label: 'Enter lab results', key: 'LR RESULT' },
@@ -108,7 +108,7 @@ const ROLES = [
   {
     id: 'rad-tech', name: 'Radiology Technologist', isSystem: true,
     description: 'Imaging exam execution, image capture, and exam completion.',
-    userCount: 7,
+    userCount: 0,
     permissions: [
       { label: 'Complete exams', key: 'RA TECH' },
       { label: 'Capture images', key: 'RA IMAGE' },
@@ -120,7 +120,7 @@ const ROLES = [
   {
     id: 'scheduler', name: 'Scheduling Clerk', isSystem: true,
     description: 'Appointment booking, check-in, schedule management.',
-    userCount: 15,
+    userCount: 0,
     permissions: [
       { label: 'Create appointments', key: 'SD APPT MAKE' },
       { label: 'Cancel appointments', key: 'SD APPT CANCEL' },
@@ -133,7 +133,7 @@ const ROLES = [
   {
     id: 'front-desk', name: 'Registration Clerk', isSystem: true,
     description: 'Patient registration, demographics, insurance verification.',
-    userCount: 8,
+    userCount: 0,
     permissions: [
       { label: 'Register new patients', key: 'DG REGISTER' },
       { label: 'Edit patient demographics', key: 'DG DEMOGRAPHICS' },
@@ -146,7 +146,7 @@ const ROLES = [
   {
     id: 'billing-coder', name: 'Billing Coder', isSystem: true,
     description: 'Charge capture, claims processing, revenue cycle management.',
-    userCount: 6,
+    userCount: 0,
     permissions: [
       { label: 'Enter charges', key: 'IB CHARGE' },
       { label: 'Submit claims', key: 'IB CLAIMS' },
@@ -158,7 +158,7 @@ const ROLES = [
   {
     id: 'social-worker', name: 'Social Worker', isSystem: true,
     description: 'Case management, discharge planning, psychosocial assessments.',
-    userCount: 4,
+    userCount: 0,
     permissions: [
       { label: 'Write social work notes', key: 'TIU WRITE' },
       { label: 'View patient records', key: 'DG RECORDS' },
@@ -170,7 +170,7 @@ const ROLES = [
   {
     id: 'system-admin', name: 'System Administrator', isSystem: true,
     description: 'Full administrative access. User management, configuration, security, audit.',
-    userCount: 2,
+    userCount: 0,
     permissions: [
       { label: 'Manage all users', key: 'XUMGR' },
       { label: 'Assign any permission', key: 'XUMGR' },
@@ -186,7 +186,7 @@ const ROLES = [
   {
     id: 'adpac', name: 'ADPAC', isSystem: true,
     description: 'Application coordinator. Manages menus, templates, print settings, and first-line support.',
-    userCount: 3,
+    userCount: 0,
     permissions: [
       { label: 'Manage menus for assigned module', key: 'XUMGR' },
       { label: 'Edit print templates', key: 'XU TEMPLATE' },
@@ -198,7 +198,7 @@ const ROLES = [
   {
     id: 'chief-of-staff', name: 'Chief of Staff', isSystem: true,
     description: 'Clinical leadership with cross-workspace read access and provider authority.',
-    userCount: 1,
+    userCount: 0,
     permissions: [
       { label: 'All Physician permissions', key: 'ORES' },
       { label: 'View all audit logs', key: 'ZVE ADMIN AUDIT' },
@@ -223,6 +223,9 @@ export default function RoleTemplates() {
   const [cloneName, setCloneName] = useState('');
   const [roleSaving, setRoleSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [error, setError] = useState(null);
+
+  const [keyHolderMap, setKeyHolderMap] = useState({});
 
   useEffect(() => {
     Promise.allSettled([
@@ -231,8 +234,12 @@ export default function RoleTemplates() {
       getCustomRoles(),
     ]).then(([permsRes, rolesRes, customRes]) => {
       if (permsRes.status === 'fulfilled') {
-        const keys = (permsRes.value?.data || []).map(k => k.keyName);
+        const permsData = permsRes.value?.data || [];
+        const keys = permsData.map(k => k.keyName);
         setVistaKeySet(new Set(keys));
+        const hMap = {};
+        permsData.forEach(k => { hMap[k.keyName] = k.holderCount || 0; });
+        setKeyHolderMap(hMap);
       }
       if (customRes.status === 'fulfilled' && customRes.value?.data) {
         const loaded = customRes.value.data.map(r => ({
@@ -247,6 +254,13 @@ export default function RoleTemplates() {
       }
     });
   }, []);
+
+  const getRoleHolderCount = (role) => {
+    if (Object.keys(keyHolderMap).length === 0) return role.userCount;
+    const primaryKey = role.permissions[0]?.key;
+    if (!primaryKey) return 0;
+    return keyHolderMap[primaryKey] || 0;
+  };
 
   const handleClone = (sourceRole) => {
     setCloneModalSource(sourceRole);
@@ -270,9 +284,11 @@ export default function RoleTemplates() {
         keys: newRole.permissions.map(p => p.key),
       });
       if (res?.id) newRole.id = res.id;
-    } catch { /* API not available yet — role still saved locally */ }
-    setCustomRoles(prev => [...prev, newRole]);
-    setSelectedRole(newRole);
+      setCustomRoles(prev => [...prev, newRole]);
+      setSelectedRole(newRole);
+    } catch (err) {
+      setError(err.message || 'Failed to create role');
+    }
     setCloneModalSource(null);
     setRoleSaving(false);
   };
@@ -285,9 +301,11 @@ export default function RoleTemplates() {
     if (!deleteTarget) return;
     try {
       await deleteCustomRole(deleteTarget);
-    } catch { /* Non-fatal */ }
-    setCustomRoles(prev => prev.filter(r => r.id !== deleteTarget));
-    setSelectedRole(ROLES[0]);
+      setCustomRoles(prev => prev.filter(r => r.id !== deleteTarget));
+      setSelectedRole(ROLES[0]);
+    } catch (err) {
+      setError(err.message || 'Failed to delete role');
+    }
     setDeleteTarget(null);
   };
 
@@ -298,6 +316,12 @@ export default function RoleTemplates() {
 
   return (
     <AppShell breadcrumb="Admin > Role Templates">
+      {error && (
+        <div className="mx-4 mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-4">&times;</button>
+        </div>
+      )}
       <div className="flex h-[calc(100vh-40px)]">
         {/* Left panel: role list */}
         <div className="w-[35%] border-r border-border overflow-auto p-4">
@@ -329,7 +353,7 @@ export default function RoleTemplates() {
                     <div className="font-medium text-[13px] text-[#222]">{role.name}</div>
                     {role.isSystem && <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#E8EEF5] text-[#2E5984] uppercase font-semibold">Built-in</span>}
                   </div>
-                  <span className="text-[11px] text-[#999] font-mono">{role.userCount}</span>
+                  <span className="text-[11px] text-[#999] font-mono">{getRoleHolderCount(role)}</span>
                 </div>
                 <div className="text-[11px] text-[#666] mt-0.5 line-clamp-1">{role.description}</div>
               </button>
@@ -359,7 +383,7 @@ export default function RoleTemplates() {
                 <p className="text-[13px] text-[#666] mt-1">{selectedRole.description}</p>
               </div>
               <span className="px-3 py-1 bg-[#F5F8FB] rounded-full text-[12px] font-mono text-[#666]">
-                {selectedRole.userCount} staff assigned
+                {getRoleHolderCount(selectedRole)} staff with primary key
               </span>
             </div>
 
@@ -401,7 +425,10 @@ export default function RoleTemplates() {
                           </div>
                           <div className="flex items-center gap-2">
                             {!existsInVista && vistaKeySet.size > 0 && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#FFF3E0] text-[#E6A817] font-medium">Not in VistA</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#F5F5F5] text-[#999] font-medium cursor-help"
+                                title="This permission key will become active when the corresponding VistA package is installed">
+                                Pending Install
+                              </span>
                             )}
                             <span className="text-[10px] font-mono text-[#AAA] opacity-0 group-hover:opacity-100 transition-opacity" title={`VistA Key: ${perm.key}`}>
                               {perm.key}

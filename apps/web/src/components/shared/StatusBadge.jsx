@@ -6,12 +6,13 @@ export function StatusBadge({ status, size = 'sm' }) {
     pending:  'bg-info-bg text-info',
     warning:  'bg-warning-bg text-warning',
   };
-  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  const s = status || 'unknown';
+  const label = s.charAt(0).toUpperCase() + s.slice(1);
   return (
     <span className={`
       inline-flex items-center rounded-full font-semibold uppercase tracking-wide
       ${size === 'sm' ? 'px-2.5 py-0.5 text-[10px]' : 'px-3 py-1 text-[11px]'}
-      ${styles[status.toLowerCase()] || styles.pending}
+      ${styles[s.toLowerCase()] || 'bg-[#F5F5F5] text-text-muted'}
     `}>
       {label}
     </span>
@@ -21,7 +22,7 @@ export function StatusBadge({ status, size = 'sm' }) {
 export function KeyCountBadge({ count }) {
   return (
     <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-1.5 rounded bg-[#E8EEF5] text-steel text-[11px] font-bold font-mono">
-      {String(count).padStart(2, '0')}
+      {String(count ?? 0).padStart(2, '0')}
     </span>
   );
 }
@@ -40,7 +41,7 @@ export function ActionBadge({ type, label }) {
       inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider
       ${styles[(type || '').toLowerCase()] || styles.read}
     `}>
-      {label || type}
+      {label || type || '—'}
     </span>
   );
 }

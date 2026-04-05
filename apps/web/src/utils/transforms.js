@@ -46,7 +46,7 @@ export function formatDateTime(iso) {
 // ── User list transform ────────────────────────────────
 // Merges the minimal /users list with bulk /esig-status data
 export function transformUserList(users, esigMap) {
-  return users.map(u => {
+  return (users || []).map(u => {
     const esig = esigMap.get(u.ien) || {};
     return {
       id: `S-${u.ien}`,
@@ -62,6 +62,7 @@ export function transformUserList(users, esigMap) {
 
 // ── User detail transform (from GET /users/:duz) ──────
 export function transformUserDetail(raw) {
+  if (!raw) return null;
   const vg = raw.vistaGrounding || {};
   const esig = vg.electronicSignature || {};
   return {
@@ -99,14 +100,15 @@ const KEY_MODULE_MAP = {
 };
 
 export function inferModule(keyName) {
+  if (!keyName) return 'Unclassified';
   if (KEY_MODULE_MAP[keyName]) return KEY_MODULE_MAP[keyName];
-  const prefix = keyName.split(/[\s_]/)[0];
-  return KEY_MODULE_MAP[prefix] || 'Other';
+  const prefix = String(keyName).split(/[\s_]/)[0];
+  return KEY_MODULE_MAP[prefix] || 'Unclassified';
 }
 
 export function humanizeKeyName(keyName) {
   if (!keyName) return '';
-  return keyName
+  return String(keyName)
     .replace(/[_-]/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase())
     .replace(/\bXu\b/gi, 'Kernel')
@@ -119,6 +121,7 @@ export function humanizeKeyName(keyName) {
 }
 
 export function transformPermission(raw) {
+  if (!raw) return null;
   const descriptiveName = raw.descriptiveName || raw.description || '';
   const packageName = raw.packageName || '';
   return {
@@ -136,6 +139,7 @@ export function transformPermission(raw) {
 
 // ── Division → Site transform ──────────────────────────
 export function transformSite(raw) {
+  if (!raw) return null;
   return {
     id: raw.ien,
     name: raw.name,
@@ -163,7 +167,7 @@ export function parseKernelParams(rawLines) {
   let wpKey = null;
   const wpLines = [];
 
-  for (const line of rawLines) {
+  for (const line of (rawLines || [])) {
     if (line === '[Data]' || line === '$$END$$') {
       if (wpKey) { params[wpKey].value = wpLines.join('\n'); wpKey = null; wpLines.length = 0; }
       continue;
@@ -198,11 +202,12 @@ export function parseKernelParams(rawLines) {
 
 // ── Error trap transform ───────────────────────────────
 export function transformErrorTrap(raw) {
+  if (!raw) return null;
   return {
     id: raw.ien,
-    error: raw.errorText,
+    error: raw.errorText || '',
     firstOccurrence: fmDateToIso(raw.firstDateTime),
     lastOccurrence: fmDateToIso(raw.mostRecentDateTime),
-    routine: raw.routineName || (raw.errorText.match(/^(\S+~\S+)/)?.[1] || ''),
+    routine: raw.routineName || ((raw.errorText || '').match(/^(\S+~\S+)/)?.[1] || ''),
   };
 }

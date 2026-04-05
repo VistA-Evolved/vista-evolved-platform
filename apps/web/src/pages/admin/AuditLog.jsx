@@ -42,14 +42,16 @@ function toSortableTime(fmDateVal) {
   return d ? d.getTime() : 0;
 }
 
+let auditSeq = 0;
 function normalizeAuditEntry(raw, source) {
+  const seq = ++auditSeq;
   if (source === 'signon') {
     const iso = fmDateToDate(raw.signOnDateTime)?.toISOString();
     return {
-      id: `signon-${raw.ien || Math.random()}`,
+      id: `signon-${raw.ien || seq}`,
       timestamp: iso ? formatDateTime(iso) : raw.signOnDateTime || '',
       _sortTime: toSortableTime(raw.signOnDateTime),
-      user: raw.userName || `Staff ${raw.duz || ''}`,
+      user: raw.userName || 'Staff Member',
       action: raw.signOffDateTime ? 'Sign-Off' : 'Sign-On',
       actionColor: 'create',
       source: 'Sign-On Log',
@@ -60,7 +62,7 @@ function normalizeAuditEntry(raw, source) {
   if (source === 'error') {
     const iso = fmDateToDate(raw.mostRecentDateTime)?.toISOString();
     return {
-      id: `error-${raw.ien || Math.random()}`,
+      id: `error-${raw.ien || seq}`,
       timestamp: iso ? formatDateTime(iso) : '',
       _sortTime: toSortableTime(raw.mostRecentDateTime),
       user: 'System',
@@ -74,7 +76,7 @@ function normalizeAuditEntry(raw, source) {
   if (source === 'failed') {
     const iso = fmDateToDate(raw.dateTime)?.toISOString();
     return {
-      id: `failed-${raw.ien || Math.random()}`,
+      id: `failed-${raw.ien || seq}`,
       timestamp: iso ? formatDateTime(iso) : '',
       _sortTime: toSortableTime(raw.dateTime),
       user: raw.userName || 'Unknown',
@@ -88,10 +90,10 @@ function normalizeAuditEntry(raw, source) {
   if (source === 'programmer') {
     const iso = fmDateToDate(raw.dateTime || raw.signOnDateTime)?.toISOString();
     return {
-      id: `prog-${raw.ien || Math.random()}`,
+      id: `prog-${raw.ien || seq}`,
       timestamp: iso ? formatDateTime(iso) : '',
       _sortTime: toSortableTime(raw.dateTime || raw.signOnDateTime),
-      user: raw.userName || `Staff ${raw.duz || ''}`,
+      user: raw.userName || 'Staff Member',
       action: 'Programmer Mode',
       actionColor: 'delete',
       source: 'Programmer Mode',
@@ -101,10 +103,10 @@ function normalizeAuditEntry(raw, source) {
   }
   const iso = fmDateToDate(raw.dateTime)?.toISOString();
   return {
-    id: `fm-${raw.ien || Math.random()}`,
+    id: `fm-${raw.ien || seq}`,
     timestamp: iso ? formatDateTime(iso) : '',
     _sortTime: toSortableTime(raw.dateTime),
-    user: raw.userName || `DUZ ${raw.duz || ''}`,
+    user: raw.userName || 'Staff Member',
     action: 'Data Change',
     actionColor: 'update',
     source: 'Data Audit',

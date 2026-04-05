@@ -56,7 +56,7 @@ export default function SystemMonitor() {
       if (tasksRes.status === 'fulfilled') setActiveTasks(tasksRes.value?.data || []);
       if (schedRes.status === 'fulfilled') setScheduledTasks(schedRes.value?.data || []);
       if (errorRes.status === 'fulfilled') {
-        const entries = (errorRes.value?.data || []).map(transformErrorTrap);
+        const entries = (errorRes.value?.data || []).map(transformErrorTrap).filter(Boolean);
         setErrorTraps(entries);
       }
       if (vistaRes.status === 'fulfilled') setVistaStatus(vistaRes.value || null);
@@ -109,8 +109,8 @@ export default function SystemMonitor() {
               icon="link" detail={vistaOk ? `Mode: ${vistaStatus?.connectionMode || 'direct'}` : 'Backend unreachable'} />
             <HealthCard label="Error Trap" value={`${errorCount} entries`} ok={errorCount < 10}
               icon="bug_report" detail={errorCount > 0 ? 'Review recommended' : 'No errors recorded'} />
-            <HealthCard label="Current User" value={vistaStatus?.currentUser?.userName || '—'} ok={true}
-              icon="person" detail={`User ID: ${vistaStatus?.currentUser?.duz || '—'}`} />
+            <HealthCard label="Current User" value={vistaStatus?.vista?.userName || '—'} ok={true}
+              icon="person" detail={`DUZ: ${vistaStatus?.vista?.duz || '—'}`} />
           </div>
         )}
 
@@ -169,7 +169,7 @@ export default function SystemMonitor() {
                   <div><span className="text-text-muted">URI:</span> <span className="font-mono text-text-secondary">{vistaStatus.vista?.uri || vistaStatus.vista?.url || '—'}</span></div>
                   <div><span className="text-text-muted">Connection Mode:</span> <span className="text-text-secondary">{vistaStatus.connectionMode || '—'}</span></div>
                   <div><span className="text-text-muted">Production Mode:</span> <span className="text-text-secondary">{vistaStatus.productionMode || '—'}</span></div>
-                  <div><span className="text-text-muted">Connected User:</span> <span className="text-text-secondary">{vistaStatus.currentUser?.userName || '—'}</span></div>
+                  <div><span className="text-text-muted">Connected User:</span> <span className="text-text-secondary">{vistaStatus.vista?.userName || '—'}</span></div>
                 </div>
               ) : (
                 <p className="text-sm text-text-muted">No connection data available.</p>

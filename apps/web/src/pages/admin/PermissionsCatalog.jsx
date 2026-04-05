@@ -270,10 +270,12 @@ export default function PermissionsCatalog() {
                 </button>
                 <button
                   onClick={async () => {
-                    const res = await getPermissionHolders(selectedPerm.vistaKey || selectedPerm.name);
-                    if (res.ok && res.data) {
-                      setSelectedPerm(prev => ({ ...prev, holders: res.data, holderCount: res.data.length }));
-                    }
+                    try {
+                      const res = await getPermissionHolders(selectedPerm.vistaKey || selectedPerm.name);
+                      if (res?.data) {
+                        setSelectedPerm(prev => ({ ...prev, holders: res.data, holderCount: res.data.length }));
+                      }
+                    } catch { setSelectedPerm(prev => ({ ...prev, holders: [], holderCount: 0 })); }
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-steel hover:bg-white rounded-md transition-colors">
                   <span className="material-symbols-outlined text-[16px] mr-2 align-middle">group</span>

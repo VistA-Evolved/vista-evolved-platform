@@ -35,9 +35,11 @@ export async function getSession() {
 }
 
 export async function logout() {
-  const result = await tenantApi.post('/auth/logout');
-  setSessionToken(null);
-  return result;
+  try {
+    return await tenantApi.post('/auth/logout');
+  } finally {
+    setSessionToken(null);
+  }
 }
 
 // ────────────────────────────────────────────────
@@ -159,6 +161,14 @@ export async function analyzeKeyImpact(data) {
 
 export async function getRoleTemplates() {
   return tenantApi.get('/roles');
+}
+
+// ────────────────────────────────────────────────
+// Departments / Services (backend: SERVICE/SECTION #49)
+// ────────────────────────────────────────────────
+
+export async function getDepartments(params = {}) {
+  return tenantApi.get('/services', params);
 }
 
 // ────────────────────────────────────────────────

@@ -273,6 +273,13 @@ async function main() {
     decorateReply: false,
   });
 
+  // Global error handler — normalize all uncaught errors to { ok: false, error: '...' }
+  app.setErrorHandler((error, request, reply) => {
+    const statusCode = error.statusCode || 500;
+    request.log.error(error);
+    reply.code(statusCode).send({ ok: false, error: error.message || 'Internal server error' });
+  });
+
   // Session auth middleware — check token on all /api/ routes except bypass list
   app.addHook('onRequest', async (request, reply) => {
     if (!request.url.startsWith('/api/tenant-admin/v1/')) return;
@@ -756,6 +763,8 @@ async function main() {
           name: k.name,
           vistaKey: k.name,
           description: k.description || '',
+          descriptiveName: '',
+          packageName: '',
           category: 'security-key',
           assignedUsers: [],
           vistaGrounding: { file19_1Ien: k.ien, rpcUsed: keysRes.rpcUsed },
@@ -993,6 +1002,8 @@ async function main() {
           const holders = holderMap ? (holderMap[kName.toUpperCase()] || []) : [];
           data.push({
             keyName: kName, vistaKey: kName, description: p[2] || '',
+            descriptiveName: p[4] || '',
+            packageName: p[5] || '',
             category: 'security-key', holderCount: parseInt(p[3] || '0', 10) || holders.length,
             holders: holders.slice(0, 20),
             vistaGrounding: { file19_1Ien: p[0], rpcUsed: z.rpcUsed },
@@ -1028,6 +1039,8 @@ async function main() {
           keyName: k.name,
           vistaKey: k.name,
           description: k.description || '',
+          descriptiveName: '',
+          packageName: '',
           category: 'security-key',
           holderCount: holders.length,
           holders: holders.slice(0, 20),
@@ -1494,15 +1507,19 @@ async function main() {
   app.put('/api/tenant-admin/v1/users/:duz/credentials', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const ac = body.accessCode || body.username || '';
+    const vc = body.verifyCode || body.password || '';
+    if (!ac || !vc) return reply.code(400).send({ ok: false, error: 'accessCode and verifyCode are required' });
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
-    const z = await callZveRpc('ZVE USMG CRED', [String(req.params.duz)]);
+    const z = await callZveRpc('ZVE USMG CRED', [String(req.params.duz), ac, vc]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') {
       return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG CRED not registered.', detail: o.msg });
     }
     if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
-    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed };
   });
 
   app.post('/api/tenant-admin/v1/users/:duz/deactivate', async (req, reply) => {
@@ -1566,18 +1583,23 @@ async function main() {
     if (o.kind === 'missing') {
       return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG AUDLOG not registered.', detail: o.msg });
     }
-    const entries = [];
+    const data = [];
     for (const line of z.lines.slice(1)) {
       const parts = line.split('^');
       if (parts.length >= 6) {
-        entries.push({
-          auditIen: parts[0], entryIen: parts[1], when: parts[2],
-          fieldName: parts[3], fieldNum: parts[4], byDuz: parts[5],
-          oldValue: parts[6] || '', newValue: parts[7] || '',
+        data.push({
+          ien: parts[0],
+          fileNumber: '200',
+          dateTime: parts[2],
+          fieldChanged: parts[3],
+          fieldNum: parts[4],
+          userName: parts[5] ? `Staff #${parts[5]}` : '',
+          oldValue: parts[6] || '',
+          newValue: parts[7] || '',
         });
       }
     }
-    return { ok: true, source: 'vista', tenantId, rpcUsed: z.rpcUsed, count: entries.length, entries };
+    return { ok: true, source: 'vista', tenantId, rpcUsed: z.rpcUsed, data };
   });
 
   /** Rename user (.01 field) via ZVE USMG RENAME */
@@ -5772,6 +5794,23 @@ async function main() {
     }
   });
 
+  app.put('/api/tenant-admin/v1/roles/custom/:roleId', async (req, reply) => {
+    const body = req.body || {};
+    if (!body.name) return reply.code(400).send({ ok: false, error: 'name required' });
+    try {
+      const keys = (body.keys || []).join(';');
+      const z = await callZveRpc('ZVE ROLE CUSTOM UPD', [req.params.roleId, body.name, body.description || '', keys]);
+      const o = zveOutcome(z);
+      if (o.kind === 'missing') {
+        return { ok: true, source: 'pending', id: req.params.roleId };
+      }
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      return { ok: true, source: 'zve', id: req.params.roleId };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
   app.delete('/api/tenant-admin/v1/roles/custom/:roleId', async (req, reply) => {
     try {
       const z = await callZveRpc('ZVE ROLE CUSTOM DEL', [req.params.roleId]);
@@ -5781,6 +5820,25 @@ async function main() {
       return { ok: true, source: 'zve' };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // VistA FILE #49 — SERVICE/SECTION (departments) for StaffForm dropdown
+  // ═══════════════════════════════════════════════════════════════════════
+
+  app.get('/api/tenant-admin/v1/services', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    try {
+      const rows = await lockedRpc(async () => {
+        return ddrList({ file: '49', fields: '.01;1', fieldNames: ['name', 'chief'], search: req.query.search });
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '49', data: rows, total: rows.length };
+    } catch (e) {
+      return reply.code(502).send({ ok: false, error: e.message, stage: 'DDR LISTER File 49' });
     }
   });
 

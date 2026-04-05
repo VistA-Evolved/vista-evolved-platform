@@ -67,7 +67,7 @@ async function request(method, path, body = null) {
   }
 
   if (json.status === 'error' || json.ok === false) {
-    throw new ApiError(json.code || 'UNKNOWN', json.message || 'An error occurred', res.status);
+    throw new ApiError(json.code || 'UNKNOWN', json.error || json.message || 'An error occurred', res.status);
   }
 
   return json;

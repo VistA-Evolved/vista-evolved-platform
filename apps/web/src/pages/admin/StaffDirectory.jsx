@@ -3,8 +3,8 @@ import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getSites, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, getPermissions } from '../../services/adminService';
+import { useNavigate } from 'react-router-dom';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, getPermissions } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
@@ -36,38 +36,10 @@ function SigReadinessBadge({ value }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${s.cls}`}>{s.label}</span>;
 }
 
-function ProviderBadge({ isProvider }) {
-  return isProvider
-    ? <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#E8EEF5] text-[#2E5984] uppercase">Yes</span>
-    : <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-[#F5F5F5] text-[#999] uppercase">No</span>;
-}
-
-function daysSince(dateStr) {
-  if (!dateStr) return Infinity;
-  return Math.floor((new Date() - new Date(dateStr)) / (1000 * 60 * 60 * 24));
-}
-
-function LastSignInCell({ value }) {
-  if (!value) return <span className="text-[#CC3333] font-semibold text-xs">Never</span>;
-  const days = daysSince(value);
-  const display = new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const time = new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  let cls = 'text-text-secondary';
-  if (days > 90) cls = 'text-[#CC3333] font-semibold';
-  else if (days > 30) cls = 'text-[#E6A817] font-semibold';
-  return (
-    <div className={`text-xs ${cls}`}>
-      <div>{display}</div>
-      <div className="text-[10px] opacity-75">{time}</div>
-    </div>
-  );
-}
-
 const baseColumns = [
   { key: 'name', label: 'Name', bold: true },
   { key: 'id', label: 'Staff ID', render: (val) => <span className="font-mono text-[11px] text-text-secondary">{val}</span> },
   { key: 'department', label: 'Department' },
-  { key: 'site', label: 'Site' },
   { key: 'status', label: 'Status', align: 'center', render: (val) => <StatusBadge status={val} /> },
   { key: 'esigStatus', label: 'E-Signature', align: 'center', render: (val) => <SigReadinessBadge value={val} /> },
   { key: 'permissionCount', label: 'Permissions', align: 'center', render: (val) => <KeyCountBadge count={val || 0} /> },
@@ -78,13 +50,9 @@ const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 
 export default function StaffDirectory() {
   const navigate = useNavigate();
-  const location = useLocation();
-  // Only use location.state for name-based searches; ignore permission/role key names
-  // that would never match a staff member name and cause blank results.
   const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('Active');
-  const [siteFilter, setSiteFilter] = useState('All Sites');
   const [esigFilter, setEsigFilter] = useState('All');
   const [hideSystemAccounts, setHideSystemAccounts] = useState(true);
   const [selectedStaff, setSelectedStaff] = useState(null);
@@ -94,7 +62,6 @@ export default function StaffDirectory() {
 
   // Live data state
   const [staffList, setStaffList] = useState([]);
-  const [sites, setSites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -133,19 +100,14 @@ export default function StaffDirectory() {
     setLoading(true);
     setError(null);
     try {
-      const [usersRes, esigRes, sitesRes] = await Promise.all([
+      const [usersRes, esigRes] = await Promise.all([
         getStaff(),
         getESignatureStatus(),
-        getSites(),
       ]);
 
       const users = usersRes?.data || [];
       const esigList = esigRes?.data || [];
-      const divisionList = sitesRes?.data || [];
-
-      // Build lookup maps
       const esigMap = new Map(esigList.map(e => [e.id || e.duz, e]));
-      const divMap = new Map(divisionList.map(d => [d.ien, d]));
 
       // Merge users with esig data
       const merged = users.map(u => {
@@ -154,8 +116,7 @@ export default function StaffDirectory() {
           id: `S-${u.ien}`,
           duz: u.ien,
           name: (u.name || esig.name || '').toUpperCase(),
-          department: '', // not available in list view — shows on detail
-          site: '', // would need division assignment
+          department: '',
           status: esig.status || 'active',
           esigStatus: esig.hasCode ? 'active' : 'incomplete',
           hasEsig: esig.hasCode || false,
@@ -165,7 +126,8 @@ export default function StaffDirectory() {
       });
 
       setStaffList(merged);
-      setSites(divisionList.map(d => ({ id: d.ien, name: d.name, code: d.stationNumber })));
+
+
     } catch (err) {
       setError(err.message || 'Failed to load staff data');
     } finally {
@@ -204,8 +166,8 @@ export default function StaffDirectory() {
         initials: vg.initials || '',
       });
       setDetailKeys(keysRes?.data || []);
-    } catch {
-      // Leave detail partially loaded
+    } catch (err) {
+      setDetailData(prev => prev || { ...row, _loadError: err.message || 'Failed to load details' });
     } finally {
       setDetailLoading(false);
     }
@@ -237,13 +199,11 @@ export default function StaffDirectory() {
 
   const activeFilters = [
     ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}` }] : []),
-    ...(siteFilter !== 'All Sites' ? [{ key: 'site', label: `Site: ${siteFilter}` }] : []),
     ...(esigFilter !== 'All' ? [{ key: 'esig', label: `E-Signature: ${esigFilter}` }] : []),
   ];
 
   const removeFilter = (key) => {
     if (key === 'status') setStatusFilter('All');
-    if (key === 'site') setSiteFilter('All Sites');
     if (key === 'esig') setEsigFilter('All');
   };
 
@@ -254,7 +214,8 @@ export default function StaffDirectory() {
       setDeactivateTarget(null);
       setSelectedStaff(null);
       loadData();
-    } catch {
+    } catch (err) {
+      setError(`Failed to deactivate: ${err.message}`);
       setDeactivateTarget(null);
     }
   };
@@ -264,7 +225,7 @@ export default function StaffDirectory() {
       await reactivateStaffMember(duz);
       setSelectedStaff(null);
       loadData();
-    } catch { /* handled by API layer */ }
+    } catch (err) { setError(`Failed to reactivate: ${err.message}`); }
   };
 
   const handleClearEsig = async (duz) => {
@@ -278,7 +239,7 @@ export default function StaffDirectory() {
       await setESignature(clearEsigTarget, { action: 'clear' });
       if (detailData) setDetailData(prev => ({ ...prev, esigStatus: 'incomplete', sigBlockName: '' }));
       loadData();
-    } catch { /* handled by API layer */ }
+    } catch (err) { setError(err.message || 'Failed to clear e-signature'); }
     finally { setClearingEsig(false); setClearEsigTarget(null); }
   };
 
@@ -289,7 +250,7 @@ export default function StaffDirectory() {
       try {
         const res = await getPermissions();
         setAllPermissions((res?.data || []).map(k => ({ name: k.keyName, description: k.description || '' })));
-      } catch { /* non-fatal */ }
+      } catch (err) { setAllPermissions([]); }
     }
   };
 
@@ -300,11 +261,9 @@ export default function StaffDirectory() {
       await assignPermission(detailData.duz, { keyName });
       const keysRes = await getUserPermissions(detailData.duz);
       setDetailKeys(keysRes?.data || []);
-    } catch { /* handled by API */ }
+    } catch (err) { setError(err.message || 'Failed to assign permission'); }
     finally { setAssigningPerm(false); }
   };
-
-  const siteOptions = ['All Sites', ...sites.map(s => `${s.name} (${s.code})`)];
 
   if (error) {
     return (
@@ -330,8 +289,8 @@ export default function StaffDirectory() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    const header = 'Name,Staff ID,Status,Service,Division\n';
-                    const csv = (staffList || []).map(r => `"${r.name}","${r.duz}","${r.status}","${r.service || ''}","${r.division || ''}"`).join('\n');
+                    const header = 'Name,Staff ID,Status,E-Signature,Department\n';
+                    const csv = (staffList || []).map(r => `"${r.name}","${r.duz}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.department || ''}"`).join('\n');
                     const blob = new Blob([header + csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -370,7 +329,6 @@ export default function StaffDirectory() {
             </div>
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <FilterSelect label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => { setStatusFilter(v); setPage(1); }} />
-              <FilterSelect label="Site" value={siteFilter} options={siteOptions} onChange={(v) => { setSiteFilter(v); setPage(1); }} />
               <FilterSelect label="E-Signature" value={esigFilter} options={ESIG_OPTIONS} onChange={(v) => { setEsigFilter(v); setPage(1); }} />
               <label className="flex items-center gap-1.5 text-[11px] text-[#666] cursor-pointer ml-2">
                 <input type="checkbox" checked={hideSystemAccounts} onChange={e => { setHideSystemAccounts(e.target.checked); setPage(1); }}
@@ -603,12 +561,11 @@ function FilterSelect({ label, value, options, onChange }) {
 }
 
 function DetailField({ label, value, mono }) {
-  // Hide fields with no meaningful value
-  if (!value || value === '—' || value === '') return null;
+  const display = (value && value !== '—' && value !== '') ? value : '—';
   return (
     <div>
       <div className="text-[10px] font-bold text-[#999] uppercase tracking-wider">{label}</div>
-      <div className={`text-[13px] text-[#222] mt-0.5 ${mono ? 'font-mono' : ''}`}>{value}</div>
+      <div className={`text-[13px] mt-0.5 ${mono ? 'font-mono' : ''} ${display === '—' ? 'text-[#CCC] italic' : 'text-[#222]'}`}>{display}</div>
     </div>
   );
 }
