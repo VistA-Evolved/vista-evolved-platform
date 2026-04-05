@@ -34,6 +34,7 @@ export default function SiteManagement() {
   const [toggleSaving, setToggleSaving] = useState('');
   const [showAddSite, setShowAddSite] = useState(false);
   const [newSiteForm, setNewSiteForm] = useState({ name: '', stationNumber: '', type: 'Medical Center' });
+  const [createError, setCreateError] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -394,18 +395,26 @@ export default function SiteManagement() {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => setShowAddSite(false)} className="px-4 py-2 text-sm border border-border rounded-md">Cancel</button>
+              {createError && (
+                <div className="flex-1 p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-md text-[11px] text-[#CC3333] flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  {createError}
+                </div>
+              )}
+              <button onClick={() => { setShowAddSite(false); setCreateError(''); }} className="px-4 py-2 text-sm border border-border rounded-md">Cancel</button>
               <button
                 disabled={!newSiteForm.name || saving}
                 onClick={async () => {
                   setSaving(true);
+                  setCreateError('');
                   try {
                     await createSite(newSiteForm);
                     setShowAddSite(false);
                     setNewSiteForm({ name: '', stationNumber: '', type: 'Medical Center' });
+                    setCreateError('');
                     await loadData();
                   } catch (err) {
-                    alert(err.message || 'Failed to create site');
+                    setCreateError(err.message || 'Failed to create site');
                   }
                   setSaving(false);
                 }}

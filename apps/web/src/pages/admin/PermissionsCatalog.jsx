@@ -6,7 +6,7 @@ import { SearchBar, Pagination } from '../../components/shared/SharedComponents'
 import { getPermissions, getPermissionHolders, assignPermission, getStaff, getUserPermissions } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
-import { inferModule } from '../../utils/transforms';
+import { inferModule, humanizeKeyName } from '../../utils/transforms';
 
 /**
  * AD-03 / ADM-06: Permissions Catalog
@@ -16,7 +16,8 @@ import { inferModule } from '../../utils/transforms';
  * 689 real VistA security keys from the sandbox.
  */
 
-const CATEGORIES = ['All', 'Clinical', 'Pharmacy', 'Laboratory', 'Scheduling', 'Registration', 'System', 'Imaging', 'Other', 'Orphaned'];
+// Fallback categories used when package names aren't available from backend
+const FALLBACK_CATEGORIES = ['All', 'Clinical', 'Pharmacy', 'Laboratory', 'Scheduling', 'Registration', 'System', 'Imaging', 'Other', 'Orphaned'];
 
 // columns are built inside the component to access handlers
 
@@ -36,6 +37,7 @@ export default function PermissionsCatalog() {
   const [staffSearch, setStaffSearch] = useState('');
   const [staffLoading, setStaffLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState('');
 
   // Holders modal state
   const [holdersModal, setHoldersModal] = useState(null);
@@ -57,6 +59,7 @@ export default function PermissionsCatalog() {
   const handleOpenAssign = async (row) => {
     setAssignModal(row);
     setStaffSearch('');
+    setAssignError('');
     if (staffList.length === 0) {
       setStaffLoading(true);
       try {
@@ -69,6 +72,7 @@ export default function PermissionsCatalog() {
 
   const handleAssign = async (duz) => {
     if (!assignModal) return;
+    setAssignError('');
     const keyToAssign = (assignModal.vistaKey || assignModal.name || '').toUpperCase();
     // ORES/ORELSE mutual exclusion check
     if (keyToAssign === 'ORES' || keyToAssign === 'ORELSE') {
@@ -77,7 +81,7 @@ export default function PermissionsCatalog() {
         const res = await getUserPermissions(duz);
         const existing = (res?.data || []).map(k => (k.name || '').toUpperCase());
         if (existing.includes(conflict)) {
-          alert(`Cannot assign ${keyToAssign}: user already holds ${conflict}. ORES and ORELSE are mutually exclusive.`);
+          setAssignError(`Cannot assign ${keyToAssign}: user already holds ${conflict}. ORES and ORELSE are mutually exclusive.`);
           return;
         }
       } catch { /* proceed — backend will also validate */ }
@@ -92,8 +96,13 @@ export default function PermissionsCatalog() {
   };
 
   const columns = [
-    { key: 'name', label: 'Permission Name', bold: true },
-    { key: 'module', label: 'Module' },
+    { key: 'displayName', label: 'Permission', bold: true, render: (val, row) => (
+      <div>
+        <div className="font-medium text-sm">{val}</div>
+        <div className="text-[10px] font-mono text-text-muted">{row.name}</div>
+      </div>
+    )},
+    { key: 'module', label: 'Category' },
     { key: 'description', label: 'Description', render: (val) => <span className="text-xs text-text-secondary line-clamp-1">{val || '—'}</span> },
     {
       key: 'holderCount', label: 'Staff', align: 'center',
@@ -117,15 +126,20 @@ export default function PermissionsCatalog() {
     setError(null);
     try {
       const res = await getPermissions();
-      const keys = (res?.data || []).map(k => ({
-        id: k.vistaGrounding?.file19_1Ien || k.keyName,
-        name: k.keyName,
-        vistaKey: k.vistaKey || k.keyName,
-        module: inferModule(k.keyName),
-        description: k.description || '',
-        holderCount: k.holderCount || 0,
-        holders: k.holders || [],
-      }));
+      const keys = (res?.data || []).map(k => {
+        const holders = k.holders || [];
+        const holderCount = holders.length > 0 ? holders.length : (k.holderCount || 0);
+        return {
+          id: k.vistaGrounding?.file19_1Ien || k.keyName,
+          name: k.keyName,
+          displayName: k.descriptiveName || k.description || humanizeKeyName(k.keyName),
+          vistaKey: k.vistaKey || k.keyName,
+          module: k.packageName || inferModule(k.keyName),
+          description: k.description || '',
+          holderCount,
+          holders,
+        };
+      });
       setAllKeys(keys);
     } catch (err) {
       setError(err.message || 'Failed to load permissions');
@@ -141,17 +155,23 @@ export default function PermissionsCatalog() {
     if (categoryFilter !== 'All' && k.module !== categoryFilter) return false;
     if (!searchText) return true;
     const s = searchText.toLowerCase();
-    return k.name.toLowerCase().includes(s) || k.module.toLowerCase().includes(s) || k.description.toLowerCase().includes(s);
+    return k.name.toLowerCase().includes(s) || k.displayName.toLowerCase().includes(s) || k.module.toLowerCase().includes(s) || k.description.toLowerCase().includes(s);
   });
 
   const totalFiltered = filtered.length;
   const pageStart = (page - 1) * PAGE_SIZE;
   const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
-  // Category counts for badges
+  // Category counts for badges — build dynamic list from actual data
   const categoryCounts = {};
   allKeys.forEach(k => { categoryCounts[k.module] = (categoryCounts[k.module] || 0) + 1; });
   const orphanedCount = allKeys.filter(k => k.holderCount === 0).length;
+
+  // Build dynamic categories: 'All' + sorted unique modules + 'Orphaned'
+  const dynamicModules = Object.keys(categoryCounts).sort();
+  const CATEGORIES = dynamicModules.length > 0
+    ? ['All', ...dynamicModules, 'Orphaned']
+    : FALLBACK_CATEGORIES;
 
   if (error) {
     return (
@@ -208,13 +228,13 @@ export default function PermissionsCatalog() {
         {selectedPerm && (
           <div className="w-[40%] border-l border-border bg-surface-alt p-6 overflow-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-text">{selectedPerm.name}</h2>
+              <h2 className="text-lg font-semibold text-text">{selectedPerm.displayName}</h2>
               <button onClick={() => setSelectedPerm(null)} className="text-text-muted hover:text-text">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
             <div className="space-y-4">
-              <DetailRow label="Module" value={selectedPerm.module} />
+              <DetailRow label="Category" value={selectedPerm.module} />
               <DetailRow label="Description" value={selectedPerm.description || 'No description available'} />
               <DetailRow label="Staff with This Permission" value={`${selectedPerm.holderCount} staff members`} />
 
@@ -312,6 +332,12 @@ export default function PermissionsCatalog() {
               <input type="text" value={staffSearch} onChange={e => setStaffSearch(e.target.value)}
                 placeholder="Search staff by name..."
                 className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel" />
+              {assignError && (
+                <div className="mt-2 p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-md text-[11px] text-[#CC3333] flex items-start gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] mt-0.5 flex-shrink-0">error</span>
+                  <span>{assignError}</span>
+                </div>
+              )}
             </div>
             <div className="flex-1 overflow-auto p-5">
               {staffLoading ? (

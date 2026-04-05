@@ -4,9 +4,10 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getSites, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getSites, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, getPermissions } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
+import { humanizeKeyName } from '../../utils/transforms';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -78,13 +79,17 @@ const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 export default function StaffDirectory() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchText, setSearchText] = useState(location.state?.filterRole || location.state?.assignRoleName || location.state?.assignKeyName || '');
+  // Only use location.state for name-based searches; ignore permission/role key names
+  // that would never match a staff member name and cause blank results.
+  const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('Active');
   const [siteFilter, setSiteFilter] = useState('All Sites');
   const [esigFilter, setEsigFilter] = useState('All');
+  const [hideSystemAccounts, setHideSystemAccounts] = useState(true);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [clearEsigTarget, setClearEsigTarget] = useState(null);
   const [clearingEsig, setClearingEsig] = useState(false);
 
   // Live data state
@@ -98,6 +103,12 @@ export default function StaffDirectory() {
   const [detailKeys, setDetailKeys] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Assign permissions modal state
+  const [showAssignPermsModal, setShowAssignPermsModal] = useState(false);
+  const [allPermissions, setAllPermissions] = useState([]);
+  const [permSearchText, setPermSearchText] = useState('');
+  const [assigningPerm, setAssigningPerm] = useState(false);
+
   const columns = [
     ...baseColumns,
     {
@@ -108,7 +119,7 @@ export default function StaffDirectory() {
             className="text-steel hover:underline text-[11px] font-medium px-1">Edit</button>
           <button onClick={() => navigate(`/admin/permissions?user=${row.duz}`)}
             className="text-steel hover:underline text-[11px] font-medium px-1">Keys</button>
-          <button onClick={() => navigate(`/admin/audit?user=${row.duz}`)}
+          <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(row.name)}`)}
             className="text-steel hover:underline text-[11px] font-medium px-1">Audit</button>
         </div>
       ),
@@ -201,7 +212,9 @@ export default function StaffDirectory() {
   };
 
   // Filters (client-side since list endpoint only returns ien+name)
+  const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB)/i;
   const filtered = staffList.filter(u => {
+    if (hideSystemAccounts && SYSTEM_ACCOUNT_PATTERNS.test(u.name)) return false;
     if (searchText) {
       const s = searchText.toLowerCase();
       if (!u.name.toLowerCase().includes(s) && !u.id.toLowerCase().includes(s)) return false;
@@ -255,14 +268,40 @@ export default function StaffDirectory() {
   };
 
   const handleClearEsig = async (duz) => {
-    if (!window.confirm('Clear this staff member\'s electronic signature? They will need to set a new one on next sign-in.')) return;
+    setClearEsigTarget(duz);
+  };
+
+  const confirmClearEsig = async () => {
+    if (!clearEsigTarget) return;
     setClearingEsig(true);
     try {
-      await setESignature(duz, { action: 'clear' });
+      await setESignature(clearEsigTarget, { action: 'clear' });
       if (detailData) setDetailData(prev => ({ ...prev, esigStatus: 'incomplete', sigBlockName: '' }));
       loadData();
     } catch { /* handled by API layer */ }
-    finally { setClearingEsig(false); }
+    finally { setClearingEsig(false); setClearEsigTarget(null); }
+  };
+
+  const handleOpenAssignPerms = async () => {
+    setShowAssignPermsModal(true);
+    setPermSearchText('');
+    if (allPermissions.length === 0) {
+      try {
+        const res = await getPermissions();
+        setAllPermissions((res?.data || []).map(k => ({ name: k.keyName, description: k.description || '' })));
+      } catch { /* non-fatal */ }
+    }
+  };
+
+  const handleAssignPerm = async (keyName) => {
+    if (!detailData) return;
+    setAssigningPerm(true);
+    try {
+      await assignPermission(detailData.duz, { keyName });
+      const keysRes = await getUserPermissions(detailData.duz);
+      setDetailKeys(keysRes?.data || []);
+    } catch { /* handled by API */ }
+    finally { setAssigningPerm(false); }
   };
 
   const siteOptions = ['All Sites', ...sites.map(s => `${s.name} (${s.code})`)];
@@ -333,6 +372,11 @@ export default function StaffDirectory() {
               <FilterSelect label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => { setStatusFilter(v); setPage(1); }} />
               <FilterSelect label="Site" value={siteFilter} options={siteOptions} onChange={(v) => { setSiteFilter(v); setPage(1); }} />
               <FilterSelect label="E-Signature" value={esigFilter} options={ESIG_OPTIONS} onChange={(v) => { setEsigFilter(v); setPage(1); }} />
+              <label className="flex items-center gap-1.5 text-[11px] text-[#666] cursor-pointer ml-2">
+                <input type="checkbox" checked={hideSystemAccounts} onChange={e => { setHideSystemAccounts(e.target.checked); setPage(1); }}
+                  className="w-3.5 h-3.5 rounded border-[#E2E4E8]" />
+                Hide system accounts
+              </label>
             </div>
 
             {activeFilters.length > 0 && (
@@ -372,22 +416,22 @@ export default function StaffDirectory() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <DetailField label="Staff ID" value={detailData.id} mono />
-                  <DetailField label="Title" value={detailData.title || '—'} />
-                  <DetailField label="Department" value={detailData.department || '—'} />
-                  <DetailField label="Phone" value={detailData.phone || '—'} />
-                  <DetailField label="Email" value={detailData.email || '—'} />
+                  <DetailField label="Title" value={detailData.title} />
+                  <DetailField label="Department" value={detailData.department} />
+                  <DetailField label="Phone" value={detailData.phone} />
+                  <DetailField label="Email" value={detailData.email} />
                   <DetailField label="Status" value={<StatusBadge status={detailData.status} />} />
                   {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
-                  <DetailField label="Initials" value={detailData.initials || '—'} />
+                  <DetailField label="Initials" value={detailData.initials} />
                 </div>
 
                 {detailData.isProvider && (
                   <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
                     <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Provider Information</h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <DetailField label="NPI" value={detailData.npi || '—'} mono />
-                      <DetailField label="DEA#" value={detailData.dea || '—'} mono />
-                      <DetailField label="Provider Type" value={detailData.providerType || '—'} />
+                      <DetailField label="NPI" value={detailData.npi} mono />
+                      <DetailField label="DEA#" value={detailData.dea} mono />
+                      <DetailField label="Provider Type" value={detailData.providerType} />
                       <DetailField label="E-Signature" value={<SigReadinessBadge value={detailData.esigStatus} />} />
                     </div>
                   </div>
@@ -400,7 +444,7 @@ export default function StaffDirectory() {
                     </h3>
                     <div className="flex flex-wrap gap-1.5">
                       {detailKeys.slice(0, 8).map(k => (
-                        <span key={k.ien} className="px-2 py-0.5 text-[10px] font-mono rounded bg-[#E8EEF5] text-[#2E5984]">{k.name}</span>
+                        <span key={k.ien} title={k.name} className="px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">{humanizeKeyName(k.name)}</span>
                       ))}
                       {detailKeys.length > 8 && (
                         <span className="px-2 py-0.5 text-[10px] rounded bg-[#F5F5F5] text-[#999]">
@@ -414,7 +458,7 @@ export default function StaffDirectory() {
                 <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
                   <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">E-Signature Block</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    <DetailField label="Signature Block Name" value={detailData.sigBlockName || '—'} />
+                    <DetailField label="Signature Block Name" value={detailData.sigBlockName} />
                     <DetailField label="Status" value={<SigReadinessBadge value={detailData.esigStatus} />} />
                   </div>
                 </div>
@@ -425,7 +469,7 @@ export default function StaffDirectory() {
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">edit</span>
                     Edit Staff Member
                   </button>
-                  <button onClick={() => navigate(`/admin/permissions?user=${detailData.duz}`)}
+                  <button onClick={handleOpenAssignPerms}
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">key</span>
                     Assign Permissions
@@ -440,7 +484,7 @@ export default function StaffDirectory() {
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
                     {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
                   </button>
-                  <button onClick={() => navigate(`/admin/audit?user=${detailData.duz}`)}
+                  <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(detailData.name)}`)}
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">history</span>
                     View Audit Trail
@@ -478,6 +522,55 @@ export default function StaffDirectory() {
           destructive
         />
       )}
+
+      {clearEsigTarget && (
+        <ConfirmDialog
+          title="Clear E-Signature"
+          message="Clear this staff member's electronic signature? They will need to set a new one on next sign-in."
+          confirmLabel="Clear E-Signature"
+          onConfirm={confirmClearEsig}
+          onCancel={() => setClearEsigTarget(null)}
+          destructive
+        />
+      )}
+
+      {showAssignPermsModal && detailData && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAssignPermsModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-[#E2E4E8] flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#222]">Assign Permission</h3>
+                <p className="text-xs text-[#666] mt-0.5">to {detailData.name}</p>
+              </div>
+              <button onClick={() => setShowAssignPermsModal(false)} className="text-[#999] hover:text-[#222]">
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-4 border-b border-[#E2E4E8]">
+              <input type="text" value={permSearchText} onChange={e => setPermSearchText(e.target.value)}
+                placeholder="Search permissions..." className="w-full h-9 px-3 border border-[#E2E4E8] rounded-md text-sm focus:outline-none focus:border-[#2E5984]" />
+            </div>
+            <div className="flex-1 overflow-auto p-2">
+              {allPermissions
+                .filter(p => !permSearchText || p.name.toLowerCase().includes(permSearchText.toLowerCase()) || p.description.toLowerCase().includes(permSearchText.toLowerCase()))
+                .filter(p => !detailKeys.some(k => k.name === p.name))
+                .slice(0, 50)
+                .map(p => (
+                  <button key={p.name} disabled={assigningPerm}
+                    onClick={() => handleAssignPerm(p.name)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#F5F8FB] rounded-md flex items-center justify-between disabled:opacity-50">
+                    <div>
+                      <div className="font-medium text-[#222]">{humanizeKeyName(p.name)}</div>
+                      <div className="text-[10px] text-[#999] font-mono">{p.name}</div>
+                    </div>
+                    <span className="text-[#2E5984] text-xs font-medium">Assign</span>
+                  </button>
+                ))}
+              {allPermissions.length === 0 && <div className="text-center text-sm text-[#999] py-4">Loading permissions...</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
@@ -510,6 +603,8 @@ function FilterSelect({ label, value, options, onChange }) {
 }
 
 function DetailField({ label, value, mono }) {
+  // Hide fields with no meaningful value
+  if (!value || value === '—' || value === '') return null;
   return (
     <div>
       <div className="text-[10px] font-bold text-[#999] uppercase tracking-wider">{label}</div>

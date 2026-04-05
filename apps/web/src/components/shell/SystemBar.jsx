@@ -52,12 +52,19 @@ export default function SystemBar({ breadcrumb = '' }) {
   };
 
   const siteLabel = activeSite ? `${activeSite.name} (${activeSite.code})` : 'Select Site';
+  const isSandbox = vistaConnected && (userName?.includes('PRO') || sites.some(s => s.name?.includes('SANDBOX') || s.name?.includes('TEST') || s.code === '500'));
 
   return (
     <header className="fixed top-0 left-0 right-0 h-10 bg-navy flex items-center px-4 z-50">
       <span className="text-white font-semibold text-sm tracking-wide mr-4">
         VistA Evolved
       </span>
+
+      {isSandbox && (
+        <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-[#E6A817] text-[#1A1A2E] mr-2">
+          Sandbox
+        </span>
+      )}
 
       {breadcrumb && (
         <>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
-import { CautionBanner } from '../../components/shared/SharedComponents';
+import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff } from '../../services/adminService';
 import { inferModule } from '../../utils/transforms';
 
@@ -45,7 +45,8 @@ const ROLES = [
   { value: 'read-only', label: 'Read-Only', description: 'View-only access, no data modification' },
 ];
 
-const DEPARTMENTS = [
+// Fallback departments — used as suggestions when live VistA SERVICE/SECTION (#49) data is unavailable
+const DEPARTMENTS_FALLBACK = [
   'Internal Medicine', 'Cardiology', 'Surgery', 'Psychiatry', 'Nursing Service',
   'Pharmacy', 'Laboratory', 'Radiology', 'Emergency', 'Health Information',
   'IT Support', 'Administration', 'Social Work', 'Nutrition', 'Dental',
@@ -66,7 +67,7 @@ const PROVIDER_TYPES = [
 const PERMISSION_GROUPS = [
   {
     group: 'Clinical',
-    hint: 'PROVIDER, ORES, ORELSE, OREMAS key mappings',
+    hint: 'Order writing, clinical notes, patient records',
     items: [
       { key: 'ORES', label: 'Write clinical orders', roleDefault: ['provider'] },
       { key: 'ORES-SIGN', label: 'Sign orders electronically (requires e-signature)', roleDefault: ['provider'] },
@@ -79,7 +80,7 @@ const PERMISSION_GROUPS = [
   },
   {
     group: 'Pharmacy',
-    hint: 'PSORPH, PSOA PURGE, PSOINTERFACE key mappings',
+    hint: 'Prescriptions, formulary, medication administration',
     items: [
       { key: 'PSORPH', label: 'Process outpatient prescriptions', roleDefault: ['pharmacist'] },
       { key: 'PSJ-VERIFY', label: 'Verify inpatient medication orders', roleDefault: ['pharmacist'] },
@@ -89,7 +90,7 @@ const PERMISSION_GROUPS = [
   },
   {
     group: 'Laboratory',
-    hint: 'LRLAB, LRVERIFY, LRSUPER key mappings',
+    hint: 'Lab operations, result verification, supervision',
     items: [
       { key: 'LRLAB', label: 'Core lab operations (accessioning, results)', roleDefault: ['lab-tech'] },
       { key: 'LRVERIFY', label: 'Verify and release lab results', roleDefault: [] },
@@ -98,7 +99,7 @@ const PERMISSION_GROUPS = [
   },
   {
     group: 'Scheduling',
-    hint: 'SD SUPERVISOR key mapping',
+    hint: 'Appointments, schedule management, overrides',
     items: [
       { key: 'SD-SCHED', label: 'Create and manage appointments', roleDefault: ['scheduler', 'front-desk'] },
       { key: 'SD-SUPER', label: 'Scheduling supervisor (override closures, manage no-shows)', roleDefault: [] },
@@ -106,7 +107,7 @@ const PERMISSION_GROUPS = [
   },
   {
     group: 'Registration',
-    hint: 'DG RECORD ACCESS, DG SENSITIVITY key mappings',
+    hint: 'Patient demographics, restricted record access',
     items: [
       { key: 'DG-ACCESS', label: 'Access patient registration and demographics', roleDefault: ['front-desk', 'nurse', 'provider'] },
       { key: 'DG-SENSITIVE', label: 'Access restricted/protected patient records (break-the-glass)', roleDefault: [] },
@@ -114,7 +115,7 @@ const PERMISSION_GROUPS = [
   },
   {
     group: 'System Administration',
-    hint: 'XUPROGMODE key mapping',
+    hint: 'User management, system-level access',
     items: [
       { key: 'XUMGR', label: 'Manage all users and assign any permission', roleDefault: ['system-admin'] },
       { key: 'XUPROG', label: 'Full system programmer access', roleDefault: ['system-admin'] },
@@ -139,6 +140,7 @@ export default function StaffForm() {
   const [dataLoading, setDataLoading] = useState(true);
   const [esigStatus, setEsigStatus] = useState({ hasCode: false, sigBlockName: '' });
   const [clearingEsig, setClearingEsig] = useState(false);
+  const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
 
   useEffect(() => {
     const loadRefData = async () => {
@@ -302,7 +304,11 @@ export default function StaffForm() {
   });
 
   const handleClearEsig = async () => {
-    if (!window.confirm('Clear this staff member\'s electronic signature? They will need to set a new one on next sign-in.')) return;
+    setShowClearEsigDialog(true);
+  };
+
+  const confirmClearEsig = async () => {
+    setShowClearEsigDialog(false);
     setClearingEsig(true);
     try {
       await setESignature(userId, { action: 'clear' });
@@ -444,11 +450,12 @@ export default function StaffForm() {
                   ))}
                 </div>
               </FormField>
-              <FormField label="Department" required hint="Organizational grouping for this staff member">
-                <select value={form.department} onChange={e => updateField('department', e.target.value)} className="form-input">
-                  <option value="">Select department...</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+              <FormField label="Department" required hint="Organizational grouping for this staff member. Type to search or enter a custom department.">
+                <input type="text" list="department-list" value={form.department} onChange={e => updateField('department', e.target.value)}
+                  placeholder="Select or type department..." className="form-input" />
+                <datalist id="department-list">
+                  {DEPARTMENTS_FALLBACK.map(d => <option key={d} value={d} />)}
+                </datalist>
               </FormField>
               <label className="flex items-center gap-3 p-3 bg-surface-alt rounded-lg cursor-pointer">
                 <input type="checkbox" checked={form.isProvider} onChange={e => updateField('isProvider', e.target.checked)}
@@ -479,7 +486,7 @@ export default function StaffForm() {
               </FormField>
               <FormField label="Additional Sites" hint="Staff can work across multiple sites — select all that apply">
                 <div className="space-y-2">
-                  {liveSites.map(loc => (
+                  {liveSites.filter(loc => loc.value !== form.primaryLocation).map(loc => (
                     <label key={loc.value} className="flex items-center gap-3 p-2 rounded-md hover:bg-surface-alt text-sm">
                       <input type="checkbox"
                         checked={form.additionalLocations.includes(loc.value)}
@@ -661,15 +668,17 @@ export default function StaffForm() {
               {PERMISSION_GROUPS.map(group => (
                 <div key={group.group} className="border border-border rounded-lg p-4">
                   <h3 className="text-sm font-semibold text-text mb-1">{group.group}</h3>
-                  <p className="text-[10px] text-text-muted mb-3 font-mono">{group.hint}</p>
+                  <p className="text-[10px] text-text-muted mb-3">{group.hint}</p>
                   <div className="space-y-2">
                     {group.items.map(item => {
                       const isDefault = item.roleDefault.includes(form.primaryRole);
                       const isChecked = form.assignedPermissions.includes(item.key) || isDefault;
                       const existsInVista = livePermissions.length === 0 || livePermissions.some(p => p.key === item.key);
                       return (
-                        <label key={item.key} className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+                        <label key={item.key} className={`flex items-center gap-2 text-sm cursor-pointer ${!existsInVista && livePermissions.length > 0 ? 'text-text-muted opacity-60' : 'text-text-secondary'}`}
+                          title={!existsInVista && livePermissions.length > 0 ? 'This permission will be configured when the corresponding VistA module is installed' : ''}>
                           <input type="checkbox" checked={isChecked}
+                            disabled={!existsInVista && livePermissions.length > 0}
                             onChange={e => {
                               const next = e.target.checked
                                 ? [...form.assignedPermissions, item.key]
@@ -679,9 +688,6 @@ export default function StaffForm() {
                             className="w-4 h-4 rounded border-border" />
                           <span className={isDefault ? 'text-text font-medium' : ''}>{item.label}</span>
                           {isDefault && <span className="text-[9px] text-steel bg-[#E8EEF5] px-1.5 py-0.5 rounded-full">role default</span>}
-                          {!existsInVista && livePermissions.length > 0 && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#FFF3E0] text-[#E6A817] font-medium">Not in VistA</span>
-                          )}
                         </label>
                       );
                     })}
@@ -692,7 +698,7 @@ export default function StaffForm() {
               {/* Secondary Features — Doc 2: SECONDARY MENU OPTIONS #203 */}
               <div className="border border-border rounded-lg p-4">
                 <h3 className="text-sm font-semibold text-text mb-1">Application Features</h3>
-                <p className="text-[10px] text-text-muted mb-3 font-mono">Secondary feature access assignments</p>
+                <p className="text-[10px] text-text-muted mb-3">Additional application access assignments</p>
                 <div className="space-y-2">
                   {[
                     { key: 'OR CPRS GUI CHART', label: 'Clinical workspace access (required for all clinical users)', required: true },
@@ -831,6 +837,17 @@ export default function StaffForm() {
           </button>
         </div>
       </div>
+
+      {showClearEsigDialog && (
+        <ConfirmDialog
+          title="Clear E-Signature"
+          message="Clear this staff member's electronic signature? They will need to set a new one on next sign-in."
+          confirmLabel="Clear E-Signature"
+          onConfirm={confirmClearEsig}
+          onCancel={() => setShowClearEsigDialog(false)}
+          destructive
+        />
+      )}
     </AppShell>
   );
 }

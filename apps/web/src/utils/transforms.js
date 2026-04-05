@@ -104,13 +104,31 @@ export function inferModule(keyName) {
   return KEY_MODULE_MAP[prefix] || 'Other';
 }
 
+export function humanizeKeyName(keyName) {
+  if (!keyName) return '';
+  return keyName
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\bXu\b/gi, 'Kernel')
+    .replace(/\bOr\b/gi, 'Order Entry')
+    .replace(/\bPs[ojb]?\b/gi, m => ({ ps: 'Pharmacy', pso: 'Outpatient Rx', psj: 'Inpatient Rx', psb: 'BCMA' }[m.toLowerCase()] || m))
+    .replace(/\bLr\b/gi, 'Lab')
+    .replace(/\bSd\b/gi, 'Scheduling')
+    .replace(/\bDg\b/gi, 'Registration')
+    .replace(/\bTiu\b/gi, 'Clinical Docs');
+}
+
 export function transformPermission(raw) {
+  const descriptiveName = raw.descriptiveName || raw.description || '';
+  const packageName = raw.packageName || '';
   return {
     id: raw.vistaGrounding?.file19_1Ien || raw.keyName,
     name: raw.keyName,
-    vistaKey: raw.vistaKey,
+    displayName: descriptiveName || humanizeKeyName(raw.keyName),
+    vistaKey: raw.vistaKey || raw.keyName,
     description: raw.description || '',
-    module: inferModule(raw.keyName),
+    module: packageName || inferModule(raw.keyName),
+    packageName,
     holderCount: raw.holderCount || 0,
     holders: raw.holders || [],
   };

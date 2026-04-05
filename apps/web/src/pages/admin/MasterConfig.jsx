@@ -314,6 +314,11 @@ export default function MasterConfig() {
                           <input type="number" value={displayValue} onChange={e => updateField(field.name, e.target.value)}
                             className="w-28 h-8 px-3 text-sm font-mono border border-border rounded-md focus:outline-none focus:border-steel" />
                           {field.unit && <span className="text-xs text-text-muted">{field.unit}</span>}
+                          {String(displayValue) === '0' && (
+                            <span className="px-2 py-0.5 text-[10px] font-semibold bg-[#FDE8E8] text-[#CC3333] rounded-full uppercase">
+                              Disabled — value is 0
+                            </span>
+                          )}
                         </div>
                       )}
                       {field.type === 'textarea' && (

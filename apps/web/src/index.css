@@ -11,3 +11,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
   color: #1A1A2E;
 }
+
+@layer components {
+  .form-input {
+    @apply w-full h-10 px-3 border border-border rounded-md text-sm text-text bg-white
+      placeholder:text-text-muted
+      focus:outline-none focus:border-steel focus:ring-1 focus:ring-steel
+      transition-colors;
+  }
+}

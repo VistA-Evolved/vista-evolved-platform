@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getPermissions, getRoleTemplates, getCustomRoles, createCustomRole, deleteCustomRole } from '../../services/adminService';
 
 /**
@@ -221,6 +222,7 @@ export default function RoleTemplates() {
   const [cloneModalSource, setCloneModalSource] = useState(null);
   const [cloneName, setCloneName] = useState('');
   const [roleSaving, setRoleSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     Promise.allSettled([
@@ -276,12 +278,17 @@ export default function RoleTemplates() {
   };
 
   const handleDeleteCustom = async (roleId) => {
-    if (!window.confirm('Delete this custom role?')) return;
+    setDeleteTarget(roleId);
+  };
+
+  const confirmDeleteCustom = async () => {
+    if (!deleteTarget) return;
     try {
-      await deleteCustomRole(roleId);
+      await deleteCustomRole(deleteTarget);
     } catch { /* Non-fatal */ }
-    setCustomRoles(prev => prev.filter(r => r.id !== roleId));
+    setCustomRoles(prev => prev.filter(r => r.id !== deleteTarget));
     setSelectedRole(ROLES[0]);
+    setDeleteTarget(null);
   };
 
   const allRoles = [...ROLES, ...customRoles];
@@ -495,6 +502,17 @@ export default function RoleTemplates() {
             </div>
           </div>
         </div>
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete Custom Role"
+          message="Delete this custom role? This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={confirmDeleteCustom}
+          onCancel={() => setDeleteTarget(null)}
+          destructive
+        />
       )}
     </AppShell>
   );

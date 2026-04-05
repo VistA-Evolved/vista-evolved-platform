@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getAlerts, updateAlert, getStaff, createAlert, getMailManInbox, getMailManMessage, sendMailManMessage, deleteMailManMessage } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -36,6 +37,7 @@ export default function AlertsNotifications() {
   const [messageBodyLoading, setMessageBodyLoading] = useState(false);
   const [composeModal, setComposeModal] = useState(false);
   const [mailFolder, setMailFolder] = useState('IN');
+  const [confirmDeleteAlert, setConfirmDeleteAlert] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -219,16 +221,7 @@ export default function AlertsNotifications() {
                       Forward
                     </button>
                     <button disabled={actionLoading === 'delete'}
-                      onClick={async () => {
-                        if (!window.confirm('Delete this alert?')) return;
-                        setActionLoading('delete');
-                        try {
-                          await updateAlert(selectedAlert.id, { status: 'deleted' });
-                          setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
-                          setSelectedAlert(null);
-                        } catch { /* handled by API */ }
-                        finally { setActionLoading(null); }
-                      }}
+                      onClick={() => setConfirmDeleteAlert(true)}
                       className="px-3 py-2 text-xs border border-[#CC3333] text-[#CC3333] rounded-md hover:bg-[#FDE8E8] disabled:opacity-50">
                       {actionLoading === 'delete' ? 'Deleting...' : 'Delete'}
                     </button>
@@ -336,6 +329,26 @@ export default function AlertsNotifications() {
         setStaffLoading={setStaffLoading}
         onSent={loadData}
       />
+
+      {confirmDeleteAlert && selectedAlert && (
+        <ConfirmDialog
+          title="Delete Alert"
+          message="Delete this alert? This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={async () => {
+            setConfirmDeleteAlert(false);
+            setActionLoading('delete');
+            try {
+              await updateAlert(selectedAlert.id, { status: 'deleted' });
+              setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
+              setSelectedAlert(null);
+            } catch { /* handled by API */ }
+            finally { setActionLoading(null); }
+          }}
+          onCancel={() => setConfirmDeleteAlert(false)}
+          destructive
+        />
+      )}
     </AppShell>
   );
 }
