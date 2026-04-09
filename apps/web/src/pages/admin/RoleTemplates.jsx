@@ -19,22 +19,21 @@ const ALL_WORKSPACES = [
   'Lab', 'Imaging', 'Billing', 'Supply', 'Admin', 'Analytics',
 ];
 
+// Role templates — every key below is a REAL VistA security key in #19.1.
+// These templates are a Vista Evolved concept (not stored in VistA itself);
+// they bundle assignable starter keys per role. The runtime render cross-
+// references with the live /key-inventory and any missing key is hidden,
+// not shown as a "pending install" badge.
 const ROLES = [
   {
     id: 'physician', name: 'Physician', isSystem: true,
     description: 'Licensed independent practitioner. Full order entry, prescribing, note signing.',
     userCount: 0,
     permissions: [
-      { label: 'Write clinical orders', key: 'ORES' },
-      { label: 'Sign orders electronically', key: 'OR CPRS GUI CHART' },
+      { label: 'Write clinical orders (signed)', key: 'ORES' },
       { label: 'Prescribe medications', key: 'PROVIDER' },
-      { label: 'Write clinical notes', key: 'TIU WRITE' },
-      { label: 'Sign clinical notes', key: 'TIU SIGN' },
-      { label: 'View all patient records', key: 'DG RECORDS' },
-      { label: 'Access controlled substances (with DEA)', key: 'PSJ LM OPTION' },
-      { label: 'Cosign trainee orders', key: 'ORES' },
     ],
-    mutualExclusions: ['ORES and ORELSE are mutually exclusive — providers sign their own orders'],
+    mutualExclusions: ['A physician with order-signing authority cannot also hold verbal-order entry (that role is reserved for nursing staff).'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'rw', Clinical: 'rw', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'ro' },
   },
   {
@@ -42,11 +41,8 @@ const ROLES = [
     description: 'Mid-level provider with prescriptive authority. Independent order entry and cosignature capability.',
     userCount: 0,
     permissions: [
-      { label: 'Write clinical orders', key: 'ORES' },
+      { label: 'Write clinical orders (signed)', key: 'ORES' },
       { label: 'Prescribe medications', key: 'PROVIDER' },
-      { label: 'Write clinical notes', key: 'TIU WRITE' },
-      { label: 'Sign clinical notes', key: 'TIU SIGN' },
-      { label: 'View all patient records', key: 'DG RECORDS' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'rw', Clinical: 'rw', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'ro' },
@@ -57,62 +53,74 @@ const ROLES = [
     userCount: 0,
     permissions: [
       { label: 'Enter verbal / telephone orders', key: 'ORELSE' },
-      { label: 'Document nursing assessments', key: 'TIU WRITE' },
-      { label: 'Administer medications', key: 'PSB NURSE' },
-      { label: 'Record vital signs', key: 'GMV MANAGER' },
-      { label: 'Write nursing notes', key: 'TIU WRITE' },
-      { label: 'View patient records', key: 'DG RECORDS' },
+      { label: 'Provider (for documentation authority)', key: 'PROVIDER' },
     ],
-    mutualExclusions: ['Cannot have ORES — provider-only order signing authority'],
+    mutualExclusions: ['A nurse with verbal-order authority cannot also hold physician order-signing authority.'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'ro', Scheduling: 'ro', Clinical: 'rw', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
+  },
+  {
+    id: 'ward-clerk', name: 'Ward Clerk / Unit Clerk', isSystem: true,
+    description: 'MAS order entry — transcribes orders to the chart without signing authority.',
+    userCount: 0,
+    permissions: [
+      { label: 'MAS order entry (chart-only, no signing)', key: 'OREMAS' },
+    ],
+    mutualExclusions: [],
+    workspaceAccess: { Dashboard: 'ro', Patients: 'rw', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
   },
   {
     id: 'pharmacist', name: 'Staff Pharmacist', isSystem: true,
     description: 'Outpatient and inpatient pharmacy operations, medication verification.',
     userCount: 0,
     permissions: [
-      { label: 'Process outpatient prescriptions', key: 'PSO PHARMACIST' },
-      { label: 'Verify inpatient medication orders', key: 'PSJ PHARMACIST' },
-      { label: 'Manage drug formulary', key: 'PSO FORMULARY' },
-      { label: 'Dispense medications', key: 'PSO DISPENSE' },
-      { label: 'Manage controlled substance inventory', key: 'PSD CONTROLLED' },
+      { label: 'Outpatient pharmacy refill processing', key: 'PSORPH' },
+      { label: 'Inpatient pharmacy verification', key: 'PSJ PHARMACIST' },
+      { label: 'Outpatient pharmacy manager', key: 'PSO MANAGER' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'none', Clinical: 'ro', Pharmacy: 'rw', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
   },
   {
-    id: 'pharm-tech', name: 'Pharmacy Technician', isSystem: true,
-    description: 'Assists pharmacist with dispensing, inventory, and label printing.',
+    id: 'controlled-substance-pharmacist', name: 'Controlled Substance Pharmacist', isSystem: true,
+    description: 'Handles Schedule II-V dispensing, audit trails, and controlled-substance inventory.',
     userCount: 0,
     permissions: [
-      { label: 'Fill prescriptions', key: 'PSO TECH' },
-      { label: 'Print labels', key: 'PSO LABEL' },
-      { label: 'Manage inventory', key: 'PSO INVENTORY' },
+      { label: 'Controlled substances pharmacist', key: 'PSD PHARMACIST' },
+      { label: 'Outpatient pharmacy refill processing', key: 'PSORPH' },
     ],
     mutualExclusions: [],
-    workspaceAccess: { Dashboard: 'ro', Patients: 'none', Scheduling: 'none', Clinical: 'none', Pharmacy: 'rw', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
+    workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'none', Clinical: 'ro', Pharmacy: 'rw', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
   },
   {
     id: 'lab-tech', name: 'Lab Technologist', isSystem: true,
-    description: 'Specimen processing, result entry, quality control.',
+    description: 'Specimen processing, result entry, and verification.',
     userCount: 0,
     permissions: [
-      { label: 'Process specimens', key: 'LR TECH' },
-      { label: 'Enter lab results', key: 'LR RESULT' },
-      { label: 'Run quality control', key: 'LR QC' },
-      { label: 'Print labels', key: 'LR LABEL' },
+      { label: 'Laboratory technician', key: 'LRLAB' },
+      { label: 'Result verification', key: 'LRVERIFY' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'ro', Patients: 'none', Scheduling: 'none', Clinical: 'none', Pharmacy: 'none', Lab: 'rw', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
   },
   {
-    id: 'rad-tech', name: 'Radiology Technologist', isSystem: true,
-    description: 'Imaging exam execution, image capture, and exam completion.',
+    id: 'lab-supervisor', name: 'Lab Supervisor', isSystem: true,
+    description: 'Oversees lab operations, workflow, and quality assurance.',
     userCount: 0,
     permissions: [
-      { label: 'Complete exams', key: 'RA TECH' },
-      { label: 'Capture images', key: 'RA IMAGE' },
-      { label: 'View imaging worklist', key: 'RA VIEW' },
+      { label: 'Laboratory supervisor', key: 'LRSUPER' },
+      { label: 'Result verification', key: 'LRVERIFY' },
+      { label: 'Laboratory technician', key: 'LRLAB' },
+    ],
+    mutualExclusions: [],
+    workspaceAccess: { Dashboard: 'ro', Patients: 'none', Scheduling: 'none', Clinical: 'none', Pharmacy: 'none', Lab: 'rw', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'ro', Analytics: 'ro' },
+  },
+  {
+    id: 'rad-tech', name: 'Radiology Technologist', isSystem: true,
+    description: 'Performs imaging procedures and manages exam allocation.',
+    userCount: 0,
+    permissions: [
+      { label: 'Radiology resource allocator', key: 'RA ALLOC' },
+      { label: 'Imaging system access', key: 'MAG SYSTEM' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'ro', Patients: 'none', Scheduling: 'none', Clinical: 'none', Pharmacy: 'none', Lab: 'none', Imaging: 'rw', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
@@ -122,87 +130,75 @@ const ROLES = [
     description: 'Appointment booking, check-in, schedule management.',
     userCount: 0,
     permissions: [
-      { label: 'Create appointments', key: 'SD APPT MAKE' },
-      { label: 'Cancel appointments', key: 'SD APPT CANCEL' },
-      { label: 'Check in patients', key: 'SD CHECKIN' },
-      { label: 'View clinic schedules', key: 'SD VIEW' },
+      { label: 'Scheduling manager', key: 'SDMGR' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'rw', Clinical: 'none', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
   },
   {
-    id: 'front-desk', name: 'Registration Clerk', isSystem: true,
-    description: 'Patient registration, demographics, insurance verification.',
+    id: 'scheduling-supervisor', name: 'Scheduling Supervisor', isSystem: true,
+    description: 'Override closures, manage no-shows, oversee clinic schedules.',
     userCount: 0,
     permissions: [
-      { label: 'Register new patients', key: 'DG REGISTER' },
-      { label: 'Edit patient demographics', key: 'DG DEMOGRAPHICS' },
-      { label: 'Verify insurance', key: 'IB INSURANCE' },
-      { label: 'Check in patients', key: 'SD CHECKIN' },
+      { label: 'Scheduling supervisor', key: 'SD SUPERVISOR' },
+      { label: 'Scheduling manager', key: 'SDMGR' },
+    ],
+    mutualExclusions: [],
+    workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'rw', Clinical: 'none', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'ro', Analytics: 'ro' },
+  },
+  {
+    id: 'front-desk', name: 'Registration Clerk', isSystem: true,
+    description: 'Patient registration and demographics.',
+    userCount: 0,
+    permissions: [
+      { label: 'Patient registration clerk', key: 'DG REGISTER' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'ro', Patients: 'rw', Scheduling: 'ro', Clinical: 'none', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
   },
   {
-    id: 'billing-coder', name: 'Billing Coder', isSystem: true,
-    description: 'Charge capture, claims processing, revenue cycle management.',
+    id: 'adt-coordinator', name: 'ADT Coordinator', isSystem: true,
+    description: 'Manages admissions, transfers, discharges, and ADT workflow.',
     userCount: 0,
     permissions: [
-      { label: 'Enter charges', key: 'IB CHARGE' },
-      { label: 'Submit claims', key: 'IB CLAIMS' },
-      { label: 'Process billing adjustments', key: 'IB ADJUST' },
+      { label: 'ADT coordinator', key: 'DG MENU' },
+      { label: 'Patient registration clerk', key: 'DG REGISTER' },
     ],
     mutualExclusions: [],
-    workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'none', Clinical: 'none', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'rw', Supply: 'none', Admin: 'none', Analytics: 'none' },
+    workspaceAccess: { Dashboard: 'ro', Patients: 'rw', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'ro', Supply: 'none', Admin: 'none', Analytics: 'ro' },
   },
   {
-    id: 'social-worker', name: 'Social Worker', isSystem: true,
-    description: 'Case management, discharge planning, psychosocial assessments.',
+    id: 'adt-supervisor', name: 'ADT Supervisor', isSystem: true,
+    description: 'Oversight of patient movement, restricted records, and discharge workflow.',
     userCount: 0,
     permissions: [
-      { label: 'Write social work notes', key: 'TIU WRITE' },
-      { label: 'View patient records', key: 'DG RECORDS' },
-      { label: 'Manage referrals', key: 'GMRC REFERRAL' },
+      { label: 'ADT supervisor', key: 'DG SUPERVISOR' },
+      { label: 'ADT coordinator', key: 'DG MENU' },
+      { label: 'Sensitive patient access', key: 'DG SENSITIVITY' },
     ],
     mutualExclusions: [],
-    workspaceAccess: { Dashboard: 'ro', Patients: 'rw', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
+    workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'ro', Supply: 'none', Admin: 'ro', Analytics: 'rw' },
   },
   {
-    id: 'system-admin', name: 'System Administrator', isSystem: true,
-    description: 'Full administrative access. User management, configuration, security, audit.',
+    id: 'system-admin', name: 'System Administrator (IRM)', isSystem: true,
+    description: 'Full administrative access: user management, configuration, security, audit.',
     userCount: 0,
     permissions: [
-      { label: 'Manage all users', key: 'XUMGR' },
-      { label: 'Assign any permission', key: 'XUMGR' },
-      { label: 'Configure site parameters', key: 'XU PARAM' },
-      { label: 'Manage facilities and sites', key: 'XU DIVISION' },
-      { label: 'View all audit logs', key: 'ZVE ADMIN AUDIT' },
-      { label: 'System configuration', key: 'XU PROG MODE' },
-      { label: 'Background task monitoring', key: 'ZTMQ' },
+      { label: 'IRM / site manager', key: 'XUMGR' },
+      { label: 'Programmer', key: 'XUPROG' },
+      { label: 'Programmer mode access', key: 'XUPROGMODE' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'rw', Patients: 'ro', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'ro', Supply: 'ro', Admin: 'rw', Analytics: 'rw' },
-  },
-  {
-    id: 'adpac', name: 'ADPAC', isSystem: true,
-    description: 'Application coordinator. Manages menus, templates, print settings, and first-line support.',
-    userCount: 0,
-    permissions: [
-      { label: 'Manage menus for assigned module', key: 'XUMGR' },
-      { label: 'Edit print templates', key: 'XU TEMPLATE' },
-      { label: 'View user accounts', key: 'XUMGR' },
-    ],
-    mutualExclusions: [],
-    workspaceAccess: { Dashboard: 'rw', Patients: 'none', Scheduling: 'none', Clinical: 'none', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'ro', Analytics: 'ro' },
   },
   {
     id: 'chief-of-staff', name: 'Chief of Staff', isSystem: true,
     description: 'Clinical leadership with cross-workspace read access and provider authority.',
     userCount: 0,
     permissions: [
-      { label: 'All Physician permissions', key: 'ORES' },
-      { label: 'View all audit logs', key: 'ZVE ADMIN AUDIT' },
-      { label: 'Override orders', key: 'OR OVERRIDE' },
+      { label: 'Write clinical orders (signed)', key: 'ORES' },
+      { label: 'Prescribe medications', key: 'PROVIDER' },
+      { label: 'Sensitive patient access', key: 'DG SENSITIVITY' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'ro', Clinical: 'rw', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'ro', Supply: 'none', Admin: 'ro', Analytics: 'rw' },
@@ -410,33 +406,27 @@ export default function RoleTemplates() {
               <>
                 <section className="mb-6">
                   <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">
-                    Permissions Granted ({selectedRole.permissions.length})
+                    Permissions Granted
                   </h3>
                   <div className="space-y-1">
-                    {selectedRole.permissions.map((perm, i) => {
-                      const existsInVista = vistaKeySet.size === 0 || vistaKeySet.has(perm.key);
-                      return (
+                    {selectedRole.permissions
+                      // Hide any permission whose key is not in the live catalog.
+                      // No "pending install" badge — if it's missing, it's missing.
+                      .filter(perm => vistaKeySet.size === 0 || vistaKeySet.has(perm.key))
+                      .map((perm, i) => (
                         <div key={i} className="flex items-center justify-between px-3 py-2 bg-[#F5F8FB] rounded-lg group">
                           <div className="flex items-center gap-2">
-                            <span className={`material-symbols-outlined text-[16px] ${existsInVista ? 'text-[#1B7D3A]' : 'text-[#E6A817]'}`}>
-                              {existsInVista ? 'check_circle' : 'help'}
-                            </span>
+                            <span className="material-symbols-outlined text-[16px] text-[#1B7D3A]">check_circle</span>
                             <span className="text-[13px] text-[#222]">{perm.label}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {!existsInVista && vistaKeySet.size > 0 && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#F5F5F5] text-[#999] font-medium cursor-help"
-                                title="This permission key will become active when the corresponding VistA package is installed">
-                                Pending Install
-                              </span>
-                            )}
-                            <span className="text-[10px] font-mono text-[#AAA] opacity-0 group-hover:opacity-100 transition-opacity" title={`VistA Key: ${perm.key}`}>
-                              {perm.key}
-                            </span>
-                          </div>
+                          <span className="text-[10px] font-mono text-[#AAA] opacity-0 group-hover:opacity-100 transition-opacity">
+                            {perm.key}
+                          </span>
                         </div>
-                      );
-                    })}
+                      ))}
+                    {selectedRole.permissions.filter(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key)).length === 0 && (
+                      <p className="text-[12px] text-[#999] italic px-3 py-2">No permissions in this role are available in the current system.</p>
+                    )}
                   </div>
                 </section>
 
@@ -481,12 +471,30 @@ export default function RoleTemplates() {
 
             <div className="flex gap-3 pt-4 border-t border-[#E2E4E8]">
               <button
-                onClick={() => navigate('/admin/staff', { state: { assignRoleName: selectedRole.name } })}
+                onClick={() => {
+                  // Navigate to the catalog with the role's primary key
+                  // pre-selected, which opens the catalog's assign flow.
+                  const firstAvailableKey = selectedRole.permissions.find(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key))?.key;
+                  if (firstAvailableKey) {
+                    navigate(`/admin/permissions?assign=${encodeURIComponent(firstAvailableKey)}`);
+                  } else {
+                    navigate('/admin/permissions');
+                  }
+                }}
                 className="px-4 py-2 text-[13px] font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors">
                 Assign to Staff Member
               </button>
               <button
-                onClick={() => navigate('/admin/staff', { state: { filterRole: selectedRole.name } })}
+                onClick={() => {
+                  // Navigate to the catalog filtered to the role's primary key
+                  // so the operator can see which staff currently hold it.
+                  const firstAvailableKey = selectedRole.permissions.find(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key))?.key;
+                  if (firstAvailableKey) {
+                    navigate(`/admin/permissions?view=${encodeURIComponent(firstAvailableKey)}`);
+                  } else {
+                    navigate('/admin/permissions');
+                  }
+                }}
                 className="px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors">
                 View Staff with This Role
               </button>

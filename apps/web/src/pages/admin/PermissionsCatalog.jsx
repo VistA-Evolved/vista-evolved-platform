@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { SearchBar, Pagination } from '../../components/shared/SharedComponents';
@@ -19,6 +19,7 @@ import ErrorState from '../../components/shared/ErrorState';
 
 export default function PermissionsCatalog() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [selectedPerm, setSelectedPerm] = useState(null);
@@ -149,6 +150,29 @@ export default function PermissionsCatalog() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Deep-link support: if the URL has ?assign=KEYNAME or ?view=KEYNAME,
+  // auto-open the matching modal once the catalog has loaded. This powers
+  // the cross-page "Assign to staff" / "View staff with this role" buttons
+  // on RoleTemplates so the admin never hits a blank destination page.
+  useEffect(() => {
+    if (allKeys.length === 0) return;
+    const assignKey = searchParams.get('assign');
+    const viewKey = searchParams.get('view');
+    const target = assignKey || viewKey;
+    if (!target) return;
+    const row = allKeys.find(k => k.name === target || k.vistaKey === target);
+    if (!row) return;
+    setSelectedPerm(row);
+    if (assignKey) {
+      handleOpenAssign(row);
+    } else if (viewKey) {
+      handleViewStaff(row);
+    }
+    // Clear the query so the deep-link only fires once.
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allKeys]);
 
   const filtered = allKeys.filter(k => {
     if (categoryFilter === 'Orphaned') return k.holderCount === 0;
