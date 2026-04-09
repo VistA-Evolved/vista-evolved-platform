@@ -199,7 +199,9 @@ export default function RecordRestrictions() {
           addedBy: 'CURRENT,USER',
         }]);
       }
-    } catch { /* API error — staff not added */ }
+    } catch (err) {
+      setError(err?.message || 'Failed to add authorized staff member');
+    }
     setShowStaffPicker(false);
     setStaffSearch('');
     setStaffResults([]);
@@ -211,7 +213,9 @@ export default function RecordRestrictions() {
       if (res.ok) {
         setAuthorizedStaff(prev => prev.filter(s => s.id !== id));
       }
-    } catch { /* API error — staff not removed */ }
+    } catch (err) {
+      setError(err?.message || 'Failed to remove authorized staff member');
+    }
     setConfirmRemoveId(null);
   }, [patientId]);
 

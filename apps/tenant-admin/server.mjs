@@ -73,11 +73,19 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// Classify the outcome of a ZVE RPC call:
+//   'ok'      — first response line starts with "1^" (success)
+//   'missing' — RPC itself is not registered in the broker
+//   'rejected' — first line starts with "0^..."; the M routine ran and
+//                returned a business-logic error (e.g. mutual-exclusion
+//                conflict, validation failure). This is a REAL failure
+//                that must be surfaced to the caller, not a silent noop.
+//   'fail'    — any other error (network, parse, crash in the broker)
 function zveOutcome(z) {
   if (z.ok) return { kind: 'ok' };
   const msg = z.error || z.line0 || '';
   if (isRpcMissingError(msg)) return { kind: 'missing', msg };
-  if ((z.line0 || '').startsWith('0^')) return { kind: 'noop', msg: (z.line0 || '').slice(2) };
+  if ((z.line0 || '').startsWith('0^')) return { kind: 'rejected', msg: (z.line0 || '').slice(2) };
   return { kind: 'fail', msg };
 }
 
@@ -1373,16 +1381,20 @@ async function main() {
       // Step 1: Create the new user via ZVE USMG ADD
       const addResult = await callZveRpc('ZVE USMG ADD', [body.newName]);
       const addOutcome = zveOutcome(addResult);
-      if (addOutcome.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE USMG ADD' });
-      if (addOutcome.kind === 'fail') return reply.code(502).send({ ok: false, error: addOutcome.msg, stage: 'create-user', lines: addResult.lines });
+      if (addOutcome.kind !== 'ok') {
+        const code = addOutcome.kind === 'rejected' ? 409 : 502;
+        return reply.code(code).send({ ok: false, error: addOutcome.msg, stage: 'create-user', lines: addResult.lines });
+      }
       const newDuz = (addResult.line0 || '').split('^')[1] || null;
       if (!newDuz) return reply.code(502).send({ ok: false, error: 'User created but could not extract new DUZ', lines: addResult.lines });
 
       // Step 2: Clone keys/menus from source to new user via ZVE USER CLONE
       const cloneResult = await callZveRpc('ZVE USER CLONE', [String(body.sourceDuz), newDuz]);
       const cloneOutcome = zveOutcome(cloneResult);
-      if (cloneOutcome.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE USER CLONE' });
-      if (cloneOutcome.kind === 'fail') return reply.code(502).send({ ok: false, error: cloneOutcome.msg, stage: 'clone-keys', lines: cloneResult.lines });
+      if (cloneOutcome.kind !== 'ok') {
+        const code = cloneOutcome.kind === 'rejected' ? 409 : 502;
+        return reply.code(code).send({ ok: false, error: cloneOutcome.msg, stage: 'clone-keys', lines: cloneResult.lines });
+      }
 
       return {
         ok: true, source: 'vista', tenantId,
@@ -1551,9 +1563,7 @@ async function main() {
     const z = await callZveRpc('ZVE USMG KEYS', ['ADD', String(req.params.targetDuz), sanitized]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG KEYS returned missing status`, detail: o.msg });
-    if (o.kind === 'fail') {
-      return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
-    }
+    if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, targetDuz: req.params.targetDuz, keyName: sanitized, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1567,9 +1577,7 @@ async function main() {
     const z = await callZveRpc('ZVE USMG KEYS', ['DEL', String(req.params.targetDuz), keyName.trim()]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG KEYS returned missing status`, detail: o.msg });
-    if (o.kind === 'fail') {
-      return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
-    }
+    if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, targetDuz: req.params.targetDuz, keyName: keyName.trim(), rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1716,6 +1724,7 @@ async function main() {
     const z = await callZveRpc('ZVE USMG AUDLOG', [targetDuz, max]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG AUDLOG returned missing status`, detail: o.msg });
+    if (o.kind !== 'ok') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg || 'RPC rejected', rpcUsed: z.rpcUsed });
     const data = [];
     for (const line of z.lines.slice(1)) {
       const parts = line.split('^');
@@ -1752,7 +1761,7 @@ async function main() {
     const z = await callZveRpc('ZVE USMG RENAME', [String(req.params.duz), newName.toUpperCase().trim()]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG RENAME returned missing status`, detail: o.msg });
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
+    if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, newName: newName.toUpperCase().trim(), rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1866,7 +1875,7 @@ async function main() {
         if (o.kind === 'ok') {
           return { ok: true, source: 'zve', tenantId, paramName, value, rpcUsed: z.rpcUsed };
         }
-        if (o.kind === 'fail') {
+        if ((o.kind !== 'ok' && o.kind !== 'missing')) {
           return reply.code(400).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
         }
         if (o.kind !== 'missing') {
@@ -3746,7 +3755,7 @@ async function main() {
       if (o.kind === 'missing') {
         return reply.code(502).send({ ok: false, error: 'RPC ZVE TASKMAN STATUS' });
       }
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const parts = (z.line0 || '').split('^');
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE TASKMAN STATUS', data: { status: parts[1] || 'UNKNOWN', lastRun: parts[2] || '' } };
     } catch (e) {
@@ -3765,7 +3774,7 @@ async function main() {
       if (o.kind === 'missing') {
         return reply.code(502).send({ ok: false, error: 'RPC ZVE TASKMAN TASKS' });
       }
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const tasks = [];
       const lines = z.lines || [];
       for (let i = 1; i < lines.length; i++) {
@@ -3793,7 +3802,7 @@ async function main() {
       if (o.kind === 'missing') {
         return reply.code(502).send({ ok: false, error: 'RPC ZVE HL7 FILER STATUS' });
       }
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const data = {};
       const lines = z.lines || [];
       for (let i = 1; i < lines.length; i++) {
@@ -3818,7 +3827,7 @@ async function main() {
       if (o.kind === 'missing') {
         return reply.code(502).send({ ok: false, error: 'RPC ZVE HL7 LINK STATUS' });
       }
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const data = {};
       const lines = z.lines || [];
       for (let i = 1; i < lines.length; i++) {
@@ -3843,7 +3852,7 @@ async function main() {
       const z = await callZveRpc('ZVE CLINIC AVAIL GET', [ien]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE CLINIC AVAIL GET returned missing status`, detail: o.msg });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const slots = [];
       const lines = z.lines || [];
       for (let i = 1; i < lines.length; i++) {
@@ -3871,7 +3880,7 @@ async function main() {
     if (o.kind === 'missing') {
       return reply.code(502).send({ ok: false, error: 'RPC ZVE CLINIC AVAIL SET' });
     }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+    if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
     return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE CLINIC AVAIL SET', clinicIen: ien, lines: z.lines };
   });
 
@@ -4027,7 +4036,7 @@ async function main() {
       const z = await callZveRpc('ZVE MAILGRP MEMBERS', [ien]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE MAILGRP MEMBERS' });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       const members = (z.lines || []).filter(l => l && !l.startsWith('[') && l.includes('^')).map(l => {
         const a = l.split('^');
         return { ien: a[0], name: a[1] || '', type: a[2] || '' };
@@ -4048,7 +4057,7 @@ async function main() {
       const z = await callZveRpc('ZVE MAILGRP ADD', [ien, String(body.userDuz)]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE MAILGRP ADD' });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE MAILGRP ADD', groupIen: ien, userDuz: body.userDuz };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
   });
@@ -4063,7 +4072,7 @@ async function main() {
       const z = await callZveRpc('ZVE MAILGRP REMOVE', [ien, duz]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE MAILGRP REMOVE' });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE MAILGRP REMOVE', groupIen: ien, removedDuz: duz };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
   });
@@ -4080,7 +4089,7 @@ async function main() {
       const z = await callZveRpc('ZVE HS COMPONENTS', [ien]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE HS COMPONENTS' });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       const comps = (z.lines || []).filter(l => l && !l.startsWith('[') && l.includes('^')).map(l => {
         const a = l.split('^');
         return { ien: a[0], name: a[1] || '', type: a[2] || '' };
@@ -4101,7 +4110,7 @@ async function main() {
       const z = await callZveRpc('ZVE HS COMP ADD', [ien, String(body.componentIen)]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE HS COMP ADD' });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE HS COMP ADD', hsTypeIen: ien, componentIen: body.componentIen };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
   });
@@ -4116,7 +4125,7 @@ async function main() {
       const z = await callZveRpc('ZVE HS COMP REMOVE', [ien, compIen]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE HS COMP REMOVE' });
-      if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok' && o.kind !== 'missing') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE HS COMP REMOVE', hsTypeIen: ien, removedCompIen: compIen };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
   });
@@ -5945,7 +5954,7 @@ async function main() {
       if (o.kind === 'missing') {
         return reply.code(502).send({ ok: false, error: 'RPC ZVE ESIG MANAGE' });
       }
-      if (o.kind !== 'ok' && o.kind !== 'noop') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve', duz: req.params.duz };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });

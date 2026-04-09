@@ -725,9 +725,16 @@ export async function callZveRpc(rpcName, params = []) {
   });
 }
 
-/** True when error text indicates RPC is not registered / missing. */
+/** True when error text indicates the RPC ITSELF is not registered in the
+ *  broker (as opposed to a valid RPC returning an error about missing data).
+ *  We specifically look for the VistA XWB broker's canonical not-registered
+ *  error signature rather than loose substring matches, because arbitrary
+ *  application error text may legitimately contain "not found" etc. */
 export function isRpcMissingError(text = '') {
-  return /does not exist|not registered|unknown rpc|no such rpc/i.test(String(text));
+  const s = String(text || '');
+  // XWB broker: "RPC does not exist", "No such RPC", "Unknown RPC"
+  // Also some implementations: "M ERROR... RPC ... NOT REGISTERED"
+  return /RPC (?:does not exist|not registered)|no such RPC|unknown RPC|RPC call denied|rpc is unknown|not a valid option/i.test(s);
 }
 
 /** Build e-sig summary for users returned by ORWU NEWPERS (sequential DDR GETS). */

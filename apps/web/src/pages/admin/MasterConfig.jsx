@@ -290,13 +290,23 @@ export default function MasterConfig() {
                         </div>
                         <div className="flex gap-2">
                           <button disabled={isSelf || pendingLoading}
-                            onClick={async () => { setPendingLoading(true); try { await approve2PRequest(req.id); await loadPending(); await loadData(); } catch {} finally { setPendingLoading(false); } }}
+                            onClick={async () => {
+                              setPendingLoading(true);
+                              try { await approve2PRequest(req.id); await loadPending(); await loadData(); }
+                              catch (err) { setSaveError(err?.message || 'Failed to approve request'); }
+                              finally { setPendingLoading(false); }
+                            }}
                             className="px-3 py-1.5 text-[11px] bg-[#2D6A4F] text-white rounded-md hover:bg-[#1B4332] disabled:opacity-40"
                             title={isSelf ? 'Cannot approve your own request' : 'Approve and apply change'}>
                             {isSelf ? 'Cannot self-approve' : 'Approve'}
                           </button>
                           <button disabled={isSelf || pendingLoading}
-                            onClick={async () => { setPendingLoading(true); try { await reject2PRequest(req.id); await loadPending(); } catch {} finally { setPendingLoading(false); } }}
+                            onClick={async () => {
+                              setPendingLoading(true);
+                              try { await reject2PRequest(req.id); await loadPending(); }
+                              catch (err) { setSaveError(err?.message || 'Failed to reject request'); }
+                              finally { setPendingLoading(false); }
+                            }}
                             className="px-3 py-1.5 text-[11px] border border-[#CC3333] text-[#CC3333] rounded-md hover:bg-[#FDE8E8] disabled:opacity-40">
                             Reject
                           </button>

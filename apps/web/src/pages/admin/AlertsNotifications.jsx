@@ -185,7 +185,7 @@ export default function AlertsNotifications() {
                           await updateAlert(selectedAlert.id, { status: 'read' });
                           setAlerts(prev => prev.map(a => a.id === selectedAlert.id ? { ...a, status: 'read' } : a));
                           setSelectedAlert(prev => ({ ...prev, status: 'read' }));
-                        } catch { /* handled by API */ }
+                        } catch (err) { setError(err?.message || "Operation failed"); }
                         finally { setActionLoading(null); }
                       }}
                       className="px-3 py-2 text-xs border border-border rounded-md hover:bg-white disabled:opacity-50">
@@ -198,7 +198,7 @@ export default function AlertsNotifications() {
                           await updateAlert(selectedAlert.id, { status: 'acknowledged' });
                           setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
                           setSelectedAlert(null);
-                        } catch { /* handled by API */ }
+                        } catch (err) { setError(err?.message || "Operation failed"); }
                         finally { setActionLoading(null); }
                       }}
                       className="px-3 py-2 text-xs border border-border rounded-md hover:bg-white disabled:opacity-50">
@@ -314,7 +314,7 @@ export default function AlertsNotifications() {
                           try {
                             await updateAlert(forwardModal.id, { action: 'forward', forwardTo: s.duz });
                             setForwardModal(null);
-                          } catch { /* handled by API */ }
+                          } catch (err) { setError(err?.message || "Operation failed"); }
                           finally { setActionLoading(null); }
                         }}
                         className="w-full text-left flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-alt text-sm disabled:opacity-50">
@@ -352,7 +352,7 @@ export default function AlertsNotifications() {
               await updateAlert(selectedAlert.id, { status: 'deleted' });
               setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
               setSelectedAlert(null);
-            } catch { /* handled by API */ }
+            } catch (err) { setError(err?.message || "Operation failed"); }
             finally { setActionLoading(null); }
           }}
           onCancel={() => setConfirmDeleteAlert(false)}
@@ -488,7 +488,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
       await deleteMailManMessage(ien);
       setMessages(prev => prev.filter(m => m.ien !== ien));
       if (selectedMessage?.ien === ien) { setSelectedMessage(null); setMessageBody(null); }
-    } catch { /* silent */ }
+    } catch (err) { setError(err?.message || "Delete failed"); }
   };
 
   return (

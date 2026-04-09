@@ -29,6 +29,7 @@ export default function BedManagement() {
   const [newBedForm, setNewBedForm] = useState({ room: '', bed: '', ward: '' });
   const [bedSaving, setBedSaving] = useState(false);
   const [deleteBedTarget, setDeleteBedTarget] = useState(null);
+  const [opError, setOpError] = useState(null);
   const refreshTimer = useRef(null);
 
   const fetchData = useCallback(async (showLoading = true) => {
@@ -109,23 +110,28 @@ export default function BedManagement() {
     const bed = deleteBedTarget;
     if (!bed) return;
     setDeleteBedTarget(null);
+    setOpError(null);
     try {
       await deleteBed(bed.ien || bed.id);
       setBeds(prev => prev.filter(b => b.id !== bed.id));
       if (selectedBed?.id === bed.id) setSelectedBed(null);
-    } catch { /* Non-fatal */ }
+    } catch (err) {
+      setOpError(err?.message || 'Failed to remove bed');
+    }
   };
 
   const handleAddBed = async () => {
     if (!newBedForm.room.trim() || !newBedForm.bed.trim() || !newBedForm.ward) return;
     setBedSaving(true);
+    setOpError(null);
     try {
       await addBed({ room: newBedForm.room, bed: newBedForm.bed, wardIen: newBedForm.ward });
       setShowAddBed(false);
       setNewBedForm({ room: '', bed: '', ward: '' });
       fetchData(false);
-    } catch { /* Non-fatal, refresh will reconcile */ }
-    finally { setBedSaving(false); }
+    } catch (err) {
+      setOpError(err?.message || 'Failed to add bed');
+    } finally { setBedSaving(false); }
   };
 
   const loadCensus = useCallback(async () => {
@@ -141,6 +147,17 @@ export default function BedManagement() {
   return (
     <AppShell breadcrumb="Patients › Bed Management">
       <div className="px-6 py-5">
+        {opError && (
+          <div className="mb-4 px-4 py-3 bg-[#FDE8E8] border border-[#CC3333] rounded-md text-sm text-[#CC3333] flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] mt-0.5">error</span>
+              <span>{opError}</span>
+            </div>
+            <button onClick={() => setOpError(null)} className="text-[#CC3333] hover:text-[#992222]" aria-label="Dismiss">
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-[28px] font-bold text-[#1A1A2E]">Bed Management</h1>
           <div className="flex items-center gap-3">

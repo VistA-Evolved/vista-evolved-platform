@@ -88,8 +88,11 @@ export default function PermissionsCatalog() {
       await assignPermission(duz, { keyName: assignModal.vistaKey || assignModal.name });
       setAssignModal(null);
       loadData();
-    } catch { /* handled by API */ }
-    finally { setAssigning(false); }
+    } catch (err) {
+      // Surface the real backend error (e.g. mutual-exclusion conflict,
+      // missing user, VistA unreachable) instead of silently closing.
+      setAssignError(err?.message || 'Failed to assign permission');
+    } finally { setAssigning(false); }
   };
 
   const columns = [

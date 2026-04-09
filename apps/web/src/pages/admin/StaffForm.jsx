@@ -356,15 +356,18 @@ export default function StaffForm() {
     try {
       await setESignature(userId, { action: 'clear' });
       setEsigStatus({ hasCode: false, sigBlockName: '' });
-    } catch { /* handled by API */ }
-    finally { setClearingEsig(false); }
+    } catch (err) {
+      setSubmitError(err?.message || 'Failed to clear e-signature');
+    } finally { setClearingEsig(false); }
   };
 
   const handleSaveSigBlock = async () => {
     try {
       await setESignature(userId, { sigBlockName: form.sigBlockName });
       setEsigStatus(prev => ({ ...prev, sigBlockName: form.sigBlockName }));
-    } catch { /* handled by API */ }
+    } catch (err) {
+      setSubmitError(err?.message || 'Failed to save signature block');
+    }
   };
 
   return (
