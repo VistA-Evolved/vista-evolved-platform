@@ -8,7 +8,6 @@ import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deac
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
-import { KEY_TRANSLATIONS } from '../../utils/vocabulary';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -26,15 +25,26 @@ import { KEY_TRANSLATIONS } from '../../utils/vocabulary';
 function deriveTitleFromKeys(keys) {
   if (!keys || keys.length === 0) return '';
   const keySet = new Set(keys.map(k => (k || '').toUpperCase()));
+  if (keySet.has('XUMGR') && keySet.has('XUPROG')) return 'System Administrator';
   if (keySet.has('XUMGR')) return 'System Administrator';
-  if (keySet.has('ORES') && keySet.has('PROVIDER')) return 'Provider';
-  if (keySet.has('ORELSE') && keySet.has('PROVIDER')) return 'Nurse';
+  if (keySet.has('ORES') && keySet.has('PROVIDER')) return 'Physician';
+  if (keySet.has('ORELSE') && keySet.has('PROVIDER')) return 'Nurse Practitioner';
+  if (keySet.has('ORELSE')) return 'Nurse';
   if (keySet.has('PSJ PHARMACIST') || keySet.has('PSORPH')) return 'Pharmacist';
   if (keySet.has('LRLAB') || keySet.has('LRVERIFY')) return 'Lab Technologist';
+  if (keySet.has('LRSUPER')) return 'Lab Supervisor';
   if (keySet.has('RA ALLOC')) return 'Radiology Technologist';
-  if (keySet.has('SDMGR') || keySet.has('SD SUPERVISOR')) return 'Scheduling';
-  if (keySet.has('DG REGISTER')) return 'Registration';
+  if (keySet.has('SDMGR')) return 'Scheduling Manager';
+  if (keySet.has('SD SUPERVISOR')) return 'Scheduling Supervisor';
+  if (keySet.has('DG REGISTER')) return 'Registration Clerk';
+  if (keySet.has('DG SUPERVISOR')) return 'Registration Supervisor';
+  if (keySet.has('MAG SYSTEM')) return 'Imaging Technician';
+  if (keySet.has('IB BILLING')) return 'Billing Specialist';
+  if (keySet.has('TIU SIGN DOCUMENT')) return 'Health Information';
+  if (keySet.has('SR SURGEON')) return 'Surgeon';
+  if (keySet.has('SR ANESTHESIOLOGIST')) return 'Anesthesiologist';
   if (keySet.has('PROVIDER')) return 'Clinical Staff';
+  if (keySet.has('OR CPRS GUI CHART')) return 'Clinical User';
   return '';
 }
 
@@ -63,7 +73,7 @@ const baseColumns = [
   { key: 'permissionCount', label: 'Permissions', align: 'center', render: (val) => <KeyCountBadge count={val || 0} /> },
 ];
 
-const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Terminated'];
+const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Locked', 'Terminated'];
 const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 
 export default function StaffDirectory() {
@@ -124,11 +134,13 @@ export default function StaffDirectory() {
       const merged = users.map(u => {
         const esig = esigMap.get(u.ien) || {};
         const rawStatus = (u.status || esig.status || 'active').toLowerCase();
+        const rawTitle = u.title || '';
+        const isNumericTitle = /^\d+$/.test(rawTitle);
         return {
           id: `S-${u.ien}`,
           duz: u.ien,
           name: u.name || esig.name || '',
-          title: u.title || '',
+          title: isNumericTitle ? '' : rawTitle,
           department: u.service || '',
           site: u.division || '',
           status: rawStatus,
@@ -142,9 +154,9 @@ export default function StaffDirectory() {
 
       // Disambiguate duplicate names by appending Staff ID suffix
       const nameCounts = {};
-      for (const u of merged) nameCounts[u.name] = (nameCounts[u.name] || 0) + 1;
+      for (const u of merged) if (u.name) nameCounts[u.name] = (nameCounts[u.name] || 0) + 1;
       for (const u of merged) {
-        u.isDuplicate = nameCounts[u.name] > 1;
+        u.isDuplicate = u.name && nameCounts[u.name] > 1;
         u.displayName = u.isDuplicate ? `${u.name} (${u.id})` : u.name;
       }
 
@@ -202,7 +214,7 @@ export default function StaffDirectory() {
     if (hideSystemAccounts && SYSTEM_ACCOUNT_PATTERNS.test(u.name)) return false;
     if (searchText) {
       const s = searchText.toLowerCase();
-      if (!u.name.toLowerCase().includes(s) && !u.id.toLowerCase().includes(s)) return false;
+      if (!u.name.toLowerCase().includes(s) && !u.id.toLowerCase().includes(s) && !(u.title || '').toLowerCase().includes(s) && !(u.department || '').toLowerCase().includes(s)) return false;
     }
     if (statusFilter !== 'All' && u.status !== statusFilter.toLowerCase()) return false;
     if (esigFilter === 'Ready' && !u.hasEsig) return false;
@@ -291,12 +303,16 @@ export default function StaffDirectory() {
     try {
       await assignPermission(detailData.duz, { keyName });
       const keysRes = await getUserPermissions(detailData.duz);
-      setDetailKeys(keysRes?.data || []);
+      const newKeys = keysRes?.data || [];
+      setDetailKeys(newKeys);
+      setStaffList(prev => prev.map(u => u.duz === detailData.duz ? { ...u, permissionCount: newKeys.length } : u));
     } catch (err) { setError(err.message || 'Failed to assign permission'); }
     finally { setAssigningPerm(false); }
   };
 
-  if (error) {
+  const isLoadError = error && staffList.length === 0;
+
+  if (isLoadError) {
     return (
       <AppShell breadcrumb="Admin > Staff Directory">
         <div className="p-6"><ErrorState message={error} onRetry={loadData} /></div>
@@ -309,6 +325,15 @@ export default function StaffDirectory() {
       <div className="flex h-[calc(100vh-40px)]">
         <div className={`p-6 overflow-auto ${selectedStaff ? 'w-[55%]' : 'w-full'}`}>
           <div className="max-w-[1400px]">
+            {error && !isLoadError && (
+              <div className="mb-4 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px]">error</span>
+                  {error}
+                </div>
+                <button onClick={() => setError(null)} className="text-xs hover:underline">Dismiss</button>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-[22px] font-bold text-[#222]">Staff Directory</h1>
@@ -320,8 +345,8 @@ export default function StaffDirectory() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    const header = 'Name,Staff ID,Status,E-Signature,Department\n';
-                    const csv = (staffList || []).map(r => `"${r.name}","${r.duz}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.department || ''}"`).join('\n');
+                    const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions\n';
+                    const csv = (staffList || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}"`).join('\n');
                     const blob = new Blob([header + csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -400,6 +425,15 @@ export default function StaffDirectory() {
             {detailLoading ? (
               <div className="space-y-3">
                 {[...Array(4)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-[#E2E4E8] rounded" />)}
+              </div>
+            ) : detailData?._loadError ? (
+              <div className="p-4 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-start gap-2">
+                <span className="material-symbols-outlined text-[18px] mt-0.5">error</span>
+                <div>
+                  <strong>Failed to load details</strong>
+                  <p className="text-xs text-[#666] mt-1">{detailData._loadError}</p>
+                  <button onClick={() => handleRowClick(selectedStaff)} className="mt-2 text-xs text-[#2E5984] hover:underline">Try Again</button>
+                </div>
               </div>
             ) : detailData ? (
               <div className="space-y-4">
@@ -593,7 +627,13 @@ export default function StaffDirectory() {
                     <span className="text-[#2E5984] text-xs font-medium flex-shrink-0 mt-0.5">Assign</span>
                   </button>
                 ))}
-              {allPermissions.length === 0 && <div className="text-center text-sm text-[#999] py-4">Loading permissions...</div>}
+              {allPermissions.length === 0 && (
+                <div className="text-center py-6">
+                  <span className="material-symbols-outlined text-[32px] text-[#999] block mb-2">vpn_key_off</span>
+                  <div className="text-sm text-[#999]">No permissions available</div>
+                  <div className="text-xs text-[#BBB] mt-1">Unable to load the permission catalog. Try closing and reopening this panel.</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -657,7 +697,7 @@ function ActionsMenu({ row, navigate }) {
               className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
               <span className="material-symbols-outlined text-[14px]">edit</span> Edit
             </button>
-            <button onClick={() => { setOpen(false); navigate(`/admin/permissions?user=${row.duz}`); }}
+            <button onClick={() => { setOpen(false); navigate(`/admin/permissions?view=${encodeURIComponent(row.name)}`); }}
               className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
               <span className="material-symbols-outlined text-[14px]">vpn_key</span> Permissions
             </button>

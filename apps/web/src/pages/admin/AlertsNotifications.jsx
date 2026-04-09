@@ -38,6 +38,7 @@ export default function AlertsNotifications() {
   const [composeModal, setComposeModal] = useState(false);
   const [mailFolder, setMailFolder] = useState('IN');
   const [confirmDeleteAlert, setConfirmDeleteAlert] = useState(false);
+  const [actionError, setActionError] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -118,6 +119,16 @@ export default function AlertsNotifications() {
           </button>
         </div>
 
+        {actionError && (
+          <div className="mb-4 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px]">error</span>
+              {actionError}
+            </div>
+            <button onClick={() => setActionError(null)} className="text-xs hover:underline">Dismiss</button>
+          </div>
+        )}
+
         {tab === 'alerts' && (
           <div className="flex gap-6">
             <div className={`${selectedAlert ? 'w-[35%]' : 'w-full'}`}>
@@ -185,7 +196,7 @@ export default function AlertsNotifications() {
                           await updateAlert(selectedAlert.id, { status: 'read' });
                           setAlerts(prev => prev.map(a => a.id === selectedAlert.id ? { ...a, status: 'read' } : a));
                           setSelectedAlert(prev => ({ ...prev, status: 'read' }));
-                        } catch (err) { setError(err?.message || "Operation failed"); }
+                        } catch (err) { setActionError(err?.message || "Operation failed"); }
                         finally { setActionLoading(null); }
                       }}
                       className="px-3 py-2 text-xs border border-border rounded-md hover:bg-white disabled:opacity-50">
@@ -198,7 +209,7 @@ export default function AlertsNotifications() {
                           await updateAlert(selectedAlert.id, { status: 'acknowledged' });
                           setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
                           setSelectedAlert(null);
-                        } catch (err) { setError(err?.message || "Operation failed"); }
+                        } catch (err) { setActionError(err?.message || "Operation failed"); }
                         finally { setActionLoading(null); }
                       }}
                       className="px-3 py-2 text-xs border border-border rounded-md hover:bg-white disabled:opacity-50">
@@ -312,7 +323,7 @@ export default function AlertsNotifications() {
                           try {
                             await updateAlert(forwardModal.id, { action: 'forward', forwardTo: s.duz });
                             setForwardModal(null);
-                          } catch (err) { setError(err?.message || "Operation failed"); }
+                          } catch (err) { setActionError(err?.message || "Operation failed"); }
                           finally { setActionLoading(null); }
                         }}
                         className="w-full text-left flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-alt text-sm disabled:opacity-50">
@@ -350,7 +361,7 @@ export default function AlertsNotifications() {
               await updateAlert(selectedAlert.id, { status: 'deleted' });
               setAlerts(prev => prev.filter(a => a.id !== selectedAlert.id));
               setSelectedAlert(null);
-            } catch (err) { setError(err?.message || "Operation failed"); }
+            } catch (err) { setActionError(err?.message || "Operation failed"); }
             finally { setActionLoading(null); }
           }}
           onCancel={() => setConfirmDeleteAlert(false)}

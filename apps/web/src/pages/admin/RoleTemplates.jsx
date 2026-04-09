@@ -456,7 +456,10 @@ export default function RoleTemplates() {
                                   <span className="text-[13px] font-medium text-[#222]">{displayName}</span>
                                 </div>
                                 {description && <div className="text-[11px] text-[#666] ml-6 mt-0.5">{description}</div>}
-                                <div className="text-[10px] font-mono text-[#AAA] ml-6 mt-0.5">{perm.key}</div>
+                                <details className="ml-6 mt-0.5">
+                                  <summary className="text-[9px] text-[#BBB] cursor-pointer hover:text-[#888]">System reference</summary>
+                                  <div className="text-[10px] font-mono text-[#AAA] mt-0.5">{perm.key}</div>
+                                </details>
                               </div>
                             );
                           })}

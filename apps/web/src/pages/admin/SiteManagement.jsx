@@ -131,7 +131,7 @@ export default function SiteManagement() {
   }
 
   return (
-    <AppShell breadcrumb="Admin > Site Management">
+    <AppShell breadcrumb="Admin > Facilities & Sites">
       <div className="flex h-[calc(100vh-40px)]">
         <div className="w-[40%] border-r border-border overflow-auto p-4">
           <h1 className="text-[22px] font-bold text-text mb-1 px-2">Facilities & Sites</h1>
@@ -198,7 +198,7 @@ export default function SiteManagement() {
                           const d = res?.data || {};
                           setSiteDetail(d);
                           setEditForm({ name: d.name || selectedSite.name, phone: d.phone || '', address: d.address || '', city: d.city || '', state: d.state || '', zip: d.zip || '' });
-                        } catch { setSiteDetail({}); setEditForm({}); }
+                        } catch (err) { setSiteDetail({}); setEditForm({}); setSaveMsg(`Error loading site details: ${err?.message || 'Unknown error'}`); }
                         finally { setDetailLoading(false); }
                       }
                       setSaveMsg('');

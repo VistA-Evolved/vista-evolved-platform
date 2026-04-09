@@ -129,7 +129,6 @@ const PARAM_TREE = [
 // Security policy enforcement rules — max values enforced regardless of facility type
 const VHA_RULES = {
   sessionTimeout: { max: 900, maxLabel: '15 minutes (900 seconds)', param: 'Session Timeout' },
-  autoSignOffDelay: { max: 900, maxLabel: '15 minutes (900 seconds)', param: 'Auto Sign-Off Delay' },
 };
 
 export default function SiteParameters() {
@@ -207,13 +206,11 @@ export default function SiteParameters() {
     }
     if (selectedGroup === 'session') {
       const timeoutSec = Number(kernelParams.sessionTimeout?.value || 0);
-      const signoffSec = Number(kernelParams.autoSignOffDelay?.value || 0);
       const rpcTimeout = Number(kernelParams.rpcTimeout?.value || 0);
       const policyLabel = isVA ? 'VHA Directive 6500' : 'Security Policy';
       const zeroWarning = (val, param) => val === 0 ? ` ⚠ Currently 0 — ${param} is not enforced. Set a value to enable.` : '';
       return [
-        { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. ${policyLabel}: max 15 minutes (900 seconds).${zeroWarning(timeoutSec, 'session timeout')}`, critical: true, enforcedMax: 900 },
-        { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.${zeroWarning(signoffSec, 'auto sign-off')}`, critical: true, enforcedMax: 900 },
+        { key: 'sessionTimeout', name: 'Session Timeout (Auto Sign-Off)', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. ${policyLabel}: max 15 minutes (900 seconds). This controls how long an inactive session remains open before automatic sign-off.${zeroWarning(timeoutSec, 'session timeout')}`, critical: true, enforcedMax: 900 },
         { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.${zeroWarning(rpcTimeout, 'response timeout')}` },
       ];
     }
@@ -272,7 +269,6 @@ export default function SiteParameters() {
   // back with the matching VistA param name.
   const KERNEL_FIELD_TO_PARAM = {
     sessionTimeout: 'AUTOLOGOFF',
-    autoSignOffDelay: 'AUTOLOGOFF',
     rpcTimeout: 'BROKER TIMEOUT',
     welcomeMessage: 'WELCOME MESSAGE',
     domainName: 'DOMAIN',

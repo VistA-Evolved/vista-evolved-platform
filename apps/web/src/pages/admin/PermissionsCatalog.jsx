@@ -291,6 +291,12 @@ export default function PermissionsCatalog() {
                 <div className="text-sm font-mono text-text-secondary mt-2">{selectedPerm.vistaKey}</div>
               </details>
 
+              {selectedPerm._holderError && (
+                <div className="p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-md text-xs text-[#CC3333] flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  {selectedPerm._holderError}
+                </div>
+              )}
               {selectedPerm.holders?.length > 0 && (
                 <div className="bg-white rounded-md p-3 border border-border">
                   <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider mb-2">
@@ -331,7 +337,9 @@ export default function PermissionsCatalog() {
                       const res = await getPermissionHolders(selectedPerm.vistaKey || selectedPerm.name);
                       const holders = res?.holders || res?.data || [];
                       setSelectedPerm(prev => ({ ...prev, holders, holderCount: holders.length }));
-                    } catch { /* non-fatal, keep the stale value */ }
+                    } catch (err) {
+                      setSelectedPerm(prev => ({ ...prev, _holderError: err?.message || 'Failed to load holders' }));
+                    }
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-steel hover:bg-white rounded-md transition-colors">
                   <span className="material-symbols-outlined text-[16px] mr-2 align-middle">group</span>

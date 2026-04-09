@@ -110,7 +110,12 @@ const REPORT_COLUMN_LABELS = {
 
 function humanizeColumnHeader(raw) {
   if (REPORT_COLUMN_LABELS[raw]) return REPORT_COLUMN_LABELS[raw];
-  return raw.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/\s+/g, ' ')
+    .replace(/^./, s => s.toUpperCase())
+    .trim();
 }
 
 export default function SystemHealth() {
@@ -238,7 +243,7 @@ export default function SystemHealth() {
         {activeTab === 'health' && !loading && (
           <div className="space-y-6">
             {/* Background scheduler status */}
-            {!taskRunning && taskStatus ? (
+            {!taskRunning && (taskStatus || !loading) ? (
               /* Spec: When STOPPED, show a single prominent card, not 15 blank rows */
               <div className="bg-[#FFF3E0] border border-[#E65100] rounded-lg p-6">
                 <div className="flex items-start gap-3">

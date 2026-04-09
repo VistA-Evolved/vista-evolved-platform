@@ -48,9 +48,22 @@ const PARAM_LABELS = {
   'AUTO VERIFY CODES': 'Auto-Generate Passwords',
 };
 
+const TOGGLE_LABELS = { 'YES': 'Enabled', 'NO': 'Disabled', 'Y': 'Enabled', 'N': 'Disabled' };
+const AUDIT_LABELS = { 'A': 'Audit All Activity', 'N': 'No Auditing', 'S': 'Audit Specific Options' };
+const FAILED_LABELS = { 'A': 'Log All Failed Attempts', 'D': 'Log by Device', 'AR': 'Log All + Details', 'DR': 'Log Devices + Details', 'N': 'No Logging' };
+
+function humanizeParamValue(field, value) {
+  if (!value && value !== 0) return value;
+  const upper = String(value).toUpperCase();
+  if (['MULTIPLE SIGN-ON'].includes(field)) return TOGGLE_LABELS[upper] || value;
+  if (field === 'OPTION AUDIT') return AUDIT_LABELS[upper] || value;
+  if (field === 'FAILED ACCESS AUDIT') return FAILED_LABELS[upper] || value;
+  return value;
+}
+
 const SECTION_CONFIG = [
   { id: 'login', label: 'Login Security', icon: 'lock', twoPersonRequired: true },
-  { id: 'esig', label: 'Electronic Signature', icon: 'draw', twoPersonRequired: true },
+  { id: 'esig', label: 'Electronic Signature', icon: 'draw', twoPersonRequired: false },
   { id: 'account', label: 'Account Policies', icon: 'manage_accounts', twoPersonRequired: false },
   { id: 'audit', label: 'Audit & Logging', icon: 'shield', twoPersonRequired: false },
 ];
@@ -264,7 +277,7 @@ export default function SecurityAuth() {
     );
   }
 
-  const pendingForSection = pendingRequests.filter(r => r.status === 'PENDING');
+  const pendingForSection = pendingRequests.filter(r => r.status === 'PENDING' && (!r.section || r.section === selectedSection));
 
   return (
     <AppShell breadcrumb="Admin > Security & Authentication">
@@ -339,7 +352,7 @@ export default function SecurityAuth() {
                           <span className="text-[10px] text-[#999]">{req.submittedDate}</span>
                         </div>
                         <div className="text-[11px] text-[#666] mb-1">
-                          <span className="font-mono">{req.oldValue || '—'}</span> → <span className="font-mono font-bold">{req.newValue}</span>
+                          <span className="font-mono">{humanizeParamValue(req.field, req.oldValue) || '—'}</span> → <span className="font-mono font-bold">{humanizeParamValue(req.field, req.newValue)}</span>
                         </div>
                         <div className="text-[10px] text-[#999] mb-2">
                           Submitted by: {req.submitterName || 'Unknown'}{req.reason ? ` — "${req.reason}"` : ''}

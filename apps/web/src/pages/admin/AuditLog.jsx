@@ -216,6 +216,11 @@ export default function AuditLog() {
 
       combined.sort((a, b) => (b._sortTime || 0) - (a._sortTime || 0));
       setAllEvents(combined);
+
+      const allFailed = results.every(r => r.status === 'rejected');
+      if (allFailed && combined.length === 0) {
+        setError('Unable to load audit data from any source. The system may be unreachable.');
+      }
     } catch (err) {
       setError(err.message || 'Failed to load audit data');
     } finally {

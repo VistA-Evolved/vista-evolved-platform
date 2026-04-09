@@ -225,11 +225,14 @@ export default function StaffForm() {
     if (stepId === 'identity') {
       if (!form.fullName.trim()) errors.fullName = 'Name is required';
       else if (form.fullName.length < 3) errors.fullName = 'Name must be at least 3 characters';
+      else if (form.fullName.length > 35) errors.fullName = 'Name must be 35 characters or fewer';
       else if (!/^[A-Z]+,[A-Z]/.test(form.fullName.trim())) errors.fullName = 'Name must be in LAST,FIRST format (e.g. SMITH,JOHN A)';
       if (!form.sex) errors.sex = 'Gender is required';
+      if (!form.dob) errors.dob = 'Date of birth is required';
     }
     if (stepId === 'role') {
       if (!form.primaryRole) errors.primaryRole = 'Role selection is required';
+      if (!form.department.trim()) errors.department = 'Department is required';
     }
     if (stepId === 'location') {
       if (!form.primaryLocation) errors.primaryLocation = 'At least one site must be selected';
@@ -250,6 +253,7 @@ export default function StaffForm() {
     authorizedToWriteMeds: false, controlledSchedules: [],
     assignedPermissions: [],
     secondaryFeatures: ['OR CPRS GUI CHART'],
+    removedDefaults: [],
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -271,8 +275,14 @@ export default function StaffForm() {
   }, [form.primaryLocation, form.additionalLocations]);
 
   const handleSubmit = async () => {
+    // Merge role defaults into permissions so they are actually submitted
+    const allDefaults = PERMISSION_STARTERS.flatMap(g => g.items)
+      .filter(item => item.roleDefault.includes(form.primaryRole))
+      .map(item => item.key);
+    const mergedPermissions = [...new Set([...form.assignedPermissions, ...allDefaults])];
+
     // ORES/ORELSE mutual exclusion — block submission
-    if (form.assignedPermissions.includes('ORES') && form.assignedPermissions.includes('ORELSE')) {
+    if (mergedPermissions.includes('ORES') && mergedPermissions.includes('ORELSE')) {
       setSubmitError('Cannot save: "Write clinical orders" and "Enter verbal orders" are mutually exclusive — a staff member cannot hold both. Remove one before proceeding.');
       return;
     }
@@ -289,7 +299,7 @@ export default function StaffForm() {
         phone: form.phone,
         role: form.primaryRole,
         department: form.department,
-        isProvider: form.isProvider,
+        isProvider: form.isProvider || showProviderStep,
         primaryLocation: form.primaryLocation,
         additionalLocations: form.additionalLocations,
         providerType: form.providerType,
@@ -298,8 +308,11 @@ export default function StaffForm() {
         deaExpiration: form.deaExpiration,
         authorizedToWriteMeds: form.authorizedToWriteMeds,
         controlledSchedules: form.controlledSchedules,
-        permissions: form.assignedPermissions,
+        permissions: mergedPermissions,
         secondaryFeatures: form.secondaryFeatures,
+        sigBlockName: form.sigBlockName,
+        requiresCosign: form.requiresCosign || false,
+        cosigner: form.cosigner || '',
       };
       if (isEdit) {
         await updateStaffMember(userId, payload);
@@ -315,30 +328,25 @@ export default function StaffForm() {
   };
 
   const handleNameBlur = async () => {
-    if (form.fullName && form.dob) {
-      try {
-        const res = await getStaff({ search: form.fullName });
-        const matches = (res?.data || []).filter(u => {
-          const nameMatch = u.name && u.name.toUpperCase() === form.fullName.toUpperCase();
-          return nameMatch;
+    if (!form.fullName || form.fullName.length < 3) return;
+    try {
+      const res = await getStaff({ search: form.fullName });
+      const matches = (res?.data || []).filter(u => {
+        return u.name && u.name.toUpperCase() === form.fullName.toUpperCase();
+      });
+      if (matches.length > 0 && !isEdit) {
+        setDuplicateWarning({
+          message: `Potential duplicate found: ${matches.length} existing record(s) match this name. Verify before continuing.`,
+          isDuplicate: true,
         });
-        if (matches.length > 0 && !isEdit) {
-          setDuplicateWarning({
-            message: `Potential duplicate found: ${matches.length} existing record(s) match this name. Verify before continuing.`,
-            isDuplicate: true,
-          });
-        } else {
-          setDuplicateWarning({
-            message: 'Duplicate check complete. No matching records found.',
-            isDuplicate: false,
-          });
-        }
-      } catch {
+      } else {
         setDuplicateWarning({
           message: 'Duplicate check complete. No matching records found.',
           isDuplicate: false,
         });
       }
+    } catch {
+      setDuplicateWarning(null);
     }
   };
 
@@ -453,7 +461,7 @@ export default function StaffForm() {
                   <input type="text" value={form.displayName} onChange={e => updateField('displayName', e.target.value)}
                     placeholder="Jane Smith" className="form-input" maxLength={50} />
                 </FormField>
-                <FormField label="Sex" required>
+                <FormField label="Sex" required error={validationErrors.sex}>
                   <select value={form.sex} onChange={e => updateField('sex', e.target.value)} className="form-input">
                     <option value="">Select...</option>
                     <option value="M">Male</option>
@@ -461,16 +469,16 @@ export default function StaffForm() {
                     <option value="U">Unknown</option>
                   </select>
                 </FormField>
-                <FormField label="Date of Birth" required>
+                <FormField label="Date of Birth" required error={validationErrors.dob}>
                   <input type="date" value={form.dob}
-                    onChange={e => { updateField('dob', e.target.value); handleNameBlur(); }}
+                    onChange={e => updateField('dob', e.target.value)}
                     className="form-input" />
                 </FormField>
                 <FormField label="Government ID (Last 4)" hint="Last 4 digits of SSN or national identifier. Masked for privacy.">
                   <input type="password" value={form.govIdLast4} onChange={e => updateField('govIdLast4', e.target.value)}
                     placeholder="••••" maxLength={4} className="form-input" autoComplete="off" />
                 </FormField>
-                <FormField label="Email" hint="Not a standard field in legacy systems — product overlay">
+                <FormField label="Email" hint="Used for system notifications and password resets">
                   <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)}
                     placeholder="jane.smith@facility.org" className="form-input" />
                 </FormField>
@@ -496,8 +504,8 @@ export default function StaffForm() {
           {step.id === 'role' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Role and Work Type</h2>
-              <FormField label="Primary Role" required
-                hint="Maps to primary menu and initial permission bundle. Each role determines default system access.">
+              <FormField label="Primary Role" required error={validationErrors.primaryRole}
+                hint="Each role determines default system access and initial permission bundle.">
                 <div className="grid grid-cols-2 gap-3">
                   {ROLES.map(role => (
                     <button key={role.value}
@@ -517,7 +525,7 @@ export default function StaffForm() {
                   ))}
                 </div>
               </FormField>
-              <FormField label="Department" required hint="Type to search or enter a custom department.">
+              <FormField label="Department" required error={validationErrors.department} hint="Type to search or enter a custom department.">
                 <input type="text" list="department-list" value={form.department} onChange={e => updateField('department', e.target.value)}
                   placeholder="Select or type department..." className="form-input" />
                 <datalist id="department-list">
@@ -543,7 +551,7 @@ export default function StaffForm() {
                 Assign this staff member to one or more sites. The primary site determines the default sign-in location.
                 Multi-site staff can switch context via the system bar.
               </p>
-              <FormField label="Primary Site" required hint="Where this person signs in by default">
+              <FormField label="Primary Site" required error={validationErrors.primaryLocation} hint="Where this person signs in by default">
                 <select value={form.primaryLocation} onChange={e => updateField('primaryLocation', e.target.value)} className="form-input">
                   <option value="">Select primary site...</option>
                   {liveSites.map(loc => (
@@ -585,14 +593,14 @@ export default function StaffForm() {
                 Verify credentials before enabling medication or order-writing authority.
               </CautionBanner>
               <div className="grid grid-cols-2 gap-4">
-                <FormField label="Provider Type" required
+                <FormField label="Provider Type" required error={validationErrors.providerType}
                   hint="Professional classification. Determines scope of practice and permissible actions.">
                   <select value={form.providerType} onChange={e => updateField('providerType', e.target.value)} className="form-input">
                     <option value="">Select provider type...</option>
                     {PROVIDER_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
                   </select>
                 </FormField>
-                <FormField label="NPI" hint="10-digit National Provider Identifier. Required for billing. Luhn check applies.">
+                <FormField label="NPI" error={validationErrors.npi} hint="10-digit National Provider Identifier. Required for billing.">
                   <input type="text" value={form.npi} onChange={e => updateField('npi', e.target.value)}
                     placeholder="1234567890" maxLength={10} className="form-input font-mono" />
                 </FormField>
@@ -761,7 +769,7 @@ export default function StaffForm() {
                     <p className="text-[10px] text-text-muted mb-3">{group.hint}</p>
                     <div className="space-y-2">
                       {visibleItems.map(item => {
-                        const isDefault = item.roleDefault.includes(form.primaryRole);
+                        const isDefault = item.roleDefault.includes(form.primaryRole) && !form.removedDefaults.includes(item.key);
                         const isChecked = form.assignedPermissions.includes(item.key) || isDefault;
                         // Prefer the server-enriched display name and description,
                         // falling back to the hardcoded label only when VistA data
@@ -777,10 +785,15 @@ export default function StaffForm() {
                               type="checkbox"
                               checked={isChecked}
                               onChange={e => {
-                                const next = e.target.checked
-                                  ? [...form.assignedPermissions, item.key]
-                                  : form.assignedPermissions.filter(k => k !== item.key);
-                                updateField('assignedPermissions', next);
+                                if (e.target.checked) {
+                                  updateField('assignedPermissions', [...form.assignedPermissions, item.key]);
+                                  updateField('removedDefaults', form.removedDefaults.filter(k => k !== item.key));
+                                } else {
+                                  updateField('assignedPermissions', form.assignedPermissions.filter(k => k !== item.key));
+                                  if (item.roleDefault.includes(form.primaryRole)) {
+                                    updateField('removedDefaults', [...form.removedDefaults, item.key]);
+                                  }
+                                }
                               }}
                               className="w-4 h-4 rounded border-border mt-0.5 flex-shrink-0"
                             />
@@ -864,7 +877,7 @@ export default function StaffForm() {
                 <ReviewSection title="Identity" items={[
                   ['Name', form.fullName || '—'],
                   ['Display Name', form.displayName || '(auto from name)'],
-                  ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex || '—'],
+                  ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex === 'U' ? 'Unknown' : form.sex || '—'],
                   ['Date of Birth', form.dob || '—'],
                   ['Email', form.email || '—'],
                 ]} />
@@ -879,7 +892,7 @@ export default function StaffForm() {
                     ? form.additionalLocations.map(v => liveSites.find(l => l.value === v)?.label).filter(Boolean).join(', ')
                     : 'None'],
                 ]} />
-                {form.isProvider && (
+                {(form.isProvider || showProviderStep) && (
                   <ReviewSection title="Provider Configuration" items={[
                     ['Provider Type', PROVIDER_TYPES.find(p => p.value === form.providerType)?.label || '—'],
                     ['NPI', form.npi || '—'],
@@ -897,7 +910,7 @@ export default function StaffForm() {
                 The system will generate initial authentication credentials.
               </div>
 
-              {!form.fullName && (
+              {(!form.fullName || !form.sex || !form.dob || !form.primaryRole || !form.primaryLocation) && (
                 <div className="p-3 bg-warning-bg rounded-md text-sm text-warning flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px]">warning</span>
                   Missing required fields. Go back and complete all required steps before creating.
