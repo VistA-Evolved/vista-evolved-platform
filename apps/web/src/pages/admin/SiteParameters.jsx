@@ -266,13 +266,34 @@ export default function SiteParameters() {
     });
   };
 
+  // Frontend field key → ZVE PARAM SET paramName. These are the exact
+  // names the ZVE PARAM GET RPC returns, so the round-trip stays
+  // consistent: the edit form reads a field under one key and writes
+  // back with the matching VistA param name.
+  const KERNEL_FIELD_TO_PARAM = {
+    sessionTimeout: 'AUTOLOGOFF',
+    autoSignOffDelay: 'AUTOLOGOFF',
+    rpcTimeout: 'BROKER TIMEOUT',
+    welcomeMessage: 'WELCOME MESSAGE',
+    domainName: 'DOMAIN',
+    siteNumber: 'SITE NAME',
+  };
+
   const handleSave = async () => {
     if (hasViolation || !changeReason.trim()) return;
     setSaving(true);
     setSaveError('');
     try {
       if (selectedGroup === 'kernel' || selectedGroup === 'session') {
-        await updateSiteParameters({ ...editedValues, reason: changeReason });
+        // ZVE PARAM SET takes one param at a time — submit each edited
+        // field as its own save with the mapped VistA paramName.
+        for (const [key, val] of Object.entries(editedValues)) {
+          const paramName = KERNEL_FIELD_TO_PARAM[key];
+          if (!paramName) {
+            throw new Error(`Unknown parameter: ${key}`);
+          }
+          await updateSiteParameters({ paramName, value: String(val), reason: changeReason });
+        }
       } else {
         // Package-specific save
         const payload = {};
