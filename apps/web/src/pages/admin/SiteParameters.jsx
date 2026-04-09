@@ -325,7 +325,7 @@ export default function SiteParameters() {
   return (
     <AppShell breadcrumb="Admin > Site Parameters">
       <div className="flex h-[calc(100vh-40px)]">
-        <div className="w-[260px] border-r border-border overflow-auto p-3 flex-shrink-0">
+        <div className="w-[200px] lg:w-[260px] border-r border-border overflow-auto p-3 flex-shrink-0">
           <h1 className="text-[22px] font-bold text-text px-2 mb-1">Site Parameters</h1>
           <p className="text-[10px] text-text-muted px-2 mb-4">
             {loading ? 'Loading...' : 'Live System Parameters'}

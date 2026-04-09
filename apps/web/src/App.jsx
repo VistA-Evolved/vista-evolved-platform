@@ -8,6 +8,7 @@ import { getSession } from './services/adminService';
 import { PatientProvider } from './components/shared/PatientContext';
 import SessionManager from './components/shared/SessionManager';
 import ESignatureSetup from './components/shared/ESignatureSetup';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 
 import StaffDirectory from './pages/admin/StaffDirectory';
 import StaffForm from './pages/admin/StaffForm';
@@ -149,27 +150,27 @@ export default function App() {
           {/* Dashboard */}
           <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
 
-          {/* Admin/Security workspace */}
+          {/* Admin/Security workspace — wrapped in ErrorBoundary to catch render crashes */}
           <Route path="/admin" element={<RequireAdmin><Navigate to="/admin/staff" replace /></RequireAdmin>} />
           {/* People */}
-          <Route path="/admin/staff" element={<RequireAdmin><StaffDirectory /></RequireAdmin>} />
-          <Route path="/admin/staff/new" element={<RequireAdmin><StaffForm /></RequireAdmin>} />
-          <Route path="/admin/staff/:userId/edit" element={<RequireAdmin><StaffForm /></RequireAdmin>} />
+          <Route path="/admin/staff" element={<RequireAdmin><ErrorBoundary><StaffDirectory /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/staff/new" element={<RequireAdmin><ErrorBoundary><StaffForm /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/staff/:userId/edit" element={<RequireAdmin><ErrorBoundary><StaffForm /></ErrorBoundary></RequireAdmin>} />
           {/* Access Control */}
-          <Route path="/admin/roles" element={<RequireAdmin><RoleTemplates /></RequireAdmin>} />
-          <Route path="/admin/permissions" element={<RequireAdmin><PermissionsCatalog /></RequireAdmin>} />
+          <Route path="/admin/roles" element={<RequireAdmin><ErrorBoundary><RoleTemplates /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/permissions" element={<RequireAdmin><ErrorBoundary><PermissionsCatalog /></ErrorBoundary></RequireAdmin>} />
           {/* Organization */}
-          <Route path="/admin/sites" element={<RequireAdmin><SiteManagement /></RequireAdmin>} />
-          <Route path="/admin/departments" element={<RequireAdmin><DepartmentsServices /></RequireAdmin>} />
+          <Route path="/admin/sites" element={<RequireAdmin><ErrorBoundary><SiteManagement /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/departments" element={<RequireAdmin><ErrorBoundary><DepartmentsServices /></ErrorBoundary></RequireAdmin>} />
           {/* System Settings */}
-          <Route path="/admin/security" element={<RequireAdmin><SecurityAuth /></RequireAdmin>} />
-          <Route path="/admin/config" element={<RequireAdmin><SystemConfig /></RequireAdmin>} />
-          <Route path="/admin/module-settings" element={<RequireAdmin><SiteParameters /></RequireAdmin>} />
+          <Route path="/admin/security" element={<RequireAdmin><ErrorBoundary><SecurityAuth /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/config" element={<RequireAdmin><ErrorBoundary><SystemConfig /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/module-settings" element={<RequireAdmin><ErrorBoundary><SiteParameters /></ErrorBoundary></RequireAdmin>} />
           {/* Monitoring */}
-          <Route path="/admin/health" element={<RequireAdmin><SystemHealth /></RequireAdmin>} />
-          <Route path="/admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
-          <Route path="/admin/messages" element={<RequireAdmin><AlertsNotifications /></RequireAdmin>} />
-          <Route path="/admin/reports" element={<RequireAdmin><AdminReports /></RequireAdmin>} />
+          <Route path="/admin/health" element={<RequireAdmin><ErrorBoundary><SystemHealth /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/audit" element={<RequireAdmin><ErrorBoundary><AuditLog /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/messages" element={<RequireAdmin><ErrorBoundary><AlertsNotifications /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/reports" element={<RequireAdmin><ErrorBoundary><AdminReports /></ErrorBoundary></RequireAdmin>} />
           {/* Legacy redirects */}
           <Route path="/admin/parameters" element={<Navigate to="/admin/module-settings" replace />} />
           <Route path="/admin/monitor" element={<Navigate to="/admin/health" replace />} />

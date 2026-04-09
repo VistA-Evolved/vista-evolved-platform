@@ -323,7 +323,7 @@ export default function StaffDirectory() {
   return (
     <AppShell breadcrumb="Admin > Staff Directory">
       <div className="flex h-[calc(100vh-40px)]">
-        <div className={`p-6 overflow-auto ${selectedStaff ? 'w-[55%]' : 'w-full'}`}>
+        <div className={`p-6 overflow-auto ${selectedStaff ? 'w-full xl:w-[55%]' : 'w-full'}`}>
           <div className="max-w-[1400px]">
             {error && !isLoadError && (
               <div className="mb-4 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-center justify-between">
@@ -370,7 +370,7 @@ export default function StaffDirectory() {
             </div>
 
             {loading ? <KpiCardSkeleton /> : (
-              <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
                 <MetricCard label="Total Staff" value={totalStaff} icon="badge" />
                 <MetricCard label="Active" value={activeCount} icon="check_circle" color="text-[#2E7D32]" />
                 <MetricCard label="E-Signature Ready" value={esigReadyCount} icon="draw" color="text-[#2E5984]" />
@@ -414,7 +414,7 @@ export default function StaffDirectory() {
         </div>
 
         {selectedStaff && (
-          <div className="w-[45%] border-l border-[#E2E4E8] bg-[#F5F8FB] overflow-auto p-6">
+          <div className="hidden xl:block w-[45%] border-l border-[#E2E4E8] bg-[#F5F8FB] overflow-auto p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-[#222]">{selectedStaff.name}</h2>
               <button onClick={() => { setSelectedStaff(null); setDetailData(null); }} className="text-[#999] hover:text-[#222]" aria-label="Close">

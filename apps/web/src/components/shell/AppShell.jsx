@@ -37,7 +37,7 @@ export default function AppShell({ breadcrumb, children }) {
       {isAdmin && <AdminSubNav />}
       {isPatients && <PatientsSubNav />}
       {isAdmin && <SandboxBanner />}
-      <main className={`mt-10 min-h-content ${hasSidebar ? 'ml-[calc(4rem+220px)]' : 'ml-16'}`}>
+      <main className={`mt-10 min-h-content ${hasSidebar ? 'ml-[calc(4rem+180px)] lg:ml-[calc(4rem+220px)]' : 'ml-16'}`}>
         {children}
       </main>
     </div>

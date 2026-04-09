@@ -220,7 +220,7 @@ export default function PermissionsCatalog() {
   return (
     <AppShell breadcrumb="Admin > Permissions Catalog">
       <div className="flex h-[calc(100vh-40px)]">
-        <div className={`p-6 ${selectedPerm ? 'w-[60%]' : 'w-full'} overflow-auto`}>
+        <div className={`p-6 ${selectedPerm ? 'w-full xl:w-[60%]' : 'w-full'} overflow-auto`}>
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-[22px] font-bold text-text">Permissions Catalog</h1>
@@ -274,7 +274,7 @@ export default function PermissionsCatalog() {
         </div>
 
         {selectedPerm && (
-          <div className="w-[40%] border-l border-border bg-surface-alt p-6 overflow-auto">
+          <div className="hidden xl:block w-[40%] border-l border-border bg-surface-alt p-6 overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-text">{selectedPerm.displayName}</h2>
               <button onClick={() => setSelectedPerm(null)} className="text-text-muted hover:text-text" aria-label="Close">

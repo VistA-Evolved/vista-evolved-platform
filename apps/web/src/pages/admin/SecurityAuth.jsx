@@ -283,7 +283,7 @@ export default function SecurityAuth() {
     <AppShell breadcrumb="Admin > Security & Authentication">
       <div className="flex h-[calc(100vh-40px)]">
         {/* Section sidebar */}
-        <div className="w-[240px] border-r border-border overflow-auto p-3 flex-shrink-0">
+        <div className="w-[200px] lg:w-[240px] border-r border-border overflow-auto p-3 flex-shrink-0">
           <h1 className="text-[22px] font-bold text-text px-2 mb-1">Security & Authentication</h1>
           <p className="text-[10px] text-text-muted px-2 mb-4">
             {loading ? 'Loading...' : 'Live security configuration'}

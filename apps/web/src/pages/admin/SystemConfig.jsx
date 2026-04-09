@@ -133,7 +133,7 @@ export default function SystemConfig() {
               </h2>
               <p className="text-[11px] text-[#999] mb-4">Core system identification.</p>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
                   <label className="block text-xs font-medium text-text mb-1">Organization Name</label>
                   <div className="text-sm font-medium text-text">{siteName || '—'}</div>
@@ -217,7 +217,7 @@ export default function SystemConfig() {
               </h2>
               <p className="text-[11px] text-[#999] mb-4">Read-only technical details about this system.</p>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
                   { label: 'System Status', value: vistaInfo?.vista?.vistaReachable ? 'Connected' : 'Unreachable', icon: vistaInfo?.vista?.vistaReachable ? 'check_circle' : 'error', color: vistaInfo?.vista?.vistaReachable ? 'text-[#2D6A4F]' : 'text-[#CC3333]' },
                   { label: 'Current User', value: vistaInfo?.vista?.userName || '—' },

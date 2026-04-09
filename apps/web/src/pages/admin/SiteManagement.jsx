@@ -133,7 +133,7 @@ export default function SiteManagement() {
   return (
     <AppShell breadcrumb="Admin > Facilities & Sites">
       <div className="flex h-[calc(100vh-40px)]">
-        <div className="w-[40%] border-r border-border overflow-auto p-4">
+        <div className="w-full xl:w-[40%] border-r border-border overflow-auto p-4">
           <h1 className="text-[22px] font-bold text-text mb-1 px-2">Facilities & Sites</h1>
           <p className="text-xs text-text-secondary mb-4 px-2">
             {loading ? 'Loading sites...' : `${allSites.length} sites loaded.`}
@@ -176,7 +176,7 @@ export default function SiteManagement() {
           )}
         </div>
 
-        <div className="w-[60%] overflow-auto p-6">
+        <div className="hidden xl:block w-[60%] overflow-auto p-6">
           {selectedSite ? (
             <div className="max-w-2xl">
               <div className="flex items-center justify-between mb-6">

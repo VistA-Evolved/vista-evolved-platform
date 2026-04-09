@@ -527,7 +527,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
       </div>
 
       <div className="flex gap-6">
-        <div className={`${selectedMessage ? 'w-[40%]' : 'w-full'}`}>
+        <div className={`${selectedMessage ? 'w-full xl:w-[40%]' : 'w-full'}`}>
           {messagesLoading ? (
             <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse bg-[#E2E4E8] rounded-md" />)}</div>
           ) : messages.length === 0 ? (
@@ -561,7 +561,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
         </div>
 
         {selectedMessage && (
-          <div className="w-[60%] bg-surface-alt border border-border rounded-lg p-5">
+          <div className="hidden xl:block w-[60%] bg-surface-alt border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-sm text-text">{messageBody?.subject || selectedMessage.subject}</h3>
               <button onClick={() => { setSelectedMessage(null); setMessageBody(null); }} className="text-text-muted hover:text-text" aria-label="Close">

@@ -336,7 +336,7 @@ export default function RoleTemplates() {
       )}
       <div className="flex h-[calc(100vh-40px)]">
         {/* Left panel: role list */}
-        <div className="w-[35%] border-r border-border overflow-auto p-4">
+        <div className="w-full xl:w-[35%] border-r border-border overflow-auto p-4">
           <div className="flex items-center justify-between mb-1 px-2">
             <h1 className="text-[22px] font-bold text-[#222]">Role Templates</h1>
           </div>
@@ -382,7 +382,7 @@ export default function RoleTemplates() {
         </div>
 
         {/* Right panel: role detail */}
-        <div className="w-[65%] overflow-auto p-6">
+        <div className="hidden xl:block w-[65%] overflow-auto p-6">
           <div className="max-w-2xl">
             <div className="flex items-center justify-between mb-4">
               <div>

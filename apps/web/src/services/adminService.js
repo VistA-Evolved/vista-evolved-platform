@@ -175,6 +175,18 @@ export async function getDepartments(params = {}) {
   return tenantApi.get('/services', params);
 }
 
+export async function getDepartmentDetail(ien) {
+  return tenantApi.get(`/services/${ien}`);
+}
+
+export async function createDepartment(data) {
+  return tenantApi.post('/services', data);
+}
+
+export async function updateDepartment(ien, data) {
+  return tenantApi.put(`/services/${ien}`, data);
+}
+
 // ────────────────────────────────────────────────
 // Sites / Divisions (backend: INSTITUTION #4 + MEDICAL CENTER DIVISION #40.8)
 // ────────────────────────────────────────────────
@@ -352,18 +364,6 @@ export async function getNursingReport(params = {}) {
 // ────────────────────────────────────────────────
 // Master Configuration
 // Backend exposes /params/kernel for Kernel system parameters.
-// No generic /config endpoint. For master config, we use params/kernel
-// for session, password, and security policy settings.
-// ────────────────────────────────────────────────
-
-export async function getMasterConfig() {
-  return tenantApi.get('/params/kernel');
-}
-
-export async function updateMasterConfig(data) {
-  return tenantApi.put('/params/kernel', data);
-}
-
 // ────────────────────────────────────────────────
 // Capacity / System Info
 // ────────────────────────────────────────────────

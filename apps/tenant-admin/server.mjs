@@ -6028,6 +6028,80 @@ async function main() {
     }
   });
 
+  /** Department/Service detail — DDR GETS ENTRY DATA on File #49 */
+  app.get('/api/tenant-admin/v1/services/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId || 'default';
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    try {
+      const ien = req.params.ien;
+      const iens = `${ien},`;
+      const fields = '.01;1;2;3;4';
+      const entry = await ddrGetsEntry({ file: '49', iens, fields });
+      const data = {
+        ien,
+        name: entry?.['.01'] || '',
+        abbreviation: entry?.['1'] || '',
+        mailSymbol: entry?.['2'] || '',
+        chief: entry?.['3'] || '',
+        type: entry?.['4'] || '',
+      };
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '49', data };
+    } catch (e) {
+      return reply.code(502).send({ ok: false, error: e.message, stage: 'DDR GETS ENTRY DATA File 49' });
+    }
+  });
+
+  /** Edit department/service field — DDR VALIDATOR + DDR FILER on File #49 */
+  const SERVICE49_ALLOW = {
+    '.01': 'NAME', '1': 'ABBREVIATION', '2': 'MAIL SYMBOL',
+  };
+  app.put('/api/tenant-admin/v1/services/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId || 'default';
+    const { field, value } = req.body || {};
+    if (!field || !SERVICE49_ALLOW[field]) {
+      return reply.code(400).send({ ok: false, error: `Field ${field} is not editable. Allowed: ${Object.keys(SERVICE49_ALLOW).join(', ')}` });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    try {
+      const iens = `${req.params.ien},`;
+      const valRes = await ddrValidateField(49, iens, field, String(value));
+      if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+      const filer = await ddrFilerEdit(49, iens, field, String(value), 'E');
+      if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error });
+      return { ok: true, source: 'vista', tenantId, ien: req.params.ien, field, rpcUsed: ['DDR VALIDATOR', 'DDR FILER'], filerLines: filer.lines };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  /** Create department/service — DDR FILER ADD on File #49 */
+  app.post('/api/tenant-admin/v1/services', async (req, reply) => {
+    const tenantId = req.query.tenantId || 'default';
+    const { name, abbreviation } = req.body || {};
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return reply.code(400).send({ ok: false, error: 'Department name is required' });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    try {
+      const valRes = await ddrValidateField(49, '+1,', '.01', name.trim());
+      if (!valRes.ok) return reply.code(400).send({ ok: false, stage: 'DDR VALIDATOR', error: valRes.error });
+      const filer = await ddrFilerAdd('49', '.01', '+1,', name.trim(), 'E');
+      if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER ADD', error: filer.error });
+      const newIen = (filer.lines || []).find(l => l.includes('^'))?.split('^')[1] || null;
+      if (newIen && abbreviation) {
+        try {
+          await ddrFilerEdit(49, `${newIen},`, '1', String(abbreviation).trim(), 'E');
+        } catch { /* abbreviation is optional, don't fail the create */ }
+      }
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER ADD', file: '49', ien: newIen, lines: filer.lines };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════════════════
   // E-SIGNATURE SET ACTION
   // ═══════════════════════════════════════════════════════════════════════
