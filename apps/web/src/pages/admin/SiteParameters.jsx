@@ -214,7 +214,7 @@ export default function SiteParameters() {
       return [
         { key: 'sessionTimeout', name: 'Session Timeout', value: String(timeoutSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(timeoutSec/60)} minutes. ${policyLabel}: max 15 minutes (900 seconds).${zeroWarning(timeoutSec, 'session timeout')}`, critical: true, enforcedMax: 900 },
         { key: 'autoSignOffDelay', name: 'Auto Sign-Off Delay', value: String(signoffSec), type: 'number', unit: 'seconds', description: `Current: ${Math.round(signoffSec/60)} minutes. Inactive terminal disconnection time.${zeroWarning(signoffSec, 'auto sign-off')}`, critical: true, enforcedMax: 900 },
-        { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.${zeroWarning(rpcTimeout, 'RPC timeout')}` },
+        { key: 'rpcTimeout', name: 'Response Timeout', value: String(rpcTimeout), type: 'number', unit: 'seconds', description: `Maximum wait time for server responses. Current: ${rpcTimeout} seconds.${zeroWarning(rpcTimeout, 'response timeout')}` },
       ];
     }
     // Package-specific params
