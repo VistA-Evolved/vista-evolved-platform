@@ -6,18 +6,14 @@ import { SearchBar, Pagination } from '../../components/shared/SharedComponents'
 import { getPermissions, getPermissionHolders, assignPermission, getStaff, getUserPermissions } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
-import { inferModule, humanizeKeyName } from '../../utils/transforms';
 
 /**
- * AD-03 / ADM-06: Permissions Catalog
- * @vista SECURITY KEY #19.1 via DDR LISTER
+ * Permissions Catalog — live SECURITY KEY #19.1 inventory.
  *
- * Live: GET /key-inventory → { data: [{ keyName, vistaKey, description, holderCount, holders, vistaGrounding }] }
- * 689 real VistA security keys from the sandbox.
+ * Live: GET /key-inventory → each row carries displayName, packageName,
+ * description, holderCount from the server-side enrichment layer (live
+ * PACKAGE #9.4 prefix lookup + VistA word-processing description text).
  */
-
-// Fallback categories used when package names aren't available from backend
-const FALLBACK_CATEGORIES = ['All', 'Clinical', 'Pharmacy', 'Laboratory', 'Scheduling', 'Registration', 'System', 'Imaging', 'Other', 'Orphaned'];
 
 // columns are built inside the component to access handlers
 
@@ -127,17 +123,21 @@ export default function PermissionsCatalog() {
     try {
       const res = await getPermissions();
       const keys = (res?.data || []).map(k => {
-        const holders = k.holders || [];
-        const holderCount = holders.length > 0 ? holders.length : (k.holderCount || 0);
+        // Holder count comes from the ^XUSEC scan inside the M routine
+        // (canonical source). The holders array may be empty in the list
+        // response; the per-key detail endpoint fills it in on click.
+        const holderCount = k.holderCount || 0;
         return {
           id: k.vistaGrounding?.file19_1Ien || k.keyName,
           name: k.keyName,
-          displayName: k.descriptiveName || k.description || humanizeKeyName(k.keyName),
+          // displayName and packageName are always populated by the server
+          // humanizer (enrichKey) — no client-side fallback needed.
+          displayName: k.displayName || k.keyName,
           vistaKey: k.vistaKey || k.keyName,
-          module: k.packageName || inferModule(k.keyName),
+          module: k.packageName || 'General',
           description: k.description || '',
           holderCount,
-          holders,
+          holders: k.holders || [],
         };
       });
       setAllKeys(keys);
@@ -167,11 +167,13 @@ export default function PermissionsCatalog() {
   allKeys.forEach(k => { categoryCounts[k.module] = (categoryCounts[k.module] || 0) + 1; });
   const orphanedCount = allKeys.filter(k => k.holderCount === 0).length;
 
-  // Build dynamic categories: 'All' + sorted unique modules + 'Orphaned'
+  // Build categories dynamically from whatever package labels the live
+  // /key-inventory response returned. No hardcoded fallback — if nothing
+  // loaded yet, the only filter option is "All".
   const dynamicModules = Object.keys(categoryCounts).sort();
   const CATEGORIES = dynamicModules.length > 0
     ? ['All', ...dynamicModules, 'Orphaned']
-    : FALLBACK_CATEGORIES;
+    : ['All'];
 
   if (error) {
     return (
@@ -249,13 +251,20 @@ export default function PermissionsCatalog() {
                     Staff Holding This Permission ({selectedPerm.holderCount})
                   </div>
                   <div className="space-y-1 max-h-40 overflow-auto">
-                    {selectedPerm.holders.slice(0, 10).map((h, i) => (
-                      <div key={i} className="text-[11px] text-text-secondary">{typeof h === 'string' ? h : h.name || JSON.stringify(h)}</div>
-                    ))}
+                    {selectedPerm.holders.slice(0, 10).map((h, i) => {
+                      const name = typeof h === 'string' ? h : (h.name || '');
+                      if (!name) return null;
+                      return (
+                        <div key={h.duz || i} className="text-[11px] text-text-secondary">{name}</div>
+                      );
+                    })}
                     {selectedPerm.holderCount > 10 && (
-                      <div className="text-[10px] text-steel cursor-pointer hover:underline">
-                        View all {selectedPerm.holderCount} staff members...
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleViewStaff(selectedPerm)}
+                        className="text-[10px] text-steel cursor-pointer hover:underline block mt-1">
+                        View all {selectedPerm.holderCount} staff members…
+                      </button>
                     )}
                   </div>
                 </div>
@@ -263,23 +272,24 @@ export default function PermissionsCatalog() {
 
               <div className="pt-4 border-t border-border space-y-2">
                 <button
-                  onClick={() => navigate('/admin/staff', { state: { assignKeyName: selectedPerm.name } })}
+                  onClick={() => handleOpenAssign(selectedPerm)}
                   className="w-full text-left px-3 py-2 text-sm text-steel hover:bg-white rounded-md transition-colors">
                   <span className="material-symbols-outlined text-[16px] mr-2 align-middle">person_add</span>
                   Assign to a staff member
                 </button>
                 <button
                   onClick={async () => {
+                    // Refresh the holders list from the server. Uses the
+                    // authoritative ^XUSEC-backed /key-holders endpoint.
                     try {
                       const res = await getPermissionHolders(selectedPerm.vistaKey || selectedPerm.name);
-                      if (res?.data) {
-                        setSelectedPerm(prev => ({ ...prev, holders: res.data, holderCount: res.data.length }));
-                      }
-                    } catch { setSelectedPerm(prev => ({ ...prev, holders: [], holderCount: 0 })); }
+                      const holders = res?.holders || res?.data || [];
+                      setSelectedPerm(prev => ({ ...prev, holders, holderCount: holders.length }));
+                    } catch { /* non-fatal, keep the stale value */ }
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-steel hover:bg-white rounded-md transition-colors">
                   <span className="material-symbols-outlined text-[16px] mr-2 align-middle">group</span>
-                  View all staff with this permission
+                  Load full holder list
                 </button>
               </div>
             </div>
@@ -292,7 +302,10 @@ export default function PermissionsCatalog() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setHoldersModal(null)}>
           <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="font-semibold text-text">Staff with "{holdersModal.name}"</h3>
+              <div>
+                <h3 className="font-semibold text-text">Staff with this permission</h3>
+                <div className="text-xs text-text-secondary mt-0.5">{holdersModal.displayName || holdersModal.name}</div>
+              </div>
               <button onClick={() => setHoldersModal(null)} className="text-text-muted hover:text-text">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
@@ -304,15 +317,20 @@ export default function PermissionsCatalog() {
                 <p className="text-sm text-text-muted text-center py-6">No staff members hold this permission.</p>
               ) : (
                 <div className="space-y-1">
-                  {holdersData.map((h, i) => (
-                    <div key={i} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-alt text-sm">
-                      <span className="text-text">{typeof h === 'string' ? h : h.name || JSON.stringify(h)}</span>
-                      {(typeof h === 'object' && h.duz) && (
-                        <button onClick={() => { setHoldersModal(null); navigate(`/admin/staff/${h.duz}/edit`); }}
-                          className="text-[11px] text-steel hover:underline">View</button>
-                      )}
-                    </div>
-                  ))}
+                  {holdersData.map((h, i) => {
+                    const name = typeof h === 'string' ? h : (h.name || '');
+                    if (!name) return null;
+                    const duz = typeof h === 'object' ? h.duz : null;
+                    return (
+                      <div key={duz || i} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-alt text-sm">
+                        <span className="text-text">{name}</span>
+                        {duz && (
+                          <button onClick={() => { setHoldersModal(null); navigate(`/admin/staff/${duz}/edit`); }}
+                            className="text-[11px] text-steel hover:underline">View</button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -325,7 +343,10 @@ export default function PermissionsCatalog() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setAssignModal(null)}>
           <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="font-semibold text-text">Assign "{assignModal.name}"</h3>
+              <div>
+                <h3 className="font-semibold text-text">Assign permission</h3>
+                <div className="text-xs text-text-secondary mt-0.5">{assignModal.displayName || assignModal.name}</div>
+              </div>
               <button onClick={() => setAssignModal(null)} className="text-text-muted hover:text-text">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
