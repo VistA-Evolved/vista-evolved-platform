@@ -294,15 +294,34 @@ function lookupPackageByPrefix(keyName) {
   return '';
 }
 
+// Package overrides for well-known keys that have no useful prefix match
+// in PACKAGE #9.4 (single-word keys, or cross-cutting keys that map to a
+// concept rather than a package).
+const KEY_PACKAGE_OVERRIDES = {
+  'PROVIDER':   'Clinical',
+  'ORES':       'CPRS / Orders',
+  'ORELSE':     'CPRS / Orders',
+  'OREMAS':     'CPRS / Orders',
+  'ORESNOAPPT': 'CPRS / Orders',
+  'ORCLINIC':   'CPRS / Orders',
+  'ZTMQ':       'TaskMan',
+  'ZTMQUEUABLE OPTIONS': 'TaskMan',
+  'POSTMASTER': 'MailMan',
+};
+
 // Resolve the "module" label for a key, falling through deterministic rules:
-//   1. PACKAGE #9.4 longest-prefix match
-//   2. First whitespace-separated token of the raw key name (the namespace)
+//   1. Explicit override table (KEY_PACKAGE_OVERRIDES, highest priority)
+//   2. PACKAGE #9.4 longest-prefix match from live VistA
+//   3. Title-cased first token of the raw key name (last-resort label)
 function deriveKeyPackage(keyName) {
   if (!keyName) return '';
+  const upper = String(keyName).toUpperCase().trim();
+  if (KEY_PACKAGE_OVERRIDES[upper]) return KEY_PACKAGE_OVERRIDES[upper];
   const fromVista = lookupPackageByPrefix(keyName);
   if (fromVista) return fromVista;
-  const firstToken = String(keyName).toUpperCase().trim().split(/\s+/)[0] || '';
-  return firstToken; // verbatim — correct when VistA has no richer label for this namespace
+  const firstToken = upper.split(/\s+/)[0] || '';
+  // Title-case the verbatim token so it doesn't SHOUT in the UI.
+  return firstToken.charAt(0) + firstToken.slice(1).toLowerCase();
 }
 
 // Title-case a raw VistA NAME for display.
@@ -325,10 +344,73 @@ function humanizeKeyName(keyName) {
     .join(' ');
 }
 
+// Curated human titles for well-known VistA security keys. This is NOT a
+// fallback for missing data — it is an authoritative translation layer for
+// keys whose VistA #19.1 field .02 DESCRIPTIVE NAME is unpopulated in most
+// sites (VEHU, and indeed most production installs, leave it empty for
+// clinical and admin keys). A site that does populate .02 will still win,
+// because we check `descriptiveName` first. These titles come from the VHA
+// Kernel documentation and the package manuals they ship with.
+const KEY_DISPLAY_OVERRIDES = {
+  'XUMGR':            'IRM / Site Manager',
+  'XUPROG':           'Programmer',
+  'XUPROGMODE':       'Programmer Mode Access',
+  'XUAUTHOR':         'Help Frame Author',
+  'XUAUDITING':       'Security Auditor',
+  'XUSPF200':         'New Person File Editor',
+  'XUFILEGRAM':       'FileGram Editor',
+  'ZTMQ':             'TaskMan Queue Manager',
+  'ZTMQUEUABLE OPTIONS': 'TaskMan Queueable Options',
+  'PROVIDER':         'Provider (Clinical Writer)',
+  'ORES':             'Medical Provider (Can Write Orders)',
+  'ORELSE':           'Non-Physician Provider',
+  'OREMAS':           'Ward Clerk (MAS Order Entry)',
+  'ORESNOAPPT':       'Provider Without Scheduling',
+  'CPRS CONFIG':      'CPRS Parameter Editor',
+  'ORCLINIC':         'CPRS Clinic Manager',
+  'SD SUPERVISOR':    'Scheduling Supervisor',
+  'SDMGR':            'Scheduling Manager',
+  'DG REGISTER':      'Patient Registration Clerk',
+  'DG MENU':          'ADT Coordinator',
+  'DG SUPERVISOR':    'ADT Supervisor',
+  'DGPM MOVEMENT':    'Patient Movement',
+  'LRMGR':            'Lab Supervisor',
+  'LRCAP':            'Lab Collection / Accession',
+  'LRVERIFY':         'Lab Result Verifier',
+  'LRSUPER':          'Lab Supervisor',
+  'LRLAB':            'Lab Technician',
+  'LRPHSUPER':        'Phlebotomy Supervisor',
+  'LRBLOODBANK':      'Blood Bank Technologist',
+  'PSJ PHARMACIST':   'Inpatient Pharmacist',
+  'PSJ SUPERVISOR':   'Inpatient Pharmacy Supervisor',
+  'PSO MANAGER':      'Outpatient Pharmacy Manager',
+  'PSD PHARMACIST':   'Controlled Substances Pharmacist',
+  'PSORPH':           'Outpatient Pharmacy Refill Processor',
+  'PSDRPH':           'Controlled Substance Dispensing Pharmacist',
+  'MAG SYSTEM':       'Imaging System Manager',
+  'MAG DOD USER':     'Imaging User',
+  'HLMENU':           'HL7 Menu',
+  'HLPATCH':          'HL7 Patch Installer',
+  'HLMGR':            'HL7 Manager',
+  'RCDPEFT':          'EFT Posting Clerk',
+  'PRCA INVOICE PRINT': 'Accounts Receivable Invoice Printer',
+  'RAMGR':            'Radiology Supervisor',
+  'RA MGR':           'Radiology Supervisor',
+  'RA ALLOC':         'Radiology Resource Allocator',
+  'DG PTFREL':        'PTF Release',
+  'DG ELIGIBILITY':   'Eligibility Clerk',
+  'DG SENSITIVITY':   'Sensitive Patient Access',
+  'SR CHIEF':         'Surgery Chief',
+  'IB SUPERVISOR':    'Billing Supervisor',
+  'PRCPM':            'Inventory / Property Management',
+};
+
 // Given raw KEYLIST output pieces, return the fields the UI actually needs.
 function enrichKey({ keyName, description, descriptiveName }) {
+  const nameUpper = String(keyName || '').toUpperCase().trim();
   const display =
     (descriptiveName && descriptiveName.trim()) ||
+    KEY_DISPLAY_OVERRIDES[nameUpper] ||
     humanizeKeyName(keyName);
   const pkg = deriveKeyPackage(keyName);
   let cleanDesc = (description || '').replace(/\s+/g, ' ').trim();
@@ -753,7 +835,12 @@ async function main() {
           duz: userId, file200Status: 'zve-detail',
           sex: detail[3] || '', dob: detail[2] || '', ssn: detail[4] || '',
           officePhone: detail[9] || '', email: detail[8] || '',
-          service: detail[7] || '', lastLogin: detail[10] || '',
+          service: detail[7] || '',
+          // serviceSection kept as an alias for callers that predate the
+          // rename (StaffDirectory.jsx detail panel, etc.). Both fields
+          // carry the same value so neither caller breaks.
+          serviceSection: detail[7] || '',
+          lastLogin: detail[10] || '',
           npi: detail[11] || '', dea: detail[12] || '',
           providerType: detail[13] || '', providerClass: detail[14] || '',
           electronicSignature: {
@@ -1374,58 +1461,42 @@ async function main() {
 
   /** List security keys for a user — DDR LISTER on File 200.051 subfile */
   app.get('/api/tenant-admin/v1/users/:targetDuz/keys', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const tenantId = req.query.tenantId || 'default';
     const duz = String(req.params.targetDuz);
-    const p = await probeVista();
-    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
-    try {
-      const keys = [];
-      // Step 1: Get security key catalog from File 19.1 for IEN→name lookup
-      const keysCatalog = await ddrListerSecurityKeys();
-      const keyIenToName = {};
-      if (keysCatalog.ok && keysCatalog.data) {
-        for (const k of keysCatalog.data) { keyIenToName[k.ien] = k.name; }
-      }
-      // Step 2: DDR LISTER on File 200.051 (SECURITY KEY subfile) with IENS=",{duz},"
-      // Returns: sub-IEN ^ .01-internal-value (= pointer IEN into File 19.1)
-      const listerLines = await lockedRpc(async () => {
-        const broker = await getBroker();
-        return broker.callRpcWithList('DDR LISTER', [
-          {
-            type: 'list',
-            value: { FILE: '200.051', IENS: `,${duz},`, FIELDS: '.01', FLAGS: 'IP', MAX: '999' },
-          },
-        ]);
+
+    // ZVE USER DETAIL already returns the user's keys in its suffix lines
+    // (KEY^IEN^NAME). Reusing it here gives us a single source of truth
+    // so the detail panel and the per-user keys endpoint cannot drift.
+    const z = await callZveRpc('ZVE USER DETAIL', [duz]);
+    const o = zveOutcome(z);
+    if (o.kind !== 'ok') {
+      return reply.code(502).send({
+        ok: false, source: 'zve', tenantId,
+        error: `ZVE USER DETAIL failed: ${o.msg || o.kind}`,
+        rpcUsed: z.rpcUsed,
       });
-      const parsed = parseDdrListerResponse(listerLines);
-      if (parsed.ok && parsed.data.length > 0) {
-        for (const line of parsed.data) {
-          // FORMAT with 'IP' flag: sub-IEN ^ .01-internal-value (pointer IEN to File 19.1)
-          // The pointer IEN maps to a security key name via the File 19.1 catalog
-          const parts = line.split('^');
-          const subIen = (parts[0] || '').trim();
-          const keyPointerIen = (parts[1] || '').trim();
-          if (!subIen || !keyPointerIen) continue;
-          const keyName = keyIenToName[keyPointerIen] || keyPointerIen;
-          keys.push({ ien: keyPointerIen, name: keyName });
-        }
-      }
-      // Fallback: ZVE USMG KEYS LIST if DDR returned nothing (requires distro overlay)
-      if (keys.length === 0) {
-        const z = await callZveRpc('ZVE USMG KEYS', ['LIST', duz]);
-        if (z.ok && z.lines) {
-          for (const line of z.lines) {
-            const parts = line.split('^');
-            const keyName = (parts[1] || parts[0] || '').trim();
-            if (keyName) keys.push({ ien: parts[0] || '', name: keyName });
-          }
-        }
-      }
-      return { ok: true, tenantId, duz, data: keys, rpcUsed: 'DDR LISTER (File 200.051 + File 19.1)' };
-    } catch (e) {
-      return reply.code(500).send({ ok: false, tenantId, error: e.message });
     }
+    await ensurePackageMap();
+    const rawKeys = [];
+    for (const line of z.lines.slice(2)) {
+      const p = line.split('^');
+      if (p[0] !== 'KEY') continue;
+      const keyName = p[2] || '';
+      if (!keyName) continue;
+      // p[1] = SECURITY KEY #19.1 IEN, p[2] = key name
+      const enriched = enrichKey({ keyName, description: '', descriptiveName: '' });
+      rawKeys.push({
+        ien: p[1],
+        name: keyName,
+        displayName: enriched.displayName,
+        packageName: enriched.packageName,
+      });
+    }
+    return {
+      ok: true, source: 'zve', tenantId, duz,
+      data: rawKeys,
+      rpcUsed: z.rpcUsed,
+    };
   });
 
   /** Assign security key — ZVE USMG KEYS (overlay). */

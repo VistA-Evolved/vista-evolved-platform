@@ -45,7 +45,7 @@ const baseColumns = [
   { key: 'permissionCount', label: 'Permissions', align: 'center', render: (val) => <KeyCountBadge count={val || 0} /> },
 ];
 
-const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Locked'];
+const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Terminated'];
 const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 
 export default function StaffDirectory() {
@@ -109,19 +109,22 @@ export default function StaffDirectory() {
       const esigList = esigRes?.data || [];
       const esigMap = new Map(esigList.map(e => [e.id || e.duz, e]));
 
-      // Merge users with esig data
+      // Merge users with esig data. The ZVE USER LIST row already carries
+      // service (department) and keyCount — use them directly instead of
+      // leaving the columns blank.
       const merged = users.map(u => {
         const esig = esigMap.get(u.ien) || {};
+        const rawStatus = (u.status || esig.status || 'active').toLowerCase();
         return {
           id: `S-${u.ien}`,
           duz: u.ien,
-          name: (u.name || esig.name || '').toUpperCase(),
-          department: '',
-          status: esig.status || 'active',
+          name: u.name || esig.name || '',
+          department: u.service || '',
+          status: rawStatus,
           esigStatus: esig.hasCode ? 'active' : 'incomplete',
           hasEsig: esig.hasCode || false,
           sigBlockName: esig.sigBlockName || '',
-          permissionCount: null, // loaded per-user on demand
+          permissionCount: u.keyCount || 0,
         };
       });
 
@@ -249,7 +252,15 @@ export default function StaffDirectory() {
     if (allPermissions.length === 0) {
       try {
         const res = await getPermissions();
-        setAllPermissions((res?.data || []).map(k => ({ name: k.keyName, description: k.description || '' })));
+        // Preserve the server-side enrichment (displayName, packageName) so
+        // the modal can show a human title, a package badge, and a real
+        // sentence description without having to humanize client-side.
+        setAllPermissions((res?.data || []).map(k => ({
+          name: k.keyName,
+          displayName: k.displayName || k.descriptiveName || '',
+          packageName: k.packageName || '',
+          description: k.description || '',
+        })));
       } catch (err) { setAllPermissions([]); }
     }
   };
@@ -402,7 +413,13 @@ export default function StaffDirectory() {
                     </h3>
                     <div className="flex flex-wrap gap-1.5">
                       {detailKeys.slice(0, 8).map(k => (
-                        <span key={k.ien} title={k.name} className="px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">{humanizeKeyName(k.name)}</span>
+                        <span
+                          key={k.ien || k.name}
+                          title={`${k.name}${k.packageName ? ' — ' + k.packageName : ''}`}
+                          className="px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]"
+                        >
+                          {k.displayName || humanizeKeyName(k.name)}
+                        </span>
                       ))}
                       {detailKeys.length > 8 && (
                         <span className="px-2 py-0.5 text-[10px] rounded bg-[#F5F5F5] text-[#999]">
@@ -454,7 +471,7 @@ export default function StaffDirectory() {
                       Deactivate
                     </button>
                   )}
-                  {detailData.status === 'inactive' && (
+                  {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
                     <button onClick={() => handleReactivate(detailData.duz)}
                       className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
                       <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
@@ -510,18 +527,35 @@ export default function StaffDirectory() {
             </div>
             <div className="flex-1 overflow-auto p-2">
               {allPermissions
-                .filter(p => !permSearchText || p.name.toLowerCase().includes(permSearchText.toLowerCase()) || p.description.toLowerCase().includes(permSearchText.toLowerCase()))
+                .filter(p => {
+                  if (!permSearchText) return true;
+                  const s = permSearchText.toLowerCase();
+                  return (
+                    p.name.toLowerCase().includes(s) ||
+                    (p.displayName || '').toLowerCase().includes(s) ||
+                    (p.description || '').toLowerCase().includes(s) ||
+                    (p.packageName || '').toLowerCase().includes(s)
+                  );
+                })
                 .filter(p => !detailKeys.some(k => k.name === p.name))
                 .slice(0, 50)
                 .map(p => (
                   <button key={p.name} disabled={assigningPerm}
                     onClick={() => handleAssignPerm(p.name)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#F5F8FB] rounded-md flex items-center justify-between disabled:opacity-50">
-                    <div>
-                      <div className="font-medium text-[#222]">{humanizeKeyName(p.name)}</div>
-                      <div className="text-[10px] text-[#999] font-mono">{p.name}</div>
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#F5F8FB] rounded-md flex items-start justify-between gap-3 disabled:opacity-50">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-[#222] truncate">{p.displayName || humanizeKeyName(p.name)}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-[#999] font-mono">{p.name}</span>
+                        {p.packageName && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#E8EEF5] text-[#2E5984] uppercase tracking-wide">{p.packageName}</span>
+                        )}
+                      </div>
+                      {p.description && (
+                        <div className="text-[11px] text-[#666] mt-1 line-clamp-2">{p.description}</div>
+                      )}
                     </div>
-                    <span className="text-[#2E5984] text-xs font-medium">Assign</span>
+                    <span className="text-[#2E5984] text-xs font-medium flex-shrink-0 mt-0.5">Assign</span>
                   </button>
                 ))}
               {allPermissions.length === 0 && <div className="text-center text-sm text-[#999] py-4">Loading permissions...</div>}
