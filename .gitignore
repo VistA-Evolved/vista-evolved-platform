@@ -18,6 +18,9 @@ scripts/notion/notion-sync-config.json
 .env.local
 .env.*.local
 
+# Persistent session store (tenant-admin) — encrypted at rest but still secret
+apps/tenant-admin/.sessions.enc
+
 # IDE
 .idea/
 .vscode/

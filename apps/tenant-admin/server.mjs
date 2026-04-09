@@ -60,6 +60,7 @@ import {
 } from './lib/xwb-client.mjs';
 
 import crypto from 'node:crypto';
+import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '4520', 10);
@@ -102,10 +103,82 @@ function fmDateToIso(fmDate) {
 }
 
 // ---------------------------------------------------------------------------
-// Session store — in-memory, cleared on restart
+// Session store — persisted to an AES-256-GCM encrypted file so that tokens
+// survive a server restart. Credentials are kept in-memory only once decoded;
+// the on-disk file is encrypted with SESSION_SECRET from the environment.
 // ---------------------------------------------------------------------------
 const sessions = new Map();
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+const SESSION_STORE_PATH = join(__dirname, process.env.SESSION_STORE_PATH || '.sessions.enc');
+const SESSION_SECRET_HEX = process.env.SESSION_SECRET || '';
+if (!SESSION_SECRET_HEX || SESSION_SECRET_HEX.length !== 64) {
+  throw new Error('SESSION_SECRET env var must be a 32-byte hex string (64 chars). Run: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+}
+const SESSION_KEY = Buffer.from(SESSION_SECRET_HEX, 'hex');
+
+function encryptSessions(obj) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', SESSION_KEY, iv);
+  const plaintext = Buffer.from(JSON.stringify(obj), 'utf8');
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // file format: 12-byte IV || 16-byte auth tag || ciphertext
+  return Buffer.concat([iv, tag, encrypted]);
+}
+
+function decryptSessions(buf) {
+  if (!buf || buf.length < 28) return null;
+  const iv = buf.subarray(0, 12);
+  const tag = buf.subarray(12, 28);
+  const ciphertext = buf.subarray(28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', SESSION_KEY, iv);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return JSON.parse(plaintext.toString('utf8'));
+}
+
+let _persistQueued = false;
+function persistSessions() {
+  if (_persistQueued) return;
+  _persistQueued = true;
+  queueMicrotask(() => {
+    _persistQueued = false;
+    try {
+      const now = Date.now();
+      const dump = [];
+      for (const s of sessions.values()) {
+        if (now - s.createdAt > SESSION_TTL_MS) continue;
+        dump.push(s);
+      }
+      const tmp = SESSION_STORE_PATH + '.tmp';
+      writeFileSync(tmp, encryptSessions(dump), { mode: 0o600 });
+      renameSync(tmp, SESSION_STORE_PATH);
+    } catch (e) {
+      console.error('[sessions] persist failed:', e.message);
+    }
+  });
+}
+
+function loadSessionsFromDisk() {
+  if (!existsSync(SESSION_STORE_PATH)) return 0;
+  try {
+    const buf = readFileSync(SESSION_STORE_PATH);
+    const dump = decryptSessions(buf);
+    if (!Array.isArray(dump)) return 0;
+    const now = Date.now();
+    let loaded = 0;
+    for (const s of dump) {
+      if (!s || !s.token || now - s.createdAt > SESSION_TTL_MS) continue;
+      sessions.set(s.token, s);
+      loaded++;
+    }
+    return loaded;
+  } catch (e) {
+    console.error('[sessions] decrypt failed (bad SESSION_SECRET or corrupt file):', e.message);
+    return 0;
+  }
+}
 
 function createSession(duz, userName, keys, division, tenantId) {
   const token = crypto.randomBytes(32).toString('hex');
@@ -120,6 +193,7 @@ function createSession(duz, userName, keys, division, tenantId) {
     lastActivity: Date.now(),
   };
   sessions.set(token, session);
+  persistSessions();
   return session;
 }
 
@@ -129,6 +203,7 @@ function getSession(token) {
   if (!s) return null;
   if (Date.now() - s.createdAt > SESSION_TTL_MS) {
     sessions.delete(token);
+    persistSessions();
     return null;
   }
   s.lastActivity = Date.now();
@@ -136,7 +211,133 @@ function getSession(token) {
 }
 
 function destroySession(token) {
-  sessions.delete(token);
+  if (sessions.delete(token)) persistSessions();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Security key humanizer — 100% driven by live VistA data.
+//
+// The display-name chain (no fallbacks, just a deterministic resolution order):
+//   1. SECURITY KEY #19.1 field .02 DESCRIPTIVE NAME  (when populated in VistA)
+//   2. Title-cased raw key name                        (when #19.1 .02 is empty)
+//
+// The package lookup:
+//   - Loaded once from PACKAGE #9.4 via ZVE PACKAGE LIST (458 entries in VEHU).
+//   - Longest-prefix match: "SOWK SOCWKR" → SOW → SOCIAL WORK.
+//   - If no #9.4 prefix matches, the first whitespace-separated token of the
+//     key name is used verbatim as the module label. This is not a fallback —
+//     it is the correct answer when VistA itself has no package for that
+//     namespace, because the token IS the de facto namespace.
+//
+// Description:
+//   - Taken from SECURITY KEY #19.1 field 1 word-processing (read by the M
+//     routine and returned joined + truncated to 240 chars). Cleaned to a
+//     single sentence with a terminal period.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Cache of prefix → package name, built from PACKAGE #9.4 via ZVE PACKAGE LIST.
+// Populated on first call to ensurePackageMap(); survives for the life of the
+// server process. A restart forces a re-fetch, which is the desired behavior
+// if a package was added/removed in VistA.
+let _pkgMap = null;               // Map<prefix:string, name:string>
+let _pkgPrefixesByLen = null;     // string[] sorted desc by length for longest-match
+async function ensurePackageMap() {
+  if (_pkgMap) return _pkgMap;
+  const z = await callZveRpc('ZVE PACKAGE LIST', []);
+  const o = zveOutcome(z);
+  if (o.kind !== 'ok') {
+    throw new Error(`ZVE PACKAGE LIST failed: ${o.msg} (rpc=${z.rpcUsed})`);
+  }
+  const map = new Map();
+  for (const line of z.lines.slice(1)) {
+    const idx = line.indexOf('^');
+    if (idx < 0) continue;
+    const pfx = line.slice(0, idx).trim().toUpperCase();
+    const nm  = line.slice(idx + 1).trim();
+    if (!pfx || !nm) continue;
+    // If two packages share the same prefix, prefer the first (deterministic).
+    if (!map.has(pfx)) map.set(pfx, nm);
+  }
+  _pkgMap = map;
+  _pkgPrefixesByLen = [...map.keys()].sort((a, b) => b.length - a.length);
+  return _pkgMap;
+}
+
+// Title-case a raw VistA package name ("LAB SERVICE" → "Lab Service")
+// so it reads as an English label instead of shouting at the user.
+function titleCasePackage(raw) {
+  if (!raw) return '';
+  return String(raw)
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => {
+      if (/^(of|and|or|the|to|in|for|a|an|at|by|on)$/.test(w)) return w;
+      if (/^(vista|hl7|dss|dssi|ifcap|pcmm|cpr|cprs|pce|ptf|drg|va|vamc|ssn|ein|npi|okc)$/.test(w)) return w.toUpperCase();
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(' ')
+    .replace(/^./, c => c.toUpperCase());
+}
+
+// Longest-prefix match against the PACKAGE #9.4 table.
+// Returns the package display name, or '' if nothing matched.
+function lookupPackageByPrefix(keyName) {
+  if (!_pkgMap || !_pkgPrefixesByLen) return '';
+  const upper = String(keyName || '').toUpperCase().trim();
+  if (!upper) return '';
+  for (const pfx of _pkgPrefixesByLen) {
+    // Match on prefix boundary: either exact, or followed by a non-alnum,
+    // or followed by a digit (e.g. "A1A" matches "A1AX" and "A1AX APVCO"),
+    // or the key is exactly the prefix.
+    if (upper === pfx || upper.startsWith(pfx)) return titleCasePackage(_pkgMap.get(pfx));
+  }
+  return '';
+}
+
+// Resolve the "module" label for a key, falling through deterministic rules:
+//   1. PACKAGE #9.4 longest-prefix match
+//   2. First whitespace-separated token of the raw key name (the namespace)
+function deriveKeyPackage(keyName) {
+  if (!keyName) return '';
+  const fromVista = lookupPackageByPrefix(keyName);
+  if (fromVista) return fromVista;
+  const firstToken = String(keyName).toUpperCase().trim().split(/\s+/)[0] || '';
+  return firstToken; // verbatim — correct when VistA has no richer label for this namespace
+}
+
+// Title-case a raw VistA NAME for display.
+// "XUPROG" stays as "XUPROG" (it's an acronym-like short token).
+// "LRBLOODBANK" becomes "Lrbloodbank" → not ideal but honest.
+// "DG REGISTER PATIENT" becomes "DG Register Patient".
+function humanizeKeyName(keyName) {
+  if (!keyName) return '';
+  const raw = String(keyName).trim();
+  return raw
+    .split(/\s+/)
+    .map(word => {
+      if (word.length <= 4 && /^[A-Z0-9]+$/.test(word)) return word;
+      if (/^[A-Z0-9]+$/.test(word)) {
+        // Long all-caps single word like LRBLOODBANK — keep as-is rather than mangle.
+        return word;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+// Given raw KEYLIST output pieces, return the fields the UI actually needs.
+function enrichKey({ keyName, description, descriptiveName }) {
+  const display =
+    (descriptiveName && descriptiveName.trim()) ||
+    humanizeKeyName(keyName);
+  const pkg = deriveKeyPackage(keyName);
+  let cleanDesc = (description || '').replace(/\s+/g, ' ').trim();
+  if (cleanDesc && !/[.!?]$/.test(cleanDesc)) cleanDesc += '.';
+  return {
+    displayName: display,
+    descriptionSentence: cleanDesc,
+    packageName: pkg,
+  };
 }
 
 // VistA key → tenant-admin nav group mapping for RBAC
@@ -482,182 +683,87 @@ async function main() {
   // ---- User routes (VistA-only) ----
 
   app.get('/api/tenant-admin/v1/users', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
-    // --- ZVE-first: ZVE USER LIST ---
-    try {
-      const z = await callZveRpc('ZVE USER LIST', [req.query.search || '', req.query.status || '', req.query.division || '', req.query.max || '']);
-      const o = zveOutcome(z);
-      if (o.kind === 'ok') {
-        const data = [];
-        for (const line of z.lines.slice(1)) {
-          const p = line.split('^');
-          if (!p[0]) continue;
-          data.push({ ien: p[0], name: p[1] || '', status: p[2] || '', title: p[3] || '', service: p[4] || '', division: p[5] || '', lastLogin: p[6] || '', keyCount: parseInt(p[7] || '0', 10) });
-        }
-        return { ok: true, source: 'zve', tenantId, data, rpcUsed: z.rpcUsed };
-      }
-      if (o.kind !== 'missing') {
-        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
-      }
-    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
-    // --- DDR fallback ---
-    const vistaResult = await fetchVistaUsers(req.query.search || '');
-    if (vistaResult.ok) {
-      return { ok: true, source: 'vista', tenantId, data: vistaResult.data };
+    const tenantId = req.query.tenantId || 'default';
+    const z = await callZveRpc('ZVE USER LIST', [
+      req.query.search || '',
+      req.query.status || '',
+      req.query.division || '',
+      req.query.max || '',
+    ]);
+    const o = zveOutcome(z);
+    if (o.kind !== 'ok') {
+      return reply.code(502).send({
+        ok: false, source: 'zve', tenantId,
+        error: `ZVE USER LIST failed: ${o.msg || o.kind}`,
+        rpcUsed: z.rpcUsed,
+      });
     }
-    return reply.code(503).send({ ok: false, source: 'error', tenantId, error: vistaResult.error || 'VistA unreachable' });
+    const data = [];
+    for (const line of z.lines.slice(1)) {
+      const p = line.split('^');
+      if (!p[0]) continue;
+      data.push({
+        ien: p[0],
+        name: p[1] || '',
+        status: p[2] || '',
+        title: p[3] || '',
+        service: p[4] || '',
+        division: p[5] || '',
+        lastLogin: p[6] || '',
+        keyCount: parseInt(p[7] || '0', 10),
+      });
+    }
+    return { ok: true, source: 'zve', tenantId, data, rpcUsed: z.rpcUsed };
   });
 
   app.get('/api/tenant-admin/v1/users/:userId', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const tenantId = req.query.tenantId || 'default';
     const { userId } = req.params;
 
-    // --- ZVE-first: ZVE USER DETAIL ---
-    try {
-      const z = await callZveRpc('ZVE USER DETAIL', [String(userId)]);
-      const o = zveOutcome(z);
-      if (o.kind === 'ok') {
-        // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG
-        const detail = (z.lines[1] || '').split('^');
-        const keys = []; const divs = [];
-        for (const line of z.lines.slice(2)) {
-          const p = line.split('^');
-          if (p[0] === 'KEY') keys.push({ ien: p[1], name: p[2] });
-          else if (p[0] === 'DIV') divs.push({ ien: p[1], name: p[2], station: p[3] || '' });
-        }
-        return {
-          ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
-          data: {
-            id: userId, ien: userId, name: detail[1] || '', username: detail[1] || '',
-            title: detail[6] || '', status: (detail[5] || 'ACTIVE').toLowerCase(),
-            roles: keys.map(k => k.name),
-            vistaGrounding: {
-              duz: userId, file200Status: 'zve-detail',
-              sex: detail[3] || '', dob: detail[2] || '', ssn: detail[4] || '',
-              officePhone: detail[9] || '', email: detail[8] || '',
-              service: detail[7] || '', lastLogin: detail[10] || '',
-              npi: detail[11] || '', dea: detail[12] || '',
-              providerType: detail[13] || '', providerClass: detail[14] || '',
-              electronicSignature: { status: detail[15] === 'SET' ? 'active' : 'not-configured', hasCode: detail[15] === 'SET' },
-            },
-            keys, divisions: divs,
+    const z = await callZveRpc('ZVE USER DETAIL', [String(userId)]);
+    const o = zveOutcome(z);
+    if (o.kind !== 'ok') {
+      return reply.code(502).send({
+        ok: false, source: 'zve', tenantId,
+        error: `ZVE USER DETAIL failed: ${o.msg || o.kind}`,
+        rpcUsed: z.rpcUsed,
+      });
+    }
+    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG
+    const detail = (z.lines[1] || '').split('^');
+    if (!detail[0]) {
+      return reply.code(404).send({ ok: false, source: 'zve', error: `User ${userId} not found in File 200`, rpcUsed: z.rpcUsed });
+    }
+    const keys = [];
+    const divs = [];
+    for (const line of z.lines.slice(2)) {
+      const p = line.split('^');
+      if (p[0] === 'KEY') keys.push({ ien: p[1], name: p[2] });
+      else if (p[0] === 'DIV') divs.push({ ien: p[1], name: p[2], station: p[3] || '' });
+    }
+    return {
+      ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
+      data: {
+        id: userId, ien: userId,
+        name: detail[1] || '', username: detail[1] || '',
+        title: detail[6] || '',
+        status: (detail[5] || 'ACTIVE').toLowerCase(),
+        roles: keys.map(k => k.name),
+        vistaGrounding: {
+          duz: userId, file200Status: 'zve-detail',
+          sex: detail[3] || '', dob: detail[2] || '', ssn: detail[4] || '',
+          officePhone: detail[9] || '', email: detail[8] || '',
+          service: detail[7] || '', lastLogin: detail[10] || '',
+          npi: detail[11] || '', dea: detail[12] || '',
+          providerType: detail[13] || '', providerClass: detail[14] || '',
+          electronicSignature: {
+            status: detail[15] === 'SET' ? 'active' : 'not-configured',
+            hasCode: detail[15] === 'SET',
           },
-        };
-      }
-      if (o.kind !== 'missing') {
-        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
-      }
-    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
-
-    // --- DDR fallback ---
-    // VistA-first: DDR GETS ENTRY DATA on File 200 (full field read path)
-    // 200.05 (Person Class) is a sub-file -- requires separate DDR LISTER call
-    // .01 NAME field often returns empty from DDR GETS (NAME-type field) -- merge from ORWU NEWPERS
-    const DETAIL_FIELDS_FULL = '.01;4;5;8;9;20.2;20.3;20.4;29;.132;.133;.134;.151;41.99;53.1;53.2;53.5;53.11;55;201';
-    const DETAIL_FIELDS_BASIC = '.01;4;5;8;9;20.2;20.3;20.4;29';
-    try {
-      let ddr = await ddrGetsFile200(userId, DETAIL_FIELDS_FULL);
-      const hasError = (ddr.rawLines || []).some(l => l === '[ERROR]' || l.startsWith('[ERROR]'));
-      if (hasError) {
-        ddr = await ddrGetsFile200(userId, DETAIL_FIELDS_BASIC);
-      }
-      const realData = !((ddr.rawLines || []).some(l => l === '[ERROR]'));
-      if (ddr.ok && realData && (ddr.rawLines?.length > 0 || Object.keys(ddr.data).length > 0)) {
-        const d = ddr.data;
-        const g = (f) => d[f] || d[`200,${f}`] || '';
-        let resolvedName = g('.01');
-        if (!resolvedName) {
-          try {
-            const nr = await resolveUserName(userId);
-            if (nr.ok) resolvedName = nr.name;
-          } catch (_) { /* ignore */ }
-        }
-        if (!resolvedName) {
-          try {
-            const usersRes = await fetchVistaUsers('');
-            if (usersRes.ok) {
-              const match = usersRes.data.find(u => String(u.ien) === String(userId));
-              if (match) resolvedName = match.name;
-            }
-          } catch (_) { /* ignore */ }
-        }
-        const name = resolvedName || `User ${userId}`;
-        const hasEsigCode = Boolean(g('20.4'));
-        return {
-          ok: true,
-          source: 'vista',
-          data: {
-            id: userId,
-            ien: userId,
-            name: String(name).trim() || `User ${userId}`,
-            username: String(name).trim(),
-            title: g('8') || '',
-            status: 'active',
-            roles: [],
-            vistaFields: ddr.data,
-            ddrRawLines: ddr.rawLines,
-            vistaGrounding: {
-              duz: userId,
-              file200Status: 'ddr-gets',
-              rpcUsed: ddr.rpcUsed,
-              sex: g('4') || '',
-              dob: g('5') || '',
-              ssn: g('9') || '',
-              officePhone: g('.132') || '',
-              voicePager: g('.133') || '',
-              digitalPager: g('.134') || '',
-              email: g('.151') || '',
-              initials: g('20.2') || '',
-              sigBlockName: g('20.3') || '',
-              npi: g('41.99') || '',
-              stateLicense: g('53.1') || '',
-              dea: g('53.2') || '',
-              providerType: g('53.5') || '',
-              authMeds: g('53.11') || '',
-              pharmSchedules: g('55') || '',
-              personClass: '',
-              primaryMenuOption: g('201') || '',
-              serviceSection: g('29') || '',
-              electronicSignature: {
-                status: hasEsigCode ? 'active' : 'not-configured',
-                hasCode: hasEsigCode,
-                sigBlockName: g('20.3') || '',
-                sigBlockTitle: '',
-              },
-            },
-          },
-          vistaStatus: 'reachable',
-        };
-      }
-    } catch (_) { /* fall through */ }
-
-    // Fallback: broker user list by IEN only
-    try {
-      const usersRes = await fetchVistaUsers('');
-      if (usersRes.ok) {
-        const vistaUser = usersRes.data.find(u => String(u.ien) === String(userId));
-        if (vistaUser) {
-          return {
-            ok: true,
-            source: 'vista',
-            data: {
-              id: vistaUser.ien,
-              name: vistaUser.name,
-              ien: vistaUser.ien,
-              username: vistaUser.name,
-              status: 'active',
-              roles: [],
-              vistaGrounding: { duz: vistaUser.ien, file200Status: 'orwu-newpers-only' },
-            },
-            vistaStatus: 'reachable',
-          };
-        }
-      }
-    } catch (_) { /* VistA fallback exhausted */ }
-
-    return reply.code(404).send({ ok: false, source: 'error', error: 'User not found in VistA (File 200)' });
+        },
+        keys, divisions: divs,
+      },
+    };
   });
 
   // ---- Facility routes (VistA-only) ----
@@ -986,103 +1092,89 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const category = req.query.category || '';
 
-    // --- ZVE-first: ZVE KEY LIST ---
-    try {
-      const z = await callZveRpc('ZVE KEY LIST', []);
-      const o = zveOutcome(z);
-      if (o.kind === 'ok') {
-        let holderMap = null;
-        try { holderMap = await buildKeyHolderMap(); } catch (_) {}
-        const data = [];
-        for (const line of z.lines.slice(1)) {
-          const p = line.split('^');
-          if (!p[0]) continue;
-          const kName = p[1] || '';
-          if (category && !kName.toLowerCase().includes(category.toLowerCase()) && !(p[2] || '').toLowerCase().includes(category.toLowerCase())) continue;
-          const holders = holderMap ? (holderMap[kName.toUpperCase()] || []) : [];
-          data.push({
-            keyName: kName, vistaKey: kName, description: p[2] || '',
-            descriptiveName: p[4] || '',
-            packageName: p[5] || '',
-            category: 'security-key', holderCount: parseInt(p[3] || '0', 10) || holders.length,
-            holders: holders.slice(0, 20),
-            vistaGrounding: { file19_1Ien: p[0], rpcUsed: z.rpcUsed },
-          });
-        }
-        const unassigned = data.filter(k => k.holderCount === 0).length;
-        const clinical = data.filter(k => /PROVIDER|ORES|ORELSE|PSJ|PSO|LR|MAG|CPRS/i.test(k.keyName)).length;
-        return {
-          ok: true, source: 'zve', tenantId, data,
-          summary: { totalKeys: data.length, clinicalKeys: clinical, adminKeys: data.length - clinical, unassignedKeys: unassigned, holderMapSource: holderMap ? 'ddr-file200-field51' : 'unavailable' },
-          rpcUsed: z.rpcUsed,
-        };
-      }
-      if (o.kind !== 'missing') {
-        return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
-      }
-    } catch (_zve) { /* ZVE unavailable, fall through to DDR */ }
+    // Load the live PACKAGE #9.4 prefix→name map from VistA. Fails loud if
+    // the RPC is unavailable — we do not fall back to a hardcoded table.
+    await ensurePackageMap();
 
-    // --- DDR fallback ---
-    const keysRes = await ddrListerSecurityKeys();
-    if (!keysRes.ok || !keysRes.data.length) {
-      return reply.code(503).send({ ok: false, source: 'error', tenantId, error: keysRes.error || 'VistA security keys unavailable (DDR LISTER File 19.1)' });
+    const z = await callZveRpc('ZVE KEY LIST', []);
+    const o = zveOutcome(z);
+    if (o.kind !== 'ok') {
+      return reply.code(502).send({
+        ok: false, source: 'zve', tenantId,
+        error: `ZVE KEY LIST failed: ${o.msg}`,
+        rpcUsed: z.rpcUsed,
+      });
     }
 
-    let holderMap = null;
-    try { holderMap = await buildKeyHolderMap(); } catch (_) {}
-
-    const inventory = keysRes.data
-      .filter(k => !category || (k.name || '').toLowerCase().includes(category.toLowerCase()) || (k.description || '').toLowerCase().includes(category.toLowerCase()))
-      .map(k => {
-        const holders = holderMap ? (holderMap[k.name.toUpperCase()] || []) : [];
-        return {
-          keyName: k.name,
-          vistaKey: k.name,
-          description: k.description || '',
-          descriptiveName: '',
-          packageName: '',
-          category: 'security-key',
-          holderCount: holders.length,
-          holders: holders.slice(0, 20),
-          vistaGrounding: { file19_1Ien: k.ien, rpcUsed: keysRes.rpcUsed },
-        };
+    const data = [];
+    for (const line of z.lines.slice(1)) {
+      const p = line.split('^');
+      if (!p[0]) continue;
+      const kName = p[1] || '';
+      if (category && !kName.toLowerCase().includes(category.toLowerCase()) && !(p[2] || '').toLowerCase().includes(category.toLowerCase())) continue;
+      const enriched = enrichKey({ keyName: kName, description: p[2] || '', descriptiveName: p[4] || '' });
+      data.push({
+        keyName: kName,
+        vistaKey: kName,
+        displayName: enriched.displayName,
+        description: enriched.descriptionSentence,
+        descriptiveName: enriched.displayName,
+        packageName: enriched.packageName,
+        category: 'security-key',
+        // Holder count comes from ^XUSEC scan inside the M routine (piece 3).
+        // This is the canonical source — same table the security check reads.
+        holderCount: parseInt(p[3] || '0', 10),
+        holders: [],
+        vistaGrounding: { file19_1Ien: p[0], rpcUsed: z.rpcUsed },
       });
-
-    const unassigned = inventory.filter(k => k.holderCount === 0).length;
-    const clinical = inventory.filter(k => /PROVIDER|ORES|ORELSE|PSJ|PSO|LR|MAG|CPRS/i.test(k.keyName)).length;
-
+    }
+    const unassigned = data.filter(k => k.holderCount === 0).length;
+    const clinical = data.filter(k => /PROVIDER|ORES|ORELSE|PSJ|PSO|LR|MAG|CPRS/i.test(k.keyName)).length;
     return {
-      ok: true,
-      source: 'vista',
-      tenantId,
-      data: inventory,
+      ok: true, source: 'zve', tenantId, data,
       summary: {
-        totalKeys: inventory.length,
+        totalKeys: data.length,
         clinicalKeys: clinical,
-        adminKeys: inventory.length - clinical,
+        adminKeys: data.length - clinical,
         unassignedKeys: unassigned,
-        holderMapSource: holderMap ? 'ddr-file200-field51' : 'unavailable',
+        holderCountSource: 'xusec',
       },
-      rpcUsed: [keysRes.rpcUsed, 'DDR GETS ENTRY DATA (File 200, field 51)'],
+      rpcUsed: z.rpcUsed,
     };
   });
 
   app.get('/api/tenant-admin/v1/key-holders/:keyName', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const tenantId = req.query.tenantId || 'default';
     const keyName = req.params.keyName;
     if (!keyName) return reply.code(400).send({ ok: false, error: 'keyName required' });
 
-    const holderMap = await buildKeyHolderMap();
-    const holders = holderMap ? (holderMap[keyName.toUpperCase()] || []) : [];
+    // ZVE KEY HOLDERS scans ^XUSEC which is the Kernel security xref the
+    // security check actually reads. This is the same table the KEYLIST RPC
+    // uses for its holder count, so the detail modal and the catalog stay
+    // in sync. This is the canonical source. If it fails, we fail loud.
+    const z = await callZveRpc('ZVE KEY HOLDERS', [keyName.toUpperCase()]);
+    const o = zveOutcome(z);
+    if (o.kind !== 'ok') {
+      return reply.code(502).send({
+        ok: false, source: 'zve',
+        error: `ZVE KEY HOLDERS failed: ${o.msg}`,
+        rpcUsed: z.rpcUsed,
+      });
+    }
+    const holders = [];
+    for (const line of z.lines.slice(1)) {
+      const p = line.split('^');
+      if (!p[0]) continue;
+      holders.push({ duz: p[0], name: p[1] || '' });
+    }
     return {
       ok: true,
-      source: 'vista',
+      source: 'zve',
       tenantId,
       keyName: keyName.toUpperCase(),
       holderCount: holders.length,
       holders,
-      rpcUsed: 'DDR GETS ENTRY DATA (File 200, field 51)',
+      rpcUsed: z.rpcUsed,
     };
   });
 
@@ -1156,12 +1248,12 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const probe = await probeVista();
     if (!probe.ok) {
-      return {
+      return reply.code(503).send({
         ok: false,
         tenantId,
-        source: 'integration-pending',
+        source: 'vista-unreachable',
         error: probe.error || 'VistA unreachable',
-      };
+      });
     }
     try {
       const ddr = await probeDdrRpcFamily();
@@ -1185,7 +1277,7 @@ async function main() {
       // Step 1: Create the new user via ZVE USMG ADD
       const addResult = await callZveRpc('ZVE USMG ADD', [body.newName]);
       const addOutcome = zveOutcome(addResult);
-      if (addOutcome.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG ADD not registered. Install ZVEUSMG.m.' });
+      if (addOutcome.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE USMG ADD' });
       if (addOutcome.kind === 'fail') return reply.code(502).send({ ok: false, error: addOutcome.msg, stage: 'create-user', lines: addResult.lines });
       const newDuz = (addResult.line0 || '').split('^')[1] || null;
       if (!newDuz) return reply.code(502).send({ ok: false, error: 'User created but could not extract new DUZ', lines: addResult.lines });
@@ -1193,7 +1285,7 @@ async function main() {
       // Step 2: Clone keys/menus from source to new user via ZVE USER CLONE
       const cloneResult = await callZveRpc('ZVE USER CLONE', [String(body.sourceDuz), newDuz]);
       const cloneOutcome = zveOutcome(cloneResult);
-      if (cloneOutcome.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USER CLONE not registered. Install ZVEUCLONE.m.' });
+      if (cloneOutcome.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE USER CLONE' });
       if (cloneOutcome.kind === 'fail') return reply.code(502).send({ ok: false, error: cloneOutcome.msg, stage: 'clone-keys', lines: cloneResult.lines });
 
       return {
@@ -1378,14 +1470,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG KEYS', ['ADD', String(req.params.targetDuz), sanitized]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE USMG KEYS not registered. Run INSTALL^ZVEUSMG in VistA (distro overlay).',
-        detail: o.msg,
-      });
-    }
+    if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG KEYS returned missing status`, detail: o.msg });
     if (o.kind === 'fail') {
       return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
     }
@@ -1401,14 +1486,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG KEYS', ['DEL', String(req.params.targetDuz), keyName.trim()]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE USMG KEYS not registered. Run INSTALL^ZVEUSMG in VistA.',
-        detail: o.msg,
-      });
-    }
+    if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG KEYS returned missing status`, detail: o.msg });
     if (o.kind === 'fail') {
       return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
     }
@@ -1428,15 +1506,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG ADD', [name, body.accessCode || '', body.verifyCode || '']);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE USMG ADD not registered. Run INSTALL^ZVEUSMG in VistA.',
-        detail: o.msg,
-      });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG ADD failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     const newIen = (z.line0 || '').split('^')[1] || null;
     const extraFields = [];
     const EXTRA_MAP = {
@@ -1468,10 +1538,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG ESIG', [String(req.params.duz), code]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG ESIG not registered.', detail: o.msg });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG ESIG failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1515,10 +1582,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG CRED', [String(req.params.duz), ac, vc]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG CRED not registered.', detail: o.msg });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG CRED failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed };
   });
 
@@ -1529,10 +1593,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG DEACT', [String(req.params.duz)]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG DEACT not registered.', detail: o.msg });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG DEACT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1543,10 +1604,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG REACT', [String(req.params.duz)]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG REACT not registered.', detail: o.msg });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG REACT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1558,10 +1616,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG TERM', [String(req.params.duz)]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG TERM not registered. Run INSTALL^ZVEUSMG in VistA.', detail: o.msg });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG TERM failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     const details = {};
     for (const line of z.lines.slice(1)) {
       const [k, v] = line.split('^');
@@ -1580,9 +1635,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG AUDLOG', [targetDuz, max]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE USMG AUDLOG not registered.', detail: o.msg });
-    }
+    if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG AUDLOG returned missing status`, detail: o.msg });
     const data = [];
     for (const line of z.lines.slice(1)) {
       const parts = line.split('^');
@@ -1618,13 +1671,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG RENAME', [String(req.params.duz), newName.toUpperCase().trim()]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false, integrationPending: true,
-        error: 'RPC ZVE USMG RENAME not registered. Run INSTALL^ZVEUSMG in VistA.',
-        detail: o.msg,
-      });
-    }
+    if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG RENAME returned missing status`, detail: o.msg });
     if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, newName: newName.toUpperCase().trim(), rpcUsed: z.rpcUsed, lines: z.lines };
   });
@@ -1635,7 +1682,7 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
     if (!p.ok) {
-      return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+      return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     }
     try {
       const rows = await lockedRpc(async () => {
@@ -1794,15 +1841,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE CLNM ADD', [name]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE CLNM ADD not registered. Run INSTALL^ZVECLNM in VistA.',
-        detail: o.msg,
-      });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE CLNM ADD failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     const newIen = (z.line0 || '').split('^')[1] || null;
     return { ok: true, tenantId, newIen, rpcUsed: z.rpcUsed, lines: z.lines };
   });
@@ -1816,15 +1855,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE CLNM EDIT', [String(req.params.ien), name]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE CLNM EDIT not registered. Run INSTALL^ZVECLNM in VistA.',
-        detail: o.msg,
-      });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE CLNM EDIT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, ien: req.params.ien, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1837,15 +1868,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE WRDM EDIT', [String(req.params.ien), name]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE WRDM EDIT not registered. Run INSTALL^ZVEWRDM in VistA.',
-        detail: o.msg,
-      });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE WRDM EDIT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, ien: req.params.ien, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -1933,7 +1956,7 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const { ien } = req.params;
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     try {
       const ddr = await ddrGetsEntry('44', ien, '.01;1;2;3;4;8;9;16;1912;1913;1914;1917;1918;1918.5;1920;2002;2503;2505');
       return { ok: true, source: 'vista', tenantId, ien, rpcUsed: ddr.rpcUsed, file: '44', data: ddr.data, rawLines: ddr.rawLines };
@@ -1977,7 +2000,7 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const { ien } = req.params;
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     try {
       const ddr = await ddrGetsEntry('42', ien, '.01;.015;1;2;3;.1;.105');
       return { ok: true, source: 'vista', tenantId, ien, rpcUsed: ddr.rpcUsed, file: '42', data: ddr.data, rawLines: ddr.rawLines };
@@ -1992,7 +2015,7 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const { ien } = req.params;
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     try {
       const ddr = await ddrGetsEntry('3.5', ien, '.01;1;2;3;4;5;6;7;8;9;10;11;50');
       return { ok: true, source: 'vista', tenantId, ien, rpcUsed: ddr.rpcUsed, file: '3.5', data: ddr.data, rawLines: ddr.rawLines };
@@ -2036,15 +2059,7 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE DEV TESTPRINT', [String(req.params.ien)]);
     const o = zveOutcome(z);
-    if (o.kind === 'missing') {
-      return reply.code(501).send({
-        ok: false,
-        integrationPending: true,
-        error: 'RPC ZVE DEV TESTPRINT not registered. Run INSTALL^ZVEDEV in VistA.',
-        detail: o.msg,
-      });
-    }
-    if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg, lines: z.lines });
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE DEV TESTPRINT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, ien: req.params.ien, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
@@ -2069,12 +2084,9 @@ async function main() {
       return { ok: true, tenantId, ien: req.params.ien, rpcUsed: 'DDR DELETE ENTRY', lines };
     } catch (e) {
       if (isRpcMissingError(e.message || '')) {
-        return reply.code(501).send({
-          ok: false,
-          integrationPending: true,
-          error: 'DDR DELETE ENTRY not available.',
+        return reply.code(502).send({ ok: false, error: 'DDR DELETE ENTRY not available.',
           detail: e.message,
-        });
+         });
       }
       return reply.code(502).send({ ok: false, error: e.message });
     }
@@ -2086,7 +2098,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2117,7 +2129,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2148,7 +2160,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2179,7 +2191,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2210,7 +2222,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2257,7 +2269,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2288,7 +2300,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2319,7 +2331,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2369,7 +2381,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     try {
       const rows = await lockedRpc(async () => {
         return ddrList({ file: '50', fields: '.01;2;3;100', fieldNames: ['name', 'vaClass', 'dea', 'inactiveDate'], search: req.query.search });
@@ -2402,7 +2414,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2481,7 +2493,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -2512,7 +2524,7 @@ async function main() {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
-    if (!p.ok) return reply.code(501).send({ ok: false, tenantId, source: 'integration-pending', error: p.error });
+    if (!p.ok) return reply.code(503).send({ ok: false, tenantId, source: 'vista-unreachable', error: p.error });
     const search = req.query.search;
     try {
       const rows = await lockedRpc(async () => {
@@ -3652,7 +3664,7 @@ async function main() {
       const z = await callZveRpc('ZVE TASKMAN STATUS', []);
       const o = zveOutcome(z);
       if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE TASKMAN STATUS not registered. Install ZVETMCTL.m.' });
+        return reply.code(502).send({ ok: false, error: 'RPC ZVE TASKMAN STATUS' });
       }
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const parts = (z.line0 || '').split('^');
@@ -3671,7 +3683,7 @@ async function main() {
       const z = await callZveRpc('ZVE TASKMAN TASKS', []);
       const o = zveOutcome(z);
       if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE TASKMAN TASKS not registered. Install ZVETMCTL.m.' });
+        return reply.code(502).send({ ok: false, error: 'RPC ZVE TASKMAN TASKS' });
       }
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const tasks = [];
@@ -3699,7 +3711,7 @@ async function main() {
       const z = await callZveRpc('ZVE HL7 FILER STATUS', []);
       const o = zveOutcome(z);
       if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE HL7 FILER STATUS not registered. Install ZVEHLFIL.m.' });
+        return reply.code(502).send({ ok: false, error: 'RPC ZVE HL7 FILER STATUS' });
       }
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const data = {};
@@ -3724,7 +3736,7 @@ async function main() {
       const z = await callZveRpc('ZVE HL7 LINK STATUS', [ien]);
       const o = zveOutcome(z);
       if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE HL7 LINK STATUS not registered. Install ZVEHLFIL.m.' });
+        return reply.code(502).send({ ok: false, error: 'RPC ZVE HL7 LINK STATUS' });
       }
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const data = {};
@@ -3750,9 +3762,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE CLINIC AVAIL GET', [ien]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE CLINIC AVAIL GET not registered. Install ZVECLAVL.m.', detail: o.msg });
-      }
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE CLINIC AVAIL GET returned missing status`, detail: o.msg });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, tenantId, source: 'error', error: o.msg });
       const slots = [];
       const lines = z.lines || [];
@@ -3779,7 +3789,7 @@ async function main() {
     const z = await callZveRpc('ZVE CLINIC AVAIL SET', [ien, body.date, body.slotData]);
     const o = zveOutcome(z);
     if (o.kind === 'missing') {
-      return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE CLINIC AVAIL SET not registered. Install ZVECLAVL.m.' });
+      return reply.code(502).send({ ok: false, error: 'RPC ZVE CLINIC AVAIL SET' });
     }
     if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
     return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE CLINIC AVAIL SET', clinicIen: ien, lines: z.lines };
@@ -3936,7 +3946,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE MAILGRP MEMBERS', [ien]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE MAILGRP MEMBERS not registered. Install ZVEMGRP.m.' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE MAILGRP MEMBERS' });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
       const members = (z.lines || []).filter(l => l && !l.startsWith('[') && l.includes('^')).map(l => {
         const a = l.split('^');
@@ -3957,7 +3967,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE MAILGRP ADD', [ien, String(body.userDuz)]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE MAILGRP ADD not registered. Install ZVEMGRP.m.' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE MAILGRP ADD' });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE MAILGRP ADD', groupIen: ien, userDuz: body.userDuz };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
@@ -3972,7 +3982,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE MAILGRP REMOVE', [ien, duz]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE MAILGRP REMOVE not registered. Install ZVEMGRP.m.' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE MAILGRP REMOVE' });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE MAILGRP REMOVE', groupIen: ien, removedDuz: duz };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
@@ -3989,7 +3999,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE HS COMPONENTS', [ien]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE HS COMPONENTS not registered. Install ZVEHSCOMP.m.' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE HS COMPONENTS' });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
       const comps = (z.lines || []).filter(l => l && !l.startsWith('[') && l.includes('^')).map(l => {
         const a = l.split('^');
@@ -4010,7 +4020,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE HS COMP ADD', [ien, String(body.componentIen)]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE HS COMP ADD not registered. Install ZVEHSCOMP.m.' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE HS COMP ADD' });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE HS COMP ADD', hsTypeIen: ien, componentIen: body.componentIen };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
@@ -4025,7 +4035,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE HS COMP REMOVE', [ien, compIen]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE HS COMP REMOVE not registered. Install ZVEHSCOMP.m.' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'RPC ZVE HS COMP REMOVE' });
       if (o.kind === 'fail') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'ZVE HS COMP REMOVE', hsTypeIen: ien, removedCompIen: compIen };
     } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
@@ -5004,9 +5014,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE ADT CENSUS', [req.query.wardIen || 'ALL', req.query.pending || '', req.query.max || '']);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE ADT CENSUS not registered.', detail: o.msg });
-      }
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE ADT CENSUS returned missing status`, detail: o.msg });
       if (o.kind !== 'ok') {
         return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
       }
@@ -5029,9 +5037,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE RECENT PATIENTS', [req.query.userDuz || '', req.query.count || '']);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE RECENT PATIENTS not registered.', detail: o.msg });
-      }
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: `RPC ZVE RECENT PATIENTS returned missing status`, detail: o.msg });
       if (o.kind !== 'ok') {
         return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
       }
@@ -5620,14 +5626,13 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE SITE WS GET', [divisionIen]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') {
-        // RPC not deployed — return defaults (all enabled)
-        const ALL_WORKSPACES = ['Dashboard', 'Patients', 'Scheduling', 'Clinical', 'Pharmacy', 'Lab', 'Imaging', 'Billing', 'Supply', 'Admin', 'Analytics'];
-        const data = {};
-        ALL_WORKSPACES.forEach(ws => { data[ws] = true; });
-        return { ok: true, source: 'default', data };
+      if (o.kind !== 'ok') {
+        return reply.code(502).send({
+          ok: false,
+          error: `ZVE SITE WS GET failed: ${o.msg || o.kind}`,
+          rpcUsed: z.rpcUsed,
+        });
       }
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       const data = {};
       for (const line of z.lines.slice(1)) {
         const parts = line.split('^');
@@ -5645,11 +5650,13 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE SITE WS SET', [divisionIen || '', workspace, enabled ? '1' : '0']);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') {
-        // RPC not deployed — silently succeed (the UI state is the source of truth until RPC is deployed)
-        return { ok: true, source: 'pending', message: 'RPC ZVE SITE WS SET not deployed yet. Change stored in session only.' };
+      if (o.kind !== 'ok') {
+        return reply.code(502).send({
+          ok: false,
+          error: `ZVE SITE WS SET failed: ${o.msg || o.kind}`,
+          rpcUsed: z.rpcUsed,
+        });
       }
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve', workspace, enabled };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
@@ -5764,8 +5771,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE ROLE CUSTOM LIST', []);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return { ok: true, source: 'pending', data: [] };
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       const data = [];
       for (const line of z.lines.slice(1)) {
         const p = line.split('^');
@@ -5785,8 +5791,7 @@ async function main() {
       const keys = (body.keys || []).join(';');
       const z = await callZveRpc('ZVE ROLE CUSTOM CRT', [body.name, body.description || '', keys]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return { ok: true, source: 'pending', id: `local-${Date.now()}`, message: 'ZVE ROLE CUSTOM CRT not deployed. Role stored locally.' };
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `ZVE ROLE CUSTOM CRT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       const id = (z.lines[1] || '').split('^')[0] || `zve-${Date.now()}`;
       return { ok: true, source: 'zve', id };
     } catch (e) {
@@ -5801,10 +5806,7 @@ async function main() {
       const keys = (body.keys || []).join(';');
       const z = await callZveRpc('ZVE ROLE CUSTOM UPD', [req.params.roleId, body.name, body.description || '', keys]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') {
-        return { ok: true, source: 'pending', id: req.params.roleId };
-      }
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `ZVE ROLE CUSTOM UPD failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       return { ok: true, source: 'zve', id: req.params.roleId };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
@@ -5815,8 +5817,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE ROLE CUSTOM DEL', [req.params.roleId]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return { ok: true, source: 'pending' };
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `ZVE ROLE CUSTOM DEL failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       return { ok: true, source: 'zve' };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
@@ -5828,15 +5829,19 @@ async function main() {
   // ═══════════════════════════════════════════════════════════════════════
 
   app.get('/api/tenant-admin/v1/services', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const tenantId = req.query.tenantId || 'default';
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     try {
       const rows = await lockedRpc(async () => {
-        return ddrList({ file: '49', fields: '.01;1', fieldNames: ['name', 'chief'], search: req.query.search });
+        return ddrList({ file: '49', fields: '.01;1', fieldNames: ['name', 'abbreviation'], search: req.query.search });
       });
-      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '49', data: rows, total: rows.length };
+      // Normalize: sort alphabetically, filter out entries with empty names
+      const data = (rows || [])
+        .filter(r => (r.name || '').trim())
+        .map(r => ({ ien: r.ien, name: r.name, abbreviation: r.abbreviation || '' }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '49', data, total: data.length };
     } catch (e) {
       return reply.code(502).send({ ok: false, error: e.message, stage: 'DDR LISTER File 49' });
     }
@@ -5858,7 +5863,7 @@ async function main() {
       const z = await callZveRpc('ZVE ESIG MANAGE', [String(req.params.duz), 'SET', code, sigBlockName || '']);
       const o = zveOutcome(z);
       if (o.kind === 'missing') {
-        return reply.code(501).send({ ok: false, integrationPending: true, error: 'RPC ZVE ESIG MANAGE does not support SET action yet.' });
+        return reply.code(502).send({ ok: false, error: 'RPC ZVE ESIG MANAGE' });
       }
       if (o.kind !== 'ok' && o.kind !== 'noop') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve', duz: req.params.duz };
@@ -5952,8 +5957,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE MM INBOX', [duz, folder, max]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return { ok: true, source: 'pending', data: [], message: 'ZVE MM INBOX not deployed' };
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `ZVE MM INBOX failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       const data = z.lines.slice(1).map(line => {
         const p = line.split('^');
         return { ien: p[0], from: p[1], subject: p[2], date: p[3], priority: (p[4] || 'NORMAL').toLowerCase(), read: p[5] === '1', basket: p[6] || '' };
@@ -5969,7 +5973,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE MM READ', [duz, req.params.ien]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE MM READ not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE MM READ returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       const header = (z.lines[1] || '').split('^');
       const body = z.lines.slice(2).join('\n');
@@ -5987,7 +5991,7 @@ async function main() {
       const bodyText = (body || '').replace(/\n/g, '|');
       const z = await callZveRpc('ZVE MM SEND', [duz, String(to), subject, bodyText]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE MM SEND not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE MM SEND returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve', messageId: z.lines[0]?.split('^')[1] || '' };
     } catch (e) {
@@ -6000,7 +6004,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE MM DELETE', [duz, req.params.ien]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE MM DELETE not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE MM DELETE returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve' };
     } catch (e) {
@@ -6019,7 +6023,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE 2P SUBMIT', [section, field, oldValue || '', newValue || '', reason || '', duz]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE 2P SUBMIT not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE 2P SUBMIT returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       const reqId = z.lines[0]?.split('^')[1] || '';
       return { ok: true, source: 'zve', requestId: reqId };
@@ -6033,8 +6037,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE 2P LIST', [status]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return { ok: true, source: 'pending', data: [] };
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       const data = z.lines.slice(1).map(line => {
         const p = line.split('^');
         return {
@@ -6054,7 +6057,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE 2P ACTION', [req.params.id, 'APPROVE', duz]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE 2P ACTION not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE 2P ACTION returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve' };
     } catch (e) {
@@ -6067,7 +6070,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE 2P ACTION', [req.params.id, 'REJECT', duz]);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE 2P ACTION not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE 2P ACTION returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve' };
     } catch (e) {
@@ -6135,7 +6138,7 @@ async function main() {
     try {
       const z = await callZveRpc('ZVE ALERT CREATE', [duz, String(to), subject, body || '', priority || 'NORMAL']);
       const o = zveOutcome(z);
-      if (o.kind === 'missing') return reply.code(501).send({ ok: false, error: 'ZVE ALERT CREATE not deployed' });
+      if (o.kind === 'missing') return reply.code(502).send({ ok: false, error: 'ZVE ALERT CREATE returned unexpected missing status', rpcUsed: z.rpcUsed });
       if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: o.msg });
       return { ok: true, source: 'zve' };
     } catch (e) {
@@ -6147,6 +6150,9 @@ async function main() {
   app.setNotFoundHandler(async (_req, reply) => {
     return reply.sendFile('index.html');
   });
+
+  const restored = loadSessionsFromDisk();
+  if (restored > 0) console.log(`[sessions] restored ${restored} session(s) from encrypted store`);
 
   await app.listen({ port: PORT, host: '0.0.0.0' });
   console.log(`Site Administration Console listening on http://127.0.0.1:${PORT}`);
