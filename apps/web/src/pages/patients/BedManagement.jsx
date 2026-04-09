@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getBeds, getWards, updateBed, addBed, deleteBed, getCensus } from '../../services/patientService';
 
 const STATUS_COLORS = {
@@ -27,6 +28,7 @@ export default function BedManagement() {
   const [showAddBed, setShowAddBed] = useState(false);
   const [newBedForm, setNewBedForm] = useState({ room: '', bed: '', ward: '' });
   const [bedSaving, setBedSaving] = useState(false);
+  const [deleteBedTarget, setDeleteBedTarget] = useState(null);
   const refreshTimer = useRef(null);
 
   const fetchData = useCallback(async (showLoading = true) => {
@@ -99,8 +101,14 @@ export default function BedManagement() {
     }
   };
 
-  const handleDeleteBed = async (bed) => {
-    if (!window.confirm(`Remove bed ${bed.bed}? This cannot be undone.`)) return;
+  const handleDeleteBed = (bed) => {
+    setDeleteBedTarget(bed);
+  };
+
+  const confirmDeleteBed = async () => {
+    const bed = deleteBedTarget;
+    if (!bed) return;
+    setDeleteBedTarget(null);
     try {
       await deleteBed(bed.ien || bed.id);
       setBeds(prev => prev.filter(b => b.id !== bed.id));
@@ -414,6 +422,17 @@ export default function BedManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {deleteBedTarget && (
+        <ConfirmDialog
+          title="Remove bed"
+          message={`Remove bed ${deleteBedTarget.bed} in room ${deleteBedTarget.room || '?'}? This cannot be undone.`}
+          confirmLabel="Remove bed"
+          onConfirm={confirmDeleteBed}
+          onCancel={() => setDeleteBedTarget(null)}
+          destructive
+        />
       )}
     </AppShell>
   );

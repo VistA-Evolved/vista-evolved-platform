@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getPatient, getPatientInsurance, addInsurance, updateInsurance, deleteInsurance, getInsuranceCompanies, verifyInsuranceEligibility } from '../../services/patientService';
 
 const inputCls = 'h-10 px-3 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984] focus:ring-1 focus:ring-[#2E5984]';
@@ -202,6 +203,7 @@ export default function InsuranceCoverage() {
   const [companySearch, setCompanySearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -270,8 +272,14 @@ export default function InsuranceCoverage() {
     }
   };
 
-  const handleDelete = async (ins) => {
-    if (!window.confirm(`Delete insurance "${ins.planName}"? This action cannot be undone.`)) return;
+  const handleDelete = (ins) => {
+    setDeleteTarget(ins);
+  };
+
+  const confirmDelete = async () => {
+    const ins = deleteTarget;
+    if (!ins) return;
+    setDeleteTarget(null);
     setDeleteError(null);
     try {
       const res = await deleteInsurance(patientId, ins.id);
@@ -404,6 +412,17 @@ export default function InsuranceCoverage() {
             saving={saving}
             onSave={handleUpdate}
             onClose={() => { setEditingIns(null); setCompanySearch(''); }}
+          />
+        )}
+
+        {deleteTarget && (
+          <ConfirmDialog
+            title="Delete insurance plan"
+            message={`Delete insurance plan "${deleteTarget.planName || 'this plan'}"? This will remove it from the patient's record and cannot be undone.`}
+            confirmLabel="Delete plan"
+            onConfirm={confirmDelete}
+            onCancel={() => setDeleteTarget(null)}
+            destructive
           />
         )}
       </div>

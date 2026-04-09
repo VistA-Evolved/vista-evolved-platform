@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getPatient, admitPatient, getBeds, getWards, getTreatingSpecialties, getProviders } from '../../services/patientService';
 
 const inputCls = 'h-10 px-3 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984] focus:ring-1 focus:ring-[#2E5984]';
@@ -28,6 +29,7 @@ export default function Admission() {
   const [loadingSpecialties, setLoadingSpecialties] = useState(false);
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [showInsuranceWarning, setShowInsuranceWarning] = useState(false);
+  const [checklistPrompt, setChecklistPrompt] = useState(false);
   const [form, setForm] = useState({
     admittingDiagnosis: '', admittingProvider: '', treatingSpecialty: '',
     wardIen: '', roomBed: '', expectedLos: '',
@@ -115,8 +117,14 @@ export default function Admission() {
       return;
     }
     if (!checklistComplete) {
-      if (!window.confirm('The admission checklist is incomplete. Do you want to proceed anyway?')) return;
+      setChecklistPrompt(true);
+      return;
     }
+    await doSubmit();
+  };
+
+  const doSubmit = async () => {
+    setChecklistPrompt(false);
     setSaving(true);
     setSaveError(null);
     try {
@@ -383,6 +391,17 @@ export default function Admission() {
           </div>
         </div>
       </div>
+
+      {checklistPrompt && (
+        <ConfirmDialog
+          title="Incomplete Admission Checklist"
+          message="The admission checklist is incomplete (consent, valuables inventory, allergy verification, or medication reconciliation still pending). Do you want to proceed with this admission anyway?"
+          confirmLabel="Proceed with admission"
+          cancelLabel="Go back"
+          onConfirm={doSubmit}
+          onCancel={() => setChecklistPrompt(false)}
+        />
+      )}
     </AppShell>
   );
 }

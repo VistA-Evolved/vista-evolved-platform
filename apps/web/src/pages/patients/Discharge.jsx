@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getPatient, dischargePatient, getProviders } from '../../services/patientService';
 
 const inputCls = 'h-10 px-3 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984] focus:ring-1 focus:ring-[#2E5984]';
@@ -35,6 +36,8 @@ export default function Discharge() {
   const [saveError, setSaveError] = useState(null);
   const [successData, setSuccessData] = useState(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [amaPrompt, setAmaPrompt] = useState(false);
+  const [checklistPrompt, setChecklistPrompt] = useState(false);
   const [form, setForm] = useState({
     dischargeDateTime: new Date().toISOString().slice(0, 16),
     dischargeDisposition: '',
@@ -85,11 +88,19 @@ export default function Discharge() {
       return;
     }
     if (isAMA) {
-      if (!window.confirm('This patient is being discharged Against Medical Advice (AMA). AMA discharge requires additional documentation. Do you want to proceed?')) return;
+      setAmaPrompt(true);
+      return;
     }
     if (!checklistComplete) {
-      if (!window.confirm('The discharge checklist is incomplete. Do you want to proceed anyway?')) return;
+      setChecklistPrompt(true);
+      return;
     }
+    await doSubmit();
+  };
+
+  const doSubmit = async () => {
+    setAmaPrompt(false);
+    setChecklistPrompt(false);
     setSaving(true);
     setSaveError(null);
     try {
@@ -107,6 +118,16 @@ export default function Discharge() {
       setSaveError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // When the AMA dialog is accepted, we still need to check the checklist
+  const confirmAma = () => {
+    setAmaPrompt(false);
+    if (!checklistComplete) {
+      setChecklistPrompt(true);
+    } else {
+      doSubmit();
     }
   };
 
@@ -309,6 +330,29 @@ export default function Discharge() {
           </div>
         </div>
       </div>
+
+      {amaPrompt && (
+        <ConfirmDialog
+          title="Discharge Against Medical Advice"
+          message="This patient is being discharged Against Medical Advice (AMA). AMA discharge requires additional documentation on the chart and an incident note. Confirm that you intend to proceed."
+          confirmLabel="Proceed with AMA discharge"
+          cancelLabel="Go back"
+          onConfirm={confirmAma}
+          onCancel={() => setAmaPrompt(false)}
+          destructive
+        />
+      )}
+
+      {checklistPrompt && (
+        <ConfirmDialog
+          title="Incomplete Discharge Checklist"
+          message="The discharge checklist is incomplete. One or more required items (discharge instructions, medication reconciliation, follow-up scheduled, or equipment returned) are still pending. Do you want to proceed anyway?"
+          confirmLabel="Proceed with discharge"
+          cancelLabel="Go back"
+          onConfirm={doSubmit}
+          onCancel={() => setChecklistPrompt(false)}
+        />
+      )}
     </AppShell>
   );
 }
