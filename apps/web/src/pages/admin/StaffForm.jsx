@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments } from '../../services/adminService';
-import { inferModule } from '../../utils/transforms';
 
 /**
  * AD-02 / ADM-03+ADM-04: Create / Edit Staff Member (Multi-Step Wizard)
@@ -45,13 +44,6 @@ const ROLES = [
   { value: 'read-only', label: 'Read-Only', description: 'View-only access, no data modification' },
 ];
 
-// Fallback departments — used as suggestions when live VistA SERVICE/SECTION (#49) data is unavailable
-const DEPARTMENTS_FALLBACK = [
-  'Internal Medicine', 'Cardiology', 'Surgery', 'Psychiatry', 'Nursing Service',
-  'Pharmacy', 'Laboratory', 'Radiology', 'Emergency', 'Health Information',
-  'IT Support', 'Administration', 'Social Work', 'Nutrition', 'Dental',
-];
-
 const PROVIDER_TYPES = [
   { value: 'physician', label: 'Physician (MD/DO) — Allopathic / Osteopathic' },
   { value: 'np', label: 'Nurse Practitioner (NP)' },
@@ -64,68 +56,78 @@ const PROVIDER_TYPES = [
   { value: 'dietitian', label: 'Registered Dietitian (RD)' },
 ];
 
-const PERMISSION_GROUPS = [
+// Curated "starter kit" permissions grouped by function. Every key below
+// is a REAL VistA security key present in standard Kernel + CPRS + package
+// installs. If a key isn't in the live VistA catalog at runtime, it is
+// hidden — not shown as a disabled checkbox with a "will be configured"
+// tooltip, which leaks VistA internals to the admin user.
+//
+// The label is only used as a fallback; the runtime render prefers the
+// server-provided displayName + description from the key enrichment.
+const PERMISSION_STARTERS = [
   {
     group: 'Clinical',
-    hint: 'Order writing, clinical notes, patient records',
+    hint: 'Orders, clinical notes, provider access',
     items: [
-      { key: 'ORES', label: 'Write clinical orders', roleDefault: ['provider'] },
-      { key: 'ORES-SIGN', label: 'Sign orders electronically (requires e-signature)', roleDefault: ['provider'] },
-      { key: 'ORELSE', label: 'Enter verbal / telephone orders (requires cosign)', roleDefault: ['nurse'] },
-      { key: 'OREMAS', label: 'Mark orders as signed on chart (unit clerk)', roleDefault: [] },
-      { key: 'DG-RECORD', label: 'View patient records', roleDefault: ['provider', 'nurse', 'pharmacist', 'lab-tech'] },
-      { key: 'TIU-WRITE', label: 'Write clinical notes', roleDefault: ['provider', 'nurse'] },
-      { key: 'TIU-SIGN', label: 'Sign clinical notes (requires e-signature)', roleDefault: ['provider'] },
+      { key: 'PROVIDER',       label: 'Provider (can be selected on orders and encounters)', roleDefault: ['provider', 'nurse'] },
+      { key: 'ORES',           label: 'Write clinical orders (physicians, signed)',          roleDefault: ['provider'] },
+      { key: 'ORELSE',         label: 'Enter verbal / telephone orders (non-physician)',     roleDefault: ['nurse'] },
+      { key: 'OREMAS',         label: 'MAS order entry (unit clerks / ward clerks)',         roleDefault: [] },
     ],
   },
   {
     group: 'Pharmacy',
-    hint: 'Prescriptions, formulary, medication administration',
+    hint: 'Outpatient and inpatient pharmacy operations',
     items: [
-      { key: 'PSORPH', label: 'Process outpatient prescriptions', roleDefault: ['pharmacist'] },
-      { key: 'PSJ-VERIFY', label: 'Verify inpatient medication orders', roleDefault: ['pharmacist'] },
-      { key: 'PSOFORM', label: 'Manage drug formulary', roleDefault: ['pharmacist'] },
-      { key: 'PSB-ADMIN', label: 'Administer medications (bedside verification)', roleDefault: ['nurse'] },
+      { key: 'PSORPH',         label: 'Outpatient pharmacy refill processing',               roleDefault: ['pharmacist'] },
+      { key: 'PSO MANAGER',    label: 'Outpatient pharmacy manager',                         roleDefault: [] },
+      { key: 'PSJ PHARMACIST', label: 'Inpatient pharmacist',                                roleDefault: ['pharmacist'] },
+      { key: 'PSD PHARMACIST', label: 'Controlled substances pharmacist',                    roleDefault: [] },
     ],
   },
   {
     group: 'Laboratory',
     hint: 'Lab operations, result verification, supervision',
     items: [
-      { key: 'LRLAB', label: 'Core lab operations (accessioning, results)', roleDefault: ['lab-tech'] },
-      { key: 'LRVERIFY', label: 'Verify and release lab results', roleDefault: [] },
-      { key: 'LRSUPER', label: 'Lab supervisor functions', roleDefault: [] },
+      { key: 'LRLAB',          label: 'Core lab operations (accessioning, results)',         roleDefault: ['lab-tech'] },
+      { key: 'LRVERIFY',       label: 'Verify and release lab results',                      roleDefault: [] },
+      { key: 'LRSUPER',        label: 'Lab supervisor',                                      roleDefault: [] },
     ],
   },
   {
     group: 'Scheduling',
-    hint: 'Appointments, schedule management, overrides',
+    hint: 'Appointments, clinic schedules, supervisor overrides',
     items: [
-      { key: 'SD-SCHED', label: 'Create and manage appointments', roleDefault: ['scheduler', 'front-desk'] },
-      { key: 'SD-SUPER', label: 'Scheduling supervisor (override closures, manage no-shows)', roleDefault: [] },
+      { key: 'SD SUPERVISOR',  label: 'Scheduling supervisor',                               roleDefault: [] },
+      { key: 'SDMGR',          label: 'Scheduling manager',                                  roleDefault: ['scheduler'] },
     ],
   },
   {
     group: 'Registration',
-    hint: 'Patient demographics, restricted record access',
+    hint: 'Patient registration and sensitive-record access',
     items: [
-      { key: 'DG-ACCESS', label: 'Access patient registration and demographics', roleDefault: ['front-desk', 'nurse', 'provider'] },
-      { key: 'DG-SENSITIVE', label: 'Access restricted/protected patient records (break-the-glass)', roleDefault: [] },
+      { key: 'DG REGISTER',    label: 'Patient registration clerk',                          roleDefault: ['front-desk'] },
+      { key: 'DG SENSITIVITY', label: 'Access restricted / sensitive patient records',       roleDefault: [] },
+      { key: 'DG SUPERVISOR',  label: 'ADT supervisor',                                      roleDefault: [] },
+    ],
+  },
+  {
+    group: 'Imaging',
+    hint: 'VistA Imaging and radiology',
+    items: [
+      { key: 'MAG SYSTEM',     label: 'Imaging system manager',                              roleDefault: [] },
+      { key: 'RA ALLOC',       label: 'Radiology resource allocator',                        roleDefault: ['rad-tech'] },
     ],
   },
   {
     group: 'System Administration',
-    hint: 'User management, system-level access',
+    hint: 'User management, Kernel, and programmer access',
     items: [
-      { key: 'XUMGR', label: 'Manage all users and assign any permission', roleDefault: ['system-admin'] },
-      { key: 'XUPROG', label: 'Full system programmer access', roleDefault: ['system-admin'] },
+      { key: 'XUMGR',          label: 'IRM / Site manager (full user admin)',                roleDefault: ['system-admin'] },
+      { key: 'XUPROG',         label: 'Programmer (Kernel access)',                          roleDefault: [] },
+      { key: 'XUPROGMODE',     label: 'Programmer mode access',                              roleDefault: [] },
     ],
   },
-];
-
-// LOCATIONS is now loaded from live VistA /divisions endpoint
-const LOCATIONS_FALLBACK = [
-  { value: 'main', label: 'Main Hospital — Station 500', type: 'Medical Center' },
 ];
 
 export default function StaffForm() {
@@ -137,8 +139,10 @@ export default function StaffForm() {
   const [validationErrors, setValidationErrors] = useState({});
   const [liveSites, setLiveSites] = useState([]);
   const [livePermissions, setLivePermissions] = useState([]);
+  const [livePermissionMap, setLivePermissionMap] = useState(new Map());
   const [liveDepartments, setLiveDepartments] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [refDataError, setRefDataError] = useState(null);
   const [esigStatus, setEsigStatus] = useState({ hasCode: false, sigBlockName: '' });
   const [clearingEsig, setClearingEsig] = useState(false);
   const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
@@ -146,23 +150,46 @@ export default function StaffForm() {
   useEffect(() => {
     const loadRefData = async () => {
       setDataLoading(true);
+      setRefDataError(null);
       try {
         const [sitesRes, permsRes, deptRes] = await Promise.all([getSites(), getPermissions(), getDepartments()]);
-        const sites = (sitesRes?.data || []).map(d => ({
-          value: d.ien, label: `${d.name} — ${d.stationNumber}`, type: d.name.includes('CBOC') ? 'Community Clinic' : 'Medical Center',
-        }));
-        setLiveSites(sites.length > 0 ? sites : LOCATIONS_FALLBACK);
 
+        // Sites come from MEDICAL CENTER DIVISION #40.8 via the /divisions route
+        const sites = (sitesRes?.data || []).map(d => ({
+          value: d.ien,
+          label: d.stationNumber ? `${d.name} — ${d.stationNumber}` : d.name,
+          type: (d.name || '').includes('CBOC') ? 'Community Clinic' : 'Medical Center',
+        }));
+        setLiveSites(sites);
+
+        // Preserve the full server enrichment for each key (displayName,
+        // packageName, description) so the permissions step shows live
+        // human labels instead of the hardcoded fallback text.
         const perms = (permsRes?.data || []).map(k => ({
-          key: k.keyName, label: k.keyName, module: inferModule(k.keyName), holderCount: k.holderCount || 0,
+          key: k.keyName,
+          displayName: k.displayName || k.descriptiveName || k.keyName,
+          description: k.description || '',
+          packageName: k.packageName || '',
+          holderCount: k.holderCount || 0,
         }));
         setLivePermissions(perms);
+        setLivePermissionMap(new Map(perms.map(p => [p.key, p])));
 
-        const depts = (deptRes?.data || []).map(d => d.name).filter(Boolean);
-        setLiveDepartments(depts.length > 0 ? depts : DEPARTMENTS_FALLBACK);
-      } catch {
-        setLiveSites(LOCATIONS_FALLBACK);
-        setLiveDepartments(DEPARTMENTS_FALLBACK);
+        // SERVICE/SECTION #49 populates the department dropdown. VistA
+        // allows duplicate names (e.g. two "NHCU" entries with different
+        // IENs), so we dedupe by name for the dropdown.
+        const deptNames = [...new Set((deptRes?.data || []).map(d => d.name).filter(Boolean))].sort();
+        setLiveDepartments(deptNames);
+
+        if (sites.length === 0) {
+          setRefDataError('No sites returned from VistA (MEDICAL CENTER DIVISION #40.8 is empty or unreachable).');
+        } else if (deptNames.length === 0) {
+          setRefDataError('No departments returned from VistA (SERVICE/SECTION #49 is empty or unreachable).');
+        } else if (perms.length === 0) {
+          setRefDataError('No security keys returned from VistA (SECURITY KEY #19.1 is empty or unreachable).');
+        }
+      } catch (err) {
+        setRefDataError(`Failed to load reference data from VistA: ${err.message || 'unknown error'}`);
       } finally {
         setDataLoading(false);
       }
@@ -229,6 +256,17 @@ export default function StaffForm() {
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const step = STEPS[currentStep];
   const showProviderStep = form.isProvider || ['provider', 'pharmacist', 'nurse'].includes(form.primaryRole);
+
+  // When the primary site changes, drop it from the additional-sites list
+  // so a user can't be assigned twice to the same division.
+  useEffect(() => {
+    if (!form.primaryLocation) return;
+    if (!form.additionalLocations.includes(form.primaryLocation)) return;
+    setForm(f => ({
+      ...f,
+      additionalLocations: f.additionalLocations.filter(v => v !== form.primaryLocation),
+    }));
+  }, [form.primaryLocation, form.additionalLocations]);
 
   const handleSubmit = async () => {
     // ORES/ORELSE mutual exclusion — block submission
@@ -377,7 +415,17 @@ export default function StaffForm() {
         {dataLoading && (
           <div className="flex items-center gap-2 p-3 bg-info-bg rounded-md text-sm text-info mb-4">
             <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-            Loading reference data from VistA (sites, permissions)...
+            Loading reference data from VistA (sites, departments, permissions)...
+          </div>
+        )}
+        {!dataLoading && refDataError && (
+          <div className="flex items-start gap-2 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-md text-sm text-[#CC3333] mb-4">
+            <span className="material-symbols-outlined text-[18px] mt-0.5">error</span>
+            <div>
+              <strong>Reference data unavailable.</strong>
+              <div className="mt-0.5 text-[12px] text-[#666]">{refDataError}</div>
+              <div className="mt-0.5 text-[12px] text-[#666]">You can still fill out this form, but dropdowns for sites, departments, and permissions will be empty until VistA is reachable.</div>
+            </div>
           </div>
         )}
 
@@ -667,46 +715,67 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 6: Permissions & Features — Doc 2 Section 3.2 Step 5 */}
+          {/* STEP 6: Permissions & Features */}
           {step.id === 'permissions' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Permissions & Features</h2>
               <p className="text-sm text-text-secondary mb-4">
                 Permissions are pre-configured based on the selected role. Adjust individual permissions as needed.
-                Each permission maps to a system-level access right.
+                Each permission corresponds to a live security key in this system.
                 {livePermissions.length > 0 && (
-                  <span className="ml-1 text-[11px] text-[#999]">({livePermissions.length} live VistA keys available)</span>
+                  <span className="ml-1 text-[11px] text-[#999]">({livePermissions.length} permissions available)</span>
                 )}
               </p>
-              {PERMISSION_GROUPS.map(group => (
-                <div key={group.group} className="border border-border rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-text mb-1">{group.group}</h3>
-                  <p className="text-[10px] text-text-muted mb-3">{group.hint}</p>
-                  <div className="space-y-2">
-                    {group.items.map(item => {
-                      const isDefault = item.roleDefault.includes(form.primaryRole);
-                      const isChecked = form.assignedPermissions.includes(item.key) || isDefault;
-                      const existsInVista = livePermissions.length === 0 || livePermissions.some(p => p.key === item.key);
-                      return (
-                        <label key={item.key} className={`flex items-center gap-2 text-sm cursor-pointer ${!existsInVista && livePermissions.length > 0 ? 'text-text-muted opacity-60' : 'text-text-secondary'}`}
-                          title={!existsInVista && livePermissions.length > 0 ? 'This permission will be configured when the corresponding VistA module is installed' : ''}>
-                          <input type="checkbox" checked={isChecked}
-                            disabled={!existsInVista && livePermissions.length > 0}
-                            onChange={e => {
-                              const next = e.target.checked
-                                ? [...form.assignedPermissions, item.key]
-                                : form.assignedPermissions.filter(k => k !== item.key);
-                              updateField('assignedPermissions', next);
-                            }}
-                            className="w-4 h-4 rounded border-border" />
-                          <span className={isDefault ? 'text-text font-medium' : ''}>{item.label}</span>
-                          {isDefault && <span className="text-[9px] text-steel bg-[#E8EEF5] px-1.5 py-0.5 rounded-full">role default</span>}
-                        </label>
-                      );
-                    })}
+              {PERMISSION_STARTERS.map(group => {
+                // Only render keys that actually exist in the live inventory.
+                // Anything missing is hidden, not shown as a disabled checkbox.
+                const visibleItems = group.items.filter(item => livePermissions.length === 0 || livePermissionMap.has(item.key));
+                if (visibleItems.length === 0) return null;
+                return (
+                  <div key={group.group} className="border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-semibold text-text mb-1">{group.group}</h3>
+                    <p className="text-[10px] text-text-muted mb-3">{group.hint}</p>
+                    <div className="space-y-2">
+                      {visibleItems.map(item => {
+                        const isDefault = item.roleDefault.includes(form.primaryRole);
+                        const isChecked = form.assignedPermissions.includes(item.key) || isDefault;
+                        // Prefer the server-enriched display name and description,
+                        // falling back to the hardcoded label only when VistA data
+                        // hasn't loaded yet.
+                        const live = livePermissionMap.get(item.key);
+                        const displayLabel = (live?.displayName && live.displayName !== item.key)
+                          ? live.displayName
+                          : item.label;
+                        const description = live?.description || '';
+                        return (
+                          <label key={item.key} className="flex items-start gap-2 text-sm text-text-secondary cursor-pointer hover:bg-surface-alt rounded px-1 py-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                const next = e.target.checked
+                                  ? [...form.assignedPermissions, item.key]
+                                  : form.assignedPermissions.filter(k => k !== item.key);
+                                updateField('assignedPermissions', next);
+                              }}
+                              className="w-4 h-4 rounded border-border mt-0.5 flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={isDefault ? 'text-text font-medium' : ''}>{displayLabel}</span>
+                                {isDefault && <span className="text-[9px] text-steel bg-[#E8EEF5] px-1.5 py-0.5 rounded-full">role default</span>}
+                              </div>
+                              {description && (
+                                <div className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{description}</div>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {/* Secondary Features — Doc 2: SECONDARY MENU OPTIONS #203 */}
               <div className="border border-border rounded-lg p-4">
@@ -736,16 +805,16 @@ export default function StaffForm() {
                 </div>
               </div>
 
-              {/* ORES/ORELSE mutual exclusion enforcement per Doc 21 Rule 1 */}
+              {/* Physician-order vs verbal-order mutual exclusion */}
               {(form.assignedPermissions.includes('ORES') && form.assignedPermissions.includes('ORELSE')) && (
                 <div className="p-3 bg-[#FDE8E8] rounded-lg text-[13px] text-[#222] flex items-start gap-2 border border-[#CC3333]">
                   <span className="material-symbols-outlined text-[#CC3333] text-[18px] mt-0.5">error</span>
                   <div>
-                    <strong className="text-[#CC3333]">CONFLICT — Mutual Exclusion Violation</strong>
+                    <strong className="text-[#CC3333]">Conflicting permissions</strong>
                     <p className="mt-1 text-[#666]">
-                      "Write clinical orders" (ORES) and "Enter verbal orders" (ORELSE) are mutually exclusive.
-                      A user cannot both sign their own orders and enter verbal orders requiring cosignature.
-                      Remove one of these permissions before proceeding.
+                      "Write clinical orders" and "Enter verbal / telephone orders" cannot both be assigned to
+                      the same staff member. A user cannot both sign their own orders and enter verbal orders
+                      that require cosignature. Uncheck one before continuing.
                     </p>
                   </div>
                 </div>
