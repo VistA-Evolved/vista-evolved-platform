@@ -23,6 +23,29 @@ const REPORT_TYPES = [
   { id: 'param-changes', name: 'Parameter Changes', description: 'All parameter changes in period.', icon: 'tune' },
 ];
 
+/* ── Task name humanization (same as SystemHealth) ── */
+const TASK_HUMAN_NAMES = {
+  'XMKPLQ': 'MailMan Queue Processor', 'XMKPL': 'MailMan Queue Processor',
+  'XM KPLQ': 'MailMan Queue Processor', 'HLCSIN': 'HL7 Incoming Filer',
+  'HLCSOUT': 'HL7 Outgoing Filer', 'HLCSLM': 'HL7 Logical Link Manager',
+  'HLCSTCP': 'HL7 TCP Link Manager', 'XQ1': 'Background Task Runner',
+  'XQSCHED': 'Task Scheduler', 'XQBTPL': 'Background Process',
+  'XQCLEAN': 'Task Queue Cleanup', 'XQSMD': 'Sub-Manager',
+  'XQCHK': 'Health Check', 'RMPFBLD': 'Fee Basis Rebuild',
+  'LRTASK': 'Lab Background Tasks', 'LRAUTO': 'Lab Auto-Verify',
+  'LRORMON': 'Lab Order Monitor', 'LRNIGHT': 'Lab Nightly Tasks',
+  'YTXCHK': 'Mental Health Instrument Check', 'PRSPCCPO': 'Payroll Process',
+  'ORSMON': 'Order Status Monitor', 'OREVNTX': 'Event-Delayed Order Processor',
+  'PSBEDT': 'BCMA Background Edit', 'XOBVSKT': 'Socket Listener',
+  'KMPDBU': 'Background Monitor',
+};
+
+function humanizeTaskName(raw) {
+  if (!raw) return 'Unknown Task';
+  const key = raw.replace(/^\^/, '').split('^')[0].trim().toUpperCase();
+  return TASK_HUMAN_NAMES[key] || raw.replace(/^\^/, '');
+}
+
 export default function SystemMonitor() {
   const [activeTab, setActiveTab] = useState('tasks');
   const [selectedReport, setSelectedReport] = useState(null);
@@ -87,9 +110,9 @@ export default function SystemMonitor() {
       <div className="p-6 max-w-[1400px]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[28px] font-bold text-text">System Monitor & Reports</h1>
+            <h1 className="text-[22px] font-bold text-text">System Monitor & Reports</h1>
             <p className="text-sm text-text-secondary mt-1">
-              {loading ? 'Loading system status...' : 'Live system health from VistA backend.'}
+              {loading ? 'Loading system status...' : 'Live system health monitoring.'}
             </p>
           </div>
           <button onClick={loadData} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
@@ -105,32 +128,32 @@ export default function SystemMonitor() {
           <div className="grid grid-cols-4 gap-4 mb-6">
             <HealthCard label="Background Tasks" value={taskStatus?.status || 'Unknown'} ok={taskRunning}
               icon="play_circle" detail={taskRunning ? 'Tasks are running' : 'Tasks are stopped — automated processes halted'} />
-            <HealthCard label="VistA Connection" value={vistaOk ? 'Connected' : 'Disconnected'} ok={vistaOk}
+            <HealthCard label="Backend Connection" value={vistaOk ? 'Connected' : 'Disconnected'} ok={vistaOk}
               icon="link" detail={vistaOk ? `Mode: ${vistaStatus?.connectionMode || 'direct'}` : 'Backend unreachable'} />
             <HealthCard label="Error Trap" value={`${errorCount} entries`} ok={errorCount < 10}
               icon="bug_report" detail={errorCount > 0 ? 'Review recommended' : 'No errors recorded'} />
             <HealthCard label="Current User" value={vistaStatus?.vista?.userName || '—'} ok={true}
-              icon="person" detail={`DUZ: ${vistaStatus?.vista?.duz || '—'}`} />
+              icon="person" detail="Authenticated session" />
           </div>
         )}
 
-        <div className="flex items-center gap-1 border-b border-border mb-6">
-          <button onClick={() => setActiveTab('tasks')}
+        <div className="flex items-center gap-1 border-b border-border mb-6" role="tablist">
+          <button onClick={() => setActiveTab('tasks')} role="tab" aria-selected={activeTab === 'tasks'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'tasks' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'}`}>
             System Health
           </button>
-          <button onClick={() => setActiveTab('hl7')}
+          <button onClick={() => setActiveTab('hl7')} role="tab" aria-selected={activeTab === 'hl7'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'hl7' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'}`}>
             HL7 Interfaces
           </button>
-          <button onClick={() => setActiveTab('errors')}
+          <button onClick={() => setActiveTab('errors')} role="tab" aria-selected={activeTab === 'errors'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'errors' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'}`}>
             Error Trap ({errorCount})
           </button>
-          <button onClick={() => setActiveTab('reports')}
+          <button onClick={() => setActiveTab('reports')} role="tab" aria-selected={activeTab === 'reports'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'reports' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'}`}>
             System Reports
@@ -162,13 +185,12 @@ export default function SystemMonitor() {
             </div>
 
             <div className="bg-white border border-border rounded-lg p-5">
-              <h2 className="text-sm font-semibold text-text uppercase tracking-wider mb-3">VistA Connection Details</h2>
+              <h2 className="text-sm font-semibold text-text uppercase tracking-wider mb-3">Backend Connection Details</h2>
               {vistaStatus ? (
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div><span className="text-text-muted">Reachable:</span> <span className={vistaOk ? 'text-success font-semibold' : 'text-danger font-semibold'}>{vistaOk ? 'Yes' : 'No'}</span></div>
-                  <div><span className="text-text-muted">URI:</span> <span className="font-mono text-text-secondary">{vistaStatus.vista?.uri || vistaStatus.vista?.url || '—'}</span></div>
-                  <div><span className="text-text-muted">Connection Mode:</span> <span className="text-text-secondary">{vistaStatus.connectionMode || '—'}</span></div>
-                  <div><span className="text-text-muted">Production Mode:</span> <span className="text-text-secondary">{vistaStatus.productionMode || '—'}</span></div>
+                  <div><span className="text-text-muted">Connection Mode:</span> <span className="text-text-secondary">{vistaStatus.connectionMode === 'direct-xwb' ? 'Direct' : vistaStatus.connectionMode || '—'}</span></div>
+                  <div><span className="text-text-muted">Environment:</span> <span className="text-text-secondary">{vistaStatus.productionMode === 'production' ? 'Production' : vistaStatus.productionMode === 'test' ? 'Test / Sandbox' : vistaStatus.productionMode || '—'}</span></div>
                   <div><span className="text-text-muted">Connected User:</span> <span className="text-text-secondary">{vistaStatus.vista?.userName || '—'}</span></div>
                 </div>
               ) : (
@@ -192,7 +214,7 @@ export default function SystemMonitor() {
                     <tbody>
                       {activeTasks.map((t, i) => (
                         <tr key={t.ien || i} className="border-t border-border">
-                          <td className="px-3 py-2 text-text">{t.name || t.taskName || t.routine || `Task ${t.ien || i}`}</td>
+                          <td className="px-3 py-2 text-text">{humanizeTaskName(t.name || t.taskName || t.routine)}</td>
                           <td className="px-3 py-2 text-text-secondary">{t.status || '—'}</td>
                           <td className="px-3 py-2 font-mono text-text-muted">{t.lastRun || t.scheduledTime || '—'}</td>
                         </tr>
@@ -219,7 +241,7 @@ export default function SystemMonitor() {
                     <tbody>
                       {scheduledTasks.map((t, i) => (
                         <tr key={t.ien || i} className="border-t border-border">
-                          <td className="px-3 py-2 text-text">{t.name || t.taskName || t.routine || `Task ${t.ien || i}`}</td>
+                          <td className="px-3 py-2 text-text">{humanizeTaskName(t.name || t.taskName || t.routine)}</td>
                           <td className="px-3 py-2 text-text-secondary">{t.frequency || t.schedule || '—'}</td>
                           <td className="px-3 py-2 font-mono text-text-muted">{t.nextRun || t.scheduledTime || '—'}</td>
                         </tr>

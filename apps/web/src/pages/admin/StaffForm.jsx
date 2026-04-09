@@ -113,7 +113,7 @@ const PERMISSION_STARTERS = [
   },
   {
     group: 'Imaging',
-    hint: 'VistA Imaging and radiology',
+    hint: 'Imaging and radiology permissions',
     items: [
       { key: 'MAG SYSTEM',     label: 'Imaging system manager',                              roleDefault: [] },
       { key: 'RA ALLOC',       label: 'Radiology resource allocator',                        roleDefault: ['rad-tech'] },
@@ -121,11 +121,11 @@ const PERMISSION_STARTERS = [
   },
   {
     group: 'System Administration',
-    hint: 'User management, Kernel, and programmer access',
+    hint: 'User management and system administration',
     items: [
-      { key: 'XUMGR',          label: 'IRM / Site manager (full user admin)',                roleDefault: ['system-admin'] },
-      { key: 'XUPROG',         label: 'Programmer (Kernel access)',                          roleDefault: [] },
-      { key: 'XUPROGMODE',     label: 'Programmer mode access',                              roleDefault: [] },
+      { key: 'XUMGR',          label: 'System administrator (full user management)',          roleDefault: ['system-admin'] },
+      { key: 'XUPROG',         label: 'System programmer (advanced access)',                  roleDefault: [] },
+      { key: 'XUPROGMODE',     label: 'Advanced diagnostic access',                           roleDefault: [] },
     ],
   },
 ];
@@ -182,14 +182,14 @@ export default function StaffForm() {
         setLiveDepartments(deptNames);
 
         if (sites.length === 0) {
-          setRefDataError('No sites returned from VistA (MEDICAL CENTER DIVISION #40.8 is empty or unreachable).');
+          setRefDataError('No sites returned. The system may be unreachable.');
         } else if (deptNames.length === 0) {
-          setRefDataError('No departments returned from VistA (SERVICE/SECTION #49 is empty or unreachable).');
+          setRefDataError('No departments returned. The system may be unreachable.');
         } else if (perms.length === 0) {
-          setRefDataError('No security keys returned from VistA (SECURITY KEY #19.1 is empty or unreachable).');
+          setRefDataError('No permissions returned. The system may be unreachable.');
         }
       } catch (err) {
-        setRefDataError(`Failed to load reference data from VistA: ${err.message || 'unknown error'}`);
+        setRefDataError(`Failed to load reference data: ${err.message || 'unknown error'}`);
       } finally {
         setDataLoading(false);
       }
@@ -214,7 +214,9 @@ export default function StaffForm() {
           sigBlockName: vg.electronicSignature?.sigBlockName || esigData?.sigBlockName || '',
           assignedPermissions: keys,
         }));
-      }).catch(() => {});
+      }).catch((err) => {
+        setRefDataError(`Failed to load staff member data: ${err.message || 'unknown error'}`);
+      });
     }
   }, [isEdit, userId]);
 
@@ -271,7 +273,7 @@ export default function StaffForm() {
   const handleSubmit = async () => {
     // ORES/ORELSE mutual exclusion — block submission
     if (form.assignedPermissions.includes('ORES') && form.assignedPermissions.includes('ORELSE')) {
-      setSubmitError('Cannot save: ORES and ORELSE are mutually exclusive. Remove one before proceeding.');
+      setSubmitError('Cannot save: "Write clinical orders" and "Enter verbal orders" are mutually exclusive — a staff member cannot hold both. Remove one before proceeding.');
       return;
     }
     setSubmitting(true);
@@ -342,7 +344,8 @@ export default function StaffForm() {
 
   const visibleSteps = STEPS.filter(s => {
     if (s.id === 'provider' && !showProviderStep) return false;
-    if (s.id === 'esignature' && !isEdit) return false;
+    // Show e-sig step during create only for providers (who will need to set one)
+    if (s.id === 'esignature' && !isEdit && !showProviderStep) return false;
     return true;
   });
 
@@ -373,7 +376,7 @@ export default function StaffForm() {
   return (
     <AppShell breadcrumb={`Admin > ${isEdit ? 'Edit Staff Member' : 'Create Staff Member'}`}>
       <div className="p-6 max-w-5xl">
-        <h1 className="text-[28px] font-bold text-text mb-2">
+        <h1 className="text-[22px] font-bold text-text mb-2">
           {isEdit ? 'Edit Staff Member' : 'Create New Staff Member'}
         </h1>
         <p className="text-sm text-text-secondary mb-6">
@@ -418,7 +421,7 @@ export default function StaffForm() {
         {dataLoading && (
           <div className="flex items-center gap-2 p-3 bg-info-bg rounded-md text-sm text-info mb-4">
             <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-            Loading reference data from VistA (sites, departments, permissions)...
+            Loading reference data (sites, departments, permissions)...
           </div>
         )}
         {!dataLoading && refDataError && (
@@ -427,7 +430,7 @@ export default function StaffForm() {
             <div>
               <strong>Reference data unavailable.</strong>
               <div className="mt-0.5 text-[12px] text-[#666]">{refDataError}</div>
-              <div className="mt-0.5 text-[12px] text-[#666]">You can still fill out this form, but dropdowns for sites, departments, and permissions will be empty until VistA is reachable.</div>
+              <div className="mt-0.5 text-[12px] text-[#666]">You can still fill out this form, but dropdowns for sites, departments, and permissions will be empty until the system is reachable.</div>
             </div>
           </div>
         )}
@@ -514,7 +517,7 @@ export default function StaffForm() {
                   ))}
                 </div>
               </FormField>
-              <FormField label="Department" required hint="Loaded from VistA SERVICE/SECTION file (#49). Type to search or enter a custom department.">
+              <FormField label="Department" required hint="Type to search or enter a custom department.">
                 <input type="text" list="department-list" value={form.department} onChange={e => updateField('department', e.target.value)}
                   placeholder="Select or type department..." className="form-input" />
                 <datalist id="department-list">
@@ -653,20 +656,23 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 5: E-Signature (edit mode only) */}
-          {step.id === 'esignature' && isEdit && (
+          {/* STEP 5: E-Signature */}
+          {step.id === 'esignature' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">E-Signature Configuration</h2>
               <p className="text-sm text-text-secondary mb-4">
                 Electronic signatures are required for signing clinical orders and notes.
-                Administrators can view status and clear a signature, but cannot set it — the staff member must set their own on sign-in.
+                {isEdit
+                  ? ' Administrators can view status and clear a signature, but cannot set it — the staff member must set their own on sign-in.'
+                  : ' After account creation, this staff member will be prompted to set their electronic signature on first sign-in.'}
               </p>
 
+              {isEdit ? (
               <div className="bg-white border border-border rounded-lg p-5">
                 <h3 className="text-sm font-semibold text-text mb-3">Current Status</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">E-Signature Code</div>
+                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">E-Signature</div>
                     <div className="mt-1 flex items-center gap-2">
                       {esigStatus.hasCode ? (
                         <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold bg-[#E8F5E9] text-[#2E7D32] uppercase">Set</span>
@@ -681,7 +687,21 @@ export default function StaffForm() {
                   </div>
                 </div>
               </div>
+              ) : (
+              <div className="bg-white border border-border rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-text mb-3">E-Signature Setup</h3>
+                <p className="text-xs text-text-secondary mb-3">
+                  This provider will be prompted to create their electronic signature on first sign-in.
+                  You can pre-configure the signature block name below.
+                </p>
+                <div className="flex items-center gap-3">
+                  <input type="text" value={form.sigBlockName || ''} onChange={e => updateField('sigBlockName', e.target.value)}
+                    placeholder="LASTNAME, FIRSTNAME CREDENTIALS" className="form-input flex-1" />
+                </div>
+              </div>
+              )}
 
+              {isEdit && (
               <div className="bg-white border border-border rounded-lg p-5">
                 <h3 className="text-sm font-semibold text-text mb-3">Signature Block Name</h3>
                 <p className="text-xs text-text-secondary mb-3">
@@ -696,8 +716,9 @@ export default function StaffForm() {
                   </button>
                 </div>
               </div>
+              )}
 
-              {esigStatus.hasCode && (
+              {isEdit && esigStatus.hasCode && (
                 <div className="bg-white border border-border rounded-lg p-5">
                   <h3 className="text-sm font-semibold text-text mb-2">Clear E-Signature</h3>
                   <p className="text-xs text-text-secondary mb-3">
@@ -706,7 +727,7 @@ export default function StaffForm() {
                   </p>
                   <button disabled={clearingEsig} onClick={handleClearEsig}
                     className="px-4 py-2 text-xs font-medium border border-[#CC3333] text-[#CC3333] rounded-md hover:bg-[#FDE8E8] transition-colors disabled:opacity-50">
-                    {clearingEsig ? 'Clearing...' : 'Clear E-Signature Code'}
+                    {clearingEsig ? 'Clearing...' : 'Clear E-Signature'}
                   </button>
                 </div>
               )}
@@ -724,7 +745,7 @@ export default function StaffForm() {
               <h2 className="text-lg font-semibold text-text mb-4">Permissions & Features</h2>
               <p className="text-sm text-text-secondary mb-4">
                 Permissions are pre-configured based on the selected role. Adjust individual permissions as needed.
-                Each permission corresponds to a live security key in this system.
+                Each permission controls specific system capabilities.
                 {livePermissions.length > 0 && (
                   <span className="ml-1 text-[11px] text-[#999]">({livePermissions.length} permissions available)</span>
                 )}

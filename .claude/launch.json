@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/web"],
+      "port": 3000
+    },
+    {
+      "name": "tenant-admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/tenant-admin"],
+      "port": 4520
+    },
+    {
+      "name": "control-plane-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/control-plane-api"],
+      "port": 4510
+    },
+    {
+      "name": "control-plane",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/control-plane"],
+      "port": 4500
+    }
+  ]
+}

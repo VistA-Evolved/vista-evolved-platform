@@ -13,12 +13,15 @@ import StaffDirectory from './pages/admin/StaffDirectory';
 import StaffForm from './pages/admin/StaffForm';
 import PermissionsCatalog from './pages/admin/PermissionsCatalog';
 import RoleTemplates from './pages/admin/RoleTemplates';
-import SiteParameters from './pages/admin/SiteParameters';
 import SiteManagement from './pages/admin/SiteManagement';
+import SecurityAuth from './pages/admin/SecurityAuth';
+import SystemConfig from './pages/admin/SystemConfig';
+import SystemHealth from './pages/admin/SystemHealth';
 import AuditLog from './pages/admin/AuditLog';
 import AlertsNotifications from './pages/admin/AlertsNotifications';
-import SystemMonitor from './pages/admin/SystemMonitor';
-import MasterConfig from './pages/admin/MasterConfig';
+import DepartmentsServices from './pages/admin/DepartmentsServices';
+import SiteParameters from './pages/admin/SiteParameters';
+import AdminReports from './pages/admin/AdminReports';
 
 import PatientSearch from './pages/patients/PatientSearch';
 import PatientDashboard from './pages/patients/PatientDashboard';
@@ -123,8 +126,8 @@ function RequireAdmin({ children }) {
             <span className="material-symbols-outlined text-[48px] text-red-400 mb-3 block">lock</span>
             <h2 className="text-xl font-semibold text-text mb-2">Access Denied</h2>
             <p className="text-sm text-text-muted">
-              You do not have the required security keys to access the Admin workspace.
-              Contact your IRM to request XUMGR or equivalent access.
+              You do not have the required permissions to access the Admin workspace.
+              Contact your system administrator to request access.
             </p>
           </div>
         </div>
@@ -148,17 +151,29 @@ export default function App() {
 
           {/* Admin/Security workspace */}
           <Route path="/admin" element={<RequireAdmin><Navigate to="/admin/staff" replace /></RequireAdmin>} />
+          {/* People */}
           <Route path="/admin/staff" element={<RequireAdmin><StaffDirectory /></RequireAdmin>} />
           <Route path="/admin/staff/new" element={<RequireAdmin><StaffForm /></RequireAdmin>} />
           <Route path="/admin/staff/:userId/edit" element={<RequireAdmin><StaffForm /></RequireAdmin>} />
-          <Route path="/admin/permissions" element={<RequireAdmin><PermissionsCatalog /></RequireAdmin>} />
+          {/* Access Control */}
           <Route path="/admin/roles" element={<RequireAdmin><RoleTemplates /></RequireAdmin>} />
-          <Route path="/admin/parameters" element={<RequireAdmin><SiteParameters /></RequireAdmin>} />
+          <Route path="/admin/permissions" element={<RequireAdmin><PermissionsCatalog /></RequireAdmin>} />
+          {/* Organization */}
           <Route path="/admin/sites" element={<RequireAdmin><SiteManagement /></RequireAdmin>} />
+          <Route path="/admin/departments" element={<RequireAdmin><DepartmentsServices /></RequireAdmin>} />
+          {/* System Settings */}
+          <Route path="/admin/security" element={<RequireAdmin><SecurityAuth /></RequireAdmin>} />
+          <Route path="/admin/config" element={<RequireAdmin><SystemConfig /></RequireAdmin>} />
+          <Route path="/admin/module-settings" element={<RequireAdmin><SiteParameters /></RequireAdmin>} />
+          {/* Monitoring */}
+          <Route path="/admin/health" element={<RequireAdmin><SystemHealth /></RequireAdmin>} />
           <Route path="/admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
-          <Route path="/admin/alerts" element={<RequireAdmin><AlertsNotifications /></RequireAdmin>} />
-          <Route path="/admin/monitor" element={<RequireAdmin><SystemMonitor /></RequireAdmin>} />
-          <Route path="/admin/config" element={<RequireAdmin><MasterConfig /></RequireAdmin>} />
+          <Route path="/admin/messages" element={<RequireAdmin><AlertsNotifications /></RequireAdmin>} />
+          <Route path="/admin/reports" element={<RequireAdmin><AdminReports /></RequireAdmin>} />
+          {/* Legacy redirects */}
+          <Route path="/admin/parameters" element={<Navigate to="/admin/module-settings" replace />} />
+          <Route path="/admin/monitor" element={<Navigate to="/admin/health" replace />} />
+          <Route path="/admin/alerts" element={<Navigate to="/admin/messages" replace />} />
 
           {/* Patients/Registration workspace */}
           <Route path="/patients" element={<RequireAuth><PatientSearch /></RequireAuth>} />

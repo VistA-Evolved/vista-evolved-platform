@@ -84,7 +84,7 @@ const PARAM_TREE = [
   {
     section: 'System',
     groups: [
-      { id: 'kernel', label: 'Kernel Parameters', icon: 'settings' },
+      { id: 'kernel', label: 'Core System Settings', icon: 'settings' },
       { id: 'session', label: 'Session & Security', icon: 'lock' },
     ],
   },
@@ -198,8 +198,8 @@ export default function SiteParameters() {
     if (!kernelParams) return [];
     if (selectedGroup === 'kernel') {
       return [
-        { key: 'domainName', name: 'Domain Name', value: kernelParams.domainName?.value || '', type: 'text', description: 'VistA domain name (FQDN)' },
-        { key: 'siteNumber', name: 'Site Name / Number', value: kernelParams.siteNumber?.value || '', type: 'text', description: 'Facility identifier used in VistA' },
+        { key: 'domainName', name: 'Domain Name', value: kernelParams.domainName?.value || '', type: 'text', description: 'System domain name (FQDN)' },
+        { key: 'siteNumber', name: 'Site Name / Number', value: kernelParams.siteNumber?.value || '', type: 'text', description: 'Facility identifier for this system' },
         { key: 'prodAccount', name: 'Production Account', value: kernelParams.prodAccount?.external || '', type: 'readonly', description: 'Whether this is a production or test environment' },
         { key: 'welcomeMessage', name: 'Welcome Message', value: kernelParams.welcomeMessage?.value || '', type: 'textarea', description: 'Text displayed on the login page' },
         { key: 'disableNewUser', name: 'Disable New User Creation', value: kernelParams.disableNewUser?.external || '', type: 'readonly', description: 'Whether automatic user creation is disabled' },
@@ -220,13 +220,13 @@ export default function SiteParameters() {
     // Package-specific params
     const pkgData = packageParams[selectedGroup];
     if (!pkgData || pkgData.error) {
-      return [{ key: 'loading', name: pkgData?.error || 'Loading...', value: '', type: 'readonly', description: pkgData?.note || 'Connecting to VistA package file...' }];
+      return [{ key: 'loading', name: pkgData?.error || 'Loading...', value: '', type: 'readonly', description: pkgData?.note || 'Connecting to system...' }];
     }
     // Parse raw DDR lines into editable fields
     const rawLines = pkgData.rawLines || [];
     if (rawLines.length === 0) {
       const groupDef = PARAM_TREE.flatMap(s => s.groups).find(g => g.id === selectedGroup);
-      return [{ key: 'empty', name: `${groupDef?.label || selectedGroup}`, value: 'No records found', type: 'readonly', description: `VistA file #${groupDef?.vistaFile || '?'} has no entries in this system. Parameters can be configured once the package is initialized.` }];
+      return [{ key: 'empty', name: `${groupDef?.label || selectedGroup}`, value: 'No records found', type: 'readonly', description: 'This module has not been initialized yet. Parameters can be configured once the package is installed and set up.' }];
     }
     return rawLines.map((line, i) => {
       const parts = line.split('^');
@@ -240,7 +240,7 @@ export default function SiteParameters() {
         name: external || `Field ${fieldNum}`,
         value: internal,
         type: 'text',
-        description: `File #${pkgData.file || '?'}, field ${fieldNum}`,
+        description: `Configuration parameter ${fieldNum}`,
       };
     });
   };
@@ -330,9 +330,9 @@ export default function SiteParameters() {
     <AppShell breadcrumb="Admin > Site Parameters">
       <div className="flex h-[calc(100vh-40px)]">
         <div className="w-[260px] border-r border-border overflow-auto p-3 flex-shrink-0">
-          <h1 className="text-[28px] font-bold text-text px-2 mb-1">Site Parameters</h1>
+          <h1 className="text-[22px] font-bold text-text px-2 mb-1">Site Parameters</h1>
           <p className="text-[10px] text-text-muted px-2 mb-4">
-            {loading ? 'Loading from VistA...' : 'Live Kernel System Parameters (#8989.3)'}
+            {loading ? 'Loading...' : 'Live System Parameters'}
           </p>
 
           {PARAM_TREE.map(section => (

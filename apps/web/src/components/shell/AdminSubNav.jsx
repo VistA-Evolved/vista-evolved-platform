@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 const sections = [
   {
-    group: 'Staff Management',
+    group: 'People',
     icon: 'badge',
     items: [
       { label: 'Staff Directory', path: '/admin/staff', icon: 'group' },
@@ -14,32 +14,35 @@ const sections = [
     group: 'Access Control',
     icon: 'key',
     items: [
-      { label: 'Permissions Catalog', path: '/admin/permissions', icon: 'vpn_key' },
-      { label: 'Role Templates', path: '/admin/roles', icon: 'shield_person' },
+      { label: 'Roles & Permissions', path: '/admin/roles', icon: 'shield_person' },
+      { label: 'Permission Catalog', path: '/admin/permissions', icon: 'vpn_key' },
     ],
   },
   {
-    group: 'Site Configuration',
+    group: 'Organization',
+    icon: 'domain',
+    items: [
+      { label: 'Facilities & Sites', path: '/admin/sites', icon: 'apartment' },
+      { label: 'Departments & Services', path: '/admin/departments', icon: 'account_tree' },
+    ],
+  },
+  {
+    group: 'System Settings',
     icon: 'tune',
     items: [
-      { label: 'Site Parameters', path: '/admin/parameters', icon: 'settings_applications' },
-      { label: 'Site Management', path: '/admin/sites', icon: 'domain' },
+      { label: 'Security & Authentication', path: '/admin/security', icon: 'lock' },
+      { label: 'System Configuration', path: '/admin/config', icon: 'settings_applications' },
+      { label: 'Module Settings', path: '/admin/module-settings', icon: 'package_2' },
     ],
   },
   {
-    group: 'Audit & Compliance',
-    icon: 'policy',
-    items: [
-      { label: 'Audit Log', path: '/admin/audit', icon: 'history' },
-      { label: 'Alerts & Notifications', path: '/admin/alerts', icon: 'notifications_active' },
-    ],
-  },
-  {
-    group: 'System Operations',
+    group: 'Monitoring',
     icon: 'monitoring',
     items: [
-      { label: 'System Monitor', path: '/admin/monitor', icon: 'monitor_heart' },
-      { label: 'Master Configuration', path: '/admin/config', icon: 'admin_panel_settings' },
+      { label: 'System Health', path: '/admin/health', icon: 'monitor_heart' },
+      { label: 'Audit Trail', path: '/admin/audit', icon: 'history' },
+      { label: 'Messages & Alerts', path: '/admin/messages', icon: 'notifications_active' },
+      { label: 'Reports', path: '/admin/reports', icon: 'assessment' },
     ],
   },
 ];

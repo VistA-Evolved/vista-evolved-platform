@@ -15,6 +15,8 @@
  *  GET /bulletins       → { data: [{ ien, ... }] }
  */
 
+import { KEY_TRANSLATIONS } from './vocabulary';
+
 // ── FileMan date → JS Date ────────────────────────────
 export function fmDateToDate(fmDate) {
   const s = String(fmDate || '').trim();
@@ -108,16 +110,25 @@ export function inferModule(keyName) {
 
 export function humanizeKeyName(keyName) {
   if (!keyName) return '';
+  const translated = KEY_TRANSLATIONS[keyName] || KEY_TRANSLATIONS[keyName.toUpperCase()];
+  if (translated) return translated;
   return String(keyName)
     .replace(/[_-]/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase())
-    .replace(/\bXu\b/gi, 'Kernel')
+    .replace(/\bXu\b/gi, 'System')
     .replace(/\bOr\b/gi, 'Order Entry')
-    .replace(/\bPs[ojb]?\b/gi, m => ({ ps: 'Pharmacy', pso: 'Outpatient Rx', psj: 'Inpatient Rx', psb: 'BCMA' }[m.toLowerCase()] || m))
+    .replace(/\bPs[ojb]?\b/gi, m => ({ ps: 'Pharmacy', pso: 'Outpatient Rx', psj: 'Inpatient Rx', psb: 'Medication Admin' }[m.toLowerCase()] || m))
     .replace(/\bLr\b/gi, 'Lab')
     .replace(/\bSd\b/gi, 'Scheduling')
     .replace(/\bDg\b/gi, 'Registration')
-    .replace(/\bTiu\b/gi, 'Clinical Docs');
+    .replace(/\bTiu\b/gi, 'Clinical Notes')
+    .replace(/\bMag\b/gi, 'Imaging')
+    .replace(/\bRa\b/gi, 'Radiology')
+    .replace(/\bSr\b/gi, 'Surgery')
+    .replace(/\bGmra\b/gi, 'Allergy')
+    .replace(/\bIb\b/gi, 'Billing')
+    .replace(/\bSc\b/gi, 'Primary Care')
+    .replace(/\bDgpf\b/gi, 'Patient Flags');
 }
 
 export function transformPermission(raw) {

@@ -91,6 +91,10 @@ export async function reactivateStaffMember(duz) {
   return tenantApi.post(`/users/${duz}/reactivate`);
 }
 
+export async function unlockUser(duz) {
+  return tenantApi.post(`/users/${duz}/unlock`);
+}
+
 export async function terminateStaffMember(duz) {
   return tenantApi.post(`/users/${duz}/terminate`);
 }
@@ -310,6 +314,10 @@ export async function getErrorTrap(params = {}) {
 
 export async function getHL7FilerStatus() {
   return tenantApi.get('/hl7/filer-status');
+}
+
+export async function getHL7Interfaces(params = {}) {
+  return tenantApi.get('/hl7-interfaces', params);
 }
 
 export async function getHL7LinkStatus(ien) {

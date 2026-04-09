@@ -4,10 +4,11 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, getPermissions } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, getPermissions, unlockUser } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
+import { KEY_TRANSLATIONS } from '../../utils/vocabulary';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -21,6 +22,21 @@ import { humanizeKeyName } from '../../utils/transforms';
  *   GET /users/:duz     → { data: { id, ien, name, title, status, vistaGrounding: { ... } } }
  *   GET /users/:duz/keys → { data: [{ ien, name }] }
  */
+
+function deriveTitleFromKeys(keys) {
+  if (!keys || keys.length === 0) return '';
+  const keySet = new Set(keys.map(k => (k || '').toUpperCase()));
+  if (keySet.has('XUMGR')) return 'System Administrator';
+  if (keySet.has('ORES') && keySet.has('PROVIDER')) return 'Provider';
+  if (keySet.has('ORELSE') && keySet.has('PROVIDER')) return 'Nurse';
+  if (keySet.has('PSJ PHARMACIST') || keySet.has('PSORPH')) return 'Pharmacist';
+  if (keySet.has('LRLAB') || keySet.has('LRVERIFY')) return 'Lab Technologist';
+  if (keySet.has('RA ALLOC')) return 'Radiology Technologist';
+  if (keySet.has('SDMGR') || keySet.has('SD SUPERVISOR')) return 'Scheduling';
+  if (keySet.has('DG REGISTER')) return 'Registration';
+  if (keySet.has('PROVIDER')) return 'Clinical Staff';
+  return '';
+}
 
 const SIG_STYLES = {
   active:     { label: 'Ready',      cls: 'bg-[#E8F5E9] text-[#2E7D32]' },
@@ -37,9 +53,11 @@ function SigReadinessBadge({ value }) {
 }
 
 const baseColumns = [
-  { key: 'name', label: 'Name', bold: true },
+  { key: 'name', label: 'Name', bold: true, render: (val, row) => row.isDuplicate ? <span>{val} <span className="text-[10px] text-text-secondary font-mono">({row.id})</span></span> : val },
   { key: 'id', label: 'Staff ID', render: (val) => <span className="font-mono text-[11px] text-text-secondary">{val}</span> },
+  { key: 'title', label: 'Title' },
   { key: 'department', label: 'Department' },
+  { key: 'site', label: 'Site' },
   { key: 'status', label: 'Status', align: 'center', render: (val) => <StatusBadge status={val} /> },
   { key: 'esigStatus', label: 'E-Signature', align: 'center', render: (val) => <SigReadinessBadge value={val} /> },
   { key: 'permissionCount', label: 'Permissions', align: 'center', render: (val) => <KeyCountBadge count={val || 0} /> },
@@ -80,16 +98,7 @@ export default function StaffDirectory() {
     ...baseColumns,
     {
       key: '_actions', label: '', sortable: false,
-      render: (_, row) => (
-        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-          <button onClick={() => navigate(`/admin/staff/${row.duz}/edit`)}
-            className="text-steel hover:underline text-[11px] font-medium px-1">Edit</button>
-          <button onClick={() => navigate(`/admin/permissions?user=${row.duz}`)}
-            className="text-steel hover:underline text-[11px] font-medium px-1">Keys</button>
-          <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(row.name)}`)}
-            className="text-steel hover:underline text-[11px] font-medium px-1">Audit</button>
-        </div>
-      ),
+      render: (_, row) => <ActionsMenu row={row} navigate={navigate} />,
     },
   ];
 
@@ -119,18 +128,27 @@ export default function StaffDirectory() {
           id: `S-${u.ien}`,
           duz: u.ien,
           name: u.name || esig.name || '',
+          title: u.title || '',
           department: u.service || '',
+          site: u.division || '',
           status: rawStatus,
           esigStatus: esig.hasCode ? 'active' : 'incomplete',
           hasEsig: esig.hasCode || false,
           sigBlockName: esig.sigBlockName || '',
           permissionCount: u.keyCount || 0,
+          lastLogin: u.lastLogin || '',
         };
       });
 
+      // Disambiguate duplicate names by appending Staff ID suffix
+      const nameCounts = {};
+      for (const u of merged) nameCounts[u.name] = (nameCounts[u.name] || 0) + 1;
+      for (const u of merged) {
+        u.isDuplicate = nameCounts[u.name] > 1;
+        u.displayName = u.isDuplicate ? `${u.name} (${u.id})` : u.name;
+      }
+
       setStaffList(merged);
-
-
     } catch (err) {
       setError(err.message || 'Failed to load staff data');
     } finally {
@@ -153,9 +171,11 @@ export default function StaffDirectory() {
       ]);
       const vg = userRes?.data?.vistaGrounding || {};
       const esig = vg.electronicSignature || {};
+      const keys = (keysRes?.data || []).map(k => k.name);
+      const derivedTitle = deriveTitleFromKeys(keys);
       setDetailData({
         ...row,
-        title: userRes?.data?.title || vg.sigBlockTitle || '',
+        title: userRes?.data?.title || vg.sigBlockTitle || derivedTitle,
         department: vg.serviceSection || '',
         phone: vg.officePhone || '',
         email: vg.email || '',
@@ -177,7 +197,7 @@ export default function StaffDirectory() {
   };
 
   // Filters (client-side since list endpoint only returns ien+name)
-  const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB)/i;
+  const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB|APPLICATION|PROXY|APITEST)/i;
   const filtered = staffList.filter(u => {
     if (hideSystemAccounts && SYSTEM_ACCOUNT_PATTERNS.test(u.name)) return false;
     if (searchText) {
@@ -198,7 +218,7 @@ export default function StaffDirectory() {
   const totalStaff = staffList.length;
   const activeCount = staffList.filter(u => u.status === 'active').length;
   const esigReadyCount = staffList.filter(u => u.hasEsig).length;
-  const esigIncompleteCount = staffList.filter(u => !u.hasEsig).length;
+  const lockedCount = staffList.filter(u => u.status === 'locked').length;
 
   const activeFilters = [
     ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}` }] : []),
@@ -291,10 +311,10 @@ export default function StaffDirectory() {
           <div className="max-w-[1400px]">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-[28px] font-bold text-[#222]">Staff Directory</h1>
-                <p className="text-[15px] text-[#666] mt-1">
+                <h1 className="text-[22px] font-bold text-[#222]">Staff Directory</h1>
+                <p className="text-sm text-[#666] mt-1">
                   Manage staff members, roles, permissions, and provider configuration.
-                  {!loading && <span className="ml-2 text-[13px] text-[#999]">({totalStaff} staff from live VistA)</span>}
+                  {!loading && <span className="ml-2 text-[13px] text-[#999]">({totalStaff} staff members)</span>}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -329,7 +349,7 @@ export default function StaffDirectory() {
                 <MetricCard label="Total Staff" value={totalStaff} icon="badge" />
                 <MetricCard label="Active" value={activeCount} icon="check_circle" color="text-[#2E7D32]" />
                 <MetricCard label="E-Signature Ready" value={esigReadyCount} icon="draw" color="text-[#2E5984]" />
-                <MetricCard label="E-Signature Incomplete" value={esigIncompleteCount} icon="warning" color="text-[#E6A817]" />
+                <MetricCard label="Locked" value={lockedCount} icon="lock" color="text-[#CC3333]" />
               </div>
             )}
 
@@ -372,7 +392,7 @@ export default function StaffDirectory() {
           <div className="w-[45%] border-l border-[#E2E4E8] bg-[#F5F8FB] overflow-auto p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-[#222]">{selectedStaff.name}</h2>
-              <button onClick={() => { setSelectedStaff(null); setDetailData(null); }} className="text-[#999] hover:text-[#222]">
+              <button onClick={() => { setSelectedStaff(null); setDetailData(null); }} className="text-[#999] hover:text-[#222]" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
@@ -392,6 +412,7 @@ export default function StaffDirectory() {
                   <DetailField label="Status" value={<StatusBadge status={detailData.status} />} />
                   {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
                   <DetailField label="Initials" value={detailData.initials} />
+                  <DetailField label="Last Sign-In" value={detailData.lastLogin} />
                 </div>
 
                 {detailData.isProvider && (
@@ -471,6 +492,20 @@ export default function StaffDirectory() {
                       Deactivate
                     </button>
                   )}
+                  {detailData.status === 'locked' && (
+                    <button onClick={async () => {
+                      try {
+                        await unlockUser(detailData.duz);
+                        setSelectedStaff(null);
+                        setDetailData(null);
+                        loadData();
+                      } catch (err) { setError(`Failed to unlock: ${err.message}`); }
+                    }}
+                      className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
+                      <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>
+                      Unlock Account
+                    </button>
+                  )}
                   {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
                     <button onClick={() => handleReactivate(detailData.duz)}
                       className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
@@ -511,13 +546,13 @@ export default function StaffDirectory() {
 
       {showAssignPermsModal && detailData && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAssignPermsModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] flex flex-col" role="dialog" aria-modal="true" aria-label="Assign Permission" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-[#E2E4E8] flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-[#222]">Assign Permission</h3>
                 <p className="text-xs text-[#666] mt-0.5">to {detailData.name}</p>
               </div>
-              <button onClick={() => setShowAssignPermsModal(false)} className="text-[#999] hover:text-[#222]">
+              <button onClick={() => setShowAssignPermsModal(false)} className="text-[#999] hover:text-[#222]" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
@@ -595,11 +630,44 @@ function FilterSelect({ label, value, options, onChange }) {
 }
 
 function DetailField({ label, value, mono }) {
-  const display = (value && value !== '—' && value !== '') ? value : '—';
+  // Spec issue #3: Hide empty fields instead of showing dashes
+  if (!value || value === '—' || value === '') return null;
   return (
     <div>
       <div className="text-[10px] font-bold text-[#999] uppercase tracking-wider">{label}</div>
-      <div className={`text-[13px] mt-0.5 ${mono ? 'font-mono' : ''} ${display === '—' ? 'text-[#CCC] italic' : 'text-[#222]'}`}>{display}</div>
+      <div className={`text-[13px] mt-0.5 ${mono ? 'font-mono' : ''} text-[#222]`}>{value}</div>
+    </div>
+  );
+}
+
+function ActionsMenu({ row, navigate }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative" onClick={e => e.stopPropagation()}>
+      <button onClick={() => setOpen(o => !o)}
+        className="p-1 rounded hover:bg-[#E2E4E8] text-[#999] hover:text-[#222]"
+        aria-label={`Actions for ${row.name}`}>
+        <span className="material-symbols-outlined text-[18px]">more_vert</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-8 z-50 bg-white border border-[#E2E4E8] rounded-lg shadow-lg py-1 w-44">
+            <button onClick={() => { setOpen(false); navigate(`/admin/staff/${row.duz}/edit`); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
+              <span className="material-symbols-outlined text-[14px]">edit</span> Edit
+            </button>
+            <button onClick={() => { setOpen(false); navigate(`/admin/permissions?user=${row.duz}`); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
+              <span className="material-symbols-outlined text-[14px]">vpn_key</span> Permissions
+            </button>
+            <button onClick={() => { setOpen(false); navigate(`/admin/audit?user=${encodeURIComponent(row.name)}`); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
+              <span className="material-symbols-outlined text-[14px]">history</span> Audit Trail
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

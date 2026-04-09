@@ -70,20 +70,20 @@ export default function AlertsNotifications() {
 
   if (error) {
     return (
-      <AppShell breadcrumb="Admin > Alerts & Notifications">
+      <AppShell breadcrumb="Admin > Messages & Alerts">
         <div className="p-6"><ErrorState message={error} onRetry={loadData} /></div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell breadcrumb="Admin > Alerts & Notifications">
+    <AppShell breadcrumb="Admin > Messages & Alerts">
       <div className="p-6 max-w-[1400px]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[28px] font-bold text-text">Alerts & Notifications</h1>
+            <h1 className="text-[22px] font-bold text-text">Messages & Alerts</h1>
             <p className="text-sm text-text-secondary mt-1">
-              {loading ? 'Loading from VistA...' : `${alerts.length} alerts loaded from live VistA bulletin system.`}
+              {loading ? 'Loading...' : `${alerts.length} active alert${alerts.length !== 1 ? 's' : ''}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -96,25 +96,25 @@ export default function AlertsNotifications() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-border mb-6">
-          <button onClick={() => setTab('alerts')}
+        <div className="flex items-center gap-1 border-b border-border mb-6" role="tablist">
+          <button onClick={() => setTab('alerts')} role="tab" aria-selected={tab === 'alerts'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === 'alerts' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
             }`}>
             Alerts
             {newCount > 0 && <span className="ml-1.5 text-[10px] bg-danger-bg text-danger px-1.5 py-0.5 rounded-full font-bold">{newCount}</span>}
           </button>
-          <button onClick={() => setTab('messages')}
+          <button onClick={() => setTab('messages')} role="tab" aria-selected={tab === 'messages'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === 'messages' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
             }`}>
             Messages
           </button>
-          <button onClick={() => setTab('config')}
+          <button onClick={() => setTab('notifications')} role="tab" aria-selected={tab === 'notifications'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === 'config' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
+              tab === 'notifications' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
             }`}>
-            Configuration
+            Notifications
           </button>
         </div>
 
@@ -127,7 +127,7 @@ export default function AlertsNotifications() {
                 <div className="text-center py-12 text-text-muted">
                   <span className="material-symbols-outlined text-[40px] block mb-3">notifications_none</span>
                   <h3 className="text-lg font-semibold text-text mb-1">No Alerts</h3>
-                  <p className="text-sm">No active alerts or bulletins in the VistA system. This is normal for a sandbox environment.</p>
+                  <p className="text-sm">No active alerts at this time.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -161,7 +161,7 @@ export default function AlertsNotifications() {
               <div className="w-[65%] bg-surface-alt border border-border rounded-lg p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-sm text-text">Alert Detail</h3>
-                  <button onClick={() => setSelectedAlert(null)} className="text-text-muted hover:text-text">
+                  <button onClick={() => setSelectedAlert(null)} className="text-text-muted hover:text-text" aria-label="Close">
                     <span className="material-symbols-outlined text-[18px]">close</span>
                   </button>
                 </div>
@@ -173,7 +173,7 @@ export default function AlertsNotifications() {
                   </div>
                   {selectedAlert.raw && (
                     <details className="text-[10px] text-text-muted">
-                      <summary className="cursor-pointer hover:text-text">Raw VistA Data</summary>
+                      <summary className="cursor-pointer hover:text-text">Technical Details</summary>
                       <pre className="mt-1 p-2 bg-white rounded text-[10px] font-mono overflow-auto max-h-40">{JSON.stringify(selectedAlert.raw, null, 2)}</pre>
                     </details>
                   )}
@@ -246,35 +246,33 @@ export default function AlertsNotifications() {
           />
         )}
 
-        {tab === 'config' && (
+        {tab === 'notifications' && (
           <div className="max-w-2xl space-y-6">
             <div className="bg-white border border-border rounded-lg p-5">
-              <h3 className="font-semibold text-sm text-text mb-3">Alert Configuration</h3>
+              <h3 className="font-semibold text-sm text-text mb-3">Alert Routing</h3>
               <p className="text-xs text-text-secondary mb-4">
-                VistA alert routing is controlled by the BULLETIN file and MailMan distribution groups. 
-                Escalation paths are determined by the alert type configuration in each VistA package.
+                Alerts are routed based on the originating clinical module (Lab, Pharmacy, Orders, etc.).
+                Each module defines its own alert types and delivery rules.
               </p>
               <div className="space-y-3">
                 <div className="p-3 bg-surface-alt rounded-md">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="material-symbols-outlined text-[16px] text-info">info</span>
-                    <span className="font-medium text-xs text-text">Alert Delivery</span>
+                    <span className="font-medium text-xs text-text">Delivery</span>
                   </div>
                   <div className="text-[10px] text-text-secondary">
-                    Alerts are delivered via the VistA bulletin system. Each package (Lab, Pharmacy, Orders, etc.) 
-                    defines its own alert types and routing rules. Modify alert routing through the individual 
-                    package parameter files or via the MailMan mail group management.
+                    System alerts are delivered to staff based on their role and department assignments.
+                    Routing rules are configured per clinical module.
                   </div>
                 </div>
                 <div className="p-3 bg-surface-alt rounded-md">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="material-symbols-outlined text-[16px] text-warning">warning</span>
-                    <span className="font-medium text-xs text-text">Unprocessed Alert Behavior</span>
+                    <span className="font-medium text-xs text-text">Escalation</span>
                   </div>
                   <div className="text-[10px] text-text-secondary">
-                    VistA alerts that remain unacknowledged follow the surrogacy chain defined in the 
-                    NEW PERSON file (#200, field 20.6). Ensure surrogate entries are configured for 
-                    all providers who receive clinical alerts.
+                    Unacknowledged alerts follow the escalation chain defined in each staff member's profile.
+                    Ensure surrogate entries are configured for all providers who receive clinical alerts.
                   </div>
                 </div>
               </div>
@@ -286,10 +284,10 @@ export default function AlertsNotifications() {
       {/* Forward Modal */}
       {forwardModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setForwardModal(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-[440px] max-h-[60vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg shadow-xl w-[440px] max-h-[60vh] flex flex-col" role="dialog" aria-modal="true" aria-label="Forward Alert" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h3 className="font-semibold text-text">Forward Alert</h3>
-              <button onClick={() => setForwardModal(null)} className="text-text-muted hover:text-text">
+              <button onClick={() => setForwardModal(null)} className="text-text-muted hover:text-text" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
@@ -401,10 +399,10 @@ function NewAlertModal({ open, onClose, staffList, setStaffList, staffLoading, s
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-[520px] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl w-[520px] flex flex-col" role="dialog" aria-modal="true" aria-label="Send New Alert" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="font-semibold text-text">Send New Alert</h3>
-          <button onClick={onClose} className="text-text-muted hover:text-text"><span className="material-symbols-outlined text-[20px]">close</span></button>
+          <button onClick={onClose} className="text-text-muted hover:text-text" aria-label="Close"><span className="material-symbols-outlined text-[20px]">close</span></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           <div>
@@ -483,22 +481,32 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
     finally { setMessageBodyLoading(false); }
   };
 
+  const [deleteError, setDeleteError] = useState(null);
+
   const handleDelete = async (ien) => {
+    setDeleteError(null);
     try {
       await deleteMailManMessage(ien);
       setMessages(prev => prev.filter(m => m.ien !== ien));
       if (selectedMessage?.ien === ien) { setSelectedMessage(null); setMessageBody(null); }
-    } catch (err) { setError(err?.message || "Delete failed"); }
+    } catch (err) { setDeleteError(err?.message || 'Delete failed'); }
   };
 
   return (
     <div>
+      {deleteError && (
+        <div className="mb-3 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-xs text-[#CC3333] flex items-center gap-2">
+          <span className="material-symbols-outlined text-[14px]">error</span>
+          {deleteError}
+          <button onClick={() => setDeleteError(null)} className="ml-auto text-[#CC3333] hover:underline text-[10px]">Dismiss</button>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
-          {['IN', 'WASTE'].map(f => (
+          {['IN', 'SENT', 'WASTE'].map(f => (
             <button key={f} onClick={() => { setMailFolder(f); setSelectedMessage(null); setMessageBody(null); }}
               className={`px-3 py-1.5 text-xs rounded-md border ${mailFolder === f ? 'bg-[#E8EEF5] border-steel text-steel font-medium' : 'border-border text-text-secondary hover:bg-surface-alt'}`}>
-              {f === 'IN' ? 'Inbox' : 'Deleted'}
+              {f === 'IN' ? 'Inbox' : f === 'SENT' ? 'Sent' : 'Deleted'}
             </button>
           ))}
         </div>
@@ -514,8 +522,8 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
           ) : messages.length === 0 ? (
             <div className="text-center py-12 text-text-muted">
               <span className="material-symbols-outlined text-[40px] block mb-3">mail</span>
-              <h3 className="text-lg font-semibold text-text mb-1">{mailFolder === 'WASTE' ? 'No Deleted Messages' : 'No Messages'}</h3>
-              <p className="text-sm">Your VistA MailMan {mailFolder === 'WASTE' ? 'trash' : 'inbox'} is empty.</p>
+              <h3 className="text-lg font-semibold text-text mb-1">{mailFolder === 'WASTE' ? 'No Deleted Messages' : mailFolder === 'SENT' ? 'No Sent Messages' : 'No Messages'}</h3>
+              <p className="text-sm">Your {mailFolder === 'WASTE' ? 'deleted items' : mailFolder === 'SENT' ? 'sent folder' : 'inbox'} is empty.</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -545,7 +553,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
           <div className="w-[60%] bg-surface-alt border border-border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-sm text-text">{messageBody?.subject || selectedMessage.subject}</h3>
-              <button onClick={() => { setSelectedMessage(null); setMessageBody(null); }} className="text-text-muted hover:text-text">
+              <button onClick={() => { setSelectedMessage(null); setMessageBody(null); }} className="text-text-muted hover:text-text" aria-label="Close">
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
@@ -621,10 +629,10 @@ function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoadi
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-[520px] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-xl w-[520px] flex flex-col" role="dialog" aria-modal="true" aria-label="Compose Message" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="font-semibold text-text">Compose Message</h3>
-          <button onClick={onClose} className="text-text-muted hover:text-text"><span className="material-symbols-outlined text-[20px]">close</span></button>
+          <button onClick={onClose} className="text-text-muted hover:text-text" aria-label="Close"><span className="material-symbols-outlined text-[20px]">close</span></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           <div>

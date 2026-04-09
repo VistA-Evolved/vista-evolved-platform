@@ -24,6 +24,7 @@ export default function PermissionsCatalog() {
   const [page, setPage] = useState(1);
   const [selectedPerm, setSelectedPerm] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [viewMode, setViewMode] = useState('standard'); // standard: ~150 important keys, advanced: all 689
   const [allKeys, setAllKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,7 +79,9 @@ export default function PermissionsCatalog() {
         const res = await getUserPermissions(duz);
         const existing = (res?.data || []).map(k => (k.name || '').toUpperCase());
         if (existing.includes(conflict)) {
-          setAssignError(`Cannot assign ${keyToAssign}: user already holds ${conflict}. ORES and ORELSE are mutually exclusive.`);
+          const keyLabel = keyToAssign === 'ORES' ? 'Write clinical orders' : 'Enter verbal orders';
+          const conflictLabel = conflict === 'ORES' ? 'Write clinical orders' : 'Enter verbal orders';
+          setAssignError(`Cannot assign "${keyLabel}": this staff member already holds "${conflictLabel}". These permissions are mutually exclusive.`);
           return;
         }
       } catch { /* proceed — backend will also validate */ }
@@ -99,10 +102,9 @@ export default function PermissionsCatalog() {
     { key: 'displayName', label: 'Permission', bold: true, render: (val, row) => (
       <div>
         <div className="font-medium text-sm">{val}</div>
-        <div className="text-[10px] font-mono text-text-muted">{row.name}</div>
       </div>
     )},
-    { key: 'module', label: 'Category' },
+    { key: 'department', label: 'Department' },
     { key: 'description', label: 'Description', render: (val) => <span className="text-xs text-text-secondary line-clamp-1">{val || '—'}</span> },
     {
       key: 'holderCount', label: 'Staff', align: 'center',
@@ -139,7 +141,9 @@ export default function PermissionsCatalog() {
           displayName: k.displayName || k.keyName,
           vistaKey: k.vistaKey || k.keyName,
           module: k.packageName || 'General',
+          department: k.department || k.packageName || 'General',
           description: k.description || '',
+          visibility: k.visibility || 'advanced',
           holderCount,
           holders: k.holders || [],
         };
@@ -178,11 +182,13 @@ export default function PermissionsCatalog() {
   }, [allKeys]);
 
   const filtered = allKeys.filter(k => {
+    // Standard/Advanced filter
+    if (viewMode === 'standard' && k.visibility === 'advanced') return false;
     if (categoryFilter === 'Orphaned') return k.holderCount === 0;
-    if (categoryFilter !== 'All' && k.module !== categoryFilter) return false;
+    if (categoryFilter !== 'All' && k.department !== categoryFilter) return false;
     if (!searchText) return true;
     const s = searchText.toLowerCase();
-    return k.name.toLowerCase().includes(s) || k.displayName.toLowerCase().includes(s) || k.module.toLowerCase().includes(s) || k.description.toLowerCase().includes(s);
+    return k.name.toLowerCase().includes(s) || k.displayName.toLowerCase().includes(s) || k.department.toLowerCase().includes(s) || k.description.toLowerCase().includes(s);
   });
 
   const totalFiltered = filtered.length;
@@ -191,8 +197,9 @@ export default function PermissionsCatalog() {
 
   // Category counts for badges — build dynamic list from actual data
   const categoryCounts = {};
-  allKeys.forEach(k => { categoryCounts[k.module] = (categoryCounts[k.module] || 0) + 1; });
-  const orphanedCount = allKeys.filter(k => k.holderCount === 0).length;
+  const filteredByMode = viewMode === 'standard' ? allKeys.filter(k => k.visibility !== 'advanced') : allKeys;
+  filteredByMode.forEach(k => { categoryCounts[k.department] = (categoryCounts[k.department] || 0) + 1; });
+  const orphanedCount = filteredByMode.filter(k => k.holderCount === 0).length;
 
   // Build categories dynamically from whatever package labels the live
   // /key-inventory response returned. No hardcoded fallback — if nothing
@@ -216,10 +223,22 @@ export default function PermissionsCatalog() {
         <div className={`p-6 ${selectedPerm ? 'w-[60%]' : 'w-full'} overflow-auto`}>
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-[28px] font-bold text-text">Permissions Catalog</h1>
+              <h1 className="text-[22px] font-bold text-text">Permissions Catalog</h1>
               <p className="text-sm text-text-secondary mt-1">
-                {loading ? 'Loading permissions from VistA...' : `${allKeys.length} permissions loaded from live VistA. Permissions are system-defined and cannot be created manually.`}
+                {loading ? 'Loading permissions...' : `${filtered.length} of ${allKeys.length} permissions shown. Permissions are system-defined.`}
               </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setViewMode('standard'); setPage(1); setCategoryFilter('All'); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  viewMode === 'standard' ? 'bg-[#1A1A2E] text-white' : 'border border-[#E2E4E8] text-[#666] hover:bg-[#F5F8FB]'}`}>
+                Standard
+              </button>
+              <button onClick={() => { setViewMode('advanced'); setPage(1); setCategoryFilter('All'); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  viewMode === 'advanced' ? 'bg-[#1A1A2E] text-white' : 'border border-[#E2E4E8] text-[#666] hover:bg-[#F5F8FB]'}`}>
+                Advanced ({allKeys.length})
+              </button>
             </div>
           </div>
 
@@ -258,19 +277,19 @@ export default function PermissionsCatalog() {
           <div className="w-[40%] border-l border-border bg-surface-alt p-6 overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-text">{selectedPerm.displayName}</h2>
-              <button onClick={() => setSelectedPerm(null)} className="text-text-muted hover:text-text">
+              <button onClick={() => setSelectedPerm(null)} className="text-text-muted hover:text-text" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
             <div className="space-y-4">
-              <DetailRow label="Category" value={selectedPerm.module} />
+              <DetailRow label="Department" value={selectedPerm.department} />
               <DetailRow label="Description" value={selectedPerm.description || 'No description available'} />
               <DetailRow label="Staff with This Permission" value={`${selectedPerm.holderCount} staff members`} />
 
-              <div className="bg-white rounded-md p-3 border border-border">
-                <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider mb-1">System Reference (Admin Only)</div>
-                <div className="text-sm font-mono text-text-secondary">{selectedPerm.vistaKey}</div>
-              </div>
+              <details className="bg-white rounded-md p-3 border border-border">
+                <summary className="text-[10px] font-medium text-text-muted uppercase tracking-wider cursor-pointer">System Reference</summary>
+                <div className="text-sm font-mono text-text-secondary mt-2">{selectedPerm.vistaKey}</div>
+              </details>
 
               {selectedPerm.holders?.length > 0 && (
                 <div className="bg-white rounded-md p-3 border border-border">
@@ -327,13 +346,13 @@ export default function PermissionsCatalog() {
       {/* View Staff Holders Modal */}
       {holdersModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setHoldersModal(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" role="dialog" aria-modal="true" aria-label="Staff with this permission" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
                 <h3 className="font-semibold text-text">Staff with this permission</h3>
                 <div className="text-xs text-text-secondary mt-0.5">{holdersModal.displayName || holdersModal.name}</div>
               </div>
-              <button onClick={() => setHoldersModal(null)} className="text-text-muted hover:text-text">
+              <button onClick={() => setHoldersModal(null)} className="text-text-muted hover:text-text" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
@@ -368,13 +387,13 @@ export default function PermissionsCatalog() {
       {/* Assign Permission Modal */}
       {assignModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setAssignModal(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" role="dialog" aria-modal="true" aria-label="Assign permission" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
                 <h3 className="font-semibold text-text">Assign permission</h3>
                 <div className="text-xs text-text-secondary mt-0.5">{assignModal.displayName || assignModal.name}</div>
               </div>
-              <button onClick={() => setAssignModal(null)} className="text-text-muted hover:text-text">
+              <button onClick={() => setAssignModal(null)} className="text-text-muted hover:text-text" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>

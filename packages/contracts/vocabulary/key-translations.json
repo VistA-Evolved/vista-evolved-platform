@@ -1,0 +1,1201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VistA Evolved Security Key Translation Table",
+  "description": "Human-readable names, descriptions, and department mappings for VistA security keys from File #19.1. Used when VistA's own DESCRIPTIVE NAME (field .02) is empty. Source: VHA Kernel documentation + package manuals.",
+  "version": "1.0.0",
+  "rules": [
+    "VistA field .02 DESCRIPTIVE NAME always wins if populated",
+    "This table is the fallback for keys with empty .02",
+    "NEVER expose raw key names (e.g. A1AX APVCO) to end users",
+    "Keys marked 'visibility: standard' appear in default admin view",
+    "Keys marked 'visibility: advanced' appear only in advanced view"
+  ],
+  "keys": {
+    "PROVIDER": {
+      "name": "Clinical Provider",
+      "description": "Identifies user as a healthcare provider. Required for signing orders and clinical documentation.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "ORES": {
+      "name": "Sign & Release Orders",
+      "description": "Allows signing and releasing clinical orders to pharmacy, lab, and radiology. Typically assigned to licensed physicians.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "ORELSE": {
+      "name": "Release Other's Orders",
+      "description": "Allows releasing orders written by another provider. Used by supervising physicians and nurse practitioners.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "OREMAS": {
+      "name": "Enter Orders for Provider",
+      "description": "Allows non-providers (clerks) to enter orders that require provider signature later.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "ORESNOAPPT": {
+      "name": "Provider Without Scheduling",
+      "description": "Allows writing orders for patients without a scheduled appointment.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "OR CPRS GUI CHART": {
+      "name": "CPRS Chart Access",
+      "description": "Grants access to the clinical patient record system chart view.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "ORCL-SIGN-NOTES": {
+      "name": "Sign Clinical Notes",
+      "description": "Allows signing clinical notes and progress notes.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "ORCL-PAT-RECS": {
+      "name": "View Patient Records",
+      "description": "Grants read access to patient records in the clinical system.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "ORCLINIC": {
+      "name": "Clinic Manager",
+      "description": "Manage clinical settings and clinic-level configuration for CPRS.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "CPRS CONFIG": {
+      "name": "CPRS Parameter Editor",
+      "description": "Edit CPRS configuration parameters and system settings.",
+      "department": "Clinical",
+      "visibility": "advanced"
+    },
+    "PSORPH": {
+      "name": "Outpatient Pharmacy",
+      "description": "Process outpatient prescriptions, manage medication dispensing.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSOPHARMACIST": {
+      "name": "Pharmacist Verification",
+      "description": "Verify and approve medication orders before dispensing.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSOINTERFACE": {
+      "name": "Pharmacy Interface",
+      "description": "Access pharmacy interface for electronic prescription processing.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSOTECH": {
+      "name": "Pharmacy Technician",
+      "description": "Pharmacy technician functions: fill, label, and prepare prescriptions.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJ PHARMACIST": {
+      "name": "Inpatient Pharmacist",
+      "description": "Process and verify inpatient medication orders.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJ PHDRUG USER": {
+      "name": "Inpatient Drug User",
+      "description": "Access inpatient pharmacy drug database for medication management.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJ SUPERVISOR": {
+      "name": "Inpatient Pharmacy Supervisor",
+      "description": "Supervisory access for inpatient pharmacy operations.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSO MANAGER": {
+      "name": "Outpatient Pharmacy Manager",
+      "description": "Full management access to outpatient pharmacy operations.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSD PHARMACIST": {
+      "name": "Controlled Substances Pharmacist",
+      "description": "Manage controlled substance dispensing and tracking.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSDRPH": {
+      "name": "Controlled Substance Dispensing",
+      "description": "Dispense controlled substances with proper documentation.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSB NURSE": {
+      "name": "Medication Administration",
+      "description": "Administer medications to patients and document administration.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "LRLAB": {
+      "name": "Laboratory Access",
+      "description": "Access lab results, process specimens, enter results.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRVERIFY": {
+      "name": "Verify Lab Results",
+      "description": "Authorize and release laboratory test results.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRMGR": {
+      "name": "Lab Supervisor",
+      "description": "Full supervisory access to all laboratory operations.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRCAP": {
+      "name": "Lab Collection & Accession",
+      "description": "Collect specimens and accessioning for laboratory testing.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRSUPER": {
+      "name": "Lab Supervisor",
+      "description": "Supervisory functions for laboratory department.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRPHSUPER": {
+      "name": "Phlebotomy Supervisor",
+      "description": "Supervise phlebotomy/blood draw operations.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRBLOODBANK": {
+      "name": "Blood Bank Technologist",
+      "description": "Process blood bank orders, cross-match, and transfusion services.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "DG REGISTER": {
+      "name": "Patient Registration",
+      "description": "Register new patients, edit demographics, manage admissions.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG REGISTRATION": {
+      "name": "Patient Registration",
+      "description": "Full registration access for patient intake and demographic management.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG MENU": {
+      "name": "ADT Coordinator",
+      "description": "Coordinate admissions, discharges, and transfers.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG SUPERVISOR": {
+      "name": "Registration Supervisor",
+      "description": "Supervisory access for patient registration operations.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG ADMIT": {
+      "name": "Patient Admission",
+      "description": "Admit patients to inpatient care.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG DISCHARGE": {
+      "name": "Patient Discharge",
+      "description": "Process patient discharges from inpatient care.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG TRANSFER": {
+      "name": "Patient Transfer",
+      "description": "Transfer patients between wards or facilities.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DGMEANS TEST": {
+      "name": "Means Test",
+      "description": "Conduct financial eligibility means testing for patients.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DGPM MOVEMENT": {
+      "name": "Patient Movement",
+      "description": "Track and manage patient movements within the facility.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG ELIGIBILITY": {
+      "name": "Eligibility Clerk",
+      "description": "Verify and manage patient eligibility for healthcare services.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG PTFREL": {
+      "name": "PTF Release",
+      "description": "Release patient treatment file records.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DG SENSITIVITY": {
+      "name": "Sensitive Patient Access",
+      "description": "Access records of patients flagged as sensitive (employee, VIP, etc.).",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "SD SCHEDULING": {
+      "name": "Scheduling",
+      "description": "Book, modify, and cancel patient appointments.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "SDCLINICAL": {
+      "name": "Clinical Scheduling",
+      "description": "Schedule appointments with clinical context and provider availability.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "SD SUPERVISOR": {
+      "name": "Scheduling Supervisor",
+      "description": "Supervisory access for scheduling operations and clinic management.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "SDMGR": {
+      "name": "Scheduling Manager",
+      "description": "Full management access to scheduling configuration and operations.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "XUMGR": {
+      "name": "System Administrator",
+      "description": "Full system management access including user administration and configuration.",
+      "department": "System",
+      "visibility": "standard"
+    },
+    "XUPROG": {
+      "name": "Programmer Access",
+      "description": "Access to programmer-level functions and direct database tools.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUPROGMODE": {
+      "name": "Programmer Mode",
+      "description": "Access to direct M command prompt for database operations.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUAUTHOR": {
+      "name": "Help Frame Author",
+      "description": "Create and edit help frames for system documentation.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUAUDITING": {
+      "name": "Security Auditor",
+      "description": "Access security audit logs and compliance reporting.",
+      "department": "System",
+      "visibility": "standard"
+    },
+    "XUSPF200": {
+      "name": "Staff File Editor",
+      "description": "Direct edit access to the staff records file.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUFILEGRAM": {
+      "name": "FileGram Editor",
+      "description": "Manage FileGram transfers between VistA systems.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUSTATS": {
+      "name": "System Statistics",
+      "description": "Access system usage statistics and performance metrics.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "ZTMQ": {
+      "name": "Background Task Manager",
+      "description": "Manage TaskMan background job scheduling and execution.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "ZTMQUEUABLE OPTIONS": {
+      "name": "TaskMan Queueable Options",
+      "description": "Configure which options can be queued for background execution.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "MAG CAPTURE": {
+      "name": "Image Capture",
+      "description": "Capture and store medical images from devices and cameras.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAG ANNOTATE": {
+      "name": "Image Annotation",
+      "description": "Annotate medical images with clinical findings.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAG EDIT": {
+      "name": "Image Editor",
+      "description": "Edit and manage stored medical images.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAG SYSTEM": {
+      "name": "Imaging System Manager",
+      "description": "Full management access to the medical imaging system.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAG DOD USER": {
+      "name": "Imaging User",
+      "description": "View medical images from the imaging archive.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "RA TECHNOLOGIST": {
+      "name": "Radiology Technologist",
+      "description": "Perform radiological exams and process imaging studies.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RAMGR": {
+      "name": "Radiology Supervisor",
+      "description": "Supervisory access to radiology department operations.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA MGR": {
+      "name": "Radiology Manager",
+      "description": "Full management of radiology operations and configuration.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA ALLOC": {
+      "name": "Radiology Resource Allocator",
+      "description": "Allocate radiology resources and manage equipment scheduling.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA VERIFY": {
+      "name": "Radiology Verification",
+      "description": "Verify and approve radiology study results.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "SR SURGEON": {
+      "name": "Surgeon",
+      "description": "Surgical provider access for operative scheduling and notes.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR CHIEF": {
+      "name": "Surgery Chief",
+      "description": "Chief of surgery with full department management access.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "GMV MANAGER": {
+      "name": "Vitals Manager",
+      "description": "Manage vital signs measurement configuration and workflows.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "TIU SIGN DOCUMENT": {
+      "name": "Sign Clinical Documents",
+      "description": "Sign and authenticate clinical text documents (notes, reports).",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "IB BILLING CLERK": {
+      "name": "Billing Clerk",
+      "description": "Process billing transactions and insurance claims.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IB SUPERVISOR": {
+      "name": "Billing Supervisor",
+      "description": "Supervisory access to billing operations and revenue cycle.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IB SITE MGR": {
+      "name": "Billing Site Manager",
+      "description": "Full management of site billing configuration.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IBCNE INSURANCE MANAGEMENT": {
+      "name": "Insurance Management",
+      "description": "Manage patient insurance information and verification.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "RCDPEFT": {
+      "name": "EFT Posting Clerk",
+      "description": "Post electronic funds transfer payments from insurance payers.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "PRCA INVOICE PRINT": {
+      "name": "Invoice Printer",
+      "description": "Print accounts receivable invoices for billing.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "SW VERIFIED": {
+      "name": "Social Worker",
+      "description": "Social work verified access for case management and assessments.",
+      "department": "Social Work",
+      "visibility": "standard"
+    },
+    "FH SUPERVISOR": {
+      "name": "Nutrition & Food Supervisor",
+      "description": "Supervise nutrition and food service operations.",
+      "department": "Nutrition",
+      "visibility": "standard"
+    },
+    "YS BROKER1": {
+      "name": "Mental Health Access",
+      "description": "Access mental health assessment tools and clinical instruments.",
+      "department": "Mental Health",
+      "visibility": "standard"
+    },
+    "HLMENU": {
+      "name": "HL7 Interface Menu",
+      "description": "Access HL7 interface management and monitoring tools.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "HLPATCH": {
+      "name": "HL7 Patch Installer",
+      "description": "Install HL7 interface patches and updates.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "HLMGR": {
+      "name": "HL7 Manager",
+      "description": "Full management of HL7 messaging interfaces.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "PRCPM": {
+      "name": "Inventory & Property Management",
+      "description": "Manage facility inventory and property tracking.",
+      "department": "Supply Chain",
+      "visibility": "standard"
+    },
+    "POSTMASTER": {
+      "name": "System Messaging",
+      "description": "System messaging administration for internal mail delivery.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "LRANAT": {
+      "name": "Anatomic Pathology Access",
+      "description": "Allows the holder to use Anatomic Pathology options.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRAPMOD": {
+      "name": "Modify Released Pathology Reports",
+      "description": "Allows modification of pathology reports after release.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRAPSUPER": {
+      "name": "Anatomic Pathology Supervisor",
+      "description": "Allows users to enter and edit SNOMED files and supervise anatomic pathology workflows.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRAU": {
+      "name": "Autopsy Accessions",
+      "description": "Allows users to log in, enter data, and print autopsy accessions.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRBLSUPER": {
+      "name": "Blood Bank Supervisor",
+      "description": "Authority for blood bank supervisor-level decisions.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRCY": {
+      "name": "Cytopathology Accessions",
+      "description": "Allows users to log in, enter data, and print cytopathology accessions.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRDATA": {
+      "name": "Edit Released Lab Data",
+      "description": "Allows authorized personnel to edit or change results that have already been released.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LREM": {
+      "name": "Electron Microscopy",
+      "description": "Allows users to log in, enter data, and print electron microscopy accessions.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRLEDI": {
+      "name": "Lab EDI Configuration",
+      "description": "Identifies users responsible for the setup and maintenance of laboratory electronic data interchange.",
+      "department": "Laboratory",
+      "visibility": "advanced"
+    },
+    "LRLIASON": {
+      "name": "Laboratory Liaison",
+      "description": "Laboratory liaison key for cross-team coordination.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRMICRO": {
+      "name": "Microbiology Section",
+      "description": "Microbiology section access key.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRMIVERIFY": {
+      "name": "Verify Microbiology Results",
+      "description": "Allows laboratory technologists to verify microbiology results.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRPHMAN": {
+      "name": "Phlebotomy Manager",
+      "description": "Screens users for phlebotomy management options.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "LRSP": {
+      "name": "Surgical Pathology Accessions",
+      "description": "Allows users to log in, enter data, and print surgical pathology accessions.",
+      "department": "Laboratory",
+      "visibility": "standard"
+    },
+    "SR ANESTHESIOLOGIST": {
+      "name": "Anesthesiologist (Surgery)",
+      "description": "Restricts access to fields that anesthesiologists are authorized to modify in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR CODER": {
+      "name": "Surgery Coding Specialist",
+      "description": "Authorized to enter CPT and ICD codes for surgical cases.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR MED STUDENT": {
+      "name": "Surgery Medical Student",
+      "description": "Restricts the fields a medical student may modify in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR NURSE": {
+      "name": "Surgery Nurse",
+      "description": "Restricts the fields a nurse may modify in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR NURSE ANESTHETIST": {
+      "name": "Nurse Anesthetist (Surgery)",
+      "description": "Restricts the fields a nurse anesthetist may modify in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR PHYSICIAN ASSISTANT": {
+      "name": "Surgery Physician Assistant",
+      "description": "Restricts the fields a physician assistant may modify in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR REQ OVERRIDE": {
+      "name": "Surgery Request Override",
+      "description": "Allows the holder to make requests beyond the site-selected limit.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR RISK ASSESSMENT": {
+      "name": "Surgery Risk Assessment",
+      "description": "Locks the Surgery Risk Assessment menu.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SR STAFF SURGEON": {
+      "name": "Staff Surgeon",
+      "description": "Identifies the holder as a staff surgeon.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SRCOORD": {
+      "name": "Surgery Package Coordinator",
+      "description": "Lock for the Surgery package coordinator menu.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROCHIEF": {
+      "name": "Surgery Chief Menu",
+      "description": "Required to access the Chief's menu in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROCOMP": {
+      "name": "Surgery Complications",
+      "description": "Required to access the Complications menu in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROEDIT": {
+      "name": "Surgery Data Entry",
+      "description": "Required for entering Surgery data.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROPER": {
+      "name": "Surgery Operation Menu",
+      "description": "Required to access the Operation menu in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROREP": {
+      "name": "Surgery Reports",
+      "description": "Required to access the Surgery Reports option.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROREQ": {
+      "name": "Surgery Request Operations",
+      "description": "Required for the Request Operations menu in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROSCH": {
+      "name": "Surgery Scheduling",
+      "description": "Required for the Schedule Operations menu in the Surgery package.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROSURG": {
+      "name": "Surgeon-Only Options",
+      "description": "Restricts options that should be limited to surgeons only.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "SROTRAN": {
+      "name": "Surgery Dictation Tracking",
+      "description": "Required when accessing the Date of Dictation entry/edit option.",
+      "department": "Surgery",
+      "visibility": "advanced"
+    },
+    "SROWAIT": {
+      "name": "Surgery Waiting List",
+      "description": "Locks the Enter/Edit or Delete Patient on Waiting List option.",
+      "department": "Surgery",
+      "visibility": "standard"
+    },
+    "MAG DELETE": {
+      "name": "Delete Imaging Studies",
+      "description": "Allows the holder to delete images from the imaging file.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAG NOTE EFILE": {
+      "name": "Imaging Capture Notes",
+      "description": "Required by the Imaging Capture Client for users who attach notes to studies.",
+      "department": "Imaging",
+      "visibility": "advanced"
+    },
+    "MAG RAD SETTINGS": {
+      "name": "Radiology Imaging Workstation Settings",
+      "description": "Allows editing of CT presets in the Imaging Workstation Radiology client.",
+      "department": "Imaging",
+      "visibility": "advanced"
+    },
+    "MAGCAP ADMIN": {
+      "name": "Capture Administrative Documents",
+      "description": "Allows a user to capture administrative documents into the Imaging package.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAGCAP CP": {
+      "name": "Capture Clinical Procedure Images",
+      "description": "Allows capture of Clinical Procedures images via the Imaging Capture client.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAGCAP LAB": {
+      "name": "Capture Laboratory Images",
+      "description": "Allows capture of Laboratory images via the Imaging Capture workstation.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAGCAP RAD": {
+      "name": "Capture Radiology Images",
+      "description": "Allows capture of Radiology images via the Imaging Capture workstation.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAGCAP TIU": {
+      "name": "Capture Images to Clinical Notes",
+      "description": "Allows attaching captured images to clinical notes (TIU entries).",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAGDISP ADMIN": {
+      "name": "View Administrative Documents",
+      "description": "Allows display of administrative documents in the Imaging viewer.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "MAGDISP CLIN": {
+      "name": "View Clinical Images",
+      "description": "Allows imaging users to view clinical images and documents.",
+      "department": "Imaging",
+      "visibility": "standard"
+    },
+    "XMMGR": {
+      "name": "Mail System Manager",
+      "description": "Required for options that can remove data from the messaging system.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XMSTAR": {
+      "name": "Send Broadcast Messages",
+      "description": "Allows the holder to send broadcast messages to all users.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XMNET": {
+      "name": "Network Mail Privileges",
+      "description": "Required for options that send mail across networked systems.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "IB AUTHORIZE": {
+      "name": "Billing Authorization",
+      "description": "Allows authorization of billing transactions.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IB EDIT": {
+      "name": "Billing Edit",
+      "description": "Allows editing of billing records and bills.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IB CLAIMS SUPERVISOR": {
+      "name": "Claims Supervisor",
+      "description": "Performs supervisory review of insurance claims.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IB INSURANCE SUPERVISOR": {
+      "name": "Insurance Supervisor",
+      "description": "Performs supervisory insurance functions.",
+      "department": "Billing",
+      "visibility": "standard"
+    },
+    "IB PROVIDER EDIT": {
+      "name": "Edit Billing Providers",
+      "description": "Allows editing of provider records used for billing.",
+      "department": "Billing",
+      "visibility": "advanced"
+    },
+    "PSJ PHARM TECH": {
+      "name": "Inpatient Pharmacy Technician",
+      "description": "Identifies the user as an inpatient pharmacy technician.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJ RNFINISH": {
+      "name": "Nurse Order Finish",
+      "description": "Allows the nurse holder to finish unit dose orders.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJ RNURSE": {
+      "name": "Inpatient Pharmacy Nurse",
+      "description": "Identifies the user as a nurse for inpatient pharmacy operations.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJ RPHARM": {
+      "name": "Inpatient Pharmacy Pharmacist",
+      "description": "Identifies the user as an inpatient pharmacist for verification of orders.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJI MGR": {
+      "name": "IV Inpatient Coordinator",
+      "description": "Locks the IV Inpatient Manager menu — for inpatient pharmacy coordinator only.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJI PHARM TECH": {
+      "name": "IV Pharmacy Technician",
+      "description": "Identifies the user as a pharmacy technician able to enter IV orders.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJI PURGE": {
+      "name": "Purge Expired IV Orders",
+      "description": "Allows the holder to purge expired IV orders.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSJU MGR": {
+      "name": "Unit Dose Coordinator",
+      "description": "Unit Dose package coordinator and inpatient supervisor functions.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJU PL": {
+      "name": "Unit Dose Pick List",
+      "description": "Allows access to Unit Dose Medications Pick List options.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJU RPH": {
+      "name": "Unit Dose Pharmacist",
+      "description": "Allows pharmacists to verify and edit active unit dose orders.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSJU SITE MANAGER": {
+      "name": "Unit Dose Site Manager",
+      "description": "Hardware and device control for the Unit Dose package.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSO COPAY": {
+      "name": "Pharmacy Copay Reset",
+      "description": "Allows pharmacy users to reset copay status on prescriptions.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSB BUMGR": {
+      "name": "BCMA Backup System",
+      "description": "Controls access to the BCMA Management Menu Backup System.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSB CPRS MED BUTTON": {
+      "name": "Document Verbal Medication Orders",
+      "description": "Allows nurses to document administered verbal medication orders in CPRS.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSB INSTRUCTOR": {
+      "name": "BCMA Instructor",
+      "description": "Allows the holder to co-sign students on the BCMA GUI.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSB MANAGER": {
+      "name": "BCMA Manager",
+      "description": "Allows access to BCMA parameters and management functions.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSB NO WITNESS": {
+      "name": "BCMA No Witness Required",
+      "description": "Bypasses the witness requirement for medication administration.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSD ERROR": {
+      "name": "Controlled Substances Error Resolution",
+      "description": "Controls error-handling options in the Controlled Substances package.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSD NURSE": {
+      "name": "Controlled Substances Nurse",
+      "description": "Allows nurses to receive controlled substances drugs and process transfers.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSD PARAM": {
+      "name": "Controlled Substances Parameters",
+      "description": "Allocated to the Inpatient Pharmacy Package Coordinator for controlled substances configuration.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "PSD TRAN": {
+      "name": "Controlled Substances Transfer",
+      "description": "Controls the menu option to transfer stock entries.",
+      "department": "Pharmacy",
+      "visibility": "standard"
+    },
+    "PSDMGR": {
+      "name": "Controlled Substances Supervisor",
+      "description": "Locks the supervisor portion of the Controlled Substances package.",
+      "department": "Pharmacy",
+      "visibility": "advanced"
+    },
+    "RA DELETERPT": {
+      "name": "Delete Radiology Reports",
+      "description": "Required for users to delete a radiology report.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA DELEXAM": {
+      "name": "Delete Radiology Exams",
+      "description": "Allows the user to delete radiology exams.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA ONLINE": {
+      "name": "Online Radiology Verification",
+      "description": "Allows a radiologist to verify radiology reports online.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA PTEDIT": {
+      "name": "Edit Radiology Exams",
+      "description": "Allows the user to edit radiology exams.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA PTENTRY": {
+      "name": "Add Patients to Radiology",
+      "description": "Limits which radiology users can add patients to the patient file.",
+      "department": "Radiology",
+      "visibility": "standard"
+    },
+    "RA SITE": {
+      "name": "Radiology Site Manager",
+      "description": "Screens users from the Computer Site Manager's menu in Radiology.",
+      "department": "Radiology",
+      "visibility": "advanced"
+    },
+    "RA XUSEC": {
+      "name": "Radiology Key Assignment",
+      "description": "Allows the Radiology Supervisor to assign other RA keys.",
+      "department": "Radiology",
+      "visibility": "advanced"
+    },
+    "ORWARD": {
+      "name": "Ward Order Entry",
+      "description": "Used by Order Entry to screen selection of protocols for ward users.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "GMTSMGR": {
+      "name": "Health Summary Manager",
+      "description": "Grants access to options for managing Health Summary configuration.",
+      "department": "Clinical",
+      "visibility": "advanced"
+    },
+    "GMTSUSER": {
+      "name": "Health Summary User",
+      "description": "Allows access to the Clinical Record Toolbox.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "GMTS VIEW ONLY": {
+      "name": "Health Summary View Only",
+      "description": "Disables device selection when printing Health Summaries.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "TIU AUTOVERIFY": {
+      "name": "Auto-Verify Clinical Notes",
+      "description": "Documents transcribed by the holder are excluded from manual verification.",
+      "department": "Clinical",
+      "visibility": "advanced"
+    },
+    "GMRA-ALLERGY VERIFY": {
+      "name": "Verify Allergies",
+      "description": "Allows verification of allergy and adverse reaction entries.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "GMRA-SUPERVISOR": {
+      "name": "Allergy Supervisor",
+      "description": "Allows override of security checks in allergy and adverse reaction tracking.",
+      "department": "Clinical",
+      "visibility": "advanced"
+    },
+    "GMPL ICD CODE": {
+      "name": "Problem List ICD Coding",
+      "description": "Allows the user to assign or edit ICD codes on the Problem List.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "GMRC101": {
+      "name": "Consult Tracking Access",
+      "description": "Used by Consult/Request Tracking to authorize protocol entry.",
+      "department": "Clinical",
+      "visibility": "advanced"
+    },
+    "PXRM MANAGER": {
+      "name": "Clinical Reminders Manager",
+      "description": "Manages Clinical Reminders definitions, dialogs, and reports.",
+      "department": "Clinical",
+      "visibility": "standard"
+    },
+    "SDOB": {
+      "name": "Overbook Appointments",
+      "description": "Allows the user to overbook a time slot.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "SDMOB": {
+      "name": "Maximum Overbook Override",
+      "description": "Allows the user to exceed the maximum overbook parameter.",
+      "department": "Scheduling",
+      "visibility": "advanced"
+    },
+    "SDWL MENU": {
+      "name": "Wait List Menu",
+      "description": "Allows access to the Scheduling/PCMM Wait List menu.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "SDWL PARAMETER": {
+      "name": "Wait List Parameters",
+      "description": "Manages Wait List parameter configuration.",
+      "department": "Scheduling",
+      "visibility": "advanced"
+    },
+    "SDRR MANAGER": {
+      "name": "Recall Reminder Manager",
+      "description": "Locks the Scheduling Recall Reminder manager options.",
+      "department": "Scheduling",
+      "visibility": "standard"
+    },
+    "SD GAF SCORE": {
+      "name": "GAF Scoring",
+      "description": "Allows the user to enter a Global Assessment of Functioning score.",
+      "department": "Scheduling",
+      "visibility": "advanced"
+    },
+    "DG INSTITUTION": {
+      "name": "Edit Institution File",
+      "description": "Required to use the Institution File Enter/Edit option.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DG CONSISTENCY": {
+      "name": "ADT Consistency Checks",
+      "description": "Locks the ADT consistency check options.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DG MEANSTEST": {
+      "name": "Means Test Edit",
+      "description": "Allows editing and changing of Means Test results.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG MEANS TEST DELETE": {
+      "name": "Delete Means Tests",
+      "description": "Allows deletion of Means Test entries.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DG SECURITY OFFICER": {
+      "name": "Patient Sensitivity Officer",
+      "description": "Allows assignment and removal of patient sensitivity flags.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG PTFSUP": {
+      "name": "PTF Supervisor",
+      "description": "PTF supervisor functions including trim point entries and productivity reports.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DG PTFTRANS": {
+      "name": "PTF Transmission",
+      "description": "Allows transmission of released PTF records.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DGPF MANAGER": {
+      "name": "Patient Record Flag Manager",
+      "description": "Authority for patient record flag supervisory functions.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DGPF ASSIGNMENT": {
+      "name": "Patient Record Flag Assignment",
+      "description": "Controls user access to Patient Record Flag assignment protocols.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DGPRE EDIT": {
+      "name": "Pre-Registration Edit",
+      "description": "Allows access to the pre-registration load and edit functions.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DGPRE SUPV": {
+      "name": "Pre-Registration Supervisor",
+      "description": "Allows access to the supervisor options of the Pre-Registration package.",
+      "department": "Registration",
+      "visibility": "standard"
+    },
+    "DG DETAIL": {
+      "name": "Date of Death Entry",
+      "description": "Held by users authorized to enter a date of death by manual entry.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "DG RECORD ACCESS": {
+      "name": "Self Record Access",
+      "description": "Allows the user to access and create their own patient record.",
+      "department": "Registration",
+      "visibility": "advanced"
+    },
+    "XUARCHIVE": {
+      "name": "Archiving Menu",
+      "description": "Required to access the Archiving menu and archiving operations.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUMF INSTITUTION": {
+      "name": "Institution Master File",
+      "description": "Locks the Master File institution maintenance option.",
+      "department": "System",
+      "visibility": "advanced"
+    },
+    "XUSCREENMAN": {
+      "name": "ScreenMan Editor",
+      "description": "Required to access the ScreenMan menu for FileMan form editing.",
+      "department": "System",
+      "visibility": "advanced"
+    }
+  },
+  "departmentOrder": [
+    "Clinical",
+    "Pharmacy",
+    "Laboratory",
+    "Radiology",
+    "Surgery",
+    "Imaging",
+    "Registration",
+    "Scheduling",
+    "Billing",
+    "Mental Health",
+    "Social Work",
+    "Nutrition",
+    "Supply Chain",
+    "System"
+  ]
+}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getPermissions, getRoleTemplates, getCustomRoles, createCustomRole, deleteCustomRole } from '../../services/adminService';
+import { getPermissions, getCustomRoles, createCustomRole, deleteCustomRole } from '../../services/adminService';
 
 /**
  * AD-04: Role Templates (VistA Evolved Addition)
@@ -180,13 +180,13 @@ const ROLES = [
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'ro', Supply: 'none', Admin: 'ro', Analytics: 'rw' },
   },
   {
-    id: 'system-admin', name: 'System Administrator (IRM)', isSystem: true,
+    id: 'system-admin', name: 'System Administrator', isSystem: true,
     description: 'Full administrative access: user management, configuration, security, audit.',
     userCount: 0,
     permissions: [
-      { label: 'IRM / site manager', key: 'XUMGR' },
-      { label: 'Programmer', key: 'XUPROG' },
-      { label: 'Programmer mode access', key: 'XUPROGMODE' },
+      { label: 'System administrator (full user management)', key: 'XUMGR' },
+      { label: 'System programmer (advanced access)', key: 'XUPROG' },
+      { label: 'Advanced diagnostic access', key: 'XUPROGMODE' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'rw', Patients: 'ro', Scheduling: 'ro', Clinical: 'ro', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'ro', Supply: 'ro', Admin: 'rw', Analytics: 'rw' },
@@ -222,40 +222,56 @@ export default function RoleTemplates() {
   const [error, setError] = useState(null);
 
   const [keyHolderMap, setKeyHolderMap] = useState({});
+  // Server-enriched key data: keyName → { displayName, description, department }
+  const [keyEnrichMap, setKeyEnrichMap] = useState({});
 
   useEffect(() => {
     Promise.allSettled([
       getPermissions(),
-      getRoleTemplates(),
       getCustomRoles(),
-    ]).then(([permsRes, rolesRes, customRes]) => {
+    ]).then(([permsRes, customRes]) => {
+      let eMap = {};
       if (permsRes.status === 'fulfilled') {
         const permsData = permsRes.value?.data || [];
         const keys = permsData.map(k => k.keyName);
         setVistaKeySet(new Set(keys));
         const hMap = {};
-        permsData.forEach(k => { hMap[k.keyName] = k.holderCount || 0; });
+        permsData.forEach(k => {
+          hMap[k.keyName] = k.holderCount || 0;
+          eMap[k.keyName] = {
+            displayName: k.displayName || k.descriptiveName || '',
+            description: k.description || '',
+            department: k.department || k.packageName || '',
+          };
+        });
         setKeyHolderMap(hMap);
+        setKeyEnrichMap(eMap);
       }
       if (customRes.status === 'fulfilled' && customRes.value?.data) {
         const loaded = customRes.value.data.map(r => ({
           ...r,
           isSystem: false,
           userCount: 0,
-          permissions: (r.keys || []).map(k => ({ label: k, key: k })),
+          permissions: (r.keys || []).map(k => ({
+            label: eMap[k]?.displayName || k,
+            key: k,
+          })),
           mutualExclusions: [],
           workspaceAccess: {},
         }));
         setCustomRoles(loaded);
+      }
+      if (permsRes.status === 'rejected' && customRes.status === 'rejected') {
+        setError('Failed to load role data. Please try refreshing.');
       }
     });
   }, []);
 
   const getRoleHolderCount = (role) => {
     if (Object.keys(keyHolderMap).length === 0) return role.userCount;
-    const primaryKey = role.permissions[0]?.key;
-    if (!primaryKey) return 0;
-    return keyHolderMap[primaryKey] || 0;
+    // Count minimum holders across all role keys (intersection estimate)
+    const counts = role.permissions.map(p => keyHolderMap[p.key] || 0).filter(c => c > 0);
+    return counts.length > 0 ? Math.min(...counts) : 0;
   };
 
   const handleClone = (sourceRole) => {
@@ -315,14 +331,14 @@ export default function RoleTemplates() {
       {error && (
         <div className="mx-4 mt-2 px-4 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-4">&times;</button>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 ml-4" aria-label="Dismiss error">&times;</button>
         </div>
       )}
       <div className="flex h-[calc(100vh-40px)]">
         {/* Left panel: role list */}
         <div className="w-[35%] border-r border-border overflow-auto p-4">
           <div className="flex items-center justify-between mb-1 px-2">
-            <h1 className="text-[28px] font-bold text-[#222]">Role Templates</h1>
+            <h1 className="text-[22px] font-bold text-[#222]">Role Templates</h1>
           </div>
           <p className="text-[13px] text-[#666] mb-3 px-2">
             Roles bundle permissions into assignable templates. Assign a role instead of
@@ -379,19 +395,21 @@ export default function RoleTemplates() {
                 <p className="text-[13px] text-[#666] mt-1">{selectedRole.description}</p>
               </div>
               <span className="px-3 py-1 bg-[#F5F8FB] rounded-full text-[12px] font-mono text-[#666]">
-                {getRoleHolderCount(selectedRole)} staff with primary key
+                {getRoleHolderCount(selectedRole)} staff assigned
               </span>
             </div>
 
             {/* Tab bar */}
-            <div className="flex gap-1 border-b border-[#E2E4E8] mb-5">
+            <div className="flex gap-1 border-b border-[#E2E4E8] mb-5" role="tablist">
               {[
                 { id: 'permissions', label: 'Permissions' },
+                { id: 'staff', label: 'Staff' },
                 { id: 'workspaces', label: 'Workspace Access' },
               ].map(t => (
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id)}
+                  role="tab" aria-selected={activeTab === t.id}
                   className={`px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors ${
                     activeTab === t.id ? 'border-[#2E5984] text-[#2E5984]' : 'border-transparent text-[#666] hover:text-[#222]'
                   }`}
@@ -409,24 +427,42 @@ export default function RoleTemplates() {
                     Permissions Granted
                   </h3>
                   <div className="space-y-1">
-                    {selectedRole.permissions
-                      // Hide any permission whose key is not in the live catalog.
-                      // No "pending install" badge — if it's missing, it's missing.
-                      .filter(perm => vistaKeySet.size === 0 || vistaKeySet.has(perm.key))
-                      .map((perm, i) => (
-                        <div key={i} className="flex items-center justify-between px-3 py-2 bg-[#F5F8FB] rounded-lg group">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[16px] text-[#1B7D3A]">check_circle</span>
-                            <span className="text-[13px] text-[#222]">{perm.label}</span>
-                          </div>
-                          <span className="text-[10px] font-mono text-[#AAA] opacity-0 group-hover:opacity-100 transition-opacity">
-                            {perm.key}
-                          </span>
+                    {(() => {
+                      const validPerms = selectedRole.permissions.filter(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key));
+                      // Group by department
+                      const groups = {};
+                      for (const perm of validPerms) {
+                        const dept = keyEnrichMap[perm.key]?.department || 'General';
+                        if (!groups[dept]) groups[dept] = [];
+                        groups[dept].push(perm);
+                      }
+                      const deptEntries = Object.entries(groups);
+                      if (deptEntries.length === 0) {
+                        return <p className="text-[12px] text-[#999] italic px-3 py-2">No permissions in this role are available in the current system.</p>;
+                      }
+                      return deptEntries.map(([dept, perms]) => (
+                        <div key={dept} className="mb-3">
+                          {deptEntries.length > 1 && (
+                            <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-1">{dept}</div>
+                          )}
+                          {perms.map((perm, i) => {
+                            const enriched = keyEnrichMap[perm.key];
+                            const displayName = enriched?.displayName || perm.label;
+                            const description = enriched?.description || '';
+                            return (
+                              <div key={i} className="px-3 py-2.5 bg-[#F5F8FB] rounded-lg mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-[16px] text-[#1B7D3A]">check_circle</span>
+                                  <span className="text-[13px] font-medium text-[#222]">{displayName}</span>
+                                </div>
+                                {description && <div className="text-[11px] text-[#666] ml-6 mt-0.5">{description}</div>}
+                                <div className="text-[10px] font-mono text-[#AAA] ml-6 mt-0.5">{perm.key}</div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    {selectedRole.permissions.filter(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key)).length === 0 && (
-                      <p className="text-[12px] text-[#999] italic px-3 py-2">No permissions in this role are available in the current system.</p>
-                    )}
+                      ));
+                    })()}
                   </div>
                 </section>
 
@@ -442,6 +478,55 @@ export default function RoleTemplates() {
                   </section>
                 )}
               </>
+            )}
+
+            {/* Staff tab — shows who holds this role */}
+            {activeTab === 'staff' && (
+              <section className="mb-6">
+                <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">
+                  Staff Members with This Role
+                </h3>
+                {(() => {
+                  const holderCount = getRoleHolderCount(selectedRole);
+                  if (holderCount === 0) {
+                    return (
+                      <div className="text-center py-8 text-sm text-[#999]">
+                        <span className="material-symbols-outlined text-[32px] block mb-2">group_off</span>
+                        No staff members currently hold all permissions in this role.
+                      </div>
+                    );
+                  }
+                  // Show per-key holder counts as a breakdown
+                  return (
+                    <div className="space-y-2">
+                      <div className="px-3 py-2 bg-[#E8F5E9] rounded-lg text-[13px] text-[#2D6A4F] flex items-center gap-2 mb-3">
+                        <span className="material-symbols-outlined text-[16px]">people</span>
+                        Approximately {holderCount} staff member{holderCount !== 1 ? 's' : ''} hold this role (based on permission intersection).
+                      </div>
+                      <h4 className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mt-3 mb-2">Per-Permission Breakdown</h4>
+                      {selectedRole.permissions.map((perm, i) => {
+                        const count = keyHolderMap[perm.key] || 0;
+                        const enriched = keyEnrichMap[perm.key];
+                        return (
+                          <div key={i} className="flex items-center justify-between px-3 py-2 bg-[#F5F8FB] rounded-lg">
+                            <span className="text-[12px] text-[#222]">{enriched?.displayName || perm.label}</span>
+                            <span className="text-[11px] font-mono text-[#666]">{count} holder{count !== 1 ? 's' : ''}</span>
+                          </div>
+                        );
+                      })}
+                      <button
+                        onClick={() => {
+                          const firstKey = selectedRole.permissions.find(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key))?.key;
+                          navigate(firstKey ? `/admin/permissions?view=${encodeURIComponent(firstKey)}` : '/admin/permissions');
+                        }}
+                        className="mt-3 px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-white transition-colors">
+                        <span className="material-symbols-outlined text-[14px] mr-1 align-middle">open_in_new</span>
+                        View Full Staff List in Permission Catalog
+                      </button>
+                    </div>
+                  );
+                })()}
+              </section>
             )}
 
             {/* Workspace access tab with toggles */}
@@ -519,7 +604,7 @@ export default function RoleTemplates() {
       {/* Clone Role Modal */}
       {cloneModalSource && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setCloneModalSource(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-[400px] p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg shadow-xl w-[400px] p-6" role="dialog" aria-modal="true" aria-label="Clone Role" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-[#222] mb-3">Clone Role</h3>
             <p className="text-xs text-[#666] mb-4">
               Create a new custom role based on "{cloneModalSource.name}". The new role will inherit all permissions and workspace access.

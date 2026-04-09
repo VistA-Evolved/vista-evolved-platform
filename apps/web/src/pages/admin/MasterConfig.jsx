@@ -1,3 +1,14 @@
+// =============================================================================
+// DEPRECATED — UNROUTED DEAD CODE (kept for git history; do not extend)
+// =============================================================================
+// This page was the pre-redesign "Master Configuration" screen. Per the
+// admin-panel redesign spec (Screens 5 + 6), it has been split into:
+//   • SecurityAuth.jsx     → Login Security, E-Sig, Account Policies, Audit
+//   • SystemConfig.jsx     → Organization Identity + Login Experience
+// /admin/config now resolves to SystemConfig.jsx in App.jsx, so this file
+// is no longer reachable from the navigation. New configuration controls
+// belong in SecurityAuth.jsx or SystemConfig.jsx, not here.
+// =============================================================================
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
@@ -72,9 +83,13 @@ function buildSectionFields(kernelParams, sectionId, isVA = true) {
     ];
   }
   if (sectionId === 'esig') {
+    // E-signature policy is enforced at write-time inside ZVEADMN1.m ESIGMGT
+    // (currently a 6-character minimum, line 226). It is NOT a #8989.3 field,
+    // so there is no live param to read. Report the enforced floor honestly
+    // — sites that want a higher minimum must edit the M routine.
     return [
-      { name: 'esigMinLength', label: 'E-Signature Minimum Length', type: 'readonly', value: '6', unit: 'characters', hint: 'Configured in VistA Kernel parameter' },
-      { name: 'esigForOrders', label: 'Require E-Signature for Orders', type: 'readonly', value: 'Yes', hint: 'Mandatory for patient safety' },
+      { name: 'esigMinLength', label: 'E-Signature Minimum Length', type: 'readonly', value: '6', unit: 'characters', hint: 'Enforced by ZVE ESIG MANAGE at signature-set time. Not configurable from this screen.', policyEnforced: true },
+      { name: 'esigForOrders', label: 'Require E-Signature for Orders', type: 'readonly', value: 'Yes', hint: 'Order release requires a valid e-signature for any user holding the ORES key.', policyEnforced: true },
     ];
   }
   if (sectionId === 'session') {
@@ -83,8 +98,14 @@ function buildSectionFields(kernelParams, sectionId, isVA = true) {
     ];
   }
   if (sectionId === 'audit') {
+    // Audit retention is not a #8989.3 field — there is no live source.
+    // Show the live INITIATE AUDIT and TERMINATE AUDIT dates from the
+    // kernel params instead, since those ARE real and queryable.
+    const initAudit = kernelParams?.initiateAudit?.value || kernelParams?.['INITIATE AUDIT']?.value || '';
+    const termAudit = kernelParams?.terminateAudit?.value || kernelParams?.['TERMINATE AUDIT']?.value || '';
     return [
-      { name: 'retentionYears', label: 'Audit Retention Period', type: 'readonly', value: '3', unit: 'years', hint: 'Minimum retention per regulation' },
+      { name: 'auditStart', label: 'Audit Started', type: 'readonly', value: initAudit || 'Not configured', hint: 'Date when system auditing began (from KSP field 19.4).', policyEnforced: true },
+      { name: 'auditEnd', label: 'Audit End Date', type: 'readonly', value: termAudit || 'Continuous (no end date)', hint: 'Optional end date for auditing (from KSP field 19.5). Empty means continuous.', policyEnforced: true },
     ];
   }
   if (sectionId === 'motd') {
@@ -213,7 +234,7 @@ export default function MasterConfig() {
     <AppShell breadcrumb="Admin > Master Configuration">
       <div className="flex h-[calc(100vh-40px)]">
         <div className="w-[240px] border-r border-border overflow-auto p-3 flex-shrink-0">
-          <h1 className="text-[28px] font-bold text-text px-2 mb-1">Master Configuration</h1>
+          <h1 className="text-[22px] font-bold text-text px-2 mb-1">Master Configuration</h1>
           <p className="text-[10px] text-text-muted px-2 mb-4">
             {loading ? 'Loading...' : 'Live Kernel System Parameters'}
           </p>

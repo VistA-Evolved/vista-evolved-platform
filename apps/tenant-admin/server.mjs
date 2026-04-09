@@ -413,20 +413,71 @@ const KEY_DISPLAY_OVERRIDES = {
   'PRCPM':            'Inventory / Property Management',
 };
 
+// Key-translations file provides curated human names and department mappings
+// for security keys whose VistA DESCRIPTIVE NAME (field .02) is empty.
+let _keyTranslations = null;
+function getKeyTranslations() {
+  if (_keyTranslations) return _keyTranslations;
+  try {
+    const raw = readFileSync(join(__dirname, '../../packages/contracts/vocabulary/key-translations.json'), 'utf8');
+    _keyTranslations = JSON.parse(raw);
+  } catch {
+    _keyTranslations = { keys: {}, departmentOrder: [] };
+  }
+  return _keyTranslations;
+}
+
 // Given raw KEYLIST output pieces, return the fields the UI actually needs.
-function enrichKey({ keyName, description, descriptiveName }) {
+// vistaPackageName comes from the M routine's prefix→PACKAGE #9.4 lookup.
+function enrichKey({ keyName, description, descriptiveName, vistaPackageName }) {
   const nameUpper = String(keyName || '').toUpperCase().trim();
+  const translations = getKeyTranslations();
+  const keyTrans = translations.keys?.[nameUpper] || translations.keys?.[keyName] || null;
+
+  // VistA's #19.1 field .02 DESCRIPTIVE NAME is unreliable across packages —
+  // sometimes it's a real human label ("Outpatient Pharmacy Manager"),
+  // sometimes it's the key name shouted in caps ("RADIOLOGY CAPTURE KEY"),
+  // and sometimes it's literally the key itself ("LRANAT" → ".02 = LRANAT").
+  // Treat .02 as a legitimate display source ONLY when it's clearly different
+  // from the raw key AND looks like a human label (mixed case or contains
+  // a space). Otherwise fall through to our curated translations.
+  const dnRaw = (descriptiveName || '').trim();
+  const dnEqualsKey = dnRaw.toUpperCase() === nameUpper;
+  const dnIsAllCaps = dnRaw === dnRaw.toUpperCase();
+  const dnLooksHuman = !dnEqualsKey && (dnRaw.includes(' ') || !dnIsAllCaps) && dnRaw.length >= 4;
+  const dnUsable = dnLooksHuman ? dnRaw : '';
+
+  // Display name priority (rev): curated translations win over noisy VistA .02
+  //   1. key-translations.json (highest — curated, consistent)
+  //   2. KEY_DISPLAY_OVERRIDES (legacy curated table inside server)
+  //   3. VistA .02 if it passes the "looks human" gate
+  //   4. humanizeKeyName fallback
   const display =
-    (descriptiveName && descriptiveName.trim()) ||
+    (keyTrans && keyTrans.name) ||
     KEY_DISPLAY_OVERRIDES[nameUpper] ||
+    dnUsable ||
     humanizeKeyName(keyName);
-  const pkg = deriveKeyPackage(keyName);
+
+  // Package priority: M routine (live VistA) → overrides → prefix match → first token
+  const pkg = (vistaPackageName && vistaPackageName.trim())
+    ? titleCasePackage(vistaPackageName)
+    : deriveKeyPackage(keyName);
+
+  // Description priority: VistA word-processing → translations JSON → empty
   let cleanDesc = (description || '').replace(/\s+/g, ' ').trim();
+  if (!cleanDesc && keyTrans) cleanDesc = keyTrans.description || '';
   if (cleanDesc && !/[.!?]$/.test(cleanDesc)) cleanDesc += '.';
+
+  // Department from translations (curated grouping for UI)
+  const department = (keyTrans && keyTrans.department) || '';
+  const visibility = (keyTrans && keyTrans.visibility) || 'advanced';
+
   return {
     displayName: display,
     descriptionSentence: cleanDesc,
     packageName: pkg,
+    department,
+    visibility,
   };
 }
 
@@ -1216,7 +1267,7 @@ async function main() {
       if (!p[0]) continue;
       const kName = p[1] || '';
       if (category && !kName.toLowerCase().includes(category.toLowerCase()) && !(p[2] || '').toLowerCase().includes(category.toLowerCase())) continue;
-      const enriched = enrichKey({ keyName: kName, description: p[2] || '', descriptiveName: p[4] || '' });
+      const enriched = enrichKey({ keyName: kName, description: p[2] || '', descriptiveName: p[4] || '', vistaPackageName: p[5] || '' });
       data.push({
         keyName: kName,
         vistaKey: kName,
@@ -1224,6 +1275,8 @@ async function main() {
         description: enriched.descriptionSentence,
         descriptiveName: enriched.displayName,
         packageName: enriched.packageName,
+        department: enriched.department,
+        visibility: enriched.visibility,
         category: 'security-key',
         // Holder count comes from ^XUSEC scan inside the M routine (piece 3).
         // This is the canonical source — same table the security check reads.
@@ -1696,6 +1749,34 @@ async function main() {
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
+  /** Unlock a locked-out user account via ZVE wrapper or DDR FILER fallback */
+  app.post('/api/tenant-admin/v1/users/:duz/unlock', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    // Validate the DUZ is a positive integer up-front so the DDR fallback
+    // doesn't surface "The IENS '0,' is syntactically incorrect" to the UI.
+    const targetDuz = String(req.params.duz || '').trim();
+    if (!/^\d+$/.test(targetDuz) || Number(targetDuz) <= 0) {
+      return reply.code(400).send({ ok: false, error: 'duz must be a positive integer' });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    // Try ZVE wrapper first, fall back to DDR edit of DISUSER field (#200 field 4)
+    let z;
+    try {
+      z = await callZveRpc('ZVE USMG UNLOCK', [targetDuz]);
+      const o = zveOutcome(z);
+      if (o.kind !== 'ok') throw new Error(o.msg || 'RPC failed');
+      return { ok: true, tenantId, duz: targetDuz, action: 'unlock', rpcUsed: z.rpcUsed, lines: z.lines };
+    } catch {
+      // Fallback: clear DISUSER flag via DDR FILER
+      const iens = `${targetDuz},`;
+      const filer = await ddrFilerEdit(200, iens, '4', '@', 'E');
+      if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', error: filer.error });
+      return { ok: true, tenantId, duz: targetDuz, action: 'unlock', rpcUsed: 'DDR FILER' };
+    }
+  });
+
   /** Terminate user (DISUSER + termination date + clear access) via ZVE USMG TERM */
   app.post('/api/tenant-admin/v1/users/:duz/terminate', async (req, reply) => {
     const tenantId = req.query.tenantId;
@@ -1827,8 +1908,10 @@ async function main() {
         }
         // Fields confirmed present in File 8989.3 (no .04 — it does not exist).
         // FLAGS=IE returns both Internal and External values so numeric fields show correctly.
+        // Includes the security policy fields (202, 203, 204, 214, 219, 19*, 212.5)
+        // so the DDR fallback path matches the live ZVE PARAM GET surface.
         const getsLines = await broker.callRpcWithList('DDR GETS ENTRY DATA', [
-          { type: 'list', value: { FILE: '8989.3', IENS: `${ien},`, FIELDS: '.01;.02;.03;.05;9;11;205;210;214;217;230;231;240;501', FLAGS: 'IE' } },
+          { type: 'list', value: { FILE: '8989.3', IENS: `${ien},`, FIELDS: '.01;.02;.03;.05;9;11;11.2;19;19.4;19.5;202;203;204;205;210;212.5;214;217;219;230;231;240;501', FLAGS: 'IE' } },
         ]);
         return { ien, rawLines: getsLines };
       });
@@ -1840,6 +1923,8 @@ async function main() {
 
   // Fields verified present in File 8989.3 DD (probed via ZVEPRB94.m):
   // .04 does NOT exist — removed. .03 = AFTER HOURS MAIL GROUP, not institution.
+  // Security policy fields (202, 203, 204, 214, 219, 19, 19.4, 19.5, 212.5,
+  // 11.2) added so the DDR PUT fallback matches the live ZVE PARAM SET path.
   const KERNEL8989_ALLOW = {
     '.01': 'DOMAIN NAME',
     '.02': 'IRM MAIL GROUP',
@@ -1847,13 +1932,20 @@ async function main() {
     '.05': 'MIXED OS',
     '9': 'AGENCY CODE',
     '11': 'AUTO-GENERATE ACCESS CODES',
+    '11.2': 'AUTO-GENERATE VERIFY CODES',
+    '19': 'OPTION AUDIT',
+    '19.4': 'INITIATE AUDIT',
+    '19.5': 'TERMINATE AUDIT',
     '202': 'DEFAULT # OF ATTEMPTS',
     '203': 'DEFAULT LOCK-OUT TIME',
+    '204': 'MULTIPLE SIGN-ON',
     '205': 'ASK DEVICE TYPE AT SIGN-ON',
     '206': 'DEFAULT AUTO-MENU',
     '210': 'DEFAULT TIMED-READ (SECONDS)',
+    '212.5': 'FAILED ACCESS LOG',
     '214': 'LIFETIME OF VERIFY CODE',
     '217': 'DEFAULT INSTITUTION',
+    '219': 'MAX SIGN-ON LIMIT',
     '230': 'BROKER ACTIVITY TIMEOUT',
     '231': 'GUI POST SIGN-ON',
     '501': 'PRODUCTION',

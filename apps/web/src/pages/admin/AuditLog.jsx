@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { Pagination } from '../../components/shared/SharedComponents';
 import { ActionBadge } from '../../components/shared/StatusBadge';
-import { getAuditFileMan, getAuditSignonLog, getAuditErrorLog, getAuditFailedAccess, getAuditProgrammerMode } from '../../services/adminService';
+import { getAuditFileMan, getAuditSignonLog, getAuditErrorLog, getAuditFailedAccess, getAuditProgrammerMode, getStaff } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { fmDateToDate, formatDateTime } from '../../utils/transforms';
@@ -20,14 +20,67 @@ import { fmDateToDate, formatDateTime } from '../../utils/transforms';
  *   GET /audit/failed-access → Failed login attempts
  */
 
-const ACTION_TYPES = ['All', 'Sign-On', 'Sign-Off', 'Error', 'Failed Access', 'Data Change', 'Programmer Mode'];
+const ACTION_TYPES = ['All', 'Sign-On', 'Sign-Off', 'Error', 'Failed Access', 'Data Change', 'Administrative Access'];
+
+function StaffTypeahead({ value, onChange }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [inputVal, setInputVal] = useState(value);
+  const debounceRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => { setInputVal(value); }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchSuggestions = useCallback((q) => {
+    if (!q || q.length < 2) { setSuggestions([]); setOpen(false); return; }
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await getStaff({ search: q });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        const names = [...new Set(list.map(u => u.name || u.userName || '').filter(Boolean))].slice(0, 8);
+        setSuggestions(names);
+        setOpen(names.length > 0);
+      } catch { setSuggestions([]); }
+    }, 250);
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input type="text" value={inputVal}
+        onChange={e => { setInputVal(e.target.value); onChange(e.target.value); fetchSuggestions(e.target.value); }}
+        onFocus={() => { if (suggestions.length) setOpen(true); }}
+        placeholder="Search by name..."
+        className="w-full h-8 px-3 text-xs border border-border rounded-md focus:outline-none focus:border-steel"
+        role="combobox" aria-expanded={open} aria-autocomplete="list" autoComplete="off" />
+      {open && (
+        <ul className="absolute z-20 top-9 left-0 w-full bg-white border border-border rounded-md shadow-lg max-h-48 overflow-auto" role="listbox">
+          {suggestions.map(name => (
+            <li key={name} role="option" className="px-3 py-1.5 text-xs hover:bg-surface-alt cursor-pointer"
+              onMouseDown={() => { setInputVal(name); onChange(name); setOpen(false); }}>
+              {name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const AUDIT_SOURCES = [
-  { id: 'all', label: 'All Sources' },
-  { id: 'signon', label: 'Sign-On Log' },
-  { id: 'fileman', label: 'Data Audit' },
-  { id: 'error', label: 'Error Log' },
+  { id: 'all', label: 'All Events' },
+  { id: 'signon', label: 'Sign-On Activity' },
+  { id: 'fileman', label: 'Data Changes' },
   { id: 'failed', label: 'Failed Access' },
-  { id: 'programmer', label: 'Programmer Mode' },
+  { id: 'programmer', label: 'Administrative Access' },
 ];
 const columns = [
   { key: 'timestamp', label: 'Timestamp', render: (val) => <span className="font-mono text-[11px]">{val}</span> },
@@ -68,7 +121,7 @@ function normalizeAuditEntry(raw, source) {
       user: 'System',
       action: 'Error',
       actionColor: 'delete',
-      source: 'Error Trap',
+      source: 'Error Log',
       detail: raw.errorText || '',
       raw,
     };
@@ -94,10 +147,10 @@ function normalizeAuditEntry(raw, source) {
       timestamp: iso ? formatDateTime(iso) : '',
       _sortTime: toSortableTime(raw.dateTime || raw.signOnDateTime),
       user: raw.userName || 'Staff Member',
-      action: 'Programmer Mode',
+      action: 'Administrative Access',
       actionColor: 'delete',
-      source: 'Programmer Mode',
-      detail: raw.routine || raw.description || 'Programmer mode access',
+      source: 'Administrative Access',
+      detail: raw.routine || raw.description || 'Administrative access session',
       raw,
     };
   }
@@ -110,7 +163,7 @@ function normalizeAuditEntry(raw, source) {
     action: 'Data Change',
     actionColor: 'update',
     source: 'Data Audit',
-    detail: raw.fieldChanged ? `File ${raw.fileNumber || ''} field ${raw.fieldChanged}: ${raw.oldValue || ''} → ${raw.newValue || ''}` : (raw.description || ''),
+    detail: raw.fieldChanged ? `Record ${raw.fileNumber || ''} field ${raw.fieldChanged}: ${raw.oldValue || ''} → ${raw.newValue || ''}` : (raw.description || ''),
     raw,
   };
 }
@@ -172,7 +225,7 @@ export default function AuditLog() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const SOURCE_MAP = { signon: 'Sign-On Log', fileman: 'Data Audit', error: 'Error Trap', failed: 'Failed Access', programmer: 'Programmer Mode' };
+  const SOURCE_MAP = { signon: 'Sign-On Log', fileman: 'Data Audit', failed: 'Failed Access', programmer: 'Administrative Access' };
   const filtered = allEvents.filter(e => {
     if (actionFilter !== 'All' && e.action !== actionFilter) return false;
     if (userSearch && !e.user.toLowerCase().includes(userSearch.toLowerCase())) return false;
@@ -198,20 +251,20 @@ export default function AuditLog() {
 
   if (error) {
     return (
-      <AppShell breadcrumb="Admin > Audit Log">
+      <AppShell breadcrumb="Admin > Audit Trail">
         <div className="p-6"><ErrorState message={error} onRetry={loadData} /></div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell breadcrumb="Admin > Audit Log">
+    <AppShell breadcrumb="Admin > Audit Trail">
       <div className="p-6 max-w-[1400px]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-[28px] font-bold text-text">Audit Log</h1>
+            <h1 className="text-[22px] font-bold text-text">Audit Trail</h1>
             <p className="text-sm text-text-secondary mt-1">
-              {loading ? 'Loading audit data from VistA...' : `${allEvents.length} events from ${new Set(allEvents.map(e => e.source)).size} VistA audit sources.`}
+              {loading ? 'Loading audit data...' : `${allEvents.length} events from ${new Set(allEvents.map(e => e.source)).size} audit sources.`}
             </p>
           </div>
           <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
@@ -221,9 +274,9 @@ export default function AuditLog() {
         </div>
 
         {/* Audit Source Tabs */}
-        <div className="flex items-center gap-1 border-b border-border mb-4">
+        <div className="flex items-center gap-1 border-b border-border mb-4" role="tablist">
           {AUDIT_SOURCES.map(src => (
-            <button key={src.id} onClick={() => { setSourceFilter(src.id); setPage(1); }}
+            <button key={src.id} onClick={() => { setSourceFilter(src.id); setPage(1); }} role="tab" aria-selected={sourceFilter === src.id}
               className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
                 sourceFilter === src.id ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
               }`}>
@@ -236,8 +289,7 @@ export default function AuditLog() {
           <div className="grid grid-cols-6 gap-3">
             <div>
               <label className="block text-[10px] font-medium text-text-muted uppercase tracking-wider mb-1">Staff Member</label>
-              <input type="text" value={userSearch} onChange={e => { setUserSearch(e.target.value); setPage(1); }}
-                placeholder="Search by name..." className="w-full h-8 px-3 text-xs border border-border rounded-md focus:outline-none focus:border-steel" />
+              <StaffTypeahead value={userSearch} onChange={v => { setUserSearch(v); setPage(1); }} />
             </div>
             <div>
               <label className="block text-[10px] font-medium text-text-muted uppercase tracking-wider mb-1">Action Type</label>
@@ -265,11 +317,21 @@ export default function AuditLog() {
           </div>
         </div>
 
-        {loading ? <TableSkeleton rows={10} cols={5} /> : (
+        {loading ? <TableSkeleton rows={10} cols={5} /> : pageSlice.length === 0 ? (
+          <div className="text-center py-12 border border-[#E2E4E8] rounded-lg bg-white">
+            <span className="material-symbols-outlined text-[32px] text-[#999] block mb-2">search_off</span>
+            <p className="text-sm text-[#666] mb-1">No events match your current filters.</p>
+            <p className="text-xs text-[#999] mb-3">Try adjusting the date range, staff member, or action type.</p>
+            <button onClick={() => { setActionFilter('All'); setUserSearch(''); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
+              className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors">
+              Clear All Filters
+            </button>
+          </div>
+        ) : (
           <>
             <DataTable columns={columns} data={pageSlice} idField="id"
               selectedId={expandedId} onRowClick={(row) => setExpandedId(expandedId === row.id ? null : row.id)}
-              rowClassName={(row) => row.action === 'Programmer Mode' ? '!bg-[#FDE8E8]' : (row.action === 'Failed Access' || row.action === 'Error' ? '!bg-[#FFF8E1]' : '')} />
+              rowClassName={(row) => row.action === 'Administrative Access' ? '!bg-[#FDE8E8]' : (row.action === 'Failed Access' || row.action === 'Error' ? '!bg-[#FFF8E1]' : '')} />
 
             {expandedId && (() => {
               const event = allEvents.find(e => e.id === expandedId);
@@ -278,7 +340,7 @@ export default function AuditLog() {
                 <div className="bg-surface-alt border border-border rounded-lg p-4 mt-2 mb-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-sm text-text">Event Detail</h3>
-                    <button onClick={() => setExpandedId(null)} className="text-text-muted hover:text-text">
+                    <button onClick={() => setExpandedId(null)} className="text-text-muted hover:text-text" aria-label="Close">
                       <span className="material-symbols-outlined text-[18px]">close</span>
                     </button>
                   </div>
@@ -293,7 +355,7 @@ export default function AuditLog() {
                   </div>
                   {event.raw && (
                     <details className="mt-2 text-[10px] text-text-muted">
-                      <summary className="cursor-pointer hover:text-text">Raw VistA Data</summary>
+                      <summary className="cursor-pointer hover:text-text">Technical Details</summary>
                       <pre className="mt-1 p-2 bg-white rounded text-[10px] font-mono overflow-auto max-h-40">{JSON.stringify(event.raw, null, 2)}</pre>
                     </details>
                   )}

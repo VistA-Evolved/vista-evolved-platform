@@ -42,7 +42,12 @@ export default function SiteManagement() {
     try {
       const [res, topoRes] = await Promise.allSettled([getSites(), getTopology()]);
       if (topoRes.status === 'fulfilled') setTopology(topoRes.value?.data || topoRes.value || null);
-      const sitesData = res.status === 'fulfilled' ? res.value : null;
+      if (res.status === 'rejected') {
+        setError(res.reason?.message || 'Failed to load sites');
+        setLoading(false);
+        return;
+      }
+      const sitesData = res.value;
       const sites = ((sitesData?.data) || []).map(d => ({
         id: d.ien,
         name: d.name,
@@ -106,19 +111,20 @@ export default function SiteManagement() {
     }));
     try {
       await updateSiteWorkspace(siteId, ws, newState);
-    } catch {
-      // Revert on failure
+    } catch (err) {
+      // Revert on failure and show error
       setWorkspaceToggles(prev => ({
         ...prev,
         [siteId]: { ...(prev[siteId] || {}), [ws]: !newState },
       }));
+      setSaveMsg(`Error: Failed to save workspace toggle — ${err?.message || 'Unknown error'}`);
     }
     setToggleSaving('');
   };
 
   if (error) {
     return (
-      <AppShell breadcrumb="Admin > Site Management">
+      <AppShell breadcrumb="Admin > Facilities & Sites">
         <div className="p-6"><ErrorState message={error} onRetry={loadData} /></div>
       </AppShell>
     );
@@ -128,9 +134,9 @@ export default function SiteManagement() {
     <AppShell breadcrumb="Admin > Site Management">
       <div className="flex h-[calc(100vh-40px)]">
         <div className="w-[40%] border-r border-border overflow-auto p-4">
-          <h1 className="text-[28px] font-bold text-text mb-1 px-2">Site Management</h1>
+          <h1 className="text-[22px] font-bold text-text mb-1 px-2">Facilities & Sites</h1>
           <p className="text-xs text-text-secondary mb-4 px-2">
-            {loading ? 'Loading sites from VistA...' : `${allSites.length} sites loaded from live VistA.`}
+            {loading ? 'Loading sites...' : `${allSites.length} sites loaded.`}
           </p>
 
           <div className="mb-4 px-2">
@@ -175,7 +181,7 @@ export default function SiteManagement() {
             <div className="max-w-2xl">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-text">{selectedSite.name}</h2>
+                  <h2 className="text-[22px] font-bold text-text">{selectedSite.name}</h2>
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-sm font-mono text-text-secondary">Site Code: {selectedSite.siteCode}</span>
                     <StatusBadge status={selectedSite.status} />
@@ -263,7 +269,7 @@ export default function SiteManagement() {
                           try {
                             const res = await updateSite(selectedSite.id, editForm);
                             if (res.ok) {
-                              setSaveMsg('Success — Site details saved to VistA.');
+                              setSaveMsg('Success — Site details saved.');
                               await loadData();
                             } else {
                               setSaveMsg(`Error: ${res.error || 'Save failed'}`);
@@ -316,6 +322,7 @@ export default function SiteManagement() {
                           <button
                             onClick={() => toggleWorkspace(selectedSite.id, ws)}
                             disabled={!!toggleSaving}
+                            role="switch" aria-checked={isActive} aria-label={`Toggle ${ws} workspace`}
                             className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${isActive ? 'bg-[#1B7D3A]' : 'bg-[#DDD]'} ${toggleSaving ? 'opacity-50' : ''}`}
                           >
                             <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isActive ? 'left-[18px]' : 'left-0.5'}`} />
@@ -370,7 +377,7 @@ export default function SiteManagement() {
       {/* Add Site Modal */}
       {showAddSite && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAddSite(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-[450px] p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-lg shadow-xl w-[450px] p-6" role="dialog" aria-modal="true" aria-label="Add New Site" onClick={e => e.stopPropagation()}>
             <h3 className="font-semibold text-text text-lg mb-4">Add New Site</h3>
             <div className="space-y-3">
               <div>
