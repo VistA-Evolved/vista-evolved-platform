@@ -2,8 +2,70 @@ import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
 import { getSiteParameters, updateSiteParameters, getPackageParams, updatePackageParams, getSession } from '../../services/adminService';
-import { parseKernelParams } from '../../utils/transforms';
 import ErrorState from '../../components/shared/ErrorState';
+
+// Normalize the /params/kernel server response. The server can return
+// either the live ZVE-sourced { data: [{name, value, description}] }
+// shape (preferred) or a legacy DDR { rawLines: [...] } shape. We map
+// both to the same internal object keyed by the well-known field names
+// the UI expects.
+function normalizeKernelParams(res) {
+  if (!res) return {};
+  // ZVE path — preferred
+  if (Array.isArray(res.data) && res.data.length > 0) {
+    const nameMap = {
+      'DOMAIN': 'domainName',
+      'SITE NAME': 'siteNumber',
+      'PRODUCTION': 'prodAccount',
+      'AUTOLOGOFF': 'sessionTimeout',
+      'LOCKOUT ATTEMPTS': 'lockoutAttempts',
+      'PASSWORD EXPIRATION': 'passwordExpiration',
+      'BROKER TIMEOUT': 'rpcTimeout',
+      'AGENCY CODE': 'agencyCode',
+      'WELCOME MESSAGE': 'welcomeMessage',
+      'DISABLE NEW USER': 'disableNewUser',
+    };
+    const out = {};
+    for (const row of res.data) {
+      const key = nameMap[row.name] || row.name.toLowerCase().replace(/\s+/g, '_');
+      out[key] = {
+        value: row.value,
+        external: row.value,
+        description: row.description || '',
+        sourceName: row.name,
+      };
+    }
+    // Derive autoSignOffDelay from sessionTimeout if VistA only carries one
+    if (!out.autoSignOffDelay && out.sessionTimeout) {
+      out.autoSignOffDelay = { ...out.sessionTimeout };
+    }
+    return out;
+  }
+  // Legacy DDR path
+  if (Array.isArray(res.rawLines)) {
+    const out = {};
+    const fieldMap = {
+      '.01': 'domainName',
+      '217': 'siteNumber',
+      '501': 'prodAccount',
+      '230': 'sessionTimeout',
+      '210': 'autoSignOffDelay',
+      '214': 'rpcTimeout',
+      '240': 'welcomeMessage',
+      '205': 'disableNewUser',
+    };
+    for (const line of res.rawLines) {
+      const parts = line.split('^');
+      const field = parts[2];
+      const internal = parts[3] || '';
+      const external = parts[4] || internal;
+      const key = fieldMap[field];
+      if (key) out[key] = { value: internal, external, description: '' };
+    }
+    return out;
+  }
+  return {};
+}
 
 /**
  * Site Parameter Management
@@ -95,12 +157,7 @@ export default function SiteParameters() {
     setError(null);
     try {
       const res = await getSiteParameters();
-      if (res?.rawLines) {
-        const parsed = parseKernelParams(res.rawLines);
-        setKernelParams(parsed);
-      } else {
-        setKernelParams({});
-      }
+      setKernelParams(normalizeKernelParams(res));
     } catch (err) {
       setError(err.message || 'Failed to load parameters');
     } finally {
