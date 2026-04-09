@@ -1067,23 +1067,32 @@ async function main() {
   });
 
   app.get('/api/tenant-admin/v1/divisions/:ien', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const tenantId = req.query.tenantId || 'default';
     try {
-      const fields = '.01;1;2;3;4;5;6;7;8;9;10;100';
+      // Fetch the same field numbers the PUT route writes, so round-trip
+      // edit works: .01 NAME, 1 FACILITY NUMBER, 2 INSTITUTION FILE POINTER,
+      // 4 TELEPHONE NUMBER (phone), 1.01 STREET ADDR 1, 1.03 CITY,
+      // 1.04 STATE, 1.05 ZIP.
+      const fields = '.01;1;2;4;1.01;1.03;1.04;1.05';
       const result = await ddrGetsEntry('40.8', req.params.ien, fields, 'IE');
       if (!result.ok) return reply.code(404).send({ ok: false, source: 'vista', error: `Division ${req.params.ien} not found` });
       const d = result.data || {};
+      // ddrGetsEntry may return fields keyed by "field#" or "field#E"/"field#I".
+      // Use the external ("E") display value for user-facing strings.
+      const get = (f) => d[`${f}E`] || d[f] || d[`${f}I`] || '';
       return {
         ok: true, source: 'vista', tenantId, rpcUsed: 'DDR GETS ENTRY DATA', file: '40.8',
         data: {
           ien: req.params.ien,
-          name: d['.01'] || d['.01E'] || d['.01I'] || '',
-          facilityNumber: d['1'] || d['1E'] || d['1I'] || '',
-          institution: d['2'] || d['2E'] || '',
-          defaultPrinterMedRec: d['3'] || d['3E'] || '',
-          mailGroup: d['4'] || d['4E'] || '',
-          defaultTimeZone: d['5'] || d['5E'] || '',
+          name: get('.01'),
+          stationNumber: get('1'),
+          facilityNumber: get('1'),
+          institution: get('2'),
+          phone: get('4'),
+          address: get('1.01'),
+          city: get('1.03'),
+          state: get('1.04'),
+          zip: get('1.05'),
           vistaGrounding: { file: '40.8', ien: req.params.ien, status: 'grounded' },
         },
       };

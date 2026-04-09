@@ -2,8 +2,35 @@ import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
 import { getMasterConfig, updateMasterConfig, getSession, submit2PChange, get2PRequests, approve2PRequest, reject2PRequest } from '../../services/adminService';
-import { parseKernelParams } from '../../utils/transforms';
 import ErrorState from '../../components/shared/ErrorState';
+
+// Normalize /params/kernel — see SiteParameters.jsx for the full version.
+// Handles both the ZVE data[] shape (preferred) and the legacy DDR rawLines.
+function normalizeKernelParams(res) {
+  if (!res) return {};
+  if (Array.isArray(res.data) && res.data.length > 0) {
+    const nameMap = {
+      'DOMAIN': 'domainName',
+      'SITE NAME': 'siteNumber',
+      'PRODUCTION': 'prodAccount',
+      'AUTOLOGOFF': 'sessionTimeout',
+      'LOCKOUT ATTEMPTS': 'lockoutAttempts',
+      'PASSWORD EXPIRATION': 'passwordExpiration',
+      'BROKER TIMEOUT': 'rpcTimeout',
+      'AGENCY CODE': 'agencyCode',
+      'WELCOME MESSAGE': 'welcomeMessage',
+      'DISABLE NEW USER': 'disableNewUser',
+    };
+    const out = {};
+    for (const row of res.data) {
+      const key = nameMap[row.name] || row.name.toLowerCase().replace(/\s+/g, '_');
+      out[key] = { value: row.value, external: row.value, description: row.description || '' };
+    }
+    if (!out.autoSignOffDelay && out.sessionTimeout) out.autoSignOffDelay = { ...out.sessionTimeout };
+    return out;
+  }
+  return {};
+}
 
 /**
  * Master Admin Configuration
@@ -34,10 +61,14 @@ function buildSectionFields(kernelParams, sectionId, isVA = true) {
   const so = Number(kernelParams.autoSignOffDelay?.value || 0);
   const policyLabel = isVA ? 'VHA Directive 6500' : 'Security Policy';
 
+  // Zero-value security parameter warning (Step 3.8)
+  const zeroWarn = (v, what) => v === 0 ? ` — DISABLED, security risk: ${what} is not enforced` : '';
+  const critical = (v) => v === 0;
+
   if (sectionId === 'auth') {
     return [
-      { name: 'sessionTimeout', label: 'Session Timeout Duration', type: 'number', value: String(ts), unit: 'seconds', enforcedMax: 900, hint: `${policyLabel}: ≤ 15 min (900s). Current: ${Math.round(ts/60)} min` },
-      { name: 'autoSignoff', label: 'Auto Sign-Off Duration', type: 'number', value: String(so), unit: 'seconds', enforcedMax: 900, hint: `Inactive terminal disconnection. Current: ${Math.round(so/60)} min` },
+      { name: 'sessionTimeout', label: 'Session Timeout Duration', type: 'number', value: String(ts), unit: 'seconds', enforcedMax: 900, critical: critical(ts), hint: `${policyLabel}: ≤ 15 min (900s). Current: ${Math.round(ts/60)} min${zeroWarn(ts, 'session timeout')}` },
+      { name: 'autoSignoff', label: 'Auto Sign-Off Duration', type: 'number', value: String(so), unit: 'seconds', enforcedMax: 900, critical: critical(so), hint: `Inactive terminal disconnection. Current: ${Math.round(so/60)} min${zeroWarn(so, 'auto sign-off')}` },
     ];
   }
   if (sectionId === 'esig') {
@@ -110,11 +141,7 @@ export default function MasterConfig() {
     setError(null);
     try {
       const res = await getMasterConfig();
-      if (res?.rawLines) {
-        setKernelParams(parseKernelParams(res.rawLines));
-      } else {
-        setKernelParams({});
-      }
+      setKernelParams(normalizeKernelParams(res));
     } catch (err) {
       setError(err.message || 'Failed to load configuration');
     } finally {
