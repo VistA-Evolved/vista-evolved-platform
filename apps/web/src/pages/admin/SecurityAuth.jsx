@@ -527,47 +527,49 @@ export default function SecurityAuth() {
               </div>
             )}
 
-            {/* Save / Submit panel */}
-            {hasChanges && (
-              <div className="mt-6 p-4 bg-[#F4F5F7] border border-[#E2E4E8] rounded-lg">
-                <h3 className="text-sm font-semibold text-text mb-3">
-                  {sectionMeta?.twoPersonRequired ? 'Submit Change Request' : 'Save Changes'}
-                </h3>
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-text mb-1">
-                    Reason for Change <span className="text-[#CC3333]">*</span>
-                  </label>
-                  <textarea value={changeReason} onChange={e => setChangeReason(e.target.value)}
-                    placeholder="Document the business reason for this configuration change"
-                    className="w-full h-16 px-3 py-2 text-xs border border-[#E2E4E8] rounded-md resize-none focus:outline-none focus:border-[#2E5984]" />
-                </div>
-                {saveResult?.type === 'error' && (
-                  <div className="p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[11px] text-[#CC3333] flex items-start gap-2 mb-3">
-                    <span className="material-symbols-outlined text-[14px] mt-0.5">error</span>
-                    <span>{saveResult.msg}</span>
-                  </div>
-                )}
-                {hasViolation && (
-                  <div className="p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[11px] text-[#CC3333] flex items-start gap-2 mb-3">
-                    <span className="material-symbols-outlined text-[14px] mt-0.5">block</span>
-                    <span>Save blocked — one or more values exceed policy limits.</span>
-                  </div>
-                )}
-                <div className="flex gap-3">
-                  <button disabled={!changeReason.trim() || hasViolation || saving} onClick={handleSave}
-                    className="px-5 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                    {saving ? 'Saving...' : sectionMeta?.twoPersonRequired ? 'Submit for Approval' : 'Save Changes'}
-                  </button>
-                  <button onClick={() => { setEditedValues({}); setChangeReason(''); setSaveResult(null); }}
-                    className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-white">
-                    Discard Changes
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Sticky save bar — always visible at the bottom when changes are pending */}
+      {hasChanges && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-[#1A1A2E] shadow-[0_-4px_20px_rgba(0,0,0,0.15)] px-6 py-4">
+          <div className="max-w-4xl mx-auto flex items-center gap-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-[#E65100]">
+              <span className="material-symbols-outlined text-[18px]">edit_note</span>
+              {Object.keys(editedValues).length} unsaved change{Object.keys(editedValues).length > 1 ? 's' : ''}
+            </div>
+            <div className="flex-1">
+              <input type="text" value={changeReason} onChange={e => setChangeReason(e.target.value)}
+                placeholder="Reason for change (required) *"
+                className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+            </div>
+            {saveResult?.type === 'error' && (
+              <span className="text-[11px] text-[#CC3333] max-w-[200px] truncate">{saveResult.msg}</span>
+            )}
+            {saveResult?.type === 'success' && (
+              <span className="text-[11px] text-[#2D6A4F] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                {saveResult.msg}
+              </span>
+            )}
+            {hasViolation && (
+              <span className="text-[11px] text-[#CC3333] flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">block</span>
+                Policy violation
+              </span>
+            )}
+            <button disabled={!changeReason.trim() || hasViolation || saving} onClick={handleSave}
+              className="px-5 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
+              {saving ? 'Saving...' : sectionMeta?.twoPersonRequired ? 'Submit for Approval' : 'Save Changes'}
+            </button>
+            <button onClick={() => { setEditedValues({}); setChangeReason(''); setSaveResult(null); }}
+              className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F5F5F5] whitespace-nowrap">
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

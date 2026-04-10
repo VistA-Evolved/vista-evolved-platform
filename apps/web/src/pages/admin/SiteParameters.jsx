@@ -219,25 +219,40 @@ export default function SiteParameters() {
     if (!pkgData || pkgData.error) {
       return [{ key: 'loading', name: pkgData?.error || 'Loading...', value: '', type: 'readonly', description: pkgData?.note || 'Connecting to system...' }];
     }
-    // Parse raw DDR lines into editable fields
+    // Use the structured data[] array from the server which includes
+    // real DD field labels (e.g. "Flash Card Printer Name") instead of
+    // raw DDR field numbers ("Field 3 / Configuration parameter 3").
+    const structuredData = pkgData.data || [];
+    if (structuredData.length > 0) {
+      return structuredData.map(d => ({
+        key: `${selectedGroup}-${d.fieldNum}`,
+        fieldNum: d.fieldNum,
+        name: d.label || `Field ${d.fieldNum}`,
+        value: d.value || '',
+        type: 'text',
+        description: d.displayValue && d.displayValue !== d.value
+          ? `Current value: ${d.displayValue}`
+          : `VistA File #${pkgData.file || '?'}, field ${d.fieldNum}`,
+      }));
+    }
+    // Legacy fallback: parse raw DDR lines if server didn't return structured data
     const rawLines = pkgData.rawLines || [];
     if (rawLines.length === 0) {
       const groupDef = PARAM_TREE.flatMap(s => s.groups).find(g => g.id === selectedGroup);
-      return [{ key: 'empty', name: `${groupDef?.label || selectedGroup}`, value: 'No records found', type: 'readonly', description: 'This module has not been initialized yet. Parameters can be configured once the package is installed and set up.' }];
+      return [{ key: 'empty', name: `${groupDef?.label || selectedGroup}`, value: '', type: 'readonly', description: 'This module uses default settings. Configure as needed once the package is initialized.' }];
     }
     return rawLines.map((line, i) => {
       const parts = line.split('^');
-      // DDR GETS ENTRY format: FILE^IEN^FIELD^INTERNAL^EXTERNAL
       const fieldNum = parts[2] || `${i}`;
       const internal = parts[3] || '';
       const external = parts[4] || internal;
       return {
         key: `${selectedGroup}-${fieldNum}`,
         fieldNum,
-        name: external || `Field ${fieldNum}`,
+        name: `Field ${fieldNum}`,
         value: internal,
         type: 'text',
-        description: `Configuration parameter ${fieldNum}`,
+        description: external ? `Value: ${external}` : '',
       };
     });
   };

@@ -1671,16 +1671,27 @@ async function main() {
   });
 
   app.post('/api/tenant-admin/v1/users/:duz/esig', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
-    const code = (req.body || {}).code;
-    if (!code || typeof code !== 'string') return reply.code(400).send({ ok: false, error: 'code required' });
+    const tenantId = req.query.tenantId || 'default';
+    const body = req.body || {};
+    const action = (body.action || '').toLowerCase();
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+
+    // CLEAR action — nulls field 20.4 in File #200 via ZVE ESIG MANAGE
+    if (action === 'clear') {
+      const z = await callZveRpc('ZVE ESIG MANAGE', [String(req.params.duz), 'CLEAR']);
+      const o = zveOutcome(z);
+      if (o.kind !== 'ok') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg || 'Failed to clear e-signature', rpcUsed: z.rpcUsed });
+      return { ok: true, tenantId, duz: req.params.duz, action: 'clear', rpcUsed: z.rpcUsed };
+    }
+
+    // SET action — requires a code
+    const code = body.code;
+    if (!code || typeof code !== 'string') return reply.code(400).send({ ok: false, error: 'code required (or use action: "clear" to clear)' });
     const z = await callZveRpc('ZVE USMG ESIG', [String(req.params.duz), code]);
     const o = zveOutcome(z);
-    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG ESIG failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
-    return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+    if (o.kind !== 'ok') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg || 'Failed to set e-signature', rpcUsed: z.rpcUsed });
+    return { ok: true, tenantId, duz: req.params.duz, action: 'set', rpcUsed: z.rpcUsed };
   });
 
   app.post('/api/tenant-admin/v1/users/:duz/provider', async (req, reply) => {
@@ -5914,12 +5925,45 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
 
     try {
-      // Try DDR GETS ENTRY on the first record (IEN=1)
+      // Step 1: Read the actual data values via DDR GETS ENTRY
       const result = await ddrGetsEntry(pkgDef.file, '1', pkgDef.fields, 'IE');
       if (!result.ok) {
-        return { ok: true, source: 'vista', package: pkg, label: pkgDef.label, rawLines: [], data: {}, note: `File #${pkgDef.file} may not have records in this system.` };
+        return { ok: true, source: 'vista', package: pkg, label: pkgDef.label, rawLines: [], data: [], note: `File #${pkgDef.file} has no records in this system. Default settings are in use.` };
       }
-      return { ok: true, source: 'vista', package: pkg, label: pkgDef.label, rawLines: result.rawLines || [], file: pkgDef.file };
+
+      // Step 2: Read the DD field LABELS via ZVE DD FIELDS so we can show
+      // "FLASH CARD PRINTER NAME" instead of "Field 3 / Configuration parameter 3"
+      const fieldLabels = {};
+      try {
+        const dd = await callZveRpc('ZVE DD FIELDS', [pkgDef.file, pkgDef.fields]);
+        if (dd.ok) {
+          for (const line of dd.lines.slice(1)) {
+            const p = line.split('^');
+            if (p[0] && p[1]) fieldLabels[p[0]] = p[1];
+          }
+        }
+      } catch {}
+
+      // Step 3: Merge data values with DD field labels
+      const rawLines = result.rawLines || [];
+      const data = rawLines.map(line => {
+        const parts = line.split('^');
+        const fieldNum = parts[2] || '';
+        const internal = parts[3] || '';
+        const external = parts[4] || internal;
+        // Title-case the DD label for readability
+        const rawLabel = fieldLabels[fieldNum] || '';
+        const label = rawLabel
+          ? rawLabel.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+          : `${pkgDef.label} — Field ${fieldNum}`;
+        return { fieldNum, label, value: internal, displayValue: external };
+      }).filter(d => d.fieldNum);
+
+      return {
+        ok: true, source: 'vista', package: pkg, label: pkgDef.label, file: pkgDef.file,
+        rawLines, // backward compat
+        data,
+      };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
     }
