@@ -15,6 +15,29 @@ import ErrorState from '../../components/shared/ErrorState';
  * PACKAGE #9.4 prefix lookup + VistA word-processing description text).
  */
 
+const TASK_KEY_MAP = {
+  'write orders': ['ORES'],
+  'enter orders': ['ORES'],
+  'clinical orders': ['ORES'],
+  'verbal orders': ['ORELSE'],
+  'cosign orders': ['ORCL-SIGN-NOTES'],
+  'sign notes': ['ORCL-SIGN-NOTES'],
+  'chart access': ['OR CPRS GUI CHART'],
+  'open patient chart': ['OR CPRS GUI CHART'],
+  'patient chart': ['OR CPRS GUI CHART'],
+  'dispense medications': ['PSDISPENSE'],
+  'pharmacy dispense': ['PSDISPENSE'],
+  'controlled substances': ['PSORPH-CS'],
+  'cancel orders': ['ORCANCEL'],
+  'verify orders': ['ORES'],
+  'radiology orders': ['RA TECHNOLOGIST'],
+  'lab results': ['LRLAB'],
+  'diet orders': ['FH ENTER/EDIT DATA'],
+  'schedule appointments': ['SD SUPERVISOR'],
+  'admit patients': ['DG SUPERVISOR'],
+  'manage users': ['XUMGR'],
+};
+
 // columns are built inside the component to access handlers
 
 export default function PermissionsCatalog() {
@@ -37,6 +60,9 @@ export default function PermissionsCatalog() {
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState('');
 
+  // Multi-select state for batch assign
+  const [selectedStaff, setSelectedStaff] = useState(new Set());
+
   // Holders modal state
   const [holdersModal, setHoldersModal] = useState(null);
   const [holdersLoading, setHoldersLoading] = useState(false);
@@ -58,6 +84,7 @@ export default function PermissionsCatalog() {
     setAssignModal(row);
     setStaffSearch('');
     setAssignError('');
+    setSelectedStaff(new Set());
     if (staffList.length === 0) {
       setStaffLoading(true);
       try {
@@ -90,12 +117,36 @@ export default function PermissionsCatalog() {
     try {
       await assignPermission(duz, { keyName: assignModal.vistaKey || assignModal.name });
       setAssignModal(null);
+      setSelectedStaff(new Set());
       loadData();
     } catch (err) {
       // Surface the real backend error (e.g. mutual-exclusion conflict,
       // missing user, VistA unreachable) instead of silently closing.
       setAssignError(err?.message || 'Failed to assign permission');
     } finally { setAssigning(false); }
+  };
+
+  const handleBatchAssign = async () => {
+    if (!assignModal || selectedStaff.size === 0) return;
+    setAssigning(true);
+    setAssignError('');
+    const errors = [];
+    for (const duz of selectedStaff) {
+      try {
+        await assignPermission(duz, { keyName: assignModal.vistaKey || assignModal.name });
+      } catch (err) {
+        const staff = staffList.find(s => s.duz === duz);
+        errors.push(`${staff?.name || duz}: ${err?.message || 'failed'}`);
+      }
+    }
+    setAssigning(false);
+    if (errors.length > 0) {
+      setAssignError(`Failed for ${errors.length} staff: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '…' : ''}`);
+    } else {
+      setAssignModal(null);
+      setSelectedStaff(new Set());
+      loadData();
+    }
   };
 
   const columns = [
@@ -258,6 +309,34 @@ export default function PermissionsCatalog() {
               ))}
             </div>
           </div>
+
+          {/* Task search suggestions */}
+          {(() => {
+            if (!searchText) return null;
+            const s = searchText.toLowerCase();
+            const matchedKeys = new Set();
+            Object.entries(TASK_KEY_MAP).forEach(([task, keys]) => {
+              if (task.includes(s)) keys.forEach(k => matchedKeys.add(k));
+            });
+            const taskMatches = [...matchedKeys].map(k => allKeys.find(ak => ak.name === k || ak.vistaKey === k)).filter(Boolean);
+            if (taskMatches.length === 0) return null;
+            return (
+              <div className="mb-4 p-3 bg-[#E8F5E9] rounded-lg">
+                <div className="text-[11px] font-semibold text-[#2D6A4F] uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">lightbulb</span>
+                  Suggested keys for this task
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {taskMatches.map(match => (
+                    <button key={match.id} onClick={() => setSelectedPerm(match)}
+                      className="px-3 py-1.5 text-xs font-medium bg-white rounded-md border border-[#C8E6C9] hover:bg-[#F1F8F2] text-[#2D6A4F]">
+                      {match.displayName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {loading ? <TableSkeleton rows={10} cols={5} /> : (
             <>
@@ -425,19 +504,47 @@ export default function PermissionsCatalog() {
                     .filter(s => !staffSearch || s.name.toLowerCase().includes(staffSearch.toLowerCase()))
                     .slice(0, 50)
                     .map(s => (
-                      <button key={s.duz} onClick={() => handleAssign(s.duz)} disabled={assigning}
-                        className="w-full text-left flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-alt text-sm disabled:opacity-50">
-                        <span className="text-text">{s.name}</span>
-                        <span className="text-[11px] text-steel font-medium">Assign</span>
-                      </button>
+                      <label key={s.duz}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md hover:bg-surface-alt text-sm cursor-pointer ${selectedStaff.has(s.duz) ? 'bg-[#E8F5E9]' : ''}`}>
+                        <input type="checkbox" checked={selectedStaff.has(s.duz)}
+                          onChange={() => {
+                            setSelectedStaff(prev => {
+                              const next = new Set(prev);
+                              next.has(s.duz) ? next.delete(s.duz) : next.add(s.duz);
+                              return next;
+                            });
+                          }}
+                          className="w-3.5 h-3.5 accent-[#1B7D3A]" />
+                        <span className="text-text flex-1">{s.name}</span>
+                        <span className="text-[10px] text-[#999]">DUZ {s.duz}</span>
+                      </label>
                     ))}
                   {staffList.length === 0 && <p className="text-sm text-text-muted text-center py-6">No staff members found.</p>}
                 </div>
               )}
             </div>
           </div>
+          {selectedStaff.size > 0 && (
+            <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+              <span className="text-xs text-[#666]">{selectedStaff.size} staff selected</span>
+              <button onClick={handleBatchAssign} disabled={assigning}
+                className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40">
+                {assigning ? 'Assigning…' : `Assign to ${selectedStaff.size} Selected`}
+              </button>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Terminal Reference */}
+      <details className="mx-6 mt-4 mb-2">
+        <summary className="text-[10px] text-[#BBB] cursor-pointer hover:text-[#888]">📖 Terminal Reference</summary>
+        <div className="mt-2 p-3 bg-[#FAFAFA] rounded-lg text-[11px] text-[#888] leading-relaxed space-y-1">
+          <p>This page replaces: <strong>EVE → Menu Management → Key Management</strong> and the key-related portions of <strong>User Management → Edit User → Keys tab</strong>.</p>
+          <p className="font-mono text-[10px] text-[#AAA]">Key data is sourced from SECURITY KEY file (#19.1). Holder counts come from ^XUSEC global cross-references.</p>
+          <p>Assigning a key here is equivalent to: <span className="font-mono text-[10px] text-[#AAA]">D ALLOCATE^XUSKEYP</span></p>
+        </div>
+      </details>
     </AppShell>
   );
 }

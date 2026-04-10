@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getPermissions, getCustomRoles, createCustomRole, deleteCustomRole } from '../../services/adminService';
+import { getPermissions, getCustomRoles, createCustomRole, deleteCustomRole, updateCustomRole, getStaff, getUserPermissions, assignPermission } from '../../services/adminService';
 
 /**
  * AD-04: Role Templates (VistA Evolved Addition)
@@ -355,6 +355,51 @@ const ROLES = [
 const ACCESS_LABELS = { rw: 'Read & Write', ro: 'Read Only', none: 'No Access' };
 const ACCESS_COLORS = { rw: 'bg-[#E6F4EA] text-[#1B7D3A]', ro: 'bg-[#E8EEF5] text-[#2E5984]', none: 'bg-[#F5F5F5] text-[#999]' };
 
+const KEY_IMPACTS = {
+  'PROVIDER': 'Identifies user as healthcare provider. Without this: cannot appear in provider lookups or be selected as attending.',
+  'ORES': 'Allows signing clinical orders. Without this: orders pend indefinitely for someone else to sign.',
+  'OR CPRS GUI CHART': 'Grants access to patient charts. WITHOUT THIS KEY, THE USER CANNOT OPEN ANY PATIENT CHART.',
+  'ORCL-SIGN-NOTES': 'Allows signing clinical notes. Without this: notes remain unsigned and may not be legally valid.',
+  'ORCL-PAT-RECS': 'Allows viewing patient records. Without this: patient data is hidden even in accessible workspaces.',
+  'ORELSE': 'Allows releasing verbal/telephone orders entered by providers. Without this: verbal orders cannot be released.',
+  'PSB NURSE': 'Medication administration (BCMA). Without this: cannot scan and administer medications at bedside.',
+  'OREMAS': 'Enter orders on behalf of a provider. Without this: cannot enter orders even when directed by physician.',
+  'PSORPH': 'Outpatient pharmacy dispensing. Without this: cannot process or dispense outpatient prescriptions.',
+  'PSJ PHARMACIST': 'Inpatient pharmacy verification. Without this: cannot verify inpatient medication orders.',
+  'PSO MANAGER': 'Outpatient pharmacy management. Without this: cannot manage pharmacy workflow or override dispensing locks.',
+  'PSD PHARMACIST': 'Controlled substance pharmacist. Without this: cannot access Schedule II-V dispensing or CS audit.',
+  'PSDRPH': 'Controlled substance dispensing. Without this: cannot dispense Schedule II-V medications.',
+  'PSOPHARMACIST': 'Pharmacist verification authority. Without this: cannot verify outpatient prescriptions.',
+  'PSOINTERFACE': 'Pharmacy interface access. Without this: cannot access pharmacy interface management functions.',
+  'LRLAB': 'Laboratory technician access. Without this: cannot enter or process lab results.',
+  'LRVERIFY': 'Laboratory result verification. Without this: results remain unverified and may not release to charts.',
+  'LRSUPER': 'Laboratory supervisor authority. Without this: cannot override lab workflows or manage QA.',
+  'LRMGR': 'Laboratory manager authority. Without this: cannot manage lab configuration or personnel.',
+  'LRCAP': 'Lab collection and accession. Without this: cannot process specimen collection or accession.',
+  'SD SCHEDULING': 'Appointment scheduling. Without this: cannot book, cancel, or modify patient appointments.',
+  'SDCLINICAL': 'Clinical scheduling access. Without this: cannot manage clinical appointment types.',
+  'SD SUPERVISOR': 'Scheduling supervisor authority. Without this: cannot override closures or manage no-shows.',
+  'SDMGR': 'Scheduling manager authority. Without this: cannot manage clinic schedule templates.',
+  'DG REGISTER': 'Patient registration. Without this: cannot register new patients or update demographics.',
+  'DG REGISTRATION': 'Patient registration access. Without this: cannot access the registration workflow.',
+  'DG ADMIT': 'Patient admission. Without this: cannot process inpatient admissions.',
+  'DG DISCHARGE': 'Patient discharge. Without this: cannot process patient discharges.',
+  'DG TRANSFER': 'Patient transfer. Without this: cannot transfer patients between wards or services.',
+  'DG MENU': 'ADT coordinator menu. Without this: cannot access the ADT management workflow.',
+  'DG SUPERVISOR': 'ADT supervisor authority. Without this: cannot override ADT restrictions or access sensitive records.',
+  'DG SENSITIVITY': 'Sensitive patient access. Without this: cannot view records flagged as sensitive.',
+  'DGMEANS TEST': 'Means test entry. Without this: cannot enter or update patient means test information.',
+  'GMRA ALLERGY VERIFY': 'Allergy verification authority. Without this: cannot verify or mark allergies as reviewed.',
+  'RA TECHNOLOGIST': 'Radiology technologist access. Without this: cannot perform or manage imaging exams.',
+  'MAG SYSTEM': 'Imaging system access. Without this: cannot access the VistA Imaging system.',
+  'MAG CAPTURE': 'Image capture authority. Without this: cannot capture or upload medical images.',
+  'XUMGR': 'User management authority. Without this: cannot create, edit, or manage other user accounts.',
+  'XUPROG': 'System programmer access. Without this: cannot access FileMan or system programming tools.',
+  'XUPROGMODE': 'Advanced diagnostic access. Without this: cannot enter programmer mode for system diagnostics.',
+  'XUAUDITING': 'Security auditing access. Without this: cannot view or manage security audit logs.',
+  'IBFIN': 'Billing financial access. Without this: cannot process billing claims or financial transactions.',
+};
+
 export default function RoleTemplates() {
   const navigate = useNavigate();
   const [selectedRole, setSelectedRole] = useState(ROLES[0]);
@@ -371,6 +416,20 @@ export default function RoleTemplates() {
   const [keyHolderMap, setKeyHolderMap] = useState({});
   // Server-enriched key data: keyName → { displayName, description, department }
   const [keyEnrichMap, setKeyEnrichMap] = useState({});
+
+  // Role assignment modal state
+  const [assignTarget, setAssignTarget] = useState(null);
+  const [assignStaffList, setAssignStaffList] = useState([]);
+  const [assignStaffSearch, setAssignStaffSearch] = useState('');
+  const [assignStaffLoading, setAssignStaffLoading] = useState(false);
+  const [assignSelectedUser, setAssignSelectedUser] = useState(null);
+  const [assignUserKeys, setAssignUserKeys] = useState([]);
+  const [assigningRole, setAssigningRole] = useState(false);
+  const [assignSuccess, setAssignSuccess] = useState(null);
+
+  // Custom role editing state
+  const [editingCustomKeys, setEditingCustomKeys] = useState(false);
+  const [customKeySearch, setCustomKeySearch] = useState('');
 
   useEffect(() => {
     Promise.allSettled([
@@ -466,6 +525,74 @@ export default function RoleTemplates() {
       setError(err.message || 'Failed to delete role');
     }
     setDeleteTarget(null);
+  };
+
+  const handleOpenAssignRole = async (role) => {
+    setAssignTarget(role);
+    setAssignStaffSearch('');
+    setAssignSelectedUser(null);
+    setAssignUserKeys([]);
+    setAssignSuccess(null);
+    if (assignStaffList.length === 0) {
+      setAssignStaffLoading(true);
+      try {
+        const res = await getStaff();
+        setAssignStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
+      } catch { setAssignStaffList([]); }
+      finally { setAssignStaffLoading(false); }
+    }
+  };
+
+  const handleSelectAssignUser = async (user) => {
+    setAssignSelectedUser(user);
+    try {
+      const res = await getUserPermissions(user.duz);
+      setAssignUserKeys((res?.data || []).map(k => k.name));
+    } catch { setAssignUserKeys([]); }
+  };
+
+  const handleConfirmAssignRole = async () => {
+    if (!assignTarget || !assignSelectedUser) return;
+    setAssigningRole(true);
+    try {
+      const existingSet = new Set(assignUserKeys);
+      const toAdd = assignTarget.permissions.filter(p => !existingSet.has(p.key));
+      for (const perm of toAdd) {
+        await assignPermission(assignSelectedUser.duz, { keyName: perm.key });
+      }
+      setAssignSuccess(`Assigned ${toAdd.length} new key${toAdd.length !== 1 ? 's' : ''} to ${assignSelectedUser.name}. ${assignTarget.permissions.length - toAdd.length} already held.`);
+      setAssignSelectedUser(null);
+    } catch (err) {
+      setError(err.message || 'Failed to assign role');
+    } finally { setAssigningRole(false); }
+  };
+
+  const toggleCustomRoleKey = (roleId, keyData) => {
+    setCustomRoles(prev => prev.map(r => {
+      if (r.id !== roleId) return r;
+      const has = r.permissions.some(p => p.key === keyData.name);
+      const newPerms = has
+        ? r.permissions.filter(p => p.key !== keyData.name)
+        : [...r.permissions, { label: keyData.displayName || keyData.name, key: keyData.name }];
+      const updated = { ...r, permissions: newPerms };
+      if (selectedRole.id === roleId) setSelectedRole(updated);
+      return updated;
+    }));
+  };
+
+  const saveCustomRoleKeys = async (roleId) => {
+    const role = customRoles.find(r => r.id === roleId);
+    if (!role) return;
+    try {
+      await updateCustomRole(roleId, {
+        name: role.name,
+        description: role.description,
+        keys: role.permissions.map(p => p.key),
+      });
+      setEditingCustomKeys(false);
+    } catch (err) {
+      setError(err.message || 'Failed to save role changes');
+    }
   };
 
   const allRoles = [...ROLES, ...customRoles];
@@ -570,9 +697,62 @@ export default function RoleTemplates() {
             {activeTab === 'permissions' && (
               <>
                 <section className="mb-6">
-                  <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">
-                    Permissions Granted
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">
+                      Permissions Granted
+                    </h3>
+                    {!selectedRole.isSystem && (
+                      <button
+                        onClick={() => { setEditingCustomKeys(!editingCustomKeys); setCustomKeySearch(''); }}
+                        className="text-[11px] font-medium text-[#2E5984] hover:text-[#1A1A2E] flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]">{editingCustomKeys ? 'close' : 'edit'}</span>
+                        {editingCustomKeys ? 'Done Editing' : 'Edit Keys'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Inline key editor for custom roles */}
+                  {editingCustomKeys && !selectedRole.isSystem && (
+                    <div className="mb-4 p-3 bg-[#F5F8FB] rounded-lg border border-[#E2E4E8]">
+                      <input
+                        type="text"
+                        placeholder="Search keys…"
+                        value={customKeySearch}
+                        onChange={e => setCustomKeySearch(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] mb-2"
+                      />
+                      <div className="max-h-[250px] overflow-y-auto space-y-1">
+                        {[...vistaKeySet]
+                          .filter(k => !customKeySearch || k.toLowerCase().includes(customKeySearch.toLowerCase()) || (keyEnrichMap[k]?.displayName || '').toLowerCase().includes(customKeySearch.toLowerCase()))
+                          .slice(0, 100)
+                          .map(keyName => {
+                            const enriched = keyEnrichMap[keyName];
+                            const isSelected = selectedRole.permissions.some(p => p.key === keyName);
+                            return (
+                              <label key={keyName} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-white text-[12px] ${isSelected ? 'bg-[#E8F5E9]' : ''}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleCustomRoleKey(selectedRole.id, { name: keyName, displayName: enriched?.displayName || keyName })}
+                                  className="w-3.5 h-3.5 accent-[#1B7D3A]"
+                                />
+                                <span className="font-medium text-[#222]">{enriched?.displayName || keyName}</span>
+                                {enriched?.department && <span className="text-[9px] text-[#999]">({enriched.department})</span>}
+                              </label>
+                            );
+                          })}
+                      </div>
+                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#E2E4E8]">
+                        <span className="text-[11px] text-[#666]">{selectedRole.permissions.length} keys selected</span>
+                        <button
+                          onClick={() => saveCustomRoleKeys(selectedRole.id)}
+                          className="px-3 py-1.5 text-[11px] font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984]">
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     {(() => {
                       const validPerms = selectedRole.permissions.filter(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key));
@@ -600,9 +780,21 @@ export default function RoleTemplates() {
                               <div key={i} className="px-3 py-2.5 bg-[#F5F8FB] rounded-lg mb-1">
                                 <div className="flex items-center gap-2">
                                   <span className="material-symbols-outlined text-[16px] text-[#1B7D3A]">check_circle</span>
-                                  <span className="text-[13px] font-medium text-[#222]">{displayName}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[13px] font-medium text-[#222]">{displayName}</span>
+                                      {keyEnrichMap[perm.key]?.department && (
+                                        <span className="text-[9px] px-2 py-0.5 rounded bg-white text-[#666] flex-shrink-0">
+                                          {keyEnrichMap[perm.key].department}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                                 {description && <div className="text-[11px] text-[#666] ml-6 mt-0.5">{description}</div>}
+                                {KEY_IMPACTS[perm.key] && (
+                                  <div className="text-[11px] text-[#888] ml-6 mt-1 leading-relaxed italic">{KEY_IMPACTS[perm.key]}</div>
+                                )}
                                 <details className="ml-6 mt-0.5">
                                   <summary className="text-[9px] text-[#BBB] cursor-pointer hover:text-[#888]">System reference</summary>
                                   <div className="text-[10px] font-mono text-[#AAA] mt-0.5">{perm.key}</div>
@@ -685,6 +877,10 @@ export default function RoleTemplates() {
                 <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-3">
                   Workspace Visibility & Page-Level Access
                 </h3>
+                <div className="mb-3 p-3 bg-[#FFF8E1] rounded-lg text-[12px] text-[#F57C00] flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] mt-0.5">info</span>
+                  <span>These workspace access levels are <strong>recommended defaults</strong> for this role. Actual page access is determined by the security keys assigned above. Use this grid as a planning reference when configuring environments.</span>
+                </div>
                 <div className="space-y-2">
                   {ALL_WORKSPACES.map(ws => {
                     const access = selectedRole.workspaceAccess?.[ws] || 'none';
@@ -706,16 +902,7 @@ export default function RoleTemplates() {
 
             <div className="flex gap-3 pt-4 border-t border-[#E2E4E8]">
               <button
-                onClick={() => {
-                  // Navigate to the catalog with the role's primary key
-                  // pre-selected, which opens the catalog's assign flow.
-                  const firstAvailableKey = selectedRole.permissions.find(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key))?.key;
-                  if (firstAvailableKey) {
-                    navigate(`/admin/permissions?assign=${encodeURIComponent(firstAvailableKey)}`);
-                  } else {
-                    navigate('/admin/permissions');
-                  }
-                }}
+                onClick={() => handleOpenAssignRole(selectedRole)}
                 className="px-4 py-2 text-[13px] font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors">
                 Assign to Staff Member
               </button>
@@ -784,6 +971,110 @@ export default function RoleTemplates() {
           destructive
         />
       )}
+
+      {/* Assign Role to Staff Member Modal */}
+      {assignTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setAssignTarget(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-[520px] max-h-[85vh] overflow-y-auto p-6" role="dialog" aria-modal="true" aria-label="Assign Role" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-[#222] mb-1">Assign Role: {assignTarget.name}</h3>
+            <p className="text-xs text-[#666] mb-4">
+              Select a staff member to assign all {assignTarget.permissions.length} permissions in this role. Keys the user already holds will be skipped.
+            </p>
+
+            {assignSuccess ? (
+              <div className="mb-4">
+                <div className="p-3 bg-[#E8F5E9] rounded-lg text-sm text-[#2D6A4F] flex items-center gap-2 mb-4">
+                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                  {assignSuccess}
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => { setAssignSuccess(null); setAssignSelectedUser(null); }}
+                    className="px-4 py-2 text-xs font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">Assign Another</button>
+                  <button onClick={() => setAssignTarget(null)}
+                    className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984]">Done</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Search staff by name…"
+                  value={assignStaffSearch}
+                  onChange={e => setAssignStaffSearch(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] mb-3"
+                />
+
+                {assignStaffLoading ? (
+                  <div className="text-center py-6 text-sm text-[#999]">Loading staff…</div>
+                ) : (
+                  <div className="max-h-[200px] overflow-y-auto border border-[#E2E4E8] rounded-md mb-4">
+                    {assignStaffList
+                      .filter(u => !assignStaffSearch || u.name.toLowerCase().includes(assignStaffSearch.toLowerCase()))
+                      .slice(0, 50)
+                      .map(user => (
+                        <button
+                          key={user.duz}
+                          onClick={() => handleSelectAssignUser(user)}
+                          className={`w-full text-left px-3 py-2 text-sm border-b border-[#F0F0F0] last:border-b-0 hover:bg-[#F5F8FB] transition-colors ${assignSelectedUser?.duz === user.duz ? 'bg-[#E8EEF5] font-medium' : ''}`}>
+                          {user.name}
+                          <span className="text-[10px] text-[#999] ml-2">DUZ {user.duz}</span>
+                        </button>
+                      ))}
+                  </div>
+                )}
+
+                {assignSelectedUser && (
+                  <div className="mb-4 p-3 bg-[#F5F8FB] rounded-lg">
+                    <div className="text-xs font-semibold text-[#222] mb-2">
+                      Key comparison for {assignSelectedUser.name}
+                    </div>
+                    <div className="space-y-1 max-h-[150px] overflow-y-auto">
+                      {assignTarget.permissions.map((perm, i) => {
+                        const alreadyHeld = assignUserKeys.includes(perm.key);
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-[12px]">
+                            <span className={`material-symbols-outlined text-[14px] ${alreadyHeld ? 'text-[#999]' : 'text-[#1B7D3A]'}`}>
+                              {alreadyHeld ? 'check' : 'add_circle'}
+                            </span>
+                            <span className={alreadyHeld ? 'text-[#999]' : 'text-[#222]'}>
+                              {keyEnrichMap[perm.key]?.displayName || perm.label}
+                            </span>
+                            {alreadyHeld && <span className="text-[10px] text-[#BBB]">(already held)</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-[#666] mt-2">
+                      {assignTarget.permissions.filter(p => !assignUserKeys.includes(p.key)).length} new key(s) will be assigned
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setAssignTarget(null)}
+                    className="px-4 py-2 text-xs border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">Cancel</button>
+                  <button
+                    onClick={handleConfirmAssignRole}
+                    disabled={!assignSelectedUser || assigningRole}
+                    className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40">
+                    {assigningRole ? 'Assigning…' : 'Assign Role'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Terminal Reference */}
+      <details className="mt-6 mb-2">
+        <summary className="text-[10px] text-[#BBB] cursor-pointer hover:text-[#888]">📖 Terminal Reference</summary>
+        <div className="mt-2 p-3 bg-[#FAFAFA] rounded-lg text-[11px] text-[#888] leading-relaxed space-y-1">
+          <p>Role templates are a <strong>VistA Evolved feature</strong> with no direct terminal equivalent. In legacy VistA, key assignment is managed per-user via:</p>
+          <p className="font-mono text-[10px] text-[#AAA]">EVE → Systems Manager Menu → User Management → Edit an Existing User → Security Keys</p>
+          <p>This page groups keys into named roles for faster, more consistent assignment. Each key in a role template maps 1:1 to a VistA security key in the SECURITY KEY file (#19.1).</p>
+        </div>
+      </details>
     </AppShell>
   );
 }
