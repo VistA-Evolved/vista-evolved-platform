@@ -149,6 +149,21 @@ const FIELD_GROUPS = {
     { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
     { label: 'Booking Rules', fields: ['1', '2', '3', '4', '5'] },
   ],
+  'order-entry': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Order Processing', fields: ['1', '2', '3', '4', '5'] },
+    { label: 'Notifications', fields: ['6', '7', '8', '9', '10'] },
+  ],
+  'radiology': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Imaging Defaults', fields: ['1', '2', '3', '4', '5'] },
+    { label: 'Report Settings', fields: ['6', '7', '8', '9', '10'] },
+  ],
+  'surgery': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Scheduling', fields: ['1', '2', '3', '4', '5'] },
+    { label: 'Documentation', fields: ['6', '7', '8', '9', '10'] },
+  ],
 };
 
 export default function SiteParameters() {
@@ -433,6 +448,36 @@ export default function SiteParameters() {
             <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
               <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
               Scheduling Parameters (VistA File #44.001). Controls appointment booking rules, clinic availability, and scheduling notifications.
+            </div>
+          )}
+          {selectedGroup === 'order-entry' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Order Entry Parameters (VistA File #100.99). Controls CPRS order processing, signature requirements, and notification rules.
+            </div>
+          )}
+          {selectedGroup === 'radiology' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Radiology Parameters (VistA File #79.1). Controls imaging defaults, report formatting, and procedure tracking.
+            </div>
+          )}
+          {selectedGroup === 'surgery' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Surgery Parameters (VistA File #136). Controls surgical scheduling, documentation requirements, and case tracking.
+            </div>
+          )}
+          {selectedGroup === 'kernel' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Kernel System Parameters (VistA File #8989.3). Core system identity — domain name, site number, production status, and welcome message.
+            </div>
+          )}
+          {selectedGroup === 'session' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Session &amp; Security Parameters. Controls session timeout, auto sign-off delays, and RPC broker timeout. Subject to VHA security policy enforcement.
             </div>
           )}
 

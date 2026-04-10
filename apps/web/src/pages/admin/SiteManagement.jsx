@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import { SearchBar } from '../../components/shared/SharedComponents';
-import { getSites, getSite, getTopology, updateSite, createSite, getSiteWorkspaces, updateSiteWorkspace } from '../../services/adminService';
+import { getSites, getSite, getTopology, updateSite, createSite, getSiteWorkspaces, updateSiteWorkspace, getFacilities } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
 /**
@@ -35,13 +35,18 @@ export default function SiteManagement() {
   const [showAddSite, setShowAddSite] = useState(false);
   const [newSiteForm, setNewSiteForm] = useState({ name: '', stationNumber: '', type: 'Medical Center' });
   const [createError, setCreateError] = useState('');
+  const [facilityData, setFacilityData] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [res, topoRes] = await Promise.allSettled([getSites(), getTopology()]);
+      const [res, topoRes, facRes] = await Promise.allSettled([getSites(), getTopology(), getFacilities()]);
       if (topoRes.status === 'fulfilled') setTopology(topoRes.value?.data || topoRes.value || null);
+      if (facRes.status === 'fulfilled') {
+        const facilities = facRes.value?.data || [];
+        setFacilityData(facilities.length > 0 ? facilities[0] : null);
+      }
       if (res.status === 'rejected') {
         setError(res.reason?.message || 'Failed to load sites');
         setLoading(false);
@@ -204,14 +209,17 @@ export default function SiteManagement() {
                       setSaveMsg('');
                       setEditMode(!editMode);
                     }}
+                    title={editMode ? 'Cancel editing this site' : 'Edit site name, address, and contact details'}
                     className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
                     {editMode ? 'Cancel Edit' : 'Edit Site'}
                   </button>
                   <button onClick={() => setShowAddSite(true)}
+                    title="Create a new division entry in VistA File #40.8"
                     className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
                     Add Site
                   </button>
                   <button onClick={() => navigate('/admin/parameters')}
+                    title="View and edit package-specific system parameters"
                     className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
                     Site Parameters
                   </button>
@@ -307,7 +315,28 @@ export default function SiteManagement() {
                 </div>
               </Section>
 
+              {/* Institution fields from File #4 */}
+              {facilityData && (
+                <Section title="Facility Information">
+                  <div className="grid grid-cols-2 gap-y-3 gap-x-6">
+                    {facilityData.name && <Field label="Institution Name" value={facilityData.name} />}
+                    {facilityData.stationNumber && <Field label="Station Number" value={facilityData.stationNumber} mono />}
+                    {facilityData.address && <Field label="Address" value={facilityData.address} />}
+                    {facilityData.city && <Field label="City" value={facilityData.city} />}
+                    {facilityData.state && <Field label="State" value={facilityData.state} />}
+                    {facilityData.zip && <Field label="ZIP" value={facilityData.zip} mono />}
+                    {facilityData.phone && <Field label="Phone" value={facilityData.phone} mono />}
+                    {facilityData.director && <Field label="Director" value={facilityData.director} />}
+                    {facilityData.timezone && <Field label="Timezone" value={facilityData.timezone} />}
+                  </div>
+                </Section>
+              )}
+
               <Section title="Active Workspaces">
+                <div className="mb-3 p-3 bg-[#FFFDE7] border border-[#F9A825] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[14px] text-[#F9A825] mt-0.5">info</span>
+                  <span>Workspace visibility controls which modules appear in the navigation for staff at this site. Disabling a workspace hides it from the sidebar — it does not delete data or revoke permissions. Changes take effect on next page load.</span>
+                </div>
                 <p className="text-xs text-text-secondary mb-3">
                   Workspaces available at this site. Toggle to enable or disable.
                 </p>
@@ -337,25 +366,50 @@ export default function SiteManagement() {
               {/* Topology Section */}
               {topology && (
                 <Section title="System Topology">
-                  <div className="bg-white border border-border rounded-md p-3">
-                    {typeof topology === 'object' && !Array.isArray(topology) ? (
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        {Object.entries(topology).map(([key, val]) => (
-                          <div key={key}>
-                            <span className="text-text-muted capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}:</span>{' '}
-                            <span className="font-mono text-text-secondary">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
-                          </div>
-                        ))}
+                  <div className="bg-white border border-border rounded-md p-4">
+                    {/* Visual tree: parent → child divisions */}
+                    <div className="space-y-1">
+                      {/* Facility root node */}
+                      <div className="flex items-center gap-2 text-sm font-semibold text-text">
+                        <span className="material-symbols-outlined text-[18px] text-steel">account_tree</span>
+                        {topology.facilityName || topology.siteName || 'VistA System'}
+                        {topology.stationNumber && <span className="text-[10px] font-mono text-text-muted ml-1">({topology.stationNumber})</span>}
                       </div>
-                    ) : Array.isArray(topology) ? (
-                      <div className="space-y-1">
-                        {topology.map((item, i) => (
-                          <div key={i} className="text-xs text-text-secondary font-mono">{typeof item === 'string' ? item : JSON.stringify(item)}</div>
-                        ))}
-                      </div>
-                    ) : (
-                      <pre className="text-[10px] font-mono text-text-secondary overflow-auto max-h-40">{JSON.stringify(topology, null, 2)}</pre>
-                    )}
+                      {/* Division child nodes from allSites */}
+                      {allSites.length > 0 ? (
+                        <div className="ml-5 border-l-2 border-[#E2E4E8] pl-4 space-y-1.5 mt-1">
+                          {allSites.map(site => (
+                            <div key={site.id} className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[14px] text-text-muted">
+                                {site.type === 'Medical Center' ? 'local_hospital' : site.type === 'Community Clinic' ? 'health_and_safety' : 'location_on'}
+                              </span>
+                              <span className={`text-xs ${site.id === selectedSite?.id ? 'font-semibold text-steel' : 'text-text-secondary'}`}>{site.name}</span>
+                              <span className="text-[10px] font-mono text-text-muted">{site.siteCode}</span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${site.status === 'active' ? 'bg-[#E8F5E9] text-[#2D6A4F]' : 'bg-[#FDE8E8] text-[#CC3333]'}`}>{site.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="ml-5 text-xs text-text-muted mt-1">No divisions loaded.</p>
+                      )}
+                      {/* Additional topology metadata */}
+                      {(topology.connectionMode || topology.environment) && (
+                        <div className="mt-3 pt-3 border-t border-[#E2E4E8] grid grid-cols-2 gap-2 text-xs">
+                          {topology.connectionMode && (
+                            <div><span className="text-text-muted">Connection:</span> <span className="font-mono text-text-secondary">{topology.connectionMode}</span></div>
+                          )}
+                          {topology.environment && (
+                            <div><span className="text-text-muted">Environment:</span> <span className="text-text-secondary">{topology.environment}</span></div>
+                          )}
+                          {topology.dbEngine && (
+                            <div><span className="text-text-muted">Database:</span> <span className="font-mono text-text-secondary">{topology.dbEngine}</span></div>
+                          )}
+                          {topology.version && (
+                            <div><span className="text-text-muted">Version:</span> <span className="font-mono text-text-secondary">{topology.version}</span></div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Section>
               )}
@@ -365,6 +419,14 @@ export default function SiteManagement() {
                 via the system bar, the application context changes: different patients, parameters, workspace availability,
                 and report scope apply to the selected site.
               </div>
+
+              <details className="mt-4 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+                <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+                <p className="mt-2">This page replaces the terminal&apos;s <strong>Division Management</strong> menu.</p>
+                <p className="mt-1">Terminal path: <strong>Systems Manager Menu → Site Management → Division Management</strong></p>
+                <p className="mt-1">VistA stores divisions in <strong>MEDICAL CENTER DIVISION file (#40.8)</strong> and institutions in <strong>INSTITUTION file (#4)</strong>.</p>
+                <p className="mt-1">Workspace visibility toggles are stored in <strong>^XTMP(&quot;ZVE-WKSP&quot;)</strong>.</p>
+              </details>
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-text-muted">
@@ -383,16 +445,19 @@ export default function SiteManagement() {
               <div>
                 <label className="text-xs font-medium text-text-muted uppercase">Site Name *</label>
                 <input type="text" value={newSiteForm.name} onChange={e => setNewSiteForm(f => ({ ...f, name: e.target.value }))}
+                  title="Official name for this division (File #40.8 field .01)"
                   className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
               </div>
               <div>
                 <label className="text-xs font-medium text-text-muted uppercase">Station Number</label>
                 <input type="text" value={newSiteForm.stationNumber} onChange={e => setNewSiteForm(f => ({ ...f, stationNumber: e.target.value }))}
+                  title="3-digit station number identifying this division"
                   className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
               </div>
               <div>
                 <label className="text-xs font-medium text-text-muted uppercase">Type</label>
                 <select value={newSiteForm.type} onChange={e => setNewSiteForm(f => ({ ...f, type: e.target.value }))}
+                  title="Facility classification for this division"
                   className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1">
                   <option>Medical Center</option>
                   <option>Community Clinic</option>

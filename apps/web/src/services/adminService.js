@@ -336,6 +336,14 @@ export async function getHL7LinkStatus(ien) {
   return tenantApi.get(`/hl7/link-status/${ien}`);
 }
 
+export async function shutdownHL7Interface(ien) {
+  return tenantApi.post(`/hl7-interfaces/${ien}/shutdown`);
+}
+
+export async function enableHL7Interface(ien) {
+  return tenantApi.post(`/hl7-interfaces/${ien}/enable`);
+}
+
 // ────────────────────────────────────────────────
 // System Reports (backend: per-domain report endpoints)
 // No generic /reports — use domain-specific:

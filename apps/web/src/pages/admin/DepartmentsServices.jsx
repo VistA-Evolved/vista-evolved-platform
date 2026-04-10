@@ -14,9 +14,6 @@ import ErrorState from '../../components/shared/ErrorState';
 const columns = [
   { key: 'name', label: 'Department Name', bold: true },
   { key: 'abbreviation', label: 'Abbreviation' },
-  { key: 'chief', label: 'Department Chief' },
-  { key: 'mailSymbol', label: 'Mail Symbol' },
-  { key: 'type', label: 'Type' },
 ];
 
 const PAGE_SIZE = 25;
@@ -52,9 +49,6 @@ export default function DepartmentsServices() {
         id: d.ien || `dept-${i}`,
         name: d.name || '',
         abbreviation: d.abbreviation || '',
-        chief: '',
-        mailSymbol: '',
-        type: '',
       }));
       setDepartments(items);
     } catch (err) {
@@ -82,6 +76,7 @@ export default function DepartmentsServices() {
         chief: d.chief || '',
         mailSymbol: d.mailSymbol || '',
         type: d.type || '',
+        parentService: d.parentService || '',
       };
       setDetailData(detail);
     } catch {
@@ -115,6 +110,7 @@ export default function DepartmentsServices() {
       name: detailData.name,
       abbreviation: detailData.abbreviation,
       mailSymbol: detailData.mailSymbol,
+      chief: detailData.chief,
     });
     setSaveMsg(null);
     setActionError(null);
@@ -129,6 +125,7 @@ export default function DepartmentsServices() {
       if (editValues.name !== detailData.name) fieldsToSave.push({ field: '.01', value: editValues.name });
       if (editValues.abbreviation !== detailData.abbreviation) fieldsToSave.push({ field: '1', value: editValues.abbreviation });
       if (editValues.mailSymbol !== detailData.mailSymbol) fieldsToSave.push({ field: '2', value: editValues.mailSymbol });
+      if (editValues.chief !== detailData.chief) fieldsToSave.push({ field: '3', value: editValues.chief });
 
       for (const f of fieldsToSave) {
         await updateDepartment(detailData.id, f);
@@ -180,6 +177,7 @@ export default function DepartmentsServices() {
               </div>
               <button
                 onClick={() => { setShowCreateModal(true); setCreateError(null); setCreateName(''); setCreateAbbrev(''); }}
+                title="Create a new department in VistA File #49"
                 className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors"
               >
                 <span className="material-symbols-outlined text-[16px]">add</span>
@@ -204,6 +202,14 @@ export default function DepartmentsServices() {
             )}
 
             <Pagination page={page} pageSize={PAGE_SIZE} total={totalFiltered} onPageChange={setPage} />
+
+            <details className="mt-6 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+              <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+              <p className="mt-2">This page replaces the terminal&apos;s <strong>Service/Section</strong> management.</p>
+              <p className="mt-1">Terminal path: <strong>ADT System Definition Menu → Service/Section Set-up</strong></p>
+              <p className="mt-1">VistA stores departments in <strong>SERVICE/SECTION file (#49)</strong>.</p>
+              <p className="mt-1">Key fields: .01 (Name), 1 (Abbreviation), 2 (Mail Symbol), 3 (Chief), 4 (Parent Service).</p>
+            </details>
           </div>
         </div>
 
@@ -240,16 +246,25 @@ export default function DepartmentsServices() {
                 <div>
                   <label className="block text-xs font-medium text-[#333] mb-1">Department Name <span className="text-[#CC3333]">*</span></label>
                   <input type="text" value={editValues.name || ''} onChange={e => setEditValues(prev => ({ ...prev, name: e.target.value }))}
+                    title="Department name (File #49 field .01)"
                     className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#333] mb-1">Abbreviation</label>
                   <input type="text" value={editValues.abbreviation || ''} onChange={e => setEditValues(prev => ({ ...prev, abbreviation: e.target.value }))}
+                    title="Short abbreviation for this department (File #49 field 1)"
                     className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-[#333] mb-1">Mail Symbol</label>
                   <input type="text" value={editValues.mailSymbol || ''} onChange={e => setEditValues(prev => ({ ...prev, mailSymbol: e.target.value }))}
+                    title="Internal mail routing symbol (File #49 field 2)"
+                    className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#333] mb-1">Department Chief</label>
+                  <input type="text" value={editValues.chief || ''} onChange={e => setEditValues(prev => ({ ...prev, chief: e.target.value }))}
+                    title="Person responsible for this department (File #49 field 3)"
                     className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
                 </div>
                 <div className="flex gap-3 pt-2">
@@ -274,7 +289,8 @@ export default function DepartmentsServices() {
                 {display.chief && <DetailField label="Department Chief" value={display.chief} />}
                 {display.mailSymbol && <DetailField label="Mail Symbol" value={display.mailSymbol} />}
                 {display.type && <DetailField label="Type" value={display.type} />}
-                {!display.abbreviation && !display.chief && !display.mailSymbol && !display.type && (
+                {display.parentService && <DetailField label="Parent Service" value={display.parentService} />}
+                {!display.abbreviation && !display.chief && !display.mailSymbol && !display.type && !display.parentService && (
                   <div className="text-center py-8 text-[#999]">
                     <span className="material-symbols-outlined text-[32px] block mb-2">info</span>
                     <p className="text-sm">No additional details available for this department.</p>
@@ -307,12 +323,14 @@ export default function DepartmentsServices() {
                 <label className="block text-xs font-medium text-[#333] mb-1">Department Name <span className="text-[#CC3333]">*</span></label>
                 <input type="text" value={createName} onChange={e => setCreateName(e.target.value)}
                   placeholder="e.g. Cardiology"
+                  title="Official department name (File #49 field .01)"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" autoFocus />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Abbreviation</label>
                 <input type="text" value={createAbbrev} onChange={e => setCreateAbbrev(e.target.value)}
                   placeholder="e.g. CARD"
+                  title="Short abbreviation for this department (File #49 field 1)"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
             </div>

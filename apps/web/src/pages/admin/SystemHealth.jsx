@@ -3,7 +3,7 @@ import AppShell from '../../components/shell/AppShell';
 import {
   getTaskManStatus, getTaskManTasks, getTaskManScheduled,
   getErrorTrap, getVistaStatus, getHL7FilerStatus, getAdminReport,
-  getHL7Interfaces,
+  getHL7Interfaces, shutdownHL7Interface, enableHL7Interface,
 } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 import { transformErrorTrap, formatDateTime } from '../../utils/transforms';
@@ -199,7 +199,7 @@ export default function SystemHealth() {
               {loading ? 'Loading system status...' : 'Live system health monitoring.'}
             </p>
           </div>
-          <button onClick={loadData} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">
+          <button onClick={loadData} title="Reload all system health data" className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">
             <span className="material-symbols-outlined text-[16px]">refresh</span> Refresh
           </button>
         </div>
@@ -242,6 +242,11 @@ export default function SystemHealth() {
         {/* ── System Health tab ── */}
         {activeTab === 'health' && !loading && (
           <div className="space-y-6">
+            {/* TaskMan context banner */}
+            <div className="p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              <span>TaskMan is VistA&apos;s background job scheduler (similar to cron). It runs HL7 filers, message delivery, lab auto-verify, and scheduled reports. When stopped, no background processing occurs. In the terminal: <strong>D ^ZTMCHK</strong> to check status, <strong>D RESTART^ZTMB</strong> to restart.</span>
+            </div>
             {/* Background scheduler status */}
             {!taskRunning && (taskStatus || !loading) ? (
               /* Spec: When STOPPED, show a single prominent card, not 15 blank rows */
@@ -392,6 +397,11 @@ export default function SystemHealth() {
         {/* ── HL7 Interfaces tab ── */}
         {activeTab === 'hl7' && !loading && (
           <div className="space-y-6">
+            {/* HL7 context banner */}
+            <div className="p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              <span>HL7 interfaces (VistA File #870) handle message exchange with external systems — lab instruments, radiology, pharmacy, ADT feeds, etc. Each logical link has its own TCP connection settings and can be enabled or shut down independently. In the terminal: <strong>D ^HLCSTCP</strong> to manage links.</span>
+            </div>
             {/* HL7 Filer status at top */}
             <div className="bg-white border border-[#E2E4E8] rounded-lg p-5">
               <h2 className="text-sm font-semibold text-text uppercase tracking-wider mb-3">HL7 Filer Status</h2>
@@ -567,6 +577,15 @@ export default function SystemHealth() {
             )}
           </div>
         )}
+        {/* Terminal Reference */}
+        <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+          <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+          <p className="mt-2">This page replaces several terminal-based system monitoring tools.</p>
+          <p className="mt-1"><strong>TaskMan:</strong> Terminal — <strong>D ^ZTMCHK</strong> (status check), <strong>D RESTART^ZTMB</strong> (restart). VistA stores tasks in <strong>TASK file (#14.4)</strong> and <strong>SCHEDULE TASK file (#14.2)</strong>.</p>
+          <p className="mt-1"><strong>HL7 Interfaces:</strong> Terminal — <strong>D ^HLCSTCP</strong> (link manager). VistA stores interfaces in <strong>HL LOGICAL LINK file (#870)</strong>.</p>
+          <p className="mt-1"><strong>Error Trap:</strong> Terminal — <strong>D ^XTER</strong> (error trap display). Stored in <strong>ERROR LOG file (#3.075)</strong>.</p>
+          <p className="mt-1"><strong>Reports:</strong> Various terminal paths depending on report type.</p>
+        </details>
       </div>
     </AppShell>
   );
@@ -576,21 +595,55 @@ export default function SystemHealth() {
 function HL7InterfaceList() {
   const [interfaces, setInterfaces] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [actionMsg, setActionMsg] = useState(null);
+
+  const loadInterfaces = async () => {
+    try {
+      const res = await getHL7Interfaces();
+      setInterfaces(res?.data || []);
+    } catch {
+      setInterfaces([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await getHL7Interfaces();
-        if (!cancelled) setInterfaces(res?.data || []);
-      } catch {
-        if (!cancelled) setInterfaces([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await loadInterfaces();
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const handleShutdown = async (intf) => {
+    setActionLoading(intf.ien);
+    setActionMsg(null);
+    try {
+      await shutdownHL7Interface(intf.ien);
+      setActionMsg({ ien: intf.ien, type: 'success', text: `${intf.name} shutdown requested.` });
+      await loadInterfaces();
+    } catch (err) {
+      setActionMsg({ ien: intf.ien, type: 'error', text: err.message || 'Shutdown failed.' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleEnable = async (intf) => {
+    setActionLoading(intf.ien);
+    setActionMsg(null);
+    try {
+      await enableHL7Interface(intf.ien);
+      setActionMsg({ ien: intf.ien, type: 'success', text: `${intf.name} enable requested.` });
+      await loadInterfaces();
+    } catch (err) {
+      setActionMsg({ ien: intf.ien, type: 'error', text: err.message || 'Enable failed.' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   if (loading) return <div className="h-20 animate-pulse bg-[#E2E4E8] rounded-md" />;
   if (!interfaces || interfaces.length === 0) {
@@ -598,31 +651,58 @@ function HL7InterfaceList() {
   }
 
   return (
-    <div className="border border-[#E2E4E8] rounded-md overflow-hidden max-h-80 overflow-y-auto">
-      <table className="w-full text-xs">
-        <thead><tr className="bg-[#F4F5F7]">
-          <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Interface Name</th>
-          <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Institution</th>
-          <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Protocol</th>
-          <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Auto-Start</th>
-        </tr></thead>
-        <tbody>
-          {interfaces.map((intf, i) => (
-            <tr key={intf.ien || i} className="border-t border-[#E2E4E8]">
-              <td className="px-3 py-2 text-text font-medium">{intf.name || '—'}</td>
-              <td className="px-3 py-2 text-[#666]">{intf.institution || '—'}</td>
-              <td className="px-3 py-2 font-mono text-[#999]">{intf.lowerLayer || '—'}</td>
-              <td className="px-3 py-2">
-                {intf.autostart?.toLowerCase() === 'enabled' ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#E8F5E9] text-[#2D6A4F]">Enabled</span>
-                ) : (
-                  <span className="text-[#999]">{intf.autostart || '—'}</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div>
+      {actionMsg && (
+        <div className={`mb-3 p-2 rounded-md text-xs flex items-center gap-2 ${actionMsg.type === 'success' ? 'bg-[#E8F5E9] text-[#2D6A4F] border border-[#2D6A4F]' : 'bg-[#FDE8E8] text-[#CC3333] border border-[#CC3333]'}`}>
+          <span className="material-symbols-outlined text-[14px]">{actionMsg.type === 'success' ? 'check_circle' : 'error'}</span>
+          {actionMsg.text}
+        </div>
+      )}
+      <div className="border border-[#E2E4E8] rounded-md overflow-hidden max-h-80 overflow-y-auto">
+        <table className="w-full text-xs">
+          <thead><tr className="bg-[#F4F5F7]">
+            <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Interface Name</th>
+            <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Institution</th>
+            <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Protocol</th>
+            <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Auto-Start</th>
+            <th className="text-left px-3 py-2 font-semibold text-[#999] uppercase">Actions</th>
+          </tr></thead>
+          <tbody>
+            {interfaces.map((intf, i) => (
+              <tr key={intf.ien || i} className="border-t border-[#E2E4E8]">
+                <td className="px-3 py-2 text-text font-medium">{intf.name || '—'}</td>
+                <td className="px-3 py-2 text-[#666]">{intf.institution || '—'}</td>
+                <td className="px-3 py-2 font-mono text-[#999]">{intf.lowerLayer || '—'}</td>
+                <td className="px-3 py-2">
+                  {intf.autostart?.toLowerCase() === 'enabled' ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#E8F5E9] text-[#2D6A4F]">Enabled</span>
+                  ) : (
+                    <span className="text-[#999]">{intf.autostart || '—'}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1.5">
+                    {actionLoading === intf.ien ? (
+                      <span className="material-symbols-outlined text-[14px] text-steel animate-spin">progress_activity</span>
+                    ) : (
+                      <>
+                        <button onClick={() => handleEnable(intf)} title="Enable this HL7 interface"
+                          className="px-2 py-1 text-[10px] font-medium bg-[#E8F5E9] text-[#2D6A4F] rounded hover:bg-[#D0ECD7] transition-colors">
+                          Enable
+                        </button>
+                        <button onClick={() => handleShutdown(intf)} title="Shutdown this HL7 interface"
+                          className="px-2 py-1 text-[10px] font-medium bg-[#FDE8E8] text-[#CC3333] rounded hover:bg-[#FBD0D0] transition-colors">
+                          Shutdown
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
