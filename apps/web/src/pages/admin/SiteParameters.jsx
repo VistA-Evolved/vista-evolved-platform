@@ -477,7 +477,7 @@ export default function SiteParameters() {
           {selectedGroup === 'session' && (
             <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
               <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
-              Session &amp; Security Parameters. Controls session timeout, auto sign-off delays, and RPC broker timeout. Subject to VHA security policy enforcement.
+              Session & Security Parameters. Controls session timeout, auto sign-off delays, and RPC broker timeout. Subject to VHA security policy enforcement.
             </div>
           )}
 

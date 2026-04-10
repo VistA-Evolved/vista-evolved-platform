@@ -267,6 +267,11 @@ export default function SiteManagement() {
                         <input type="text" value={editForm.state || ''} onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))}
                           className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
                       </div>
+                      <div>
+                        <label className="text-[10px] font-medium text-text-muted uppercase">ZIP</label>
+                        <input type="text" value={editForm.zip || ''} onChange={e => setEditForm(f => ({ ...f, zip: e.target.value }))}
+                          className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel mt-1" />
+                      </div>
                     </div>
                     <div className="flex gap-3 mt-4">
                       <button

@@ -598,24 +598,24 @@ function HL7InterfaceList() {
   const [actionLoading, setActionLoading] = useState(null);
   const [actionMsg, setActionMsg] = useState(null);
 
-  const loadInterfaces = async () => {
+  const loadInterfaces = useCallback(async (signal) => {
     try {
       const res = await getHL7Interfaces();
+      if (signal?.aborted) return;
       setInterfaces(res?.data || []);
     } catch {
+      if (signal?.aborted) return;
       setInterfaces([]);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await loadInterfaces();
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    const ac = new AbortController();
+    loadInterfaces(ac.signal);
+    return () => ac.abort();
+  }, [loadInterfaces]);
 
   const handleShutdown = async (intf) => {
     setActionLoading(intf.ien);

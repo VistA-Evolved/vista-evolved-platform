@@ -191,7 +191,7 @@ export default function DepartmentsServices() {
               </div>
             </div>
 
-            {loading ? <TableSkeleton rows={10} cols={5} /> : (
+            {loading ? <TableSkeleton rows={10} cols={2} /> : (
               <DataTable
                 columns={columns}
                 data={pageSlice}
