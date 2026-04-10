@@ -185,6 +185,7 @@ export default function StaffDirectory() {
       const esig = vg.electronicSignature || {};
       const keys = (keysRes?.data || []).map(k => k.name);
       const derivedTitle = deriveTitleFromKeys(keys);
+      const divs = userRes?.data?.divisions || [];
       setDetailData({
         ...row,
         title: userRes?.data?.title || vg.sigBlockTitle || derivedTitle,
@@ -199,6 +200,17 @@ export default function StaffDirectory() {
         sigBlockName: esig.sigBlockName || '',
         ssn: vg.ssn ? `***-**-${vg.ssn.slice(-4)}` : '',
         initials: vg.initials || '',
+        primaryMenu: vg.primaryMenu || '',
+        degree: vg.degree || '',
+        division: divs?.[0]?.name || '',
+        divisions: divs.map(d => d.name),
+        terminationDate: vg.terminationDate || '',
+        terminationReason: vg.terminationReason || '',
+        personClass: vg.personClass || '',
+        taxId: vg.taxId || '',
+        authorizedToWriteMeds: vg.authMeds,
+        requiresCosigner: Boolean(vg.cosigner),
+        usualCosigner: vg.cosigner || '',
       });
       setDetailKeys(keysRes?.data || []);
     } catch (err) {
@@ -243,6 +255,8 @@ export default function StaffDirectory() {
   };
 
   const [actionSuccess, setActionSuccess] = useState(null);
+  const [removePermTarget, setRemovePermTarget] = useState(null);
+  const [deactivateReason, setDeactivateReason] = useState('');
 
   const handleDeactivate = async (reason) => {
     if (!deactivateTarget) return;
@@ -290,9 +304,12 @@ export default function StaffDirectory() {
   };
 
   const handleRemovePermission = async (key) => {
-    if (!detailData) return;
-    const label = key.displayName || humanizeKeyName(key.name);
-    if (!window.confirm(`Remove "${label}" from ${detailData.name}?`)) return;
+    setRemovePermTarget(key);
+  };
+
+  const confirmRemovePermission = async () => {
+    if (!removePermTarget || !detailData) return;
+    const key = removePermTarget;
     try {
       await removePermission(detailData.duz, key.ien || key.name);
       const keysRes = await getUserPermissions(detailData.duz);
@@ -300,8 +317,9 @@ export default function StaffDirectory() {
       setDetailKeys(newKeys);
       setStaffList(prev => prev.map(u => u.duz === detailData.duz
         ? { ...u, permissionCount: newKeys.length } : u));
-      setActionSuccess(`Removed ${label} from ${detailData.name}.`);
+      setActionSuccess(`Removed ${key.displayName || humanizeKeyName(key.name)} from ${detailData.name}.`);
     } catch (err) { setError(err.message || 'Failed to remove permission'); }
+    finally { setRemovePermTarget(null); }
   };
 
   const handleOpenAssignPerms = async () => {
@@ -637,8 +655,8 @@ export default function StaffDirectory() {
             </p>
             <label className="block text-sm font-medium text-[#333] mb-1">Reason for deactivation</label>
             <select
-              id="deactivate-reason"
-              defaultValue=""
+              value={deactivateReason}
+              onChange={e => setDeactivateReason(e.target.value)}
               className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm mb-4"
             >
               <option value="" disabled>Select a reason...</option>
@@ -650,13 +668,11 @@ export default function StaffDirectory() {
               <option value="Other">Other</option>
             </select>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setDeactivateTarget(null)}
+              <button onClick={() => { setDeactivateTarget(null); setDeactivateReason(''); }}
                 className="px-4 py-2 text-sm text-[#666] hover:bg-[#F5F5F5] rounded-lg">Cancel</button>
-              <button onClick={() => {
-                  const reason = document.getElementById('deactivate-reason')?.value || 'Not specified';
-                  handleDeactivate(reason);
-                }}
-                className="px-4 py-2 text-sm text-white bg-[#CC3333] hover:bg-[#AA2222] rounded-lg">Deactivate</button>
+              <button onClick={() => handleDeactivate(deactivateReason || 'Not specified')}
+                disabled={!deactivateReason}
+                className={`px-4 py-2 text-sm text-white rounded-lg ${deactivateReason ? 'bg-[#CC3333] hover:bg-[#AA2222]' : 'bg-gray-300 cursor-not-allowed'}`}>Deactivate</button>
             </div>
           </div>
         </div>
@@ -669,6 +685,17 @@ export default function StaffDirectory() {
           confirmLabel="Clear E-Signature"
           onConfirm={confirmClearEsig}
           onCancel={() => setClearEsigTarget(null)}
+          destructive
+        />
+      )}
+
+      {removePermTarget && (
+        <ConfirmDialog
+          title="Remove Permission"
+          message={`Remove "${removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}" from ${detailData?.name}? This will immediately revoke this access.`}
+          confirmLabel="Remove"
+          onConfirm={confirmRemovePermission}
+          onCancel={() => setRemovePermTarget(null)}
           destructive
         />
       )}

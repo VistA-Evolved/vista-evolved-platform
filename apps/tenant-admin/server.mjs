@@ -870,11 +870,20 @@ async function main() {
         rpcUsed: z.rpcUsed,
       });
     }
-    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG
+    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG^PMENU^DEGREE^TDATE^TREASON^PCLASS2^TAXID^AUTHMEDS^COSIGNER
     const detail = (z.lines[1] || '').split('^');
     if (!detail[0]) {
       return reply.code(404).send({ ok: false, source: 'zve', error: `User ${userId} not found in File 200`, rpcUsed: z.rpcUsed });
     }
+    // New fields from expanded DETAIL output (indices 16-23)
+    const primaryMenu = detail[16] || '';
+    const degree = detail[17] || '';
+    const termDate = detail[18] || '';
+    const termReason = detail[19] || '';
+    const personClass = detail[20] || '';
+    const taxId = detail[21] || '';
+    const authMeds = detail[22] || '';
+    const cosigner = detail[23] || '';
     const keys = [];
     const divs = [];
     for (const line of z.lines.slice(2)) {
@@ -906,6 +915,10 @@ async function main() {
             status: detail[15] === 'SET' ? 'active' : 'not-configured',
             hasCode: detail[15] === 'SET',
           },
+          primaryMenu, degree, terminationDate: termDate, terminationReason: termReason,
+          personClass, taxId,
+          authMeds: authMeds === '1' || authMeds.toUpperCase() === 'YES',
+          cosigner,
         },
         keys, divisions: divs,
       },
