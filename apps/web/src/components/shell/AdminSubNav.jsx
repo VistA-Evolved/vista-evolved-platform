@@ -29,7 +29,7 @@ const sections = [
     group: 'Clinical Setup',
     icon: 'local_hospital',
     items: [
-      { label: 'Clinics', path: '/admin/clinics', icon: 'clinical_notes' },
+      { label: 'Clinics', path: '/admin/clinics', icon: 'medical_services' },
       { label: 'Wards', path: '/admin/wards', icon: 'bed' },
     ],
   },
@@ -55,7 +55,7 @@ const sections = [
     group: 'Mail Administration',
     icon: 'mail',
     items: [
-      { label: 'Mail Groups', path: '/admin/mail-groups', icon: 'group_work' },
+      { label: 'Mail Groups', path: '/admin/mail-groups', icon: 'groups' },
     ],
   },
   {

@@ -28,14 +28,15 @@ const PAGE_SIZE = 25;
 /* Editable fields via PUT /clinics/:ien/fields */
 const EDIT_FIELDS = [
   { key: 'name', label: 'Clinic Name', field: '.01', help: 'Official name for this clinic (File #44 field .01). Appears in appointment scheduling, patient check-in, and workload reports.' },
-  { key: 'abbreviation', label: 'Abbreviation', field: '1', help: 'Short abbreviation used in lists and reports.' },
+  { key: 'abbreviation', label: 'Abbreviation', field: '2', help: 'Short abbreviation used in lists and reports.' },
   { key: 'stopCode', label: 'Stop Code', field: '8', help: 'DSS workload stop code for this clinic. Used for VA workload reporting and billing. Must match the primary service provided.' },
   { key: 'creditStopCode', label: 'Credit Stop Code', field: '2503', help: 'Secondary stop code for workload credit.' },
   { key: 'apptLength', label: 'Appointment Length (min)', field: '1912', help: 'Default duration in minutes for new appointments. Can be overridden per appointment.' },
-  { key: 'maxOverbooks', label: 'Max Overbooks', field: '1913', help: 'Maximum allowed overbooks per day. Set to 0 to prevent overbooking entirely.' },
-  { key: 'maxFutureBooking', label: 'Max Future Booking (days)', field: '1920', help: 'How many days in advance appointments can be scheduled. Prevents scheduling too far ahead.' },
-  { key: 'variableApptLength', label: 'Variable Appt Length', field: '1914', help: 'Allow appointment durations to vary from the default.' },
-  { key: 'holidayScheduling', label: 'Holiday Scheduling', field: '1916', help: 'Whether this clinic accepts appointments on observed holidays.' },
+  { key: 'maxOverbooks', label: 'Max Overbooks', field: '1918', help: 'Maximum allowed overbooks per day. Set to 0 to prevent overbooking entirely.' },
+  { key: 'maxNoShows', label: 'Max Consecutive No-Shows', field: '1920', help: 'Allowable consecutive no-shows before the patient is flagged. Helps manage clinic utilization.' },
+  { key: 'maxFutureBooking', label: 'Max Future Booking (days)', field: '2002', help: 'How many days in advance appointments can be scheduled. Prevents scheduling too far ahead.' },
+  { key: 'variableApptLength', label: 'Variable Appt Length', field: '1913', help: 'Allow appointment durations to vary from the default.' },
+  { key: 'holidayScheduling', label: 'Holiday Scheduling', field: '1918.5', help: 'Whether this clinic accepts appointments on observed holidays.' },
   { key: 'defaultProvider', label: 'Default Provider', field: '16', help: 'Provider automatically assigned to new appointments in this clinic.' },
 ];
 
@@ -183,7 +184,7 @@ export default function ClinicManagement() {
   const filtered = clinics.filter(c => {
     if (!searchText) return true;
     const s = searchText.toLowerCase();
-    return c.name.toLowerCase().includes(s) || c.abbreviation.toLowerCase().includes(s) || c.stopCode.includes(s);
+    return c.name.toLowerCase().includes(s) || c.abbreviation.toLowerCase().includes(s) || c.stopCode.toLowerCase().includes(s);
   });
 
   const totalFiltered = filtered.length;

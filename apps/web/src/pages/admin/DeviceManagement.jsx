@@ -23,16 +23,17 @@ const PAGE_SIZE = 25;
 const EDIT_FIELDS = [
   { key: 'name', label: 'Device Name', field: '.01', help: 'Logical name of this device (File #3.5 field .01). Referenced by print queues, HL7 interfaces, and user preferences.' },
   { key: 'dollarI', label: '$I (Port)', field: '1', help: 'M $I value — the port or channel identifier used by VistA to communicate with this device.' },
-  { key: 'volumeSet', label: 'Volume Set (UCI)', field: '2', help: 'UCI / Volume Set for this device. Usually the same as the system default.' },
+  { key: 'askDevice', label: 'Ask Device', field: '2', help: 'Prompt text shown when a user selects this device for output. Leave blank for no prompt.' },
   { key: 'type', label: 'Type', field: '3', help: 'Device class (e.g., TERMINAL, PRINTER, VIRTUAL, HFS). Determines how VistA opens the device.' },
   { key: 'subtype', label: 'Subtype', field: '4', help: 'Device subtype defining escape sequences and formatting (e.g., P-OTHER, C-VT100).' },
   { key: 'location', label: 'Location', field: '5', help: 'Physical location of this device within the facility.' },
-  { key: 'margin_width', label: 'Margin Width', field: '6', help: 'Right margin (number of columns). Standard is 80 for terminals, 132 for wide printers.' },
-  { key: 'page_length', label: 'Page Length', field: '7', help: 'Number of lines per page. Standard is 24 for terminals, 60 for printers.' },
-  { key: 'openParameters', label: 'Open Parameters', field: '8', help: 'Parameters passed to the M OPEN command when opening this device.' },
-  { key: 'closeParameters', label: 'Close Parameters', field: '9', help: 'Parameters passed to the M CLOSE command when closing this device.' },
-  { key: 'useParameters', label: 'Use Parameters', field: '10', help: 'Parameters passed to the M USE command for this device.' },
-  { key: 'slaveDevice', label: 'Slave Device', field: '50', help: 'Secondary device to mirror output to (slave printing).' },
+  { key: 'rightMargin', label: 'Right Margin', field: '6', help: 'Right margin (number of columns). Standard is 80 for terminals, 132 for wide printers.' },
+  { key: 'formFeed', label: 'Form Feed', field: '7', help: 'Form feed character or sequence sent between pages. Leave blank for default behavior.' },
+  { key: 'pageLength', label: 'Page Length', field: '8', help: 'Number of lines per page. Standard is 24 for terminals, 60 for printers.' },
+  { key: 'closeExecute', label: 'Close Execute', field: '9', help: 'M code executed when the device is closed. Use for cleanup or post-processing.' },
+  { key: 'openParameters', label: 'Open Parameters', field: '10', help: 'Parameters passed to the M OPEN command when opening this device.' },
+  { key: 'closeParameters', label: 'Close Parameters', field: '11', help: 'Parameters passed to the M CLOSE command when closing this device.' },
+  { key: 'outOfService', label: 'Out of Service', field: '50', help: 'When set, this device cannot be selected for printing or output. Existing queued jobs may still attempt to use it.' },
 ];
 
 export default function DeviceManagement() {

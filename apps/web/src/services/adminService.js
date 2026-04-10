@@ -594,7 +594,7 @@ export async function createWard(data) {
 }
 
 export async function updateWardField(ien, field, value) {
-  return tenantApi.put(`/wards/${ien}/fields`, { field, value });
+  return tenantApi.put(`/wards/${ien}/fields`, { [field]: value });
 }
 
 // ────────────────────────────────────────────────
