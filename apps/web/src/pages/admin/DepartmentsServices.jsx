@@ -326,6 +326,7 @@ export default function DepartmentsServices() {
 
       {deleteDeptTarget && (
         <ConfirmDialog
+          open
           title="Delete Department"
           message={`Permanently delete "${deleteDeptTarget.name}" from VistA? This removes the entry from File #49. Staff members assigned to this department will lose their department association.`}
           confirmLabel="Delete"

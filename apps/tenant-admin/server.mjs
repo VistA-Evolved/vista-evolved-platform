@@ -3101,11 +3101,18 @@ async function main() {
       });
       const parsed = parseDdrListerResponse(lines);
       if (!parsed.ok) return { ok: true, tenantId, purged: 0, note: 'No entries found' };
+      // Calculate cutoff date in FM internal format (YYYMMDD)
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - olderThanDays);
+      const cutoffFm = `${cutoff.getFullYear() - 1700}${String(cutoff.getMonth() + 1).padStart(2, '0')}${String(cutoff.getDate()).padStart(2, '0')}`;
       let purged = 0;
       for (const line of parsed.data) {
         const parts = line.split('^');
         const entryIen = parts[0]?.trim();
         if (!entryIen || !/^\d+$/.test(entryIen)) continue;
+        // parts[2] = field 2 (most recent date/time) in FM format
+        const entryDate = (parts[2] || '').trim().split('.')[0];
+        if (entryDate && entryDate >= cutoffFm) continue; // skip entries newer than cutoff
         try {
           await ddrFilerEdit('3.077', `${entryIen},`, '.01', '@', 'E');
           purged++;

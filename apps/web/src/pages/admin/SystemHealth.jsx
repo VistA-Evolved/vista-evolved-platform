@@ -694,7 +694,7 @@ export default function SystemHealth() {
               setShowPurgeConfirm(false);
               try {
                 const res = await purgeOldErrors(30);
-                setPurgeResult(`Purged ${res?.data?.purged || 0} entries.`);
+                setPurgeResult(`Purged ${res?.purged ?? 0} entries.`);
                 loadData();
               } catch (err) { setError(err.message); }
             }}
