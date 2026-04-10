@@ -310,6 +310,14 @@ export default function AlertsNotifications() {
             </div>
           </div>
         )}
+
+        <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+          <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+          <p className="mt-2">This page replaces: <strong>EVE → Manage Mailman</strong> and the VistA Alerts system.</p>
+          <p className="mt-1"><strong>Alerts tab:</strong> VistA Bulletin system (File #3.6). Alerts are triggered by system events and routed to configured recipients.</p>
+          <p className="mt-1"><strong>Messages tab:</strong> MailMan (Files #3.9, #3.7). Internal messaging system with inbox, compose, forward, and delete.</p>
+          <p className="mt-1"><strong>Notifications tab:</strong> Describes alert routing configuration. In terminal: EVE → Manage Mailman → Alert Management.</p>
+        </details>
       </div>
 
       {/* Forward Modal */}
@@ -389,13 +397,7 @@ export default function AlertsNotifications() {
         />
       )}
 
-      <details className="mx-0 mt-4 mb-2 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
-        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
-        <p className="mt-2">This page replaces: <strong>EVE → Manage Mailman</strong> and the VistA Alerts system.</p>
-        <p className="mt-1"><strong>Alerts tab:</strong> VistA Bulletin system (File #3.6). Alerts are triggered by system events and routed to configured recipients.</p>
-        <p className="mt-1"><strong>Messages tab:</strong> MailMan (Files #3.9, #3.7). Internal messaging system with inbox, compose, forward, and delete.</p>
-        <p className="mt-1"><strong>Notifications tab:</strong> Describes alert routing configuration. In terminal: EVE → Manage Mailman → Alert Management.</p>
-      </details>
+
     </AppShell>
   );
 }

@@ -19,7 +19,14 @@ import { KEY_TRANSLATIONS } from './vocabulary';
 
 // ── FileMan date → JS Date ────────────────────────────
 export function fmDateToDate(fmDate) {
-  const s = String(fmDate || '').trim();
+  // Coerce to string; for numeric FM dates, use toFixed to preserve trailing zeros
+  // (e.g., 3251211.143 as a number loses the trailing 0 of "1430")
+  let s;
+  if (typeof fmDate === 'number') {
+    s = fmDate.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+  } else {
+    s = String(fmDate || '').trim();
+  }
   if (!s || s.length < 7) return null;
   const [intPart, timePart = ''] = s.split('.');
   const year = 1700 + parseInt(intPart.slice(0, 3), 10);

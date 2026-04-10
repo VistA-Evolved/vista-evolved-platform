@@ -79,6 +79,7 @@ const AUDIT_SOURCES = [
   { id: 'all', label: 'All Events', title: 'Combined view of all audit sources.' },
   { id: 'signon', label: 'Sign-On Activity', title: 'Records of user sign-on and sign-off events. Source: Kernel Sign-On Log File #3.081.' },
   { id: 'fileman', label: 'Data Changes', title: 'FileMan audit trail of data modifications. Source: VA FileMan Audit File #1.1.' },
+  { id: 'error', label: 'Error Log', title: 'System error trap entries. Source: Error Trap File #3.077.' },
   { id: 'failed', label: 'Failed Access', title: 'Failed login attempts and access violations. Source: Failed Access File #3.085.' },
   { id: 'programmer', label: 'Administrative Access', title: 'Records of programmer mode entry. Source: Programmer Mode Usage log.' },
 ];
@@ -230,7 +231,7 @@ export default function AuditLog() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const SOURCE_MAP = { signon: 'Sign-On Log', fileman: 'Data Audit', failed: 'Failed Access', programmer: 'Administrative Access' };
+  const SOURCE_MAP = { signon: 'Sign-On Log', fileman: 'Data Audit', error: 'Error Log', failed: 'Failed Access', programmer: 'Administrative Access' };
   const filtered = allEvents.filter(e => {
     if (actionFilter !== 'All' && e.action !== actionFilter) return false;
     if (userSearch && !e.user.toLowerCase().includes(userSearch.toLowerCase())) return false;
