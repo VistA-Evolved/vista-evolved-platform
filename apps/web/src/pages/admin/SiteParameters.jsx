@@ -131,6 +131,26 @@ const VHA_RULES = {
   sessionTimeout: { max: 900, maxLabel: '15 minutes (900 seconds)', param: 'Session Timeout' },
 };
 
+// Known field groupings for package parameter files. When the server returns
+// discovered fields, we organize them into logical sections instead of a flat list.
+const FIELD_GROUPS = {
+  'pharmacy': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Dispensing', fields: ['1', '2', '3', '4', '5'] },
+    { label: 'Label Printing', fields: ['6', '7', '8', '9', '10'] },
+    { label: 'Processing', fields: ['11', '12', '13', '14', '15'] },
+  ],
+  'lab': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Processing', fields: ['1', '2', '3', '4', '5'] },
+    { label: 'Reporting', fields: ['6', '7', '8', '9', '10'] },
+  ],
+  'scheduling': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Booking Rules', fields: ['1', '2', '3', '4', '5'] },
+  ],
+};
+
 export default function SiteParameters() {
   const [selectedGroup, setSelectedGroup] = useState('kernel');
   const [editedValues, setEditedValues] = useState({});
@@ -224,7 +244,8 @@ export default function SiteParameters() {
     // raw DDR field numbers ("Field 3 / Configuration parameter 3").
     const structuredData = pkgData.data || [];
     if (structuredData.length > 0) {
-      return structuredData.map(d => ({
+      const groupDefs = FIELD_GROUPS[selectedGroup];
+      const items = structuredData.map(d => ({
         key: `${selectedGroup}-${d.fieldNum}`,
         fieldNum: d.fieldNum,
         name: d.label || `Field ${d.fieldNum}`,
@@ -234,6 +255,29 @@ export default function SiteParameters() {
           ? `Current value: ${d.displayValue}`
           : `VistA File #${pkgData.file || '?'}, field ${d.fieldNum}`,
       }));
+      // If we have group definitions, add section headers
+      if (groupDefs) {
+        const grouped = [];
+        const assigned = new Set();
+        for (const grp of groupDefs) {
+          const members = items.filter(p => grp.fields.includes(p.fieldNum));
+          if (members.length > 0) {
+            grouped.push({ key: `header-${grp.label}`, name: grp.label, value: '', type: 'section-header', description: '' });
+            grouped.push(...members);
+            members.forEach(m => assigned.add(m.key));
+          }
+        }
+        // Remaining ungrouped fields
+        const remaining = items.filter(p => !assigned.has(p.key));
+        if (remaining.length > 0) {
+          if (grouped.length > 0) {
+            grouped.push({ key: 'header-other', name: 'Other Settings', value: '', type: 'section-header', description: '' });
+          }
+          grouped.push(...remaining);
+        }
+        return grouped.length > 0 ? grouped : items;
+      }
+      return items;
     }
     // Legacy fallback: parse raw DDR lines if server didn't return structured data
     const rawLines = pkgData.rawLines || [];
@@ -368,11 +412,42 @@ export default function SiteParameters() {
             Verify changes carefully and document your reason before saving.
           </CautionBanner>
 
+          <p className="text-[11px] text-[#999] mb-4">
+            Configure package-specific parameters. Each clinical module (Pharmacy, Lab, Scheduling, etc.) has its own parameter file in VistA. Changes here affect all users of that module.
+          </p>
+
+          {/* Package-specific helper text */}
+          {selectedGroup === 'pharmacy' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Pharmacy Site Parameters (VistA File #59.7). Controls dispensing behavior, label printing, and prescription processing rules.
+            </div>
+          )}
+          {selectedGroup === 'lab' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Lab Site Parameters (VistA File #69.9). Controls specimen processing, auto-verification rules, and result reporting.
+            </div>
+          )}
+          {selectedGroup === 'scheduling' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Scheduling Parameters (VistA File #44.001). Controls appointment booking rules, clinic availability, and scheduling notifications.
+            </div>
+          )}
+
           {(loading || pkgLoading) ? (
             <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 animate-pulse bg-[#E2E4E8] rounded-lg" />)}</div>
           ) : (
             <div className="space-y-5">
               {params.map(param => {
+                if (param.type === 'section-header') {
+                  return (
+                    <div key={param.key} className="pt-4 pb-1 border-b border-[#E2E4E8]">
+                      <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">{param.name}</h3>
+                    </div>
+                  );
+                }
                 const isEdited = param.key in editedValues;
                 const displayValue = isEdited ? editedValues[param.key] : param.value;
                 const rule = VHA_RULES[param.key];
@@ -483,6 +558,15 @@ export default function SiteParameters() {
           )}
         </div>
       </div>
+
+      {/* Terminal Reference */}
+      <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+        <p className="mt-2">Each section replaces a package-specific parameter editor from the terminal.</p>
+        <p className="mt-1">Terminal path varies: <strong>Pharmacy Manager → Site Parameters</strong>, <strong>Lab Manager → Site Parameters</strong>, etc.</p>
+        <p className="mt-1">VistA stores these in separate parameter files per package.</p>
+        <p className="mt-1">The terminal's ScreenMan form shows ALL fields with data dictionary labels. We aim to match that coverage.</p>
+      </details>
     </AppShell>
   );
 }

@@ -99,6 +99,9 @@ export default function SystemConfig() {
   const introMessage = editedValues['INTRO MESSAGE'] ?? params?.['INTRO MESSAGE']?.value ?? '';
   const stationNumber = params?.['STATION NUMBER']?.value || vistaInfo?.vista?.stationNumber || '';
   const timeZone = params?.['TIME ZONE']?.value || vistaInfo?.vista?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  const defaultInstitution = params?.['DEFAULT INSTITUTION']?.value || '';
+  const guiPostSignOn = params?.['GUI POST SIGN-ON']?.value || '';
+  const vistaVersion = vistaInfo?.vista?.vistaVersion || vistaInfo?.vista?.version || '';
 
   if (error) {
     return (
@@ -142,7 +145,12 @@ export default function SystemConfig() {
                 <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
                   <label className="block text-xs font-medium text-text mb-1">Domain Name</label>
                   <div className="text-sm font-mono text-[#666]">{domain || '—'}</div>
-                  <p className="text-[10px] text-[#999] mt-1">System domain identifier (read-only)</p>
+                  <p className="text-[10px] text-[#999] mt-1">The system domain registered in VistA Kernel. This identifies the system in network communications.</p>
+                </div>
+                <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
+                  <label className="block text-xs font-medium text-text mb-1">Default Institution</label>
+                  <div className="text-sm text-text">{defaultInstitution || '—'}</div>
+                  <p className="text-[10px] text-[#999] mt-1">The primary institution (VistA File #4) for this system</p>
                 </div>
                 <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
                   <label className="block text-xs font-medium text-text mb-1">Organization Type</label>
@@ -219,10 +227,11 @@ export default function SystemConfig() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[
-                  { label: 'System Status', value: vistaInfo?.vista?.vistaReachable ? 'Connected' : 'Unreachable', icon: vistaInfo?.vista?.vistaReachable ? 'check_circle' : 'error', color: vistaInfo?.vista?.vistaReachable ? 'text-[#2D6A4F]' : 'text-[#CC3333]' },
+                  { label: 'System Status', value: vistaInfo?.vista?.vistaReachable ? 'Connected' : 'Unreachable', icon: vistaInfo?.vista?.vistaReachable ? 'check_circle' : 'error', color: vistaInfo?.vista?.vistaReachable ? 'text-[#2D6A4F]' : 'text-[#CC3333]', hint: 'Whether VistA is reachable from the web server. If \'Unreachable\', check the VistA Docker container and network.' },
                   { label: 'Current User', value: vistaInfo?.vista?.userName || '—' },
                   { label: 'Connection Mode', value: vistaInfo?.connectionMode === 'direct-xwb' ? 'Direct' : vistaInfo?.connectionMode || 'Unknown' },
-                  { label: 'Production Mode', value: vistaInfo?.productionMode ? 'Yes' : 'No' },
+                  { label: 'Production Mode', value: vistaInfo?.productionMode ? 'Yes' : 'No', hint: 'Read from VistA Kernel field 501. When \'Yes\', certain development/test features are disabled.' },
+                  ...(vistaVersion ? [{ label: 'VistA Version', value: vistaVersion }] : []),
                 ].map(item => (
                   <div key={item.label} className="p-3 bg-[#F4F5F7] border border-[#E2E4E8] rounded-lg">
                     <div className="text-[10px] text-[#999] mb-0.5">{item.label}</div>
@@ -230,6 +239,7 @@ export default function SystemConfig() {
                       {item.icon && <span className="material-symbols-outlined text-[14px]">{item.icon}</span>}
                       {item.value}
                     </div>
+                    {item.hint && <p className="text-[9px] text-[#BBB] mt-1">{item.hint}</p>}
                   </div>
                 ))}
               </div>
@@ -259,6 +269,14 @@ export default function SystemConfig() {
           </>
         )}
       </div>
+
+      {/* Terminal Reference */}
+      <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+        <p className="mt-2">This page shows system identity from VistA Kernel (File #8989.3) and Institution (File #4).</p>
+        <p className="mt-1">Terminal equivalent: <strong>EVE → Operations → Kernel Management → Enter/Edit Kernel Site Parameters</strong> (identity fields).</p>
+        <p className="mt-1">Some values are read-only in both terminal and web (e.g., Production flag).</p>
+      </details>
     </AppShell>
   );
 }

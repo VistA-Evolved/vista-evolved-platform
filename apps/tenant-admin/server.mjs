@@ -5942,24 +5942,50 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
 
     try {
-      // Step 1: Read the actual data values via DDR GETS ENTRY
-      const result = await ddrGetsEntry(pkgDef.file, '1', pkgDef.fields, 'IE');
+      // Step 1: Discover ALL fields in the file via ZVE DD FIELDS (empty field list = all)
+      let fieldsToRead = pkgDef.fields;
+      const fieldLabels = {};
+      try {
+        const discovery = await callZveRpc('ZVE DD FIELDS', [pkgDef.file, '']);
+        if (discovery.ok && discovery.lines.length > 1) {
+          const discoveredFields = [];
+          for (const line of discovery.lines.slice(1)) {
+            const p = line.split('^');
+            if (p[0] && p[0].match(/^[\d.]+$/)) {
+              discoveredFields.push(p[0]);
+              if (p[1]) fieldLabels[p[0]] = p[1];
+            }
+          }
+          if (discoveredFields.length > 0) {
+            fieldsToRead = discoveredFields.slice(0, 30).join(';'); // Cap at 30
+          }
+        }
+      } catch (ddErr) {
+        req.log.warn({ file: pkgDef.file, fields: pkgDef.fields, error: ddErr?.message || String(ddErr) },
+          'ZVE DD FIELDS lookup failed — using generic labels');
+      }
+
+      // Fallback: if discovery didn't populate labels, try with the specific fields
+      if (Object.keys(fieldLabels).length === 0) {
+        try {
+          const dd = await callZveRpc('ZVE DD FIELDS', [pkgDef.file, fieldsToRead]);
+          if (dd.ok) {
+            for (const line of dd.lines.slice(1)) {
+              const p = line.split('^');
+              if (p[0] && p[1]) fieldLabels[p[0]] = p[1];
+            }
+          }
+        } catch (ddErr) {
+          req.log.warn({ file: pkgDef.file, fields: fieldsToRead, error: ddErr?.message || String(ddErr) },
+            'ZVE DD FIELDS fallback lookup failed — using generic labels');
+        }
+      }
+
+      // Step 2: Read the actual data values via DDR GETS ENTRY
+      const result = await ddrGetsEntry(pkgDef.file, '1', fieldsToRead, 'IE');
       if (!result.ok) {
         return { ok: true, source: 'vista', package: pkg, label: pkgDef.label, rawLines: [], data: [], note: `File #${pkgDef.file} has no records in this system. Default settings are in use.` };
       }
-
-      // Step 2: Read the DD field LABELS via ZVE DD FIELDS so we can show
-      // "FLASH CARD PRINTER NAME" instead of "Field 3 / Configuration parameter 3"
-      const fieldLabels = {};
-      try {
-        const dd = await callZveRpc('ZVE DD FIELDS', [pkgDef.file, pkgDef.fields]);
-        if (dd.ok) {
-          for (const line of dd.lines.slice(1)) {
-            const p = line.split('^');
-            if (p[0] && p[1]) fieldLabels[p[0]] = p[1];
-          }
-        }
-      } catch {}
 
       // Step 3: Merge data values with DD field labels
       const rawLines = result.rawLines || [];

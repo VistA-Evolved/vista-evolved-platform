@@ -66,6 +66,7 @@ const SECTION_CONFIG = [
   { id: 'esig', label: 'Electronic Signature', icon: 'draw', twoPersonRequired: false },
   { id: 'account', label: 'Account Policies', icon: 'manage_accounts', twoPersonRequired: false },
   { id: 'audit', label: 'Audit & Logging', icon: 'shield', twoPersonRequired: false },
+  { id: 'advanced', label: 'Advanced Settings', icon: 'tune', twoPersonRequired: false },
 ];
 
 function zeroWarning(value, paramName) {
@@ -91,11 +92,11 @@ function buildFields(params, sectionId) {
     const multiSign = params['MULTIPLE SIGN-ON']?.value ?? '';
     const maxSign = params['MAX SIGN-ON LIMIT']?.value ?? '';
     return [
-      { name: 'AUTOLOGOFF', label: 'Session Timeout', type: 'number', value: autoLogoff, unit: 'seconds', enforcedMin: 60, enforcedMax: 900, hint: `Auto sign-off after inactivity. Current: ${autoLogoff ? Math.round(Number(autoLogoff) / 60) + ' min' : 'not set'}. VHA requires ≤ 15 min.` },
-      { name: 'LOCKOUT ATTEMPTS', label: 'Failed Login Lockout', type: 'number', value: lockAttempts, unit: 'attempts', enforcedMin: 1, enforcedMax: 5, hint: `Lock account after this many failed sign-in attempts. VHA limit: 1–5.` },
-      { name: 'LOCKOUT DURATION', label: 'Lockout Duration', type: 'number', value: lockDuration, unit: 'seconds', enforcedMin: 30, enforcedMax: 86400, hint: `How long an account stays locked. Current: ${lockDuration ? Math.round(Number(lockDuration) / 60) + ' min' : 'not set'}.` },
-      { name: 'PASSWORD EXPIRATION', label: 'Password Expiration', type: 'number', value: pwExpire, unit: 'days', enforcedMin: 1, enforcedMax: 90, hint: `Days until password must be changed. HIPAA recommends 60–90 days.`, slider: true },
-      { name: 'MULTIPLE SIGN-ON', label: 'Allow Multiple Sessions', type: 'toggle', value: multiSign, hint: 'Allow the same user to sign in from multiple devices simultaneously.' },
+      { name: 'AUTOLOGOFF', label: 'Session Timeout', type: 'number', value: autoLogoff, unit: 'seconds', enforcedMin: 60, enforcedMax: 900, hint: 'Auto sign-off after inactivity. VHA Directive 6500 requires ≤ 15 minutes (900 seconds). Setting this to 0 disables timeout — this is a SECURITY RISK.' },
+      { name: 'LOCKOUT ATTEMPTS', label: 'Failed Login Lockout', type: 'number', value: lockAttempts, unit: 'attempts', enforcedMin: 1, enforcedMax: 5, hint: 'Lock account after this many failed sign-in attempts. VHA allows 1–5. Recommended: 3.' },
+      { name: 'LOCKOUT DURATION', label: 'Lockout Duration', type: 'number', value: lockDuration, unit: 'seconds', enforcedMin: 30, enforcedMax: 86400, hint: 'How long a locked account stays locked before auto-unlock. In seconds. 1800 = 30 minutes.' },
+      { name: 'PASSWORD EXPIRATION', label: 'Password Expiration', type: 'number', value: pwExpire, unit: 'days', enforcedMin: 1, enforcedMax: 90, hint: 'Days until users must change their password. HIPAA recommends 60–90 days. Setting 0 means passwords never expire — NOT RECOMMENDED.', slider: true },
+      { name: 'MULTIPLE SIGN-ON', label: 'Allow Multiple Sessions', type: 'toggle', value: multiSign, hint: 'Whether the same user can sign in from multiple devices simultaneously. Disabling this prevents shared-credential abuse.' },
       { name: 'MAX SIGN-ON LIMIT', label: 'Max Concurrent Users', type: 'number', value: maxSign, unit: 'sessions', hint: 'Maximum concurrent sessions per user. Leave empty for unlimited.' },
     ];
   }
@@ -139,8 +140,8 @@ function buildFields(params, sectionId) {
     const autoAccess = params['AUTO ACCESS CODES']?.value ?? '';
     const autoVerify = params['AUTO VERIFY CODES']?.value ?? '';
     return [
-      { name: 'AUTO ACCESS CODES', label: 'Auto-Generate Usernames', type: 'toggle', value: autoAccess, hint: 'Automatically generate usernames when creating new staff accounts.' },
-      { name: 'AUTO VERIFY CODES', label: 'Auto-Generate Passwords', type: 'toggle', value: autoVerify, hint: 'Automatically generate initial passwords when creating new staff accounts.' },
+      { name: 'AUTO ACCESS CODES', label: 'Auto-Generate Usernames', type: 'toggle', value: autoAccess, hint: 'When enabled, VistA generates a random access code for new users instead of requiring manual entry.' },
+      { name: 'AUTO VERIFY CODES', label: 'Auto-Generate Passwords', type: 'toggle', value: autoVerify, hint: 'When enabled, VistA generates a random verify code for new users. The generated code must still be communicated securely to the user.' },
     ];
   }
 
@@ -166,10 +167,30 @@ function buildFields(params, sectionId) {
     const rawFailAccess = params['FAILED ACCESS AUDIT']?.value ?? '';
     const failAccess = FACCESS_EXT_TO_INT[rawFailAccess] || rawFailAccess.toLowerCase() || '';
     return [
-      { name: 'OPTION AUDIT', label: 'Data Auditing Mode', type: 'select', value: optAudit, options: [{ value: '', label: '— Select —' }, { value: 'a', label: 'Audit All Activity' }, { value: 'n', label: 'No Auditing' }, { value: 's', label: 'Audit Specific Options' }], hint: 'Controls what user activity is recorded in the audit trail.' },
+      { name: 'OPTION AUDIT', label: 'Data Auditing Mode', type: 'select', value: optAudit, options: [{ value: '', label: '— Select —' }, { value: 'a', label: 'Audit All Activity' }, { value: 'n', label: 'No Auditing' }, { value: 's', label: 'Audit Specific Options' }], hint: 'Controls what user activity is recorded. \'All\' logs every action. \'Specific Options\' logs only marked options. \'No Auditing\' disables the trail — NOT RECOMMENDED for production.' },
       { name: 'INITIATE AUDIT', label: 'Audit Start Date', type: 'text', value: initAudit, hint: 'Date when auditing began or should begin.' },
       { name: 'TERMINATE AUDIT', label: 'Audit End Date', type: 'text', value: termAudit, hint: 'Date when auditing should stop. Leave empty for continuous auditing.' },
       { name: 'FAILED ACCESS AUDIT', label: 'Failed Access Logging', type: 'select', value: failAccess, options: [{ value: '', label: '— Not Configured —' }, { value: 'a', label: 'Log All Failed Attempts' }, { value: 'd', label: 'Log by Device' }, { value: 'ar', label: 'Log All + Details' }, { value: 'dr', label: 'Log Devices + Details' }, { value: 'n', label: 'No Logging' }], hint: 'Controls how failed login attempts are recorded.' },
+    ];
+  }
+
+  if (sectionId === 'advanced') {
+    const irmMailGroup = params['IRM MAIL GROUP']?.value ?? '';
+    const afterHoursGroup = params['AFTER HOURS MAIL GROUP']?.value ?? '';
+    const brokerTimeout = params['BROKER TIMEOUT']?.value ?? '';
+    const defaultInstitution = params['DEFAULT INSTITUTION']?.value ?? '';
+    const guiPostSignOn = params['GUI POST SIGN-ON']?.value ?? '';
+    return [
+      { name: 'IRM MAIL GROUP', label: 'IRM Mail Group', type: 'text', value: irmMailGroup,
+        hint: 'The MailMan group that receives system notifications and alerts. Set this to your IT support team\'s mail group.' },
+      { name: 'AFTER HOURS MAIL GROUP', label: 'After-Hours Mail Group', type: 'text', value: afterHoursGroup,
+        hint: 'Mail group for notifications outside business hours. Typically your on-call IT staff.' },
+      { name: 'BROKER TIMEOUT', label: 'Server Response Timeout', type: 'number', value: brokerTimeout, unit: 'seconds',
+        hint: 'How long the server waits for a VistA response before timing out. Default: 60 seconds. Increase for slow networks.' },
+      { name: 'DEFAULT INSTITUTION', label: 'Default Institution', type: 'text', value: defaultInstitution,
+        hint: 'The primary institution (VistA File #4) for this system. This determines the facility identity for all operations.' },
+      { name: 'GUI POST SIGN-ON', label: 'Post-Login Action', type: 'text', value: guiPostSignOn,
+        hint: 'VistA option to run after GUI login. Advanced setting — leave empty unless directed by VistA configuration documentation.' },
     ];
   }
   return [];
@@ -184,6 +205,7 @@ export default function SecurityAuth() {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState(null);
+  const [originalValues, setOriginalValues] = useState({});
   const [pendingRequests, setPendingRequests] = useState([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [currentDuz, setCurrentDuz] = useState('');
@@ -213,7 +235,14 @@ export default function SecurityAuth() {
     setError(null);
     try {
       const res = await getSiteParameters();
-      setKernelParams(normalizeKernelParams(res));
+      const normalized = normalizeKernelParams(res);
+      setKernelParams(normalized);
+      // Capture original values for save diff
+      const origSnap = {};
+      for (const [key, val] of Object.entries(normalized)) {
+        origSnap[key] = val.value ?? '';
+      }
+      setOriginalValues(origSnap);
     } catch (err) {
       setError(err.message || 'Failed to load security configuration');
     } finally {
@@ -269,13 +298,25 @@ export default function SecurityAuth() {
         setSaveResult({ type: 'success', msg: 'Change request submitted. A second administrator must approve before it takes effect.' });
         await loadPending();
       } else {
-        for (const [fieldName, newVal] of Object.entries(editedValues)) {
+        const changedEntries = Object.entries(editedValues);
+        for (const [fieldName, newVal] of changedEntries) {
           await updateSiteParameters({ paramName: fieldName, value: String(newVal), reason: changeReason });
         }
+        const diffChanges = changedEntries.map(([fieldName, newVal]) => ({
+          label: PARAM_LABELS[fieldName] || fieldName,
+          before: originalValues[fieldName] || '(empty)',
+          after: String(newVal),
+        }));
         setEditedValues({});
         setChangeReason('');
         await loadData();
-        setSaveResult({ type: 'success', msg: 'Changes saved successfully.' });
+        setSaveResult({
+          type: 'success',
+          msg: 'Changes saved successfully.',
+          changes: diffChanges,
+          timestamp: new Date().toLocaleString(),
+          auditNote: 'Change recorded in VistA audit trail.',
+        });
       }
       setTimeout(() => setSaveResult(null), 5000);
     } catch (err) {
@@ -339,14 +380,27 @@ export default function SecurityAuth() {
             {sectionMeta?.twoPersonRequired && (
               <CautionBanner>
                 <strong>Two-person integrity required.</strong> Changes to {sectionMeta.label.toLowerCase()} settings
-                create a pending request that must be approved by a different administrator.
+                create a pending request that must be approved by a different administrator. This prevents a single compromised account from weakening system security.
               </CautionBanner>
             )}
 
             {saveResult?.type === 'success' && (
-              <div className="mb-4 p-3 bg-[#E8F5E9] border border-[#2D6A4F] rounded-lg text-[12px] text-[#2D6A4F] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                {saveResult.msg}
+              <div className="mb-4 p-4 bg-[#E8F5E9] border border-[#C8E6C9] rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-[#2E7D32]">check_circle</span>
+                  <span className="text-sm font-semibold text-[#2E7D32]">Changes Saved</span>
+                  {saveResult.timestamp && <span className="text-xs text-[#666] ml-auto">{saveResult.timestamp}</span>}
+                </div>
+                {saveResult.changes?.map((c, i) => (
+                  <div key={i} className="text-xs text-[#333] flex gap-2 mb-1">
+                    <span className="font-medium w-[140px]">{c.label}:</span>
+                    <span className="text-[#CC3333] line-through">{c.before}</span>
+                    <span className="mx-1">→</span>
+                    <span className="text-[#2E7D32] font-medium">{c.after}</span>
+                  </div>
+                ))}
+                {!saveResult.changes && <p className="text-[12px] text-[#2D6A4F]">{saveResult.msg}</p>}
+                {saveResult.auditNote && <p className="text-[10px] text-[#999] mt-2">{saveResult.auditNote}</p>}
               </div>
             )}
 
@@ -411,11 +465,17 @@ export default function SecurityAuth() {
             )}
 
             <h2 className="text-xl font-bold text-text mb-1">{sectionMeta?.label}</h2>
-            <p className="text-xs text-[#999] mb-6">
+            <p className="text-xs text-[#999] mb-3">
               {sectionMeta?.twoPersonRequired
                 ? 'Critical security configuration — changes require dual-admin approval before taking effect.'
                 : 'Configuration changes take effect immediately after save.'}
             </p>
+            {selectedSection === 'esig' && (
+              <div className="mb-4 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+                <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+                Electronic signature policies are enforced at the code level in VistA. These values cannot be changed through the admin panel — they are system constants.
+              </div>
+            )}
 
             {loading ? (
               <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 animate-pulse bg-[#E2E4E8] rounded-lg" />)}</div>
@@ -585,6 +645,15 @@ export default function SecurityAuth() {
           </div>
         </div>
       )}
+
+      {/* Terminal Reference */}
+      <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+        <p className="mt-2">This page replaces: <strong>EVE → Operations → Kernel Management → Enter/Edit Kernel Site Parameters</strong></p>
+        <p className="mt-1">VistA File: <strong>KERNEL SYSTEM PARAMETERS (#8989.3)</strong></p>
+        <p className="mt-1">The terminal shows ALL 23+ parameters on a single ScreenMan form.</p>
+        <p className="mt-1">We organize them into sections: Login Security, E-Signature, Account Policies, Audit &amp; Logging, Advanced.</p>
+      </details>
     </AppShell>
   );
 }

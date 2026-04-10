@@ -130,8 +130,27 @@ export default function PermissionsCatalog() {
     if (!assignModal || selectedStaff.size === 0) return;
     setAssigning(true);
     setAssignError('');
+
+    const keyToAssign = (assignModal.vistaKey || assignModal.name || '').toUpperCase();
+    const isConflictKey = keyToAssign === 'ORES' || keyToAssign === 'ORELSE';
+    const conflictKey = keyToAssign === 'ORES' ? 'ORELSE' : 'ORES';
+
     const errors = [];
+    const skipped = [];
+
     for (const duz of selectedStaff) {
+      // Pre-check ORES/ORELSE mutual exclusion
+      if (isConflictKey) {
+        try {
+          const res = await getUserPermissions(duz);
+          const existing = (res?.data || []).map(k => (k.name || '').toUpperCase());
+          if (existing.includes(conflictKey)) {
+            const staff = staffList.find(s => s.duz === duz);
+            skipped.push(staff?.name || duz);
+            continue;
+          }
+        } catch { /* proceed and let backend handle it */ }
+      }
       try {
         await assignPermission(duz, { keyName: assignModal.vistaKey || assignModal.name });
       } catch (err) {
@@ -139,9 +158,13 @@ export default function PermissionsCatalog() {
         errors.push(`${staff?.name || duz}: ${err?.message || 'failed'}`);
       }
     }
+
     setAssigning(false);
-    if (errors.length > 0) {
-      setAssignError(`Failed for ${errors.length} staff: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '…' : ''}`);
+    const msgs = [];
+    if (skipped.length > 0) msgs.push(`Skipped ${skipped.length} (already hold ${conflictKey}): ${skipped.join(', ')}`);
+    if (errors.length > 0) msgs.push(`Failed for ${errors.length}: ${errors.slice(0, 3).join('; ')}`);
+    if (msgs.length > 0) {
+      setAssignError(msgs.join(' | '));
     } else {
       setAssignModal(null);
       setSelectedStaff(new Set());
