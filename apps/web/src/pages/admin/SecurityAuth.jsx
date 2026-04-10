@@ -113,7 +113,7 @@ function buildFields(params, sectionId) {
         type: 'readonly',
         value: '6',
         unit: 'characters',
-        hint: 'Enforced at signature-set time. Contact your system administrator to adjust this policy.',
+        hint: 'This is a Kernel-level constant enforced inside the VistA source code (XUSHSH routine). It is not configurable through parameters — the system will reject any e-signature shorter than 6 characters.',
         policyEnforced: true,
       },
       {
@@ -121,7 +121,7 @@ function buildFields(params, sectionId) {
         label: 'Required for Clinical Orders',
         type: 'readonly',
         value: 'Yes',
-        hint: 'Order release requires a valid e-signature for any user with order-writing authority.',
+        hint: 'Built into the CPRS Order Entry package. Any user with the ORES key (write clinical orders) must have an active e-signature to release orders. This cannot be disabled.',
         policyEnforced: true,
       },
       {
@@ -129,7 +129,7 @@ function buildFields(params, sectionId) {
         label: 'Required for Clinical Notes',
         type: 'readonly',
         value: 'Yes',
-        hint: 'Document signing requires a valid e-signature for any user with clinical note signing authority.',
+        hint: 'Built into the TIU (Text Integration Utilities) package. Clinical note signing requires an e-signature. This is a federal compliance requirement and cannot be disabled.',
         policyEnforced: true,
       },
     ];
@@ -145,15 +145,31 @@ function buildFields(params, sectionId) {
   }
 
   if (sectionId === 'audit') {
-    const optAudit = params['OPTION AUDIT']?.value ?? '';
+    // VistA returns EXTERNAL display values ("SPECIFIC OPTIONS AUDITED")
+    // but the set-of-codes internal values are single letters (s/n/a).
+    // Normalize the external → internal for dropdown matching.
+    const AUDIT_EXT_TO_INT = {
+      'SPECIFIC OPTIONS AUDITED': 's', 'ALL OPTIONS AUDITED': 'a', 'NO AUDIT': 'n',
+      // Also handle if the raw internal code comes through
+      's': 's', 'a': 'a', 'n': 'n', 'S': 's', 'A': 'a', 'N': 'n',
+    };
+    const FACCESS_EXT_TO_INT = {
+      '': '', 'LOG ALL FAILED ACCESS': 'a', 'LOG BY DEVICE': 'd',
+      'LOG ALL + RECORD': 'ar', 'LOG DEVICE + RECORD': 'dr', 'NO LOGGING': 'n',
+      'a': 'a', 'd': 'd', 'ar': 'ar', 'dr': 'dr', 'n': 'n',
+      'A': 'a', 'D': 'd', 'AR': 'ar', 'DR': 'dr', 'N': 'n',
+    };
+    const rawOptAudit = params['OPTION AUDIT']?.value ?? '';
+    const optAudit = AUDIT_EXT_TO_INT[rawOptAudit] || rawOptAudit.toLowerCase().charAt(0) || '';
     const initAudit = params['INITIATE AUDIT']?.value ?? '';
     const termAudit = params['TERMINATE AUDIT']?.value ?? '';
-    const failAccess = params['FAILED ACCESS AUDIT']?.value ?? '';
+    const rawFailAccess = params['FAILED ACCESS AUDIT']?.value ?? '';
+    const failAccess = FACCESS_EXT_TO_INT[rawFailAccess] || rawFailAccess.toLowerCase() || '';
     return [
-      { name: 'OPTION AUDIT', label: 'Data Auditing Mode', type: 'select', value: optAudit, options: [{ value: 'A', label: 'Audit All Activity' }, { value: 'N', label: 'No Auditing' }, { value: 'S', label: 'Audit Specific Options' }], hint: 'Controls what user activity is recorded in the audit trail.' },
+      { name: 'OPTION AUDIT', label: 'Data Auditing Mode', type: 'select', value: optAudit, options: [{ value: '', label: '— Select —' }, { value: 'a', label: 'Audit All Activity' }, { value: 'n', label: 'No Auditing' }, { value: 's', label: 'Audit Specific Options' }], hint: 'Controls what user activity is recorded in the audit trail.' },
       { name: 'INITIATE AUDIT', label: 'Audit Start Date', type: 'text', value: initAudit, hint: 'Date when auditing began or should begin.' },
       { name: 'TERMINATE AUDIT', label: 'Audit End Date', type: 'text', value: termAudit, hint: 'Date when auditing should stop. Leave empty for continuous auditing.' },
-      { name: 'FAILED ACCESS AUDIT', label: 'Failed Access Logging', type: 'select', value: failAccess, options: [{ value: 'A', label: 'Log All Failed Attempts' }, { value: 'D', label: 'Log by Device' }, { value: 'AR', label: 'Log All + Details' }, { value: 'DR', label: 'Log Devices + Details' }, { value: 'N', label: 'No Logging' }], hint: 'Controls how failed login attempts are recorded.' },
+      { name: 'FAILED ACCESS AUDIT', label: 'Failed Access Logging', type: 'select', value: failAccess, options: [{ value: '', label: '— Not Configured —' }, { value: 'a', label: 'Log All Failed Attempts' }, { value: 'd', label: 'Log by Device' }, { value: 'ar', label: 'Log All + Details' }, { value: 'dr', label: 'Log Devices + Details' }, { value: 'n', label: 'No Logging' }], hint: 'Controls how failed login attempts are recorded.' },
     ];
   }
   return [];

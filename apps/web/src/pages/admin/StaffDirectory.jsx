@@ -242,12 +242,17 @@ export default function StaffDirectory() {
     if (key === 'esig') setEsigFilter('All');
   };
 
+  const [actionSuccess, setActionSuccess] = useState(null);
+
   const handleDeactivate = async () => {
     if (!deactivateTarget) return;
+    const name = deactivateTarget.name;
     try {
       await deactivateStaffMember(deactivateTarget.duz);
       setDeactivateTarget(null);
       setSelectedStaff(null);
+      setActionSuccess(`${name} has been deactivated. They can no longer sign in.`);
+      setTimeout(() => setActionSuccess(null), 6000);
       loadData();
     } catch (err) {
       setError(`Failed to deactivate: ${err.message}`);
@@ -256,9 +261,12 @@ export default function StaffDirectory() {
   };
 
   const handleReactivate = async (duz) => {
+    const name = detailData?.name || 'Staff member';
     try {
       await reactivateStaffMember(duz);
       setSelectedStaff(null);
+      setActionSuccess(`${name} has been reactivated. They can now sign in.`);
+      setTimeout(() => setActionSuccess(null), 6000);
       loadData();
     } catch (err) { setError(`Failed to reactivate: ${err.message}`); }
   };
@@ -332,6 +340,15 @@ export default function StaffDirectory() {
                   {error}
                 </div>
                 <button onClick={() => setError(null)} className="text-xs hover:underline">Dismiss</button>
+              </div>
+            )}
+            {actionSuccess && (
+              <div className="mb-4 p-3 bg-[#E8F5E9] border border-[#2D6A4F] rounded-lg text-sm text-[#2D6A4F] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                  {actionSuccess}
+                </div>
+                <button onClick={() => setActionSuccess(null)} className="text-xs hover:underline">Dismiss</button>
               </div>
             )}
             <div className="flex items-center justify-between mb-6">
