@@ -546,16 +546,16 @@ export default function PermissionsCatalog() {
                 </div>
               )}
             </div>
+            {selectedStaff.size > 0 && (
+              <div className="px-5 py-3 border-t border-border flex items-center justify-between flex-shrink-0" onClick={e => e.stopPropagation()}>
+                <span className="text-xs text-[#666]">{selectedStaff.size} staff selected</span>
+                <button onClick={handleBatchAssign} disabled={assigning}
+                  className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40">
+                  {assigning ? 'Assigning…' : `Assign to ${selectedStaff.size} Selected`}
+                </button>
+              </div>
+            )}
           </div>
-          {selectedStaff.size > 0 && (
-            <div className="px-5 py-3 border-t border-border flex items-center justify-between">
-              <span className="text-xs text-[#666]">{selectedStaff.size} staff selected</span>
-              <button onClick={handleBatchAssign} disabled={assigning}
-                className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40">
-                {assigning ? 'Assigning…' : `Assign to ${selectedStaff.size} Selected`}
-              </button>
-            </div>
-          )}
         </div>
       )}
 

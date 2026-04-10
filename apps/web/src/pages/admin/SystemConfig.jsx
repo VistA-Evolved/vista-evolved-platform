@@ -100,7 +100,6 @@ export default function SystemConfig() {
   const stationNumber = params?.['STATION NUMBER']?.value || vistaInfo?.vista?.stationNumber || '';
   const timeZone = params?.['TIME ZONE']?.value || vistaInfo?.vista?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || '';
   const defaultInstitution = params?.['DEFAULT INSTITUTION']?.value || '';
-  const guiPostSignOn = params?.['GUI POST SIGN-ON']?.value || '';
   const vistaVersion = vistaInfo?.vista?.vistaVersion || vistaInfo?.vista?.version || '';
 
   if (error) {

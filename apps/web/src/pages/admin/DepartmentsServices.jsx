@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
-import { SearchBar, Pagination, ConfirmDialog } from '../../components/shared/SharedComponents';
+import { SearchBar, Pagination } from '../../components/shared/SharedComponents';
 import { getDepartments, getDepartmentDetail, createDepartment, updateDepartment } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';

@@ -46,6 +46,10 @@ const PARAM_LABELS = {
   'FAILED ACCESS AUDIT': 'Failed Access Logging',
   'AUTO ACCESS CODES': 'Auto-Generate Usernames',
   'AUTO VERIFY CODES': 'Auto-Generate Passwords',
+  'IRM MAIL GROUP': 'IRM Mail Group',
+  'AFTER HOURS MAIL GROUP': 'After-Hours Mail Group',
+  'DEFAULT INSTITUTION': 'Default Institution',
+  'GUI POST SIGN-ON': 'Post-Login Action',
 };
 
 const TOGGLE_LABELS = { 'YES': 'Enabled', 'NO': 'Disabled', 'Y': 'Enabled', 'N': 'Disabled' };
@@ -602,6 +606,14 @@ export default function SecurityAuth() {
               </div>
             )}
 
+            {/* Terminal Reference */}
+            <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+              <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+              <p className="mt-2">This page replaces: <strong>EVE → Operations → Kernel Management → Enter/Edit Kernel Site Parameters</strong></p>
+              <p className="mt-1">VistA File: <strong>KERNEL SYSTEM PARAMETERS (#8989.3)</strong></p>
+              <p className="mt-1">The terminal shows ALL 23+ parameters on a single ScreenMan form.</p>
+              <p className="mt-1">We organize them into sections: Login Security, E-Signature, Account Policies, Audit &amp; Logging, Advanced.</p>
+            </details>
           </div>
         </div>
       </div>
@@ -646,14 +658,6 @@ export default function SecurityAuth() {
         </div>
       )}
 
-      {/* Terminal Reference */}
-      <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
-        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
-        <p className="mt-2">This page replaces: <strong>EVE → Operations → Kernel Management → Enter/Edit Kernel Site Parameters</strong></p>
-        <p className="mt-1">VistA File: <strong>KERNEL SYSTEM PARAMETERS (#8989.3)</strong></p>
-        <p className="mt-1">The terminal shows ALL 23+ parameters on a single ScreenMan form.</p>
-        <p className="mt-1">We organize them into sections: Login Security, E-Signature, Account Policies, Audit &amp; Logging, Advanced.</p>
-      </details>
     </AppShell>
   );
 }

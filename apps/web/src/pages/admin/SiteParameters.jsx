@@ -109,7 +109,7 @@ const PARAM_TREE = [
   {
     section: 'Scheduling',
     groups: [
-      { id: 'scheduling', label: 'Scheduling Settings', icon: 'calendar_month', vistaFile: '44' },
+      { id: 'scheduling', label: 'Scheduling Settings', icon: 'calendar_month', vistaFile: '44.001' },
     ],
   },
   {
@@ -503,6 +503,15 @@ export default function SiteParameters() {
               })}
             </div>
           )}
+
+          {/* Terminal Reference */}
+          <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+            <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+            <p className="mt-2">Each section replaces a package-specific parameter editor from the terminal.</p>
+            <p className="mt-1">Terminal path varies: <strong>Pharmacy Manager → Site Parameters</strong>, <strong>Lab Manager → Site Parameters</strong>, etc.</p>
+            <p className="mt-1">VistA stores these in separate parameter files per package.</p>
+            <p className="mt-1">The terminal's ScreenMan form shows ALL fields with data dictionary labels. We aim to match that coverage.</p>
+          </details>
         </div>
 
         <div className="w-[300px] border-l border-border overflow-auto p-4 flex-shrink-0 bg-surface-alt">
@@ -559,14 +568,6 @@ export default function SiteParameters() {
         </div>
       </div>
 
-      {/* Terminal Reference */}
-      <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
-        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
-        <p className="mt-2">Each section replaces a package-specific parameter editor from the terminal.</p>
-        <p className="mt-1">Terminal path varies: <strong>Pharmacy Manager → Site Parameters</strong>, <strong>Lab Manager → Site Parameters</strong>, etc.</p>
-        <p className="mt-1">VistA stores these in separate parameter files per package.</p>
-        <p className="mt-1">The terminal's ScreenMan form shows ALL fields with data dictionary labels. We aim to match that coverage.</p>
-      </details>
     </AppShell>
   );
 }
