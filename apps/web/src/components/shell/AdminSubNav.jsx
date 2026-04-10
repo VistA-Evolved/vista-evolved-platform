@@ -3,6 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 const sections = [
   {
+    group: 'Overview',
+    icon: 'dashboard',
+    items: [
+      { label: 'Admin Dashboard', path: '/admin/dashboard', icon: 'space_dashboard' },
+    ],
+  },
+  {
     group: 'People',
     icon: 'badge',
     items: [
@@ -16,6 +23,14 @@ const sections = [
     items: [
       { label: 'Roles & Permissions', path: '/admin/roles', icon: 'shield_person' },
       { label: 'Permission Catalog', path: '/admin/permissions', icon: 'vpn_key' },
+    ],
+  },
+  {
+    group: 'Clinical Setup',
+    icon: 'local_hospital',
+    items: [
+      { label: 'Clinics', path: '/admin/clinics', icon: 'clinical_notes' },
+      { label: 'Wards', path: '/admin/wards', icon: 'bed' },
     ],
   },
   {
@@ -33,6 +48,14 @@ const sections = [
       { label: 'Security & Authentication', path: '/admin/security', icon: 'lock' },
       { label: 'System Configuration', path: '/admin/config', icon: 'settings_applications' },
       { label: 'Module Settings', path: '/admin/module-settings', icon: 'package_2' },
+      { label: 'Devices', path: '/admin/devices', icon: 'print' },
+    ],
+  },
+  {
+    group: 'Mail Administration',
+    icon: 'mail',
+    items: [
+      { label: 'Mail Groups', path: '/admin/mail-groups', icon: 'group_work' },
     ],
   },
   {

@@ -23,6 +23,11 @@ import AlertsNotifications from './pages/admin/AlertsNotifications';
 import DepartmentsServices from './pages/admin/DepartmentsServices';
 import SiteParameters from './pages/admin/SiteParameters';
 import AdminReports from './pages/admin/AdminReports';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import ClinicManagement from './pages/admin/ClinicManagement';
+import WardManagement from './pages/admin/WardManagement';
+import DeviceManagement from './pages/admin/DeviceManagement';
+import MailGroupManagement from './pages/admin/MailGroupManagement';
 
 import PatientSearch from './pages/patients/PatientSearch';
 import PatientDashboard from './pages/patients/PatientDashboard';
@@ -171,6 +176,12 @@ export default function App() {
           <Route path="/admin/audit" element={<RequireAdmin><ErrorBoundary><AuditLog /></ErrorBoundary></RequireAdmin>} />
           <Route path="/admin/messages" element={<RequireAdmin><ErrorBoundary><AlertsNotifications /></ErrorBoundary></RequireAdmin>} />
           <Route path="/admin/reports" element={<RequireAdmin><ErrorBoundary><AdminReports /></ErrorBoundary></RequireAdmin>} />
+          {/* Session 5 — New Pages */}
+          <Route path="/admin/dashboard" element={<RequireAdmin><ErrorBoundary><AdminDashboard /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/clinics" element={<RequireAdmin><ErrorBoundary><ClinicManagement /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/wards" element={<RequireAdmin><ErrorBoundary><WardManagement /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/devices" element={<RequireAdmin><ErrorBoundary><DeviceManagement /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/mail-groups" element={<RequireAdmin><ErrorBoundary><MailGroupManagement /></ErrorBoundary></RequireAdmin>} />
           {/* Legacy redirects */}
           <Route path="/admin/parameters" element={<Navigate to="/admin/module-settings" replace />} />
           <Route path="/admin/monitor" element={<Navigate to="/admin/health" replace />} />

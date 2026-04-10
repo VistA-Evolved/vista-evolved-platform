@@ -548,3 +548,99 @@ export async function reject2PRequest(id) {
 export async function createAlert(data) {
   return tenantApi.post('/alerts', data);
 }
+
+// ────────────────────────────────────────────────
+// Clinics (backend: HOSPITAL LOCATION #44)
+// ────────────────────────────────────────────────
+
+export async function getClinicDetail(ien) {
+  return tenantApi.get(`/clinics/${ien}`);
+}
+
+export async function createClinic(data) {
+  return tenantApi.post('/clinics', data);
+}
+
+export async function updateClinicField(ien, field, value) {
+  return tenantApi.put(`/clinics/${ien}/fields`, { field, value });
+}
+
+export async function inactivateClinic(ien) {
+  return tenantApi.post(`/clinics/${ien}/inactivate`);
+}
+
+export async function reactivateClinic(ien) {
+  return tenantApi.post(`/clinics/${ien}/reactivate`);
+}
+
+export async function getClinicAvailability(ien) {
+  return tenantApi.get(`/clinics/${ien}/availability`);
+}
+
+export async function setClinicAvailability(ien, data) {
+  return tenantApi.post(`/clinics/${ien}/availability`, data);
+}
+
+// ────────────────────────────────────────────────
+// Wards (backend: WARD LOCATION #42)
+// ────────────────────────────────────────────────
+
+export async function getWardDetail(ien) {
+  return tenantApi.get(`/wards/${ien}`);
+}
+
+export async function createWard(data) {
+  return tenantApi.post('/wards', data);
+}
+
+export async function updateWardField(ien, field, value) {
+  return tenantApi.put(`/wards/${ien}/fields`, { field, value });
+}
+
+// ────────────────────────────────────────────────
+// Devices (backend: DEVICE #3.5)
+// ────────────────────────────────────────────────
+
+export async function getDeviceDetail(ien) {
+  return tenantApi.get(`/devices/${ien}`);
+}
+
+export async function createDevice(data) {
+  return tenantApi.post('/devices', data);
+}
+
+export async function updateDeviceField(ien, field, value) {
+  return tenantApi.put(`/devices/${ien}/fields`, { field, value });
+}
+
+export async function deleteDevice(ien) {
+  return tenantApi.delete(`/devices/${ien}`);
+}
+
+export async function testPrintDevice(ien) {
+  return tenantApi.post(`/devices/${ien}/test-print`);
+}
+
+// ────────────────────────────────────────────────
+// Mail Groups (backend: MAIL GROUP #3.8)
+// ────────────────────────────────────────────────
+
+export async function getMailGroupDetail(ien) {
+  return tenantApi.get(`/mail-groups/${ien}`);
+}
+
+export async function updateMailGroup(ien, data) {
+  return tenantApi.put(`/mail-groups/${ien}`, data);
+}
+
+export async function getMailGroupMembers(ien) {
+  return tenantApi.get(`/mail-groups/${ien}/members`);
+}
+
+export async function addMailGroupMember(ien, userDuz) {
+  return tenantApi.post(`/mail-groups/${ien}/members`, { userDuz });
+}
+
+export async function removeMailGroupMember(ien, duz) {
+  return tenantApi.delete(`/mail-groups/${ien}/members/${duz}`);
+}
