@@ -76,11 +76,11 @@ function StaffTypeahead({ value, onChange }) {
 }
 
 const AUDIT_SOURCES = [
-  { id: 'all', label: 'All Events' },
-  { id: 'signon', label: 'Sign-On Activity' },
-  { id: 'fileman', label: 'Data Changes' },
-  { id: 'failed', label: 'Failed Access' },
-  { id: 'programmer', label: 'Administrative Access' },
+  { id: 'all', label: 'All Events', title: 'Combined view of all audit sources.' },
+  { id: 'signon', label: 'Sign-On Activity', title: 'Records of user sign-on and sign-off events. Source: Kernel Sign-On Log File #3.081.' },
+  { id: 'fileman', label: 'Data Changes', title: 'FileMan audit trail of data modifications. Source: VA FileMan Audit File #1.1.' },
+  { id: 'failed', label: 'Failed Access', title: 'Failed login attempts and access violations. Source: Failed Access File #3.085.' },
+  { id: 'programmer', label: 'Administrative Access', title: 'Records of programmer mode entry. Source: Programmer Mode Usage log.' },
 ];
 const columns = [
   { key: 'timestamp', label: 'Timestamp', render: (val) => <span className="font-mono text-[11px]">{val}</span> },
@@ -271,6 +271,11 @@ export default function AuditLog() {
             <p className="text-sm text-text-secondary mt-1">
               {loading ? 'Loading audit data...' : `${allEvents.length} events from ${new Set(allEvents.map(e => e.source)).size} audit sources.`}
             </p>
+            <p className="text-sm text-[#666] mt-1">
+              View administrative audit trails from multiple VistA sources. Each tab queries a different
+              audit file to show sign-on activity, data changes, errors, failed access attempts, and
+              programmer mode usage.
+            </p>
           </div>
           <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
             <span className="material-symbols-outlined text-[16px]">download</span>
@@ -282,6 +287,7 @@ export default function AuditLog() {
         <div className="flex items-center gap-1 border-b border-border mb-4" role="tablist">
           {AUDIT_SOURCES.map(src => (
             <button key={src.id} onClick={() => { setSourceFilter(src.id); setPage(1); }} role="tab" aria-selected={sourceFilter === src.id}
+              title={src.title}
               className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
                 sourceFilter === src.id ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
               }`}>
@@ -371,6 +377,16 @@ export default function AuditLog() {
             <Pagination page={page} pageSize={PAGE_SIZE} total={totalFiltered} onPageChange={setPage} />
           </>
         )}
+
+        <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+          <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+          <p className="mt-2">This page replaces: <strong>EVE → Information Security Officer Menu</strong></p>
+          <p className="mt-1"><strong>Sign-On Activity:</strong> Kernel Sign-On Log (File #3.081). Terminal: Review Sign-On Log.</p>
+          <p className="mt-1"><strong>Data Changes:</strong> VA FileMan Audit Trail (File #1.1). Terminal: FileMan Audit options.</p>
+          <p className="mt-1"><strong>Error Log:</strong> Error Trap (File #3.077). Terminal: D ^XTER.</p>
+          <p className="mt-1"><strong>Failed Access:</strong> Failed Access Log (File #3.085). Terminal: Review Failed Access Log.</p>
+          <p className="mt-1"><strong>Programmer Mode:</strong> Programmer Mode Usage Log. Terminal: Review Programmer Mode Usage.</p>
+        </details>
       </div>
     </AppShell>
   );

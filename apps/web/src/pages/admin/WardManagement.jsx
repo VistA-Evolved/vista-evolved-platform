@@ -78,7 +78,14 @@ export default function WardManagement() {
     try {
       const res = await getWardDetail(ward.id);
       const d = res?.data || {};
-      setDetailData({ ...ward, ...d, id: ward.id });
+      // Map DDR field numbers to human keys
+      const mapped = {};
+      for (const ef of EDIT_FIELDS) {
+        // Ward uses named fields; check both named key and .01-style numbers
+        const val = d[ef.field] ?? d[ef.key];
+        if (val !== undefined && val !== '') mapped[ef.key] = val;
+      }
+      setDetailData({ ...ward, ...mapped, id: ward.id });
     } catch {
       setDetailData(ward);
     } finally {

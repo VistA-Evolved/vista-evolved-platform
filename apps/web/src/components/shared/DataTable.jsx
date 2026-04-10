@@ -30,6 +30,7 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
             {columns.map((col) => (
               <th
                 key={col.key}
+                title={col.headerTitle}
                 onClick={() => col.sortable !== false && handleSort(col.key)}
                 className={`
                   text-left px-3 py-2.5 text-white font-semibold text-xs uppercase tracking-wider

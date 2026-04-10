@@ -100,7 +100,13 @@ export default function ClinicManagement() {
     try {
       const res = await getClinicDetail(clinic.id);
       const d = res?.data || {};
-      setDetailData({ ...clinic, ...d, id: clinic.id });
+      // Map DDR field numbers to human keys
+      const mapped = {};
+      for (const ef of EDIT_FIELDS) {
+        const val = d[ef.field] ?? d[`${ef.field}E`] ?? d[`${ef.field}I`];
+        if (val !== undefined && val !== '') mapped[ef.key] = val;
+      }
+      setDetailData({ ...clinic, ...mapped, id: clinic.id });
     } catch {
       setDetailData(clinic);
     } finally {

@@ -90,7 +90,13 @@ export default function DeviceManagement() {
     try {
       const res = await getDeviceDetail(device.id);
       const d = res?.data || {};
-      setDetailData({ ...device, ...d, id: device.id });
+      // Map DDR field numbers to human keys
+      const mapped = {};
+      for (const ef of EDIT_FIELDS) {
+        const val = d[ef.field] ?? d[`${ef.field}E`] ?? d[`${ef.field}I`];
+        if (val !== undefined && val !== '') mapped[ef.key] = val;
+      }
+      setDetailData({ ...device, ...mapped, id: device.id });
     } catch {
       setDetailData(device);
     } finally {

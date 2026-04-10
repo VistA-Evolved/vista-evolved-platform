@@ -130,6 +130,11 @@ export default function AlertsNotifications() {
         )}
 
         {tab === 'alerts' && (
+          <div>
+            <p className="text-xs text-[#666] mb-3">
+              System alerts from VistA's Bulletin system. Alerts are triggered by clinical and administrative events
+              and delivered to configured mail groups and individual recipients.
+            </p>
           <div className="flex gap-6">
             <div className={`${selectedAlert ? 'w-[35%]' : 'w-full'}`}>
               {loading ? (
@@ -216,6 +221,7 @@ export default function AlertsNotifications() {
                       {actionLoading === 'ack' ? 'Acknowledging...' : 'Acknowledge & Dismiss'}
                     </button>
                     <button disabled={actionLoading === 'forward'}
+                      title="Forward this alert to another staff member or mail group."
                       onClick={async () => {
                         setForwardModal(selectedAlert);
                         setStaffSearch('');
@@ -232,6 +238,7 @@ export default function AlertsNotifications() {
                       Forward
                     </button>
                     <button disabled={actionLoading === 'delete'}
+                      title="Delete this alert. This action cannot be undone."
                       onClick={() => setConfirmDeleteAlert(true)}
                       className="px-3 py-2 text-xs border border-[#CC3333] text-[#CC3333] rounded-md hover:bg-[#FDE8E8] disabled:opacity-50">
                       {actionLoading === 'delete' ? 'Deleting...' : 'Delete'}
@@ -240,6 +247,7 @@ export default function AlertsNotifications() {
                 </div>
               </div>
             )}
+          </div>
           </div>
         )}
 
@@ -259,6 +267,18 @@ export default function AlertsNotifications() {
 
         {tab === 'notifications' && (
           <div className="max-w-2xl space-y-6">
+            <div className="p-4 bg-[#F5F8FB] rounded-lg text-sm text-[#666] mb-4">
+              <div className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+                <div>
+                  <p className="font-medium text-[#333] mb-1">About Alert Routing</p>
+                  <p>This section describes how VistA routes alerts and notifications. Alert routing configuration is managed through
+                  Kernel Site Parameters (IRM Mail Group, After-Hours Mail Group) and package-specific settings.</p>
+                  <p className="mt-1">To configure which mail groups receive system alerts, go to
+                  <strong> Security & Authentication → Advanced Settings</strong>.</p>
+                </div>
+              </div>
+            </div>
             <div className="bg-white border border-border rounded-lg p-5">
               <h3 className="font-semibold text-sm text-text mb-3">Alert Routing</h3>
               <p className="text-xs text-text-secondary mb-4">
@@ -368,6 +388,14 @@ export default function AlertsNotifications() {
           destructive
         />
       )}
+
+      <details className="mx-0 mt-4 mb-2 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+        <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+        <p className="mt-2">This page replaces: <strong>EVE → Manage Mailman</strong> and the VistA Alerts system.</p>
+        <p className="mt-1"><strong>Alerts tab:</strong> VistA Bulletin system (File #3.6). Alerts are triggered by system events and routed to configured recipients.</p>
+        <p className="mt-1"><strong>Messages tab:</strong> MailMan (Files #3.9, #3.7). Internal messaging system with inbox, compose, forward, and delete.</p>
+        <p className="mt-1"><strong>Notifications tab:</strong> Describes alert routing configuration. In terminal: EVE → Manage Mailman → Alert Management.</p>
+      </details>
     </AppShell>
   );
 }

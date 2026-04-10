@@ -263,12 +263,13 @@ export default function SiteParameters() {
       const items = structuredData.map(d => ({
         key: `${selectedGroup}-${d.fieldNum}`,
         fieldNum: d.fieldNum,
-        name: d.label || `Field ${d.fieldNum}`,
+        name: d.label || d.description || `Parameter #${d.fieldNum} (label unavailable — check system configuration)`,
         value: d.value || '',
         type: 'text',
         description: d.displayValue && d.displayValue !== d.value
           ? `Current value: ${d.displayValue}`
           : `VistA File #${pkgData.file || '?'}, field ${d.fieldNum}`,
+        vistaFile: pkgData.file,
       }));
       // If we have group definitions, add section headers
       if (groupDefs) {
@@ -308,7 +309,7 @@ export default function SiteParameters() {
       return {
         key: `${selectedGroup}-${fieldNum}`,
         fieldNum,
-        name: `Field ${fieldNum}`,
+        name: `Parameter #${fieldNum} (unlabeled)`,
         value: internal,
         type: 'text',
         description: external ? `Value: ${external}` : '',
@@ -485,6 +486,12 @@ export default function SiteParameters() {
             <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 animate-pulse bg-[#E2E4E8] rounded-lg" />)}</div>
           ) : (
             <div className="space-y-5">
+              {params.some(p => p.name?.includes('Parameter #') && (p.name?.includes('unlabeled') || p.name?.includes('label unavailable'))) && (
+                <div className="mb-3 p-3 bg-[#FFF3E0] rounded-lg text-[11px] text-[#E65100] flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[14px] mt-0.5">warning</span>
+                  <span>Some parameter labels could not be loaded from VistA's data dictionary. This may indicate the ZVE DD FIELDS RPC needs registration. Contact your system administrator.</span>
+                </div>
+              )}
               {params.map(param => {
                 if (param.type === 'section-header') {
                   return (
@@ -511,7 +518,13 @@ export default function SiteParameters() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-text-secondary mb-3">{param.description}</p>
+                    <p className="text-xs text-text-secondary mb-1">{param.description}</p>
+                    {param.fieldNum && (
+                      <p className="text-[10px] text-[#BBB] mt-0.5 mb-3">
+                        VistA File #{param.vistaFile || '—'} • Field {param.fieldNum}
+                      </p>
+                    )}
+                    {!param.fieldNum && <div className="mb-3" />}
                     <div className="flex items-center gap-4">
                       {param.type === 'number' && (
                         <div className="flex items-center gap-2">

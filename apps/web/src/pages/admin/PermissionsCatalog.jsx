@@ -173,15 +173,15 @@ export default function PermissionsCatalog() {
   };
 
   const columns = [
-    { key: 'displayName', label: 'Permission', bold: true, render: (val, row) => (
+    { key: 'displayName', label: 'Permission', bold: true, headerTitle: 'Human-readable name for this security key. Not all VistA keys have descriptions — some show only the system key name.', render: (val, row) => (
       <div>
         <div className="font-medium text-sm">{val}</div>
       </div>
     )},
-    { key: 'department', label: 'Department' },
+    { key: 'department', label: 'Department', headerTitle: 'The VistA package this key belongs to. Keys from the same package control related functions.' },
     { key: 'description', label: 'Description', render: (val) => <span className="text-xs text-text-secondary line-clamp-1">{val || '—'}</span> },
     {
-      key: 'holderCount', label: 'Staff', align: 'center',
+      key: 'holderCount', label: 'Staff', align: 'center', headerTitle: 'Number of staff members currently holding this key.',
       render: (val) => <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-1.5 rounded bg-[#E8EEF5] text-steel text-[11px] font-bold font-mono">{val}</span>,
     },
     {
@@ -189,9 +189,9 @@ export default function PermissionsCatalog() {
       render: (_, row) => (
         <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
           {row.holderCount > 0 && (
-            <button onClick={() => handleViewStaff(row)} className="text-steel hover:underline text-xs font-medium">View Staff</button>
+            <button onClick={() => handleViewStaff(row)} title="View all staff members who currently hold this key." className="text-steel hover:underline text-xs font-medium">View Staff</button>
           )}
-          <button onClick={() => handleOpenAssign(row)} className="text-steel hover:underline text-xs font-medium">Assign</button>
+          <button onClick={() => handleOpenAssign(row)} title="Grant this security key to a staff member. The key takes effect immediately." className="text-steel hover:underline text-xs font-medium">Assign</button>
         </div>
       ),
     },
@@ -304,11 +304,13 @@ export default function PermissionsCatalog() {
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => { setViewMode('standard'); setPage(1); setCategoryFilter('All'); }}
+                title="Standard: ~150 commonly assigned keys. Advanced: all 689+ keys including system-internal ones."
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   viewMode === 'standard' ? 'bg-[#1A1A2E] text-white' : 'border border-[#E2E4E8] text-[#666] hover:bg-[#F5F8FB]'}`}>
                 Standard
               </button>
               <button onClick={() => { setViewMode('advanced'); setPage(1); setCategoryFilter('All'); }}
+                title="Standard: ~150 commonly assigned keys. Advanced: all 689+ keys including system-internal ones."
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   viewMode === 'advanced' ? 'bg-[#1A1A2E] text-white' : 'border border-[#E2E4E8] text-[#666] hover:bg-[#F5F8FB]'}`}>
                 Advanced ({allKeys.length})

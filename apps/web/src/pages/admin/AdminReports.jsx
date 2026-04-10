@@ -9,12 +9,12 @@ import ErrorState from '../../components/shared/ErrorState';
  */
 
 const REPORT_TYPES = [
-  { id: 'staff-access', name: 'Staff Access Report', description: 'Active staff sorted by days since last sign-in.', icon: 'people' },
-  { id: 'permission-dist', name: 'Permission Distribution', description: 'Permissions by holder count and department.', icon: 'key' },
-  { id: 'audit-summary', name: 'Audit Summary', description: 'Actions by type, workspace, and time period.', icon: 'shield' },
-  { id: 'signin-activity', name: 'Sign-In Activity', description: 'Sign-in patterns and unusual access detection.', icon: 'login' },
-  { id: 'inactive-accounts', name: 'Inactive Accounts', description: 'Inactive accounts for security review.', icon: 'person_off' },
-  { id: 'param-changes', name: 'Parameter Change History', description: 'All parameter changes in the selected period.', icon: 'tune' },
+  { id: 'staff-access', name: 'Staff Access Report', description: 'Active staff sorted by days since last sign-in.', icon: 'people', title: 'Staff listing with status, department, and permission counts. Source: NEW PERSON File #200.' },
+  { id: 'permission-dist', name: 'Permission Distribution', description: 'Permissions by holder count and department.', icon: 'key', title: 'Security key allocation across staff. Source: SECURITY KEY File #19.1.' },
+  { id: 'audit-summary', name: 'Audit Summary', description: 'Actions by type, workspace, and time period.', icon: 'shield', title: 'Aggregated audit events from sign-on log, FileMan audit, and error trap.' },
+  { id: 'signin-activity', name: 'Sign-In Activity', description: 'Sign-in patterns and unusual access detection.', icon: 'login', title: 'Sign-in frequency and patterns by staff. Source: Kernel Sign-On Log File #3.081.' },
+  { id: 'inactive-accounts', name: 'Inactive Accounts', description: 'Inactive accounts for security review.', icon: 'person_off', title: 'Accounts with no recent sign-in for security review. Source: File #200 fields 1.1, 202.' },
+  { id: 'param-changes', name: 'Parameter Change History', description: 'All parameter changes in the selected period.', icon: 'tune', title: 'Audit trail of site parameter modifications. Source: FileMan Audit File #1.1.' },
 ];
 
 const REPORT_COLUMN_LABELS = {
@@ -72,13 +72,18 @@ export default function AdminReports() {
     <AppShell breadcrumb="Admin > Reports">
       <div className="p-6 max-w-5xl">
         <h1 className="text-[22px] font-bold text-text mb-1">Reports</h1>
-        <p className="text-xs text-[#999] mb-6">Generate administrative and security reports from live system data.</p>
+        <p className="text-xs text-[#999] mb-2">Generate administrative and security reports from live system data.</p>
+        <p className="text-sm text-[#666] mb-6">
+          Generate and export administrative reports from live VistA data. Each report queries
+          real VistA files and returns current information.
+        </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {REPORT_TYPES.map(r => (
             <button
               key={r.id}
               onClick={() => handleRunReport(r)}
+              title={r.title}
               className={`p-4 bg-white border rounded-lg text-left hover:border-[#2E5984] transition-colors ${
                 selectedReport?.id === r.id ? 'border-[#2E5984] ring-1 ring-[#2E5984]' : 'border-[#E2E4E8]'
               }`}
@@ -144,6 +149,14 @@ export default function AdminReports() {
             )}
           </div>
         )}
+
+        <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
+          <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
+          <p className="mt-2">Reports in VistA are generated from various package-specific menus.</p>
+          <p className="mt-1">Terminal paths: <strong>ADT Reports → Various</strong>, <strong>Scheduling Reports</strong>, <strong>Lab Reports</strong>, etc.</p>
+          <p className="mt-1">This page aggregates multiple report sources into a single interface.</p>
+          <p className="mt-1">Data is read live from VistA via DDR LISTER across multiple files.</p>
+        </details>
       </div>
     </AppShell>
   );

@@ -23,10 +23,10 @@ const columns = [
 const PAGE_SIZE = 25;
 
 const EDIT_FIELDS = [
-  { key: 'type', label: 'Type', field: 'type', help: 'Mail group type (e.g., public or private). Controls who can send messages to this group.' },
-  { key: 'organizer', label: 'Organizer', field: 'organizer', help: 'User who manages this mail group. The organizer can add/remove members and change settings.' },
-  { key: 'selfEnroll', label: 'Self Enroll', field: 'selfEnroll', help: 'Whether users can add themselves to this group without organizer approval.' },
-  { key: 'restrictions', label: 'Restrictions', field: 'restrictions', help: 'Access restrictions for this group. Controls who can send messages.' },
+  { key: 'type', label: 'Type', field: 'type', fieldNum: '4', help: 'Mail group type (e.g., public or private). Controls who can send messages to this group.' },
+  { key: 'organizer', label: 'Organizer', field: 'organizer', fieldNum: '5', help: 'User who manages this mail group. The organizer can add/remove members and change settings.' },
+  { key: 'selfEnroll', label: 'Self Enroll', field: 'selfEnroll', fieldNum: '7', help: 'Whether users can add themselves to this group without organizer approval.' },
+  { key: 'restrictions', label: 'Restrictions', field: 'restrictions', fieldNum: '10', help: 'Access restrictions for this group. Controls who can send messages.' },
   { key: 'description', label: 'Description', field: 'description', help: 'Free-text description of the mail group purpose.' },
 ];
 
@@ -91,7 +91,13 @@ export default function MailGroupManagement() {
         getMailGroupMembers(group.id),
       ]);
       const d = detailRes?.data || {};
-      setDetailData({ ...group, ...d, id: group.id });
+      // Map DDR field numbers and named keys to human keys
+      const mapped = {};
+      for (const ef of EDIT_FIELDS) {
+        const val = d[ef.field] ?? d[ef.key] ?? (ef.fieldNum ? (d[ef.fieldNum] ?? d[`${ef.fieldNum}E`] ?? d[`${ef.fieldNum}I`]) : undefined);
+        if (val !== undefined && val !== '') mapped[ef.key] = val;
+      }
+      setDetailData({ ...group, ...mapped, id: group.id });
       setMembers(memRes?.data || []);
     } catch {
       setDetailData(group);
