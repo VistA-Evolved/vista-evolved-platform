@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, getPermissions, unlockUser } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
@@ -244,18 +244,20 @@ export default function StaffDirectory() {
 
   const [actionSuccess, setActionSuccess] = useState(null);
 
-  const handleDeactivate = async () => {
+  const handleDeactivate = async (reason) => {
     if (!deactivateTarget) return;
     const name = deactivateTarget.name;
     try {
-      await deactivateStaffMember(deactivateTarget.duz);
+      await deactivateStaffMember(deactivateTarget.duz, { reason });
       setDeactivateTarget(null);
-      setSelectedStaff(null);
-      setActionSuccess(`${name} has been deactivated. They can no longer sign in.`);
-      setTimeout(() => setActionSuccess(null), 6000);
+      // Keep detail panel open — update status in place
+      if (detailData && detailData.duz === deactivateTarget.duz) {
+        setDetailData(prev => ({ ...prev, status: 'terminated' }));
+      }
+      setActionSuccess(`${name} has been deactivated. Reason: ${reason || 'Not specified'}. This action has been recorded in the audit log.`);
       loadData();
     } catch (err) {
-      setError(`Failed to deactivate: ${err.message}`);
+      setError(`Failed to deactivate ${name}: ${err.message}`);
       setDeactivateTarget(null);
     }
   };
@@ -264,9 +266,10 @@ export default function StaffDirectory() {
     const name = detailData?.name || 'Staff member';
     try {
       await reactivateStaffMember(duz);
-      setSelectedStaff(null);
+      if (detailData && detailData.duz === duz) {
+        setDetailData(prev => ({ ...prev, status: 'active' }));
+      }
       setActionSuccess(`${name} has been reactivated. They can now sign in.`);
-      setTimeout(() => setActionSuccess(null), 6000);
       loadData();
     } catch (err) { setError(`Failed to reactivate: ${err.message}`); }
   };
@@ -284,6 +287,21 @@ export default function StaffDirectory() {
       loadData();
     } catch (err) { setError(err.message || 'Failed to clear e-signature'); }
     finally { setClearingEsig(false); setClearEsigTarget(null); }
+  };
+
+  const handleRemovePermission = async (key) => {
+    if (!detailData) return;
+    const label = key.displayName || humanizeKeyName(key.name);
+    if (!window.confirm(`Remove "${label}" from ${detailData.name}?`)) return;
+    try {
+      await removePermission(detailData.duz, key.ien || key.name);
+      const keysRes = await getUserPermissions(detailData.duz);
+      const newKeys = keysRes?.data || [];
+      setDetailKeys(newKeys);
+      setStaffList(prev => prev.map(u => u.duz === detailData.duz
+        ? { ...u, permissionCount: newKeys.length } : u));
+      setActionSuccess(`Removed ${label} from ${detailData.name}.`);
+    } catch (err) { setError(err.message || 'Failed to remove permission'); }
   };
 
   const handleOpenAssignPerms = async () => {
@@ -388,10 +406,10 @@ export default function StaffDirectory() {
 
             {loading ? <KpiCardSkeleton /> : (
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-                <MetricCard label="Total Staff" value={totalStaff} icon="badge" />
-                <MetricCard label="Active" value={activeCount} icon="check_circle" color="text-[#2E7D32]" />
-                <MetricCard label="E-Signature Ready" value={esigReadyCount} icon="draw" color="text-[#2E5984]" />
-                <MetricCard label="Locked" value={lockedCount} icon="lock" color="text-[#CC3333]" />
+                <MetricCard label="Total Staff" value={totalStaff} icon="badge" hint="Total user accounts in the VistA NEW PERSON file (#200). Includes active, inactive, and system accounts." />
+                <MetricCard label="Active" value={activeCount} icon="check_circle" color="text-[#2E7D32]" hint="Users with no DISUSER flag and no termination date. These users can currently sign in." />
+                <MetricCard label="E-Signature Ready" value={esigReadyCount} icon="draw" color="text-[#2E5984]" hint="Users who have set an electronic signature code. Required for providers who sign orders and clinical notes." />
+                <MetricCard label="Locked" value={lockedCount} icon="lock" color="text-[#CC3333]" hint="Users whose accounts are temporarily locked due to failed sign-in attempts. Use 'Unlock' to restore access." />
               </div>
             )}
 
@@ -464,6 +482,14 @@ export default function StaffDirectory() {
                   {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
                   <DetailField label="Initials" value={detailData.initials} />
                   <DetailField label="Last Sign-In" value={detailData.lastLogin} />
+                  {detailData.primaryMenu && <DetailField label="Primary Menu" value={detailData.primaryMenu} />}
+                  {detailData.degree && <DetailField label="Degree" value={detailData.degree} />}
+                  {detailData.division && <DetailField label="Division" value={detailData.division} />}
+                  {detailData.divisions?.length > 0 && (
+                    <DetailField label="All Divisions" value={detailData.divisions.join(', ')} />
+                  )}
+                  {detailData.terminationDate && <DetailField label="Termination Date" value={detailData.terminationDate} />}
+                  {detailData.terminationReason && <DetailField label="Termination Reason" value={detailData.terminationReason} />}
                 </div>
 
                 {detailData.isProvider && (
@@ -473,6 +499,15 @@ export default function StaffDirectory() {
                       <DetailField label="NPI" value={detailData.npi} mono />
                       <DetailField label="DEA#" value={detailData.dea} mono />
                       <DetailField label="Provider Type" value={detailData.providerType} />
+                      {detailData.personClass && <DetailField label="Person Class" value={detailData.personClass} />}
+                      {detailData.taxId && <DetailField label="Tax ID" value={detailData.taxId} mono />}
+                      {detailData.authorizedToWriteMeds !== undefined && (
+                        <DetailField label="Med Order Authority" value={detailData.authorizedToWriteMeds ? 'Yes' : 'No'} />
+                      )}
+                      {detailData.requiresCosigner !== undefined && (
+                        <DetailField label="Requires Cosigner" value={detailData.requiresCosigner ? 'Yes' : 'No'} />
+                      )}
+                      {detailData.usualCosigner && <DetailField label="Usual Cosigner" value={detailData.usualCosigner} />}
                       <DetailField label="E-Signature" value={<SigReadinessBadge value={detailData.esigStatus} />} />
                     </div>
                   </div>
@@ -480,24 +515,35 @@ export default function StaffDirectory() {
 
                 {detailKeys.length > 0 && (
                   <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-                    <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">
-                      Permissions ({detailKeys.length})
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {detailKeys.slice(0, 8).map(k => (
-                        <span
-                          key={k.ien || k.name}
-                          title={`${k.name}${k.packageName ? ' — ' + k.packageName : ''}`}
-                          className="px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]"
-                        >
-                          {k.displayName || humanizeKeyName(k.name)}
-                        </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">
+                        Permissions ({detailKeys.length})
+                      </h3>
+                      <button onClick={handleOpenAssignPerms}
+                        className="text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
+                    </div>
+                    <div className="max-h-[250px] overflow-y-auto space-y-2">
+                      {Object.entries(
+                        detailKeys.reduce((groups, k) => {
+                          const dept = k.department || k.packageName || 'General';
+                          (groups[dept] = groups[dept] || []).push(k);
+                          return groups;
+                        }, {})
+                      ).sort(([a], [b]) => a.localeCompare(b)).map(([dept, keys]) => (
+                        <div key={dept}>
+                          <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {keys.map(k => (
+                              <span key={k.ien || k.name} title={`System key: ${k.name}`}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
+                                {k.displayName || humanizeKeyName(k.name)}
+                                <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
+                                  className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ))}
-                      {detailKeys.length > 8 && (
-                        <span className="px-2 py-0.5 text-[10px] rounded bg-[#F5F5F5] text-[#999]">
-                          +{detailKeys.length - 8} more
-                        </span>
-                      )}
                     </div>
                   </div>
                 )}
@@ -512,32 +558,38 @@ export default function StaffDirectory() {
 
                 <div className="pt-4 border-t border-[#E2E4E8] space-y-2">
                   <button onClick={() => navigate(`/admin/staff/${detailData.duz}/edit`)}
+                    title="Opens the staff editing wizard. Changes are written to VistA File #200 via RPC."
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">edit</span>
                     Edit Staff Member
                   </button>
                   <button onClick={handleOpenAssignPerms}
+                    title="Add security keys to this user. Keys control what features and actions the user can access in VistA."
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">key</span>
                     Assign Permissions
                   </button>
                   <button onClick={() => navigate(`/admin/roles`, { state: { assignToDuz: detailData.duz, assignToName: detailData.name } })}
+                    title="Apply a pre-defined role template that bundles related security keys. This is a VistA Evolved convenience feature — in the VistA terminal, keys are assigned individually."
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">assignment_ind</span>
                     Assign Role
                   </button>
                   <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
+                    title="Removes this user's electronic signature code. They will need to set a new one before they can sign orders or clinical notes. This action is recorded in the audit log."
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
                     {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
                   </button>
                   <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(detailData.name)}`)}
+                    title="Shows all recorded administrative actions related to this user: sign-ons, data changes, security events."
                     className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
                     <span className="material-symbols-outlined text-[16px] mr-2 align-middle">history</span>
                     View Audit Trail
                   </button>
                   {detailData.status === 'active' && (
                     <button onClick={() => setDeactivateTarget(detailData)}
+                      title="Sets the DISUSER flag in VistA File #200, preventing this user from signing in. Their data is preserved. This action is recorded in the audit log."
                       className="w-full text-left px-3 py-2 text-[13px] text-[#CC3333] hover:bg-[#FDE8E8] rounded-lg transition-colors">
                       <span className="material-symbols-outlined text-[16px] mr-2 align-middle">block</span>
                       Deactivate
@@ -552,6 +604,7 @@ export default function StaffDirectory() {
                         loadData();
                       } catch (err) { setError(`Failed to unlock: ${err.message}`); }
                     }}
+                      title="Clears the lockout counter, allowing the user to sign in again. Accounts are locked after exceeding the failed login attempt limit."
                       className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
                       <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>
                       Unlock Account
@@ -559,6 +612,7 @@ export default function StaffDirectory() {
                   )}
                   {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
                     <button onClick={() => handleReactivate(detailData.duz)}
+                      title="Clears the DISUSER flag and termination date, restoring the user's ability to sign in."
                       className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
                       <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
                       Reactivate
@@ -574,14 +628,38 @@ export default function StaffDirectory() {
       </div>
 
       {deactivateTarget && (
-        <ConfirmDialog
-          title="Deactivate Staff Member"
-          message={`Deactivating ${deactivateTarget.name} will immediately prevent them from signing in. Their records will be preserved for audit purposes.`}
-          confirmLabel="Deactivate"
-          onConfirm={handleDeactivate}
-          onCancel={() => setDeactivateTarget(null)}
-          destructive
-        />
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true">
+            <h3 className="text-lg font-semibold text-[#222] mb-2">Deactivate Staff Member</h3>
+            <p className="text-sm text-[#666] mb-4">
+              Deactivating <strong>{deactivateTarget.name}</strong> will immediately prevent them from signing in.
+              Their records will be preserved for audit purposes.
+            </p>
+            <label className="block text-sm font-medium text-[#333] mb-1">Reason for deactivation</label>
+            <select
+              id="deactivate-reason"
+              defaultValue=""
+              className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm mb-4"
+            >
+              <option value="" disabled>Select a reason...</option>
+              <option value="Left Organization">Left Organization</option>
+              <option value="Role Change">Role Change</option>
+              <option value="Security Concern">Security Concern</option>
+              <option value="Extended Leave">Extended Leave</option>
+              <option value="Retirement">Retirement</option>
+              <option value="Other">Other</option>
+            </select>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeactivateTarget(null)}
+                className="px-4 py-2 text-sm text-[#666] hover:bg-[#F5F5F5] rounded-lg">Cancel</button>
+              <button onClick={() => {
+                  const reason = document.getElementById('deactivate-reason')?.value || 'Not specified';
+                  handleDeactivate(reason);
+                }}
+                className="px-4 py-2 text-sm text-white bg-[#CC3333] hover:bg-[#AA2222] rounded-lg">Deactivate</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {clearEsigTarget && (
@@ -655,13 +733,26 @@ export default function StaffDirectory() {
           </div>
         </div>
       )}
+
+      {/* Terminal Reference */}
+      <details className="mt-6 border border-[#E2E4E8] rounded-lg bg-[#FAFBFC]">
+        <summary className="px-4 py-2.5 text-xs text-[#666] cursor-pointer select-none hover:bg-[#F5F8FB] rounded-lg">
+          📖 VistA Terminal Reference
+        </summary>
+        <div className="px-4 pb-3 text-xs text-[#666] leading-relaxed">
+          This page replaces: <strong>EVE → User Management → List Users by Various Criteria</strong>.
+          VistA File: <strong>NEW PERSON (#200)</strong>.
+          Terminal also provides: Find a User, User Inquiry, Release User (Unlock).
+          All of these are available from this single modern interface.
+        </div>
+      </details>
     </AppShell>
   );
 }
 
-function MetricCard({ label, value, icon, color = 'text-[#222]' }) {
+function MetricCard({ label, value, icon, color = 'text-[#222]', hint }) {
   return (
-    <div className="bg-white border border-[#E2E4E8] rounded-lg p-4 flex items-center gap-3">
+    <div className="bg-white border border-[#E2E4E8] rounded-lg p-4 flex items-center gap-3" title={hint}>
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-[#F5F8FB] ${color}`}>
         <span className="material-symbols-outlined text-[22px]">{icon}</span>
       </div>

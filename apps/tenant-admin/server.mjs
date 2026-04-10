@@ -1679,10 +1679,14 @@ async function main() {
 
     // CLEAR action — nulls field 20.4 in File #200 via ZVE ESIG MANAGE
     if (action === 'clear') {
-      const z = await callZveRpc('ZVE ESIG MANAGE', [String(req.params.duz), 'CLEAR']);
-      const o = zveOutcome(z);
-      if (o.kind !== 'ok') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg || 'Failed to clear e-signature', rpcUsed: z.rpcUsed });
-      return { ok: true, tenantId, duz: req.params.duz, action: 'clear', rpcUsed: z.rpcUsed };
+      try {
+        const z = await callZveRpc('ZVE ESIG MANAGE', [String(req.params.duz), 'CLEAR']);
+        const o = zveOutcome(z);
+        if (o.kind !== 'ok') return reply.code(o.kind === 'rejected' ? 409 : 502).send({ ok: false, error: o.msg || 'Failed to clear e-signature', rpcUsed: z.rpcUsed });
+        return { ok: true, tenantId, duz: req.params.duz, action: 'clear', rpcUsed: z.rpcUsed };
+      } catch (clearErr) {
+        return reply.code(502).send({ ok: false, error: `Clear failed: ${clearErr.message}` });
+      }
     }
 
     // SET action — requires a code

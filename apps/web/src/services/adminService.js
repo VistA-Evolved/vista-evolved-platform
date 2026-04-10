@@ -83,8 +83,8 @@ export async function renameStaffMember(duz, data) {
   return tenantApi.put(`/users/${duz}/rename`, data);
 }
 
-export async function deactivateStaffMember(duz) {
-  return tenantApi.post(`/users/${duz}/deactivate`);
+export async function deactivateStaffMember(duz, data) {
+  return tenantApi.post(`/users/${duz}/deactivate`, data);
 }
 
 export async function reactivateStaffMember(duz) {

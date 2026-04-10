@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments } from '../../services/adminService';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials } from '../../services/adminService';
 
 /**
  * AD-02 / ADM-03+ADM-04: Create / Edit Staff Member (Multi-Step Wizard)
@@ -21,6 +21,7 @@ import { getSites, getPermissions, getStaffMember, getUserPermissions, createSta
 
 const STEPS = [
   { id: 'identity', label: 'Identity' },
+  { id: 'credentials', label: 'Login Credentials' },
   { id: 'role', label: 'Role & Work Type' },
   { id: 'location', label: 'Locations' },
   { id: 'provider', label: 'Provider Setup' },
@@ -286,6 +287,11 @@ export default function StaffForm() {
       setSubmitError('Cannot save: "Write clinical orders" and "Enter verbal orders" are mutually exclusive — a staff member cannot hold both. Remove one before proceeding.');
       return;
     }
+    // Credential validation for new users
+    if (!isEdit && form.accessCode && form.verifyCode && form.verifyCode !== form.verifyCodeConfirm) {
+      setSubmitError('Passwords do not match. Please correct before submitting.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError('');
     try {
@@ -316,7 +322,17 @@ export default function StaffForm() {
       };
       if (isEdit) {
         await updateStaffMember(userId, payload);
+        // Update credentials if provided during edit
+        if (form.accessCode || form.verifyCode) {
+          await updateCredentials(userId, {
+            accessCode: form.accessCode || undefined,
+            verifyCode: form.verifyCode || undefined,
+          });
+        }
       } else {
+        // Include credentials in create payload — ZVE USMG ADD accepts them
+        if (form.accessCode) payload.accessCode = form.accessCode;
+        if (form.verifyCode) payload.verifyCode = form.verifyCode;
         await createStaffMember(payload);
       }
       navigate('/admin/staff');
@@ -461,7 +477,8 @@ export default function StaffForm() {
                   <input type="text" value={form.displayName} onChange={e => updateField('displayName', e.target.value)}
                     placeholder="Jane Smith" className="form-input" maxLength={50} />
                 </FormField>
-                <FormField label="Sex" required error={validationErrors.sex}>
+                <FormField label="Sex" required error={validationErrors.sex}
+                  hint="Required for VistA File #200. Used for clinical decision support.">
                   <select value={form.sex} onChange={e => updateField('sex', e.target.value)} className="form-input">
                     <option value="">Select...</option>
                     <option value="M">Male</option>
@@ -469,7 +486,8 @@ export default function StaffForm() {
                     <option value="U">Unknown</option>
                   </select>
                 </FormField>
-                <FormField label="Date of Birth" required error={validationErrors.dob}>
+                <FormField label="Date of Birth" required error={validationErrors.dob}
+                  hint="Required for identity verification. Stored in VistA File #200 field 5.">
                   <input type="date" value={form.dob}
                     onChange={e => updateField('dob', e.target.value)}
                     className="form-input" />
@@ -482,7 +500,8 @@ export default function StaffForm() {
                   <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)}
                     placeholder="jane.smith@facility.org" className="form-input" />
                 </FormField>
-                <FormField label="Phone">
+                <FormField label="Phone"
+                  hint="Office phone number for this staff member.">
                   <input type="tel" value={form.phone || ''} onChange={e => updateField('phone', e.target.value)}
                     placeholder="(503) 555-0100" className="form-input" />
                 </FormField>
@@ -495,6 +514,65 @@ export default function StaffForm() {
                     {duplicateWarning.isDuplicate ? 'warning' : 'check_circle'}
                   </span>
                   {duplicateWarning.message}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP: Login Credentials — VistA Access Code + Verify Code */}
+          {step.id === 'credentials' && (
+            <div className="space-y-5">
+              <h2 className="text-lg font-semibold text-text mb-2">Login Credentials</h2>
+              <p className="text-sm text-[#666]">
+                Set the username and password this person will use to sign in.
+                In VistA, these are called Access Code and Verify Code.
+              </p>
+              {!isEdit && (
+                <div className="p-4 bg-[#FFF3E0] rounded-lg text-sm text-[#E65100] flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] mt-0.5">warning</span>
+                  <span>These credentials cannot be retrieved later. Note them now and communicate securely to the staff member.</span>
+                </div>
+              )}
+              <FormField label="Username (Access Code)" required={!isEdit}
+                hint="The identifier the user enters at the login prompt. 3-20 characters, letters and numbers. Called 'Access Code' in VistA.">
+                <input
+                  value={form.accessCode || ''}
+                  onChange={e => updateField('accessCode', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  placeholder="e.g., JSMITH1234"
+                  maxLength={20}
+                  className="w-full h-10 px-3 border border-border rounded-md text-sm"
+                  autoComplete="off"
+                />
+              </FormField>
+              <FormField label="Password (Verify Code)" required={!isEdit}
+                hint="8-20 characters with mixed case and numbers. Called 'Verify Code' in VistA. Must be changed every 90 days.">
+                <input
+                  type="password"
+                  value={form.verifyCode || ''}
+                  onChange={e => updateField('verifyCode', e.target.value)}
+                  placeholder="Enter password"
+                  maxLength={20}
+                  className="w-full h-10 px-3 border border-border rounded-md text-sm"
+                  autoComplete="new-password"
+                />
+              </FormField>
+              <FormField label="Confirm Password" required={!isEdit}>
+                <input
+                  type="password"
+                  value={form.verifyCodeConfirm || ''}
+                  onChange={e => updateField('verifyCodeConfirm', e.target.value)}
+                  placeholder="Re-enter password"
+                  maxLength={20}
+                  className="w-full h-10 px-3 border border-border rounded-md text-sm"
+                  autoComplete="new-password"
+                />
+                {form.verifyCode && form.verifyCodeConfirm && form.verifyCode !== form.verifyCodeConfirm && (
+                  <p className="text-xs text-[#CC3333] mt-1">Passwords do not match.</p>
+                )}
+              </FormField>
+              {isEdit && (
+                <div className="p-3 bg-[#F5F5F5] rounded-lg text-sm text-[#666]">
+                  Leave blank to keep existing credentials unchanged.
                 </div>
               )}
             </div>
@@ -870,8 +948,7 @@ export default function StaffForm() {
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Review and Confirm</h2>
               <p className="text-sm text-text-secondary mb-4">
-                Verify all details before creating this staff member record. Changes to authentication credentials
-                must be done by the staff member on first sign-in.
+                Verify all details before {isEdit ? 'saving changes to' : 'creating'} this staff member record.
               </p>
               <div className="grid grid-cols-2 gap-6">
                 <ReviewSection title="Identity" items={[
@@ -892,6 +969,10 @@ export default function StaffForm() {
                     ? form.additionalLocations.map(v => liveSites.find(l => l.value === v)?.label).filter(Boolean).join(', ')
                     : 'None'],
                 ]} />
+                <ReviewSection title="Login Credentials" items={[
+                  ['Username (Access Code)', form.accessCode ? '✓ Set' : '— Not set'],
+                  ['Password (Verify Code)', form.verifyCode ? '✓ Set' : '— Not set'],
+                ]} />
                 {(form.isProvider || showProviderStep) && (
                   <ReviewSection title="Provider Configuration" items={[
                     ['Provider Type', PROVIDER_TYPES.find(p => p.value === form.providerType)?.label || '—'],
@@ -906,8 +987,8 @@ export default function StaffForm() {
               {/* Post-create guidance from Doc 2 */}
               <div className="p-3 bg-info-bg rounded-md text-sm text-info">
                 <strong>After creation:</strong> The new staff member should set their own electronic signature on first sign-in.
-                Administrators cannot set the e-signature code for other users.
-                The system will generate initial authentication credentials.
+                {!form.accessCode && ' No login credentials were set — the staff member will not be able to sign in until an administrator sets their access and verify codes.'}
+                {form.accessCode && ' Login credentials have been set — communicate them securely to the staff member.'}
               </div>
 
               {(!form.fullName || !form.sex || !form.dob || !form.primaryRole || !form.primaryLocation) && (
@@ -967,6 +1048,19 @@ export default function StaffForm() {
           destructive
         />
       )}
+
+      {/* Terminal Reference */}
+      <details className="mt-6 border border-border rounded-lg bg-surface-alt">
+        <summary className="px-4 py-2.5 text-xs text-text-secondary cursor-pointer select-none hover:bg-surface rounded-lg">
+          📖 VistA Terminal Reference
+        </summary>
+        <div className="px-4 pb-3 text-xs text-text-secondary leading-relaxed">
+          This page replaces: <strong>EVE → User Management → Add a New User / Edit an Existing User</strong>.
+          VistA File: <strong>NEW PERSON (#200)</strong> — 5-page ScreenMan form.
+          Terminal also prompts for: Security Keys, Mail Groups, Access Letter.
+          These are handled in our Permissions step and post-creation flows.
+        </div>
+      </details>
     </AppShell>
   );
 }
