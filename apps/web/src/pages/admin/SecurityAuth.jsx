@@ -505,7 +505,6 @@ export default function SecurityAuth() {
                         <select value={displayValue}
                           onChange={e => updateField(field.name, e.target.value)}
                           className="w-64 h-8 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]">
-                          <option value="">— Select —</option>
                           {field.options?.map(opt => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                           ))}
