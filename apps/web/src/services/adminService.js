@@ -187,6 +187,10 @@ export async function updateDepartment(ien, data) {
   return tenantApi.put(`/services/${ien}`, data);
 }
 
+export async function deleteDepartment(ien) {
+  return tenantApi.delete(`/services/${ien}`);
+}
+
 // ────────────────────────────────────────────────
 // Sites / Divisions (backend: INSTITUTION #4 + MEDICAL CENTER DIVISION #40.8)
 // ────────────────────────────────────────────────
@@ -320,6 +324,14 @@ export async function getErrorTrap(params = {}) {
   return tenantApi.get('/error-trap', params);
 }
 
+export async function purgeErrorTrapEntry(ien) {
+  return tenantApi.delete(`/error-trap/${ien}`);
+}
+
+export async function purgeOldErrors(olderThanDays = 30) {
+  return tenantApi.post('/error-trap/purge', { olderThanDays });
+}
+
 // ────────────────────────────────────────────────
 // System Monitor — HL7 Interfaces
 // ────────────────────────────────────────────────
@@ -435,6 +447,10 @@ export async function updateSite(ien, data) {
 
 export async function createSite(data) {
   return tenantApi.post('/divisions', data);
+}
+
+export async function deleteSite(ien) {
+  return tenantApi.delete(`/divisions/${ien}`);
 }
 
 // ────────────────────────────────────────────────

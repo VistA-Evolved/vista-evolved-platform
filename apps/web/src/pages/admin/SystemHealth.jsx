@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import {
   getTaskManStatus, getTaskManTasks, getTaskManScheduled,
   getErrorTrap, getVistaStatus, getHL7FilerStatus, getAdminReport,
   getHL7Interfaces, shutdownHL7Interface, enableHL7Interface,
+  purgeOldErrors, getCapacity,
 } from '../../services/adminService';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import ErrorState from '../../components/shared/ErrorState';
 import { transformErrorTrap, formatDateTime } from '../../utils/transforms';
 
@@ -137,6 +139,19 @@ export default function SystemHealth() {
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
 
+  // Auto-refresh polling
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [countdown, setCountdown] = useState(30);
+  const intervalRef = useRef(null);
+  const countdownRef = useRef(null);
+
+  // Capacity metrics
+  const [capacityData, setCapacityData] = useState(null);
+
+  // Error purge
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [purgeResult, setPurgeResult] = useState(null);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -158,6 +173,11 @@ export default function SystemHealth() {
       }
       if (vistaRes.status === 'fulfilled') setVistaStatus(vistaRes.value || null);
       if (hl7Res.status === 'fulfilled') setHl7Status(hl7Res.value?.data || null);
+      // Capacity metrics (non-fatal)
+      try {
+        const capRes = await getCapacity();
+        setCapacityData(capRes?.data || null);
+      } catch { /* non-fatal */ }
     } catch (err) {
       setError(err.message || 'Failed to load system status');
     } finally {
@@ -166,6 +186,44 @@ export default function SystemHealth() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Auto-refresh polling (30s)
+  useEffect(() => {
+    if (!autoRefresh) {
+      clearInterval(intervalRef.current);
+      clearInterval(countdownRef.current);
+      return;
+    }
+    setCountdown(30);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => (prev <= 1 ? 30 : prev - 1));
+    }, 1000);
+    intervalRef.current = setInterval(() => {
+      loadData();
+      setCountdown(30);
+    }, 30000);
+    return () => {
+      clearInterval(intervalRef.current);
+      clearInterval(countdownRef.current);
+    };
+  }, [autoRefresh, loadData]);
+
+  // Pause polling when tab is hidden
+  useEffect(() => {
+    const handler = () => {
+      if (document.hidden) {
+        clearInterval(intervalRef.current);
+        clearInterval(countdownRef.current);
+      } else if (autoRefresh) {
+        loadData();
+        setCountdown(30);
+        countdownRef.current = setInterval(() => setCountdown(p => (p <= 1 ? 30 : p - 1)), 1000);
+        intervalRef.current = setInterval(() => { loadData(); setCountdown(30); }, 30000);
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [autoRefresh, loadData]);
 
   const taskRunning = taskStatus?.status === 'RUNNING';
   const vistaOk = vistaStatus?.vista?.vistaReachable === true;
@@ -199,9 +257,19 @@ export default function SystemHealth() {
               {loading ? 'Loading system status...' : 'Live system health monitoring.'}
             </p>
           </div>
-          <button onClick={loadData} title="Reload all system health data" className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">
-            <span className="material-symbols-outlined text-[16px]">refresh</span> Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-[#666] cursor-pointer select-none">
+              <input type="checkbox" checked={autoRefresh} onChange={() => setAutoRefresh(!autoRefresh)}
+                className="rounded border-[#E2E4E8]" />
+              Auto-refresh
+              {autoRefresh && <span className="text-[10px] font-mono text-[#999]">({countdown}s)</span>}
+            </label>
+            <button onClick={() => { loadData(); setCountdown(30); }}
+              title="Reload all system health data"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">
+              <span className="material-symbols-outlined text-[16px]">refresh</span> Refresh
+            </button>
+          </div>
         </div>
 
         {/* ── Health Cards ── */}
@@ -391,6 +459,29 @@ export default function SystemHealth() {
                 <p className="text-sm text-[#999]">No connection data available.</p>
               )}
             </div>
+
+            {/* System Metrics (capacity) */}
+            {capacityData && (
+              <div className="bg-white border border-[#E2E4E8] rounded-lg p-5">
+                <h2 className="text-sm font-semibold text-text uppercase tracking-wider mb-3">System Metrics</h2>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <MetricCard label="VistA Connection"
+                    value={capacityData.vistaConnection?.ok ? 'Connected' : 'Unreachable'}
+                    color={capacityData.vistaConnection?.ok ? 'text-[#2D6A4F]' : 'text-[#CC3333]'} />
+                  <MetricCard label="TaskMan"
+                    value={capacityData.taskmanStatus?.status || 'Unknown'}
+                    color={capacityData.taskmanStatus?.status === 'RUNNING' ? 'text-[#2D6A4F]' : 'text-[#CC3333]'} />
+                  <MetricCard label="Last Check"
+                    value={capacityData.timestamp ? new Date(capacityData.timestamp).toLocaleTimeString() : '—'} />
+                  <MetricCard label="Capacity Planning"
+                    value="Basic" color="text-[#999]" />
+                </div>
+                <p className="text-[10px] text-[#999] mt-3">
+                  Advanced capacity metrics (disk space, global sizes, journal status) require additional VistA configuration.
+                  Terminal equivalent: EVE → Capacity Planning.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -400,7 +491,7 @@ export default function SystemHealth() {
             {/* HL7 context banner */}
             <div className="p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
               <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
-              <span>HL7 interfaces (VistA File #870) handle message exchange with external systems — lab instruments, radiology, pharmacy, ADT feeds, etc. Each logical link has its own TCP connection settings and can be enabled or shut down independently. In the terminal: <strong>D ^HLCSTCP</strong> to manage links.</span>
+              <span>HL7 interfaces (VistA File #870) handle message exchange with external systems — lab instruments, radiology, pharmacy, ADT feeds, etc. Each logical link has its own TCP connection settings and can be enabled or shut down independently. In development environments, enabling a link updates the VistA configuration but may not immediately start a TCP listener — the HL7 background filer must be running for links to become active. In the terminal: <strong>D ^HLCSTCP</strong> to manage links.</span>
             </div>
             {/* HL7 Filer status at top */}
             <div className="bg-white border border-[#E2E4E8] rounded-lg p-5">
@@ -434,6 +525,22 @@ export default function SystemHealth() {
         {/* ── Error Log tab ── */}
         {activeTab === 'errors' && !loading && (
           <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-text uppercase tracking-wider">Error Trap Entries</h2>
+              <button onClick={() => setShowPurgeConfirm(true)}
+                title="Remove error entries older than 30 days"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#CC3333] border border-[#E2E4E8] rounded-md hover:bg-[#FDE8E8]">
+                <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                Purge Errors &gt; 30 Days
+              </button>
+            </div>
+            {purgeResult && (
+              <div className="mb-3 p-2 rounded-md text-xs flex items-center gap-2 bg-[#E8F5E9] text-[#2D6A4F] border border-[#2D6A4F]">
+                <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                {purgeResult}
+                <button onClick={() => setPurgeResult(null)} className="ml-auto"><span className="material-symbols-outlined text-[14px]">close</span></button>
+              </div>
+            )}
             {errorTraps.length === 0 ? (
               <div className="text-center py-12 text-[#999]">
                 <span className="material-symbols-outlined text-[32px] block mb-2">check_circle</span>
@@ -576,6 +683,24 @@ export default function SystemHealth() {
               </div>
             )}
           </div>
+        )}
+        {/* Purge Confirm Dialog */}
+        {showPurgeConfirm && (
+          <ConfirmDialog
+            title="Purge Old Error Entries"
+            message="This will permanently remove error trap entries older than 30 days from VistA File #3.077. This cannot be undone."
+            confirmLabel="Purge"
+            onConfirm={async () => {
+              setShowPurgeConfirm(false);
+              try {
+                const res = await purgeOldErrors(30);
+                setPurgeResult(`Purged ${res?.data?.purged || 0} entries.`);
+                loadData();
+              } catch (err) { setError(err.message); }
+            }}
+            onCancel={() => setShowPurgeConfirm(false)}
+            destructive
+          />
         )}
         {/* Terminal Reference */}
         <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
@@ -721,6 +846,16 @@ function HealthCard({ label, value, ok, icon, detail }) {
           <div className="text-[10px] text-[#999] mt-0.5">{detail}</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Metric Card (capacity panel) ── */
+function MetricCard({ label, value, color }) {
+  return (
+    <div className="bg-[#F4F5F7] rounded-lg p-3">
+      <div className={`text-sm font-bold ${color || 'text-text'}`}>{value}</div>
+      <div className="text-[10px] text-[#999] mt-0.5">{label}</div>
     </div>
   );
 }

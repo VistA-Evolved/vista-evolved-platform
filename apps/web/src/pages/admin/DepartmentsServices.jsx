@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
-import { SearchBar, Pagination } from '../../components/shared/SharedComponents';
-import { getDepartments, getDepartmentDetail, createDepartment, updateDepartment } from '../../services/adminService';
+import { SearchBar, Pagination, ConfirmDialog } from '../../components/shared/SharedComponents';
+import { getDepartments, getDepartmentDetail, createDepartment, updateDepartment, deleteDepartment } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -14,6 +14,7 @@ import ErrorState from '../../components/shared/ErrorState';
 const columns = [
   { key: 'name', label: 'Department Name', bold: true },
   { key: 'abbreviation', label: 'Abbreviation' },
+  { key: 'chief', label: 'Chief' },
 ];
 
 const PAGE_SIZE = 25;
@@ -39,6 +40,7 @@ export default function DepartmentsServices() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [deleteDeptTarget, setDeleteDeptTarget] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -49,6 +51,7 @@ export default function DepartmentsServices() {
         id: d.ien || `dept-${i}`,
         name: d.name || '',
         abbreviation: d.abbreviation || '',
+        chief: d.chief || '',
       }));
       setDepartments(items);
     } catch (err) {
@@ -142,6 +145,18 @@ export default function DepartmentsServices() {
     }
   };
 
+  const handleDeleteDept = async () => {
+    if (!deleteDeptTarget) return;
+    try {
+      await deleteDepartment(deleteDeptTarget.id);
+      setDeleteDeptTarget(null);
+      setDetailData(null);
+      setSelectedDept(null);
+      setEditing(false);
+      loadData();
+    } catch (err) { setActionError(err.message); setDeleteDeptTarget(null); }
+  };
+
   const filtered = departments.filter(d => {
     if (!searchText) return true;
     const s = searchText.toLowerCase();
@@ -191,7 +206,7 @@ export default function DepartmentsServices() {
               </div>
             </div>
 
-            {loading ? <TableSkeleton rows={10} cols={2} /> : (
+            {loading ? <TableSkeleton rows={10} cols={3} /> : (
               <DataTable
                 columns={columns}
                 data={pageSlice}
@@ -276,6 +291,12 @@ export default function DepartmentsServices() {
                     Cancel
                   </button>
                 </div>
+                <button onClick={() => setDeleteDeptTarget(detailData)}
+                  title="Permanently delete this department from VistA File #49"
+                  className="w-full mt-3 px-4 py-2 text-sm text-[#CC3333] border border-[#CC3333] rounded-md hover:bg-[#FDE8E8]">
+                  <span className="material-symbols-outlined text-[14px] mr-1 align-middle">delete</span>
+                  Delete Department
+                </button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -302,6 +323,17 @@ export default function DepartmentsServices() {
           </div>
         )}
       </div>
+
+      {deleteDeptTarget && (
+        <ConfirmDialog
+          title="Delete Department"
+          message={`Permanently delete "${deleteDeptTarget.name}" from VistA? This removes the entry from File #49. Staff members assigned to this department will lose their department association.`}
+          confirmLabel="Delete"
+          onConfirm={handleDeleteDept}
+          onCancel={() => setDeleteDeptTarget(null)}
+          destructive
+        />
+      )}
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">

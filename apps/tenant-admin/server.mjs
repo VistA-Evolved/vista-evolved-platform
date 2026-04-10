@@ -3071,6 +3071,50 @@ async function main() {
     }
   });
 
+  // ---- Error Trap Purge (File 3.077) ----
+
+  app.delete('/api/tenant-admin/v1/error-trap/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    const ien = req.params.ien;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+    try {
+      const result = await ddrFilerEdit('3.077', `${ien},`, '.01', '@', 'E');
+      return { ok: true, tenantId, ien, action: 'purged', rpcUsed: 'DDR FILER', result };
+    } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
+  });
+
+  app.post('/api/tenant-admin/v1/error-trap/purge', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const olderThanDays = body.olderThanDays || 30;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+    try {
+      const lines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '3.077', FIELDS: '.01;2', FLAGS: 'IP', MAX: '500' } },
+        ]);
+      });
+      const parsed = parseDdrListerResponse(lines);
+      if (!parsed.ok) return { ok: true, tenantId, purged: 0, note: 'No entries found' };
+      let purged = 0;
+      for (const line of parsed.data) {
+        const parts = line.split('^');
+        const entryIen = parts[0]?.trim();
+        if (!entryIen || !/^\d+$/.test(entryIen)) continue;
+        try {
+          await ddrFilerEdit('3.077', `${entryIen},`, '.01', '@', 'E');
+          purged++;
+        } catch { /* skip entries that can't be deleted */ }
+      }
+      return { ok: true, tenantId, purged, olderThanDays, rpcUsed: 'DDR FILER' };
+    } catch (e) { return reply.code(500).send({ ok: false, error: e.message }); }
+  });
+
   // ---- Health Summary Type detail (DDR GETS) + edit (DDR FILER) ----
 
   app.get('/api/tenant-admin/v1/health-summary-types/:ien', async (req, reply) => {
@@ -5919,6 +5963,20 @@ async function main() {
     }
   });
 
+  /** Delete division — DDR FILER on File #40.8 (set .01 to @) */
+  app.delete('/api/tenant-admin/v1/divisions/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId || 'default';
+    const ien = req.params.ien;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+    try {
+      const result = await ddrFilerEdit('40.8', `${ien},`, '.01', '@', 'E');
+      return { ok: true, tenantId, ien, action: 'deleted', file: '40.8', rpcUsed: 'DDR FILER', result };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════════════════
   // PACKAGE-SPECIFIC PARAMETERS (Clinical, Pharmacy, Lab, Scheduling)
   // ═══════════════════════════════════════════════════════════════════════
@@ -6102,12 +6160,12 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     try {
       const rows = await lockedRpc(async () => {
-        return ddrList({ file: '49', fields: '.01;1', fieldNames: ['name', 'abbreviation'], search: req.query.search });
+        return ddrList({ file: '49', fields: '.01;1;3', fieldNames: ['name', 'abbreviation', 'chief'], search: req.query.search });
       });
       // Normalize: sort alphabetically, filter out entries with empty names
       const data = (rows || [])
         .filter(r => (r.name || '').trim())
-        .map(r => ({ ien: r.ien, name: r.name, abbreviation: r.abbreviation || '' }))
+        .map(r => ({ ien: r.ien, name: r.name, abbreviation: r.abbreviation || '', chief: r.chief || '' }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '49', data, total: data.length };
     } catch (e) {
@@ -6141,7 +6199,7 @@ async function main() {
 
   /** Edit department/service field — DDR VALIDATOR + DDR FILER on File #49 */
   const SERVICE49_ALLOW = {
-    '.01': 'NAME', '1': 'ABBREVIATION', '2': 'MAIL SYMBOL',
+    '.01': 'NAME', '1': 'ABBREVIATION', '2': 'MAIL SYMBOL', '3': 'CHIEF',
   };
   app.put('/api/tenant-admin/v1/services/:ien', async (req, reply) => {
     const tenantId = req.query.tenantId || 'default';
@@ -6184,6 +6242,20 @@ async function main() {
         } catch { /* abbreviation is optional, don't fail the create */ }
       }
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR FILER ADD', file: '49', ien: newIen, lines: filer.lines };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, error: e.message });
+    }
+  });
+
+  /** Delete department/service — DDR FILER on File #49 (set .01 to @) */
+  app.delete('/api/tenant-admin/v1/services/:ien', async (req, reply) => {
+    const tenantId = req.query.tenantId || 'default';
+    const ien = req.params.ien;
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable' });
+    try {
+      const result = await ddrFilerEdit('49', `${ien},`, '.01', '@', 'E');
+      return { ok: true, tenantId, ien, action: 'deleted', file: '49', rpcUsed: 'DDR FILER', result };
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
     }

@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import { SearchBar } from '../../components/shared/SharedComponents';
-import { getSites, getSite, getTopology, updateSite, createSite, getSiteWorkspaces, updateSiteWorkspace, getFacilities } from '../../services/adminService';
+import { getSites, getSite, getTopology, updateSite, createSite, getSiteWorkspaces, updateSiteWorkspace, getFacilities, deleteSite } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 
 /**
  * Site Management (Division Management)
@@ -36,6 +37,7 @@ export default function SiteManagement() {
   const [newSiteForm, setNewSiteForm] = useState({ name: '', stationNumber: '', type: 'Medical Center' });
   const [createError, setCreateError] = useState('');
   const [facilityData, setFacilityData] = useState(null);
+  const [deleteSiteTarget, setDeleteSiteTarget] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -125,6 +127,20 @@ export default function SiteManagement() {
       setSaveMsg(`Error: Failed to save workspace toggle — ${err?.message || 'Unknown error'}`);
     }
     setToggleSaving('');
+  };
+
+  const handleDeleteSite = async () => {
+    if (!deleteSiteTarget) return;
+    try {
+      await deleteSite(deleteSiteTarget.id);
+      setDeleteSiteTarget(null);
+      setSelectedSite(null);
+      setEditMode(false);
+      loadData();
+    } catch (err) {
+      setSaveMsg(`Error: ${err.message}`);
+      setDeleteSiteTarget(null);
+    }
   };
 
   if (error) {
@@ -299,6 +315,10 @@ export default function SiteManagement() {
                         className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
                         Cancel
                       </button>
+                      <button onClick={() => setDeleteSiteTarget(selectedSite)}
+                        className="ml-auto px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700">
+                        Delete Site
+                      </button>
                     </div>
                   </Section>
                 </div>
@@ -440,6 +460,19 @@ export default function SiteManagement() {
           )}
         </div>
       </div>
+
+      {/* Delete Site Confirm */}
+      {deleteSiteTarget && (
+        <ConfirmDialog
+          open
+          title="Delete Site"
+          message={`Permanently delete "${deleteSiteTarget.name}" from VistA? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={handleDeleteSite}
+          onCancel={() => setDeleteSiteTarget(null)}
+          destructive
+        />
+      )}
 
       {/* Add Site Modal */}
       {showAddSite && (
