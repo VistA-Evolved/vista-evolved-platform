@@ -14,10 +14,9 @@ import ErrorState from '../../components/shared/ErrorState';
 
 const columns = [
   { key: 'name', label: 'Group Name', bold: true },
+  { key: 'description', label: 'Description' },
   { key: 'type', label: 'Type' },
   { key: 'organizer', label: 'Organizer' },
-  { key: 'selfEnroll', label: 'Self Enroll' },
-  { key: 'restrictions', label: 'Restrictions' },
 ];
 
 const PAGE_SIZE = 25;

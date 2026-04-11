@@ -1608,7 +1608,7 @@ async function main() {
     if (!keyName || typeof keyName !== 'string') {
       return reply.code(400).send({ ok: false, error: 'keyName required in JSON body' });
     }
-    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
+    const sanitized = keyName.toUpperCase().replace(/[^A-Z0-9 \-]/g, '').trim();
     if (!sanitized) return reply.code(400).send({ ok: false, error: 'keyName empty after sanitize' });
     // ORES/ORELSE mutual exclusion — server-side enforcement
     if (sanitized === 'ORES' || sanitized === 'ORELSE') {
@@ -3012,7 +3012,7 @@ async function main() {
       const rows = await lockedRpc(async () => {
         const broker = await getBroker();
         const lines = await broker.callRpcWithList('DDR LISTER', [
-          { type: 'list', value: { FILE: '3.8', FIELDS: '.01;4;5;7;10', FLAGS: 'IP', MAX: '5000', ...(search ? { PART: search.toUpperCase() } : {}) } },
+          { type: 'list', value: { FILE: '3.8', FIELDS: '.01;4;5;5.1;7;10', FLAGS: 'IP', MAX: '5000', ...(search ? { PART: search.toUpperCase() } : {}) } },
         ]);
         const parsed = parseDdrListerResponse(lines);
         if (!parsed.ok) return [];
@@ -3026,8 +3026,9 @@ async function main() {
             name: a[1]?.trim() || '',
             type: a[2]?.trim() || '',
             organizer: a[3]?.trim() || '',
-            selfEnroll: a[4]?.trim() || '',
-            restrictions: a[5]?.trim() || '',
+            description: a[4]?.trim() || '',
+            selfEnroll: a[5]?.trim() || '',
+            restrictions: a[6]?.trim() || '',
           });
         }
         return out;
