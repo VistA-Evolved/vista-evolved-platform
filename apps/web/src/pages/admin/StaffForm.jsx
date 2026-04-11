@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials } from '../../services/adminService';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups } from '../../services/adminService';
+import { ROLES as SYSTEM_ROLES } from './RoleTemplates';
 
 /**
  * AD-02 / ADM-03+ADM-04: Create / Edit Staff Member (Multi-Step Wizard)
@@ -30,20 +31,9 @@ const STEPS = [
   { id: 'review', label: 'Review & Create' },
 ];
 
-const ROLES = [
-  { value: 'system-admin', label: 'System Administrator', description: 'Full system access, user management, configuration' },
-  { value: 'location-admin', label: 'Location Administrator', description: 'Manage staff and settings for assigned locations' },
-  { value: 'scheduler', label: 'Scheduler', description: 'Manage appointments, clinic schedules, availability' },
-  { value: 'front-desk', label: 'Front Desk / Registration', description: 'Patient check-in, registration, demographics' },
-  { value: 'nurse', label: 'Nurse', description: 'Clinical documentation, medication administration, vitals' },
-  { value: 'provider', label: 'Provider / Physician', description: 'Orders, notes, prescriptions, clinical decision-making' },
-  { value: 'pharmacist', label: 'Pharmacist', description: 'Medication processing, verification, formulary management' },
-  { value: 'lab-tech', label: 'Laboratory Technician', description: 'Specimen processing, result entry, quality control' },
-  { value: 'rad-tech', label: 'Radiology Technician', description: 'Imaging procedures, study tracking, reports' },
-  { value: 'billing', label: 'Billing / Revenue Cycle', description: 'Charge capture, claims, billing configuration' },
-  { value: 'him', label: 'Health Information Management', description: 'Record management, coding, compliance' },
-  { value: 'read-only', label: 'Read-Only', description: 'View-only access, no data modification' },
-];
+// Roles are now imported from RoleTemplates.jsx as SYSTEM_ROLES.
+// The 24 VistA-key-backed roles are the single source of truth for both
+// the StaffForm wizard and the Roles & Permissions page.
 
 const PROVIDER_TYPES = [
   { value: 'physician', label: 'Physician (MD/DO) — Allopathic / Osteopathic' },
@@ -70,10 +60,13 @@ const PERMISSION_STARTERS = [
     group: 'Clinical',
     hint: 'Orders, clinical notes, provider access',
     items: [
-      { key: 'PROVIDER',       label: 'Provider (can be selected on orders and encounters)', roleDefault: ['provider', 'nurse'] },
+      { key: 'PROVIDER',       label: 'Provider (can be selected on orders and encounters)', roleDefault: ['provider'] },
       { key: 'ORES',           label: 'Write clinical orders (physicians, signed)',          roleDefault: ['provider'] },
       { key: 'ORELSE',         label: 'Enter verbal / telephone orders (non-physician)',     roleDefault: ['nurse'] },
       { key: 'OREMAS',         label: 'MAS order entry (unit clerks / ward clerks)',         roleDefault: [] },
+      { key: 'ORCL-SIGN-NOTES', label: 'Sign clinical notes (progress notes, consults)',    roleDefault: ['provider'] },
+      { key: 'ORCL-PAT-RECS',  label: 'View patient records and chart data',                roleDefault: ['provider', 'nurse', 'front-desk'] },
+      { key: 'GMRA ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
     ],
   },
   {
@@ -84,6 +77,9 @@ const PERMISSION_STARTERS = [
       { key: 'PSO MANAGER',    label: 'Outpatient pharmacy manager',                         roleDefault: [] },
       { key: 'PSJ PHARMACIST', label: 'Inpatient pharmacist',                                roleDefault: ['pharmacist'] },
       { key: 'PSD PHARMACIST', label: 'Controlled substances pharmacist',                    roleDefault: [] },
+      { key: 'PSB NURSE',      label: 'Bedside medication administration (barcode scanning)', roleDefault: ['nurse'] },
+      { key: 'PSOINTERFACE',   label: 'Pharmacy system interface',                           roleDefault: ['pharmacist'] },
+      { key: 'PSOPHARMACIST',  label: 'Pharmacist prescription verification',                roleDefault: ['pharmacist'] },
     ],
   },
   {
@@ -93,14 +89,17 @@ const PERMISSION_STARTERS = [
       { key: 'LRLAB',          label: 'Core lab operations (accessioning, results)',         roleDefault: ['lab-tech'] },
       { key: 'LRVERIFY',       label: 'Verify and release lab results',                      roleDefault: [] },
       { key: 'LRSUPER',        label: 'Lab supervisor',                                      roleDefault: [] },
+      { key: 'LRCAP',          label: 'Lab collection and specimen accession',               roleDefault: ['lab-tech'] },
     ],
   },
   {
     group: 'Scheduling',
     hint: 'Appointments, clinic schedules, supervisor overrides',
     items: [
+      { key: 'SD SCHEDULING',  label: 'Schedule patient appointments',                       roleDefault: ['scheduler'] },
+      { key: 'SDCLINICAL',     label: 'Clinical scheduling access',                          roleDefault: ['scheduler'] },
       { key: 'SD SUPERVISOR',  label: 'Scheduling supervisor',                               roleDefault: [] },
-      { key: 'SDMGR',          label: 'Scheduling manager',                                  roleDefault: ['scheduler'] },
+      { key: 'SDMGR',          label: 'Scheduling manager',                                  roleDefault: [] },
     ],
   },
   {
@@ -108,6 +107,9 @@ const PERMISSION_STARTERS = [
     hint: 'Patient registration and sensitive-record access',
     items: [
       { key: 'DG REGISTER',    label: 'Patient registration clerk',                          roleDefault: ['front-desk'] },
+      { key: 'DG REGISTRATION', label: 'Full patient registration',                          roleDefault: ['front-desk'] },
+      { key: 'DG ADMIT',       label: 'Process patient admissions',                          roleDefault: ['front-desk'] },
+      { key: 'DGMEANS TEST',   label: 'Financial screening / means test',                    roleDefault: ['front-desk'] },
       { key: 'DG SENSITIVITY', label: 'Access restricted / sensitive patient records',       roleDefault: [] },
       { key: 'DG SUPERVISOR',  label: 'ADT supervisor',                                      roleDefault: [] },
     ],
@@ -153,7 +155,7 @@ export default function StaffForm() {
       setDataLoading(true);
       setRefDataError(null);
       try {
-        const [sitesRes, permsRes, deptRes] = await Promise.all([getSites(), getPermissions(), getDepartments()]);
+        const [sitesRes, permsRes, deptRes, mailGroupsRes] = await Promise.all([getSites(), getPermissions(), getDepartments(), getMailGroups().catch(() => ({ data: [] }))]);
 
         // Sites come from MEDICAL CENTER DIVISION #40.8 via the /divisions route
         const sites = (sitesRes?.data || []).map(d => ({
@@ -181,6 +183,10 @@ export default function StaffForm() {
         // IENs), so we dedupe by name for the dropdown.
         const deptNames = [...new Set((deptRes?.data || []).map(d => d.name).filter(Boolean))].sort();
         setLiveDepartments(deptNames);
+
+        // Mail groups for B6 — mail group assignment during user creation
+        const groups = (mailGroupsRes?.data || []).map(g => ({ ien: g.ien, name: g.name })).filter(g => g.ien && g.name);
+        setLiveMailGroups(groups);
 
         if (sites.length === 0) {
           setRefDataError('No sites returned. The system may be unreachable.');
@@ -255,14 +261,21 @@ export default function StaffForm() {
     assignedPermissions: [],
     secondaryFeatures: ['OR CPRS GUI CHART'],
     removedDefaults: [],
+    language: '', verifyCodeNeverExpires: false, filemanAccess: '',
+    restrictPatient: '', mailGroups: [],
   });
+
+  const [liveMailGroups, setLiveMailGroups] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const step = STEPS[currentStep];
-  const showProviderStep = form.isProvider || ['provider', 'pharmacist', 'nurse'].includes(form.primaryRole);
+  const showProviderStep = form.isProvider || (() => {
+    const role = SYSTEM_ROLES.find(r => r.id === form.primaryRole);
+    return role ? role.permissions.some(p => p.key === 'PROVIDER') : false;
+  })();
 
   // When the primary site changes, drop it from the additional-sites list
   // so a user can't be assigned twice to the same division.
@@ -276,11 +289,13 @@ export default function StaffForm() {
   }, [form.primaryLocation, form.additionalLocations]);
 
   const handleSubmit = async () => {
-    // Merge role defaults into permissions so they are actually submitted
-    const allDefaults = PERMISSION_STARTERS.flatMap(g => g.items)
-      .filter(item => item.roleDefault.includes(form.primaryRole))
+    // Permissions are pre-populated from the role selection in step 3.
+    // The user can add/remove individual permissions in step 7.
+    // Merge with any PERMISSION_STARTERS defaults that are still checked.
+    const starterDefaults = PERMISSION_STARTERS.flatMap(g => g.items)
+      .filter(item => item.roleDefault.includes(form.primaryRole) && !form.removedDefaults.includes(item.key))
       .map(item => item.key);
-    const mergedPermissions = [...new Set([...form.assignedPermissions, ...allDefaults])];
+    const mergedPermissions = [...new Set([...form.assignedPermissions, ...starterDefaults])];
 
     // ORES/ORELSE mutual exclusion — block submission
     if (mergedPermissions.includes('ORES') && mergedPermissions.includes('ORELSE')) {
@@ -333,7 +348,14 @@ export default function StaffForm() {
         // Include credentials in create payload — ZVE USMG ADD accepts them
         if (form.accessCode) payload.accessCode = form.accessCode;
         if (form.verifyCode) payload.verifyCode = form.verifyCode;
-        await createStaffMember(payload);
+        const createRes = await createStaffMember(payload);
+        // B6: Assign mail groups after creation
+        const newDuz = createRes?.data?.duz || createRes?.data?.ien;
+        if (newDuz && form.mailGroups && form.mailGroups.length > 0) {
+          for (const groupIen of form.mailGroups) {
+            try { await addMailGroupMember(groupIen, newDuz); } catch { /* non-blocking */ }
+          }
+        }
       }
       navigate('/admin/staff');
     } catch (err) {
@@ -505,6 +527,13 @@ export default function StaffForm() {
                   <input type="tel" value={form.phone || ''} onChange={e => updateField('phone', e.target.value)}
                     placeholder="(503) 555-0100" className="form-input" />
                 </FormField>
+                <FormField label="Preferred Language" hint="The user's preferred language for system messages and reports. VistA File #200 field 200.07.">
+                  <select value={form.language || ''} onChange={e => updateField('language', e.target.value)} className="form-input">
+                    <option value="">System default (English)</option>
+                    <option value="ENGLISH">English</option>
+                    <option value="SPANISH">Spanish</option>
+                  </select>
+                </FormField>
               </div>
               {duplicateWarning && (
                 <div className={`mt-4 p-3 rounded-md text-sm flex items-center gap-2 ${
@@ -575,30 +604,60 @@ export default function StaffForm() {
                   Leave blank to keep existing credentials unchanged.
                 </div>
               )}
+              <FormField label="Password Never Expires" hint="Override the system-wide password expiration policy for this user. Use only for service accounts or when required by operational policy. VistA field 9.5.">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.verifyCodeNeverExpires || false}
+                    onChange={e => updateField('verifyCodeNeverExpires', e.target.checked)}
+                    className="w-4 h-4 rounded border-border" />
+                  <span className="text-sm">Exempt from password expiration</span>
+                </label>
+              </FormField>
+              {form.primaryRole === 'system-admin' && (
+                <FormField label="FileMan Access Code" hint="Controls FileMan database access level. '@' = unrestricted (full read/write to all VistA files). Leave empty for no direct FileMan access. This is a SECURITY-SENSITIVE setting.">
+                  <select value={form.filemanAccess || ''} onChange={e => updateField('filemanAccess', e.target.value)} className="form-input">
+                    <option value="">None (no FileMan access)</option>
+                    <option value="@">@ (Unrestricted)</option>
+                  </select>
+                </FormField>
+              )}
             </div>
           )}
 
           {/* STEP 2: Role and Work Type — Doc 2 Section 3.2 Step 2 */}
           {step.id === 'role' && (
             <div className="space-y-5">
-              <h2 className="text-lg font-semibold text-text mb-4">Role and Work Type</h2>
+              <h2 className="text-lg font-semibold text-text mb-2">Role & Work Type</h2>
+              <p className="text-sm text-[#666] mb-4">
+                Select the role that best matches this person's job function.
+                The role determines which security keys are pre-selected in the Permissions step.
+              </p>
               <FormField label="Primary Role" required error={validationErrors.primaryRole}
                 hint="Each role determines default system access and initial permission bundle.">
-                <div className="grid grid-cols-2 gap-3">
-                  {ROLES.map(role => (
-                    <button key={role.value}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {SYSTEM_ROLES.map(role => (
+                    <button key={role.id}
                       onClick={() => {
-                        updateField('primaryRole', role.value);
-                        if (['provider', 'pharmacist'].includes(role.value)) updateField('isProvider', true);
+                        updateField('primaryRole', role.id);
+                        // Pre-populate permissions from the role's key bundle
+                        const roleKeys = role.permissions.map(p => p.key);
+                        updateField('assignedPermissions', roleKeys);
+                        updateField('removedDefaults', []);
+                        // Set provider flag if role has PROVIDER key
+                        if (roleKeys.includes('PROVIDER')) {
+                          updateField('isProvider', true);
+                        } else if (!['pharmacist', 'controlled-substance-pharmacist'].includes(role.id)) {
+                          updateField('isProvider', false);
+                        }
                       }}
                       className={`text-left p-3 rounded-md border transition-colors ${
-                        form.primaryRole === role.value
+                        form.primaryRole === role.id
                           ? 'border-steel bg-[#E8EEF5]'
                           : 'border-border hover:border-steel/50'
                       }`}
                     >
-                      <div className="font-medium text-sm text-text">{role.label}</div>
+                      <div className="font-medium text-sm text-text">{role.name}</div>
                       <div className="text-xs text-text-secondary mt-0.5">{role.description}</div>
+                      <div className="text-[10px] text-[#999] mt-1">{role.permissions.length} permissions</div>
                     </button>
                   ))}
                 </div>
@@ -658,6 +717,26 @@ export default function StaffForm() {
                   ))}
                 </div>
               </FormField>
+              {liveMailGroups.length > 0 && (
+                <FormField label="Mail Groups" hint="Add this user to MailMan distribution groups. They will receive system notifications sent to these groups. Common groups: IRM, After-Hours Support.">
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {liveMailGroups.map(g => (
+                      <label key={g.ien} className="flex items-center gap-3 p-2 rounded-md hover:bg-surface-alt text-sm">
+                        <input type="checkbox"
+                          checked={(form.mailGroups || []).includes(g.ien)}
+                          onChange={e => {
+                            const next = e.target.checked
+                              ? [...(form.mailGroups || []), g.ien]
+                              : (form.mailGroups || []).filter(v => v !== g.ien);
+                            updateField('mailGroups', next);
+                          }}
+                          className="w-4 h-4 rounded border-border" />
+                        <span className="font-medium text-text">{g.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </FormField>
+              )}
             </div>
           )}
 
@@ -690,6 +769,12 @@ export default function StaffForm() {
                   <input type="date" value={form.deaExpiration} onChange={e => updateField('deaExpiration', e.target.value)} className="form-input" />
                 </FormField>
               </div>
+              <FormField label="Restrict Patient Selection" hint="When enabled, this user can only access patients matching specific criteria. Used for research accounts or limited-scope staff. VistA File #200 field 101.01.">
+                <select value={form.restrictPatient || ''} onChange={e => updateField('restrictPatient', e.target.value)} className="form-input">
+                  <option value="">No restriction</option>
+                  <option value="YES">Restricted</option>
+                </select>
+              </FormField>
               <label className="flex items-center gap-3 p-3 bg-surface-alt rounded-lg cursor-pointer">
                 <input type="checkbox" checked={form.authorizedToWriteMeds}
                   onChange={e => updateField('authorizedToWriteMeds', e.target.checked)}
@@ -847,8 +932,8 @@ export default function StaffForm() {
                     <p className="text-[10px] text-text-muted mb-3">{group.hint}</p>
                     <div className="space-y-2">
                       {visibleItems.map(item => {
-                        const isDefault = item.roleDefault.includes(form.primaryRole) && !form.removedDefaults.includes(item.key);
-                        const isChecked = form.assignedPermissions.includes(item.key) || isDefault;
+                        const isChecked = form.assignedPermissions.includes(item.key) && !form.removedDefaults.includes(item.key);
+                        const isDefault = item.roleDefault.includes(form.primaryRole);
                         // Prefer the server-enriched display name and description,
                         // falling back to the hardcoded label only when VistA data
                         // hasn't loaded yet.
@@ -959,7 +1044,7 @@ export default function StaffForm() {
                   ['Email', form.email || '—'],
                 ]} />
                 <ReviewSection title="Role & Department" items={[
-                  ['Role', ROLES.find(r => r.value === form.primaryRole)?.label || '—'],
+                  ['Role', SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '—'],
                   ['Department', form.department || '—'],
                   ['Provider', form.isProvider ? 'Yes' : 'No'],
                 ]} />

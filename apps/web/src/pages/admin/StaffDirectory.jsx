@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
@@ -104,6 +104,9 @@ export default function StaffDirectory() {
   const [permSearchText, setPermSearchText] = useState('');
   const [assigningPerm, setAssigningPerm] = useState(false);
 
+  // CPRS Tab Access data (B8)
+  const [cprsTabData, setCprsTabData] = useState([]);
+
   const columns = [
     ...baseColumns,
     {
@@ -176,6 +179,7 @@ export default function StaffDirectory() {
     setDetailData(null);
     setDetailKeys([]);
     setDetailLoading(true);
+    setCprsTabData([]);
     try {
       const [userRes, keysRes] = await Promise.all([
         getStaffMember(row.duz),
@@ -211,8 +215,17 @@ export default function StaffDirectory() {
         authorizedToWriteMeds: vg.authMeds,
         requiresCosigner: Boolean(vg.cosigner),
         usualCosigner: vg.cosigner || '',
+        // B1-B5, B9: New fields from expanded M routine
+        restrictPatient: vg.restrictPatient || '',
+        verifyCodeNeverExpires: vg.verifyCodeNeverExpires,
+        language: vg.language || '',
+        filemanAccessCode: vg.filemanAccess || '',
+        defaultOrderList: vg.defaultOrderList || '',
+        proxyUser: vg.proxyUser || '',
       });
       setDetailKeys(keysRes?.data || []);
+      // B8: Load CPRS Tab Access data (non-blocking)
+      getCprsTabAccess(row.duz).then(res => setCprsTabData(res?.data || [])).catch(() => setCprsTabData([]));
     } catch (err) {
       setDetailData(prev => prev || { ...row, _loadError: err.message || 'Failed to load details' });
     } finally {
@@ -474,173 +487,41 @@ export default function StaffDirectory() {
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
+            <StaffDetailContent
+              detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
+              selectedStaff={selectedStaff} cprsTabData={cprsTabData}
+              navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
+              handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
+              handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
+              setDeactivateTarget={setDeactivateTarget} setDetailData={setDetailData}
+              unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
+              loadData={loadData} setError={setError}
+            />
+          </div>
+        )}
 
-            {detailLoading ? (
-              <div className="space-y-3">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-[#E2E4E8] rounded" />)}
-              </div>
-            ) : detailData?._loadError ? (
-              <div className="p-4 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-start gap-2">
-                <span className="material-symbols-outlined text-[18px] mt-0.5">error</span>
-                <div>
-                  <strong>Failed to load details</strong>
-                  <p className="text-xs text-[#666] mt-1">{detailData._loadError}</p>
-                  <button onClick={() => handleRowClick(selectedStaff)} className="mt-2 text-xs text-[#2E5984] hover:underline">Try Again</button>
-                </div>
-              </div>
-            ) : detailData ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <DetailField label="Staff ID" value={detailData.id} mono />
-                  <DetailField label="Title" value={detailData.title} />
-                  <DetailField label="Department" value={detailData.department} />
-                  <DetailField label="Phone" value={detailData.phone} />
-                  <DetailField label="Email" value={detailData.email} />
-                  <DetailField label="Status" value={<StatusBadge status={detailData.status} />} />
-                  {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
-                  <DetailField label="Initials" value={detailData.initials} />
-                  <DetailField label="Last Sign-In" value={detailData.lastLogin} />
-                  {detailData.primaryMenu && <DetailField label="Primary Menu" value={detailData.primaryMenu} />}
-                  {detailData.degree && <DetailField label="Degree" value={detailData.degree} />}
-                  {detailData.division && <DetailField label="Division" value={detailData.division} />}
-                  {detailData.divisions?.length > 0 && (
-                    <DetailField label="All Divisions" value={detailData.divisions.join(', ')} />
-                  )}
-                  {detailData.terminationDate && <DetailField label="Termination Date" value={detailData.terminationDate} />}
-                  {detailData.terminationReason && <DetailField label="Termination Reason" value={detailData.terminationReason} />}
-                </div>
-
-                {detailData.isProvider && (
-                  <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-                    <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Provider Information</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <DetailField label="NPI" value={detailData.npi} mono />
-                      <DetailField label="DEA#" value={detailData.dea} mono />
-                      <DetailField label="Provider Type" value={detailData.providerType} />
-                      {detailData.personClass && <DetailField label="Person Class" value={detailData.personClass} />}
-                      {detailData.taxId && <DetailField label="Tax ID" value={detailData.taxId} mono />}
-                      {detailData.authorizedToWriteMeds !== undefined && (
-                        <DetailField label="Med Order Authority" value={detailData.authorizedToWriteMeds ? 'Yes' : 'No'} />
-                      )}
-                      {detailData.requiresCosigner !== undefined && (
-                        <DetailField label="Requires Cosigner" value={detailData.requiresCosigner ? 'Yes' : 'No'} />
-                      )}
-                      {detailData.usualCosigner && <DetailField label="Usual Cosigner" value={detailData.usualCosigner} />}
-                      <DetailField label="E-Signature" value={<SigReadinessBadge value={detailData.esigStatus} />} />
-                    </div>
-                  </div>
-                )}
-
-                {detailKeys.length > 0 && (
-                  <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">
-                        Permissions ({detailKeys.length})
-                      </h3>
-                      <button onClick={handleOpenAssignPerms}
-                        className="text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
-                    </div>
-                    <div className="max-h-[250px] overflow-y-auto space-y-2">
-                      {Object.entries(
-                        detailKeys.reduce((groups, k) => {
-                          const dept = k.department || k.packageName || 'General';
-                          (groups[dept] = groups[dept] || []).push(k);
-                          return groups;
-                        }, {})
-                      ).sort(([a], [b]) => a.localeCompare(b)).map(([dept, keys]) => (
-                        <div key={dept}>
-                          <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
-                          <div className="flex flex-wrap gap-1">
-                            {keys.map(k => (
-                              <span key={k.ien || k.name} title={`System key: ${k.name}`}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
-                                {k.displayName || humanizeKeyName(k.name)}
-                                <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
-                                  className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-                  <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">E-Signature Block</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <DetailField label="Signature Block Name" value={detailData.sigBlockName} />
-                    <DetailField label="Status" value={<SigReadinessBadge value={detailData.esigStatus} />} />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#E2E4E8] space-y-2">
-                  <button onClick={() => navigate(`/admin/staff/${detailData.duz}/edit`)}
-                    title="Opens the staff editing wizard. Changes are written to VistA File #200 via RPC."
-                    className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-                    <span className="material-symbols-outlined text-[16px] mr-2 align-middle">edit</span>
-                    Edit Staff Member
-                  </button>
-                  <button onClick={handleOpenAssignPerms}
-                    title="Add security keys to this user. Keys control what features and actions the user can access in VistA."
-                    className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-                    <span className="material-symbols-outlined text-[16px] mr-2 align-middle">key</span>
-                    Assign Permissions
-                  </button>
-                  <button onClick={() => navigate(`/admin/roles`, { state: { assignToDuz: detailData.duz, assignToName: detailData.name } })}
-                    title="Apply a pre-defined role template that bundles related security keys. This is a VistA Evolved convenience feature — in the VistA terminal, keys are assigned individually."
-                    className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-                    <span className="material-symbols-outlined text-[16px] mr-2 align-middle">assignment_ind</span>
-                    Assign Role
-                  </button>
-                  <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
-                    title="Removes this user's electronic signature code. They will need to set a new one before they can sign orders or clinical notes. This action is recorded in the audit log."
-                    className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
-                    <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
-                    {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
-                  </button>
-                  <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(detailData.name)}`)}
-                    title="Shows all recorded administrative actions related to this user: sign-ons, data changes, security events."
-                    className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-                    <span className="material-symbols-outlined text-[16px] mr-2 align-middle">history</span>
-                    View Audit Trail
-                  </button>
-                  {detailData.status === 'active' && (
-                    <button onClick={() => setDeactivateTarget(detailData)}
-                      title="Sets the DISUSER flag in VistA File #200, preventing this user from signing in. Their data is preserved. This action is recorded in the audit log."
-                      className="w-full text-left px-3 py-2 text-[13px] text-[#CC3333] hover:bg-[#FDE8E8] rounded-lg transition-colors">
-                      <span className="material-symbols-outlined text-[16px] mr-2 align-middle">block</span>
-                      Deactivate
-                    </button>
-                  )}
-                  {detailData.status === 'locked' && (
-                    <button onClick={async () => {
-                      try {
-                        await unlockUser(detailData.duz);
-                        setSelectedStaff(null);
-                        setDetailData(null);
-                        loadData();
-                      } catch (err) { setError(`Failed to unlock: ${err.message}`); }
-                    }}
-                      title="Clears the lockout counter, allowing the user to sign in again. Accounts are locked after exceeding the failed login attempt limit."
-                      className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
-                      <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>
-                      Unlock Account
-                    </button>
-                  )}
-                  {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
-                    <button onClick={() => handleReactivate(detailData.duz)}
-                      title="Clears the DISUSER flag and termination date, restoring the user's ability to sign in."
-                      className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
-                      <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
-                      Reactivate
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-[#999]">Click a staff member to view details.</p>
-            )}
+        {/* Mobile/tablet full-screen modal (below xl) */}
+        {selectedStaff && (
+          <div className="xl:hidden fixed inset-0 bg-white z-40 overflow-auto">
+            <div className="sticky top-0 bg-white border-b border-[#E2E4E8] px-4 py-3 flex items-center justify-between z-10">
+              <h2 className="text-lg font-bold truncate text-[#222]">{selectedStaff.name}</h2>
+              <button onClick={() => { setSelectedStaff(null); setDetailData(null); }}
+                className="p-1 rounded-md hover:bg-[#F5F5F5]">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-4">
+              <StaffDetailContent
+                detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
+                selectedStaff={selectedStaff} cprsTabData={cprsTabData}
+                navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
+                handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
+                handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
+                setDeactivateTarget={setDeactivateTarget} setDetailData={setDetailData}
+                unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
+                loadData={loadData} setError={setError}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -843,6 +724,311 @@ function ActionsMenu({ row, navigate }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/* A4: Inline editable field for provider information */
+function EditableDetailField({ label, value, fieldKey, duz, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setProviderFields(duz, { field: fieldKey, value: editValue });
+      onSave(fieldKey, editValue);
+      setEditing(false);
+    } catch { /* show error inline would be ideal, but keep simple */ }
+    finally { setSaving(false); }
+  };
+
+  if (editing) {
+    return (
+      <div>
+        <label className="block text-[10px] font-medium text-[#999] uppercase">{label}</label>
+        <div className="flex items-center gap-1 mt-0.5">
+          <input value={editValue} onChange={e => setEditValue(e.target.value)}
+            className="flex-1 h-7 px-2 text-sm border border-[#E2E4E8] rounded" />
+          <button onClick={handleSave} disabled={saving}
+            className="text-[#2E7D32] hover:bg-[#E8F5E9] p-1 rounded">
+            <span className="material-symbols-outlined text-[16px]">check</span>
+          </button>
+          <button onClick={() => setEditing(false)}
+            className="text-[#999] hover:bg-[#F5F5F5] p-1 rounded">
+            <span className="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cursor-pointer group" onClick={() => setEditing(true)} title="Click to edit">
+      <div className="text-[10px] font-medium text-[#999] uppercase">{label}</div>
+      <div className="text-sm text-[#222] group-hover:text-[#2E5984] flex items-center gap-1">
+        {value || '—'}
+        <span className="material-symbols-outlined text-[12px] text-[#BBB] opacity-0 group-hover:opacity-100">edit</span>
+      </div>
+    </div>
+  );
+}
+
+/* A3: Extracted detail content shared by desktop side panel and mobile modal */
+function StaffDetailContent({
+  detailData, detailKeys, detailLoading, selectedStaff, cprsTabData,
+  navigate, handleRowClick, handleOpenAssignPerms,
+  handleClearEsig, clearingEsig,
+  handleReactivate, handleRemovePermission,
+  setDeactivateTarget, setDetailData,
+  unlockUser, setSelectedStaff, loadData, setError,
+}) {
+  const handleProviderFieldSave = (fieldKey, newValue) => {
+    setDetailData(prev => ({ ...prev, [fieldKey]: newValue }));
+  };
+
+  if (detailLoading) {
+    return (
+      <div className="space-y-3">
+        {[...Array(4)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-[#E2E4E8] rounded" />)}
+      </div>
+    );
+  }
+
+  if (detailData?._loadError) {
+    return (
+      <div className="p-4 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-start gap-2">
+        <span className="material-symbols-outlined text-[18px] mt-0.5">error</span>
+        <div>
+          <strong>Failed to load details</strong>
+          <p className="text-xs text-[#666] mt-1">{detailData._loadError}</p>
+          <button onClick={() => handleRowClick(selectedStaff)} className="mt-2 text-xs text-[#2E5984] hover:underline">Try Again</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!detailData) {
+    return <p className="text-sm text-[#999]">Click a staff member to view details.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <DetailField label="Staff ID" value={detailData.id} mono />
+        <DetailField label="Title" value={detailData.title} />
+        <DetailField label="Department" value={detailData.department} />
+        <DetailField label="Phone" value={detailData.phone} />
+        <DetailField label="Email" value={detailData.email} />
+        <DetailField label="Status" value={<StatusBadge status={detailData.status} />} />
+        {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
+        <DetailField label="Initials" value={detailData.initials} />
+        <DetailField label="Last Sign-In" value={detailData.lastLogin} />
+        {detailData.primaryMenu && <DetailField label="Primary Menu" value={detailData.primaryMenu} />}
+        {detailData.degree && <DetailField label="Degree" value={detailData.degree} />}
+        {detailData.division && <DetailField label="Division" value={detailData.division} />}
+        {detailData.divisions?.length > 0 && (
+          <DetailField label="All Divisions" value={detailData.divisions.join(', ')} />
+        )}
+        {detailData.terminationDate && <DetailField label="Termination Date" value={detailData.terminationDate} />}
+        {detailData.terminationReason && <DetailField label="Termination Reason" value={detailData.terminationReason} />}
+        {/* B1: Restrict Patient Selection */}
+        {detailData.restrictPatient && <DetailField label="Patient Selection Restriction" value={detailData.restrictPatient} />}
+        {/* B2: Verify Code Never Expires */}
+        <DetailField label="Password Never Expires" value={detailData.verifyCodeNeverExpires ? 'Yes (override)' : 'Normal expiration'} />
+        {/* B3: Language Preference */}
+        {detailData.language && <DetailField label="Preferred Language" value={detailData.language} />}
+        {/* B4: FileMan Access Code — only show if present */}
+        {detailData.filemanAccessCode && (
+          <DetailField label="FileMan Access" value={detailData.filemanAccessCode === '@' ? 'Unrestricted (@)' : detailData.filemanAccessCode} />
+        )}
+        {/* B9: Proxy User */}
+        {detailData.proxyUser && <DetailField label="Proxy Ordering User" value={detailData.proxyUser} />}
+      </div>
+
+      {/* B5: Clinical Configuration */}
+      {detailData.defaultOrderList && (
+        <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Clinical Configuration</h3>
+          <DetailField label="Default Order List" value={detailData.defaultOrderList} />
+        </div>
+      )}
+
+      {/* A4: Provider Information with inline editing */}
+      {detailData.isProvider && (
+        <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Provider Information</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <EditableDetailField label="NPI" value={detailData.npi} fieldKey="npi" duz={detailData.duz} onSave={handleProviderFieldSave} />
+            <EditableDetailField label="DEA#" value={detailData.dea} fieldKey="dea" duz={detailData.duz} onSave={handleProviderFieldSave} />
+            <EditableDetailField label="Provider Type" value={detailData.providerType} fieldKey="providerType" duz={detailData.duz} onSave={handleProviderFieldSave} />
+            {detailData.personClass && <EditableDetailField label="Person Class" value={detailData.personClass} fieldKey="personClass" duz={detailData.duz} onSave={handleProviderFieldSave} />}
+            {detailData.taxId && <EditableDetailField label="Tax ID" value={detailData.taxId} fieldKey="taxId" duz={detailData.duz} onSave={handleProviderFieldSave} />}
+            {detailData.authorizedToWriteMeds !== undefined && (
+              <DetailField label="Med Order Authority" value={detailData.authorizedToWriteMeds ? 'Yes' : 'No'} />
+            )}
+            {detailData.requiresCosigner !== undefined && (
+              <DetailField label="Requires Cosigner" value={detailData.requiresCosigner ? 'Yes' : 'No'} />
+            )}
+            {detailData.usualCosigner && <DetailField label="Usual Cosigner" value={detailData.usualCosigner} />}
+            <DetailField label="E-Signature" value={<SigReadinessBadge value={detailData.esigStatus} />} />
+          </div>
+        </div>
+      )}
+
+      {/* B8: CPRS Tab Access */}
+      {cprsTabData && cprsTabData.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">CPRS Tab Access</h3>
+          <div className="space-y-1">
+            {cprsTabData.map(tab => (
+              <div key={tab.ien} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">
+                <span className="font-medium">{tab.tabName}</span>
+                <span className="text-[#999]">
+                  {tab.effectiveDate && `From: ${tab.effectiveDate}`}
+                  {tab.expirationDate && ` To: ${tab.expirationDate}`}
+                  {!tab.effectiveDate && !tab.expirationDate && 'Always'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detailKeys.length > 0 && (
+        <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">
+              Permissions ({detailKeys.length})
+            </h3>
+            <button onClick={handleOpenAssignPerms}
+              className="text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
+          </div>
+          <div className="max-h-[250px] overflow-y-auto space-y-2">
+            {Object.entries(
+              detailKeys.reduce((groups, k) => {
+                const dept = k.department || k.packageName || 'General';
+                (groups[dept] = groups[dept] || []).push(k);
+                return groups;
+              }, {})
+            ).sort(([a], [b]) => a.localeCompare(b)).map(([dept, keys]) => (
+              <div key={dept}>
+                <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
+                <div className="flex flex-wrap gap-1">
+                  {keys.map(k => (
+                    <span key={k.ien || k.name} title={`System key: ${k.name}`}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
+                      {k.displayName || humanizeKeyName(k.name)}
+                      <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
+                        className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+        <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">E-Signature Block</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <DetailField label="Signature Block Name" value={detailData.sigBlockName} />
+          <DetailField label="Status" value={<SigReadinessBadge value={detailData.esigStatus} />} />
+        </div>
+      </div>
+
+      <div className="pt-4 border-t border-[#E2E4E8] space-y-2">
+        <button onClick={() => navigate(`/admin/staff/${detailData.duz}/edit`)}
+          title="Opens the staff editing wizard. Changes are written to VistA File #200 via RPC."
+          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">edit</span>
+          Edit Staff Member
+        </button>
+        <button onClick={handleOpenAssignPerms}
+          title="Add security keys to this user. Keys control what features and actions the user can access in VistA."
+          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">key</span>
+          Assign Permissions
+        </button>
+        <button onClick={() => navigate(`/admin/roles`, { state: { assignToDuz: detailData.duz, assignToName: detailData.name } })}
+          title="Apply a pre-defined role template that bundles related security keys."
+          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">assignment_ind</span>
+          Assign Role
+        </button>
+        <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
+          title="Removes this user's electronic signature code."
+          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
+          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
+          {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
+        </button>
+        <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(detailData.name)}`)}
+          title="Shows all recorded administrative actions related to this user."
+          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">history</span>
+          View Audit Trail
+        </button>
+        {/* B7: Print Access Letter */}
+        <button onClick={() => {
+          const printWindow = window.open('', '_blank');
+          if (!printWindow) return;
+          const safeText = (s) => String(s || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          printWindow.document.write(`<html><head><title>Account Access Letter</title>
+<style>body{font-family:serif;max-width:700px;margin:40px auto}h1{font-size:18px}table{width:100%;border-collapse:collapse}td{padding:4px 8px;border-bottom:1px solid #eee}</style></head>
+<body><h1>VistA Evolved — User Account Information</h1>
+<p>Date: ${new Date().toLocaleDateString()}</p>
+<table>
+<tr><td><strong>Name</strong></td><td>${safeText(detailData.name)}</td></tr>
+<tr><td><strong>Staff ID</strong></td><td>${safeText(detailData.id)}</td></tr>
+<tr><td><strong>Department</strong></td><td>${safeText(detailData.department)}</td></tr>
+<tr><td><strong>Primary Site</strong></td><td>${safeText(detailData.division)}</td></tr>
+<tr><td><strong>Permissions</strong></td><td>${detailKeys.length} assigned</td></tr>
+<tr><td><strong>E-Signature</strong></td><td>${detailData.esigStatus === 'active' ? 'Set' : 'Not set'}</td></tr>
+</table>
+<p style="margin-top:20px;font-size:12px;color:#666">This letter confirms the creation of a VistA system account. Login credentials were provided separately at account creation time. Contact your system administrator if you need to reset your password.</p>
+</body></html>`);
+          printWindow.document.close();
+          printWindow.print();
+        }}
+          title="Generate a printable account information letter for this staff member"
+          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">print</span>
+          Print Access Letter
+        </button>
+        {detailData.status === 'active' && (
+          <button onClick={() => setDeactivateTarget(detailData)}
+            title="Sets the DISUSER flag in VistA File #200, preventing this user from signing in."
+            className="w-full text-left px-3 py-2 text-[13px] text-[#CC3333] hover:bg-[#FDE8E8] rounded-lg transition-colors">
+            <span className="material-symbols-outlined text-[16px] mr-2 align-middle">block</span>
+            Deactivate
+          </button>
+        )}
+        {detailData.status === 'locked' && (
+          <button onClick={async () => {
+            try {
+              await unlockUser(detailData.duz);
+              setSelectedStaff(null);
+              setDetailData(null);
+              loadData();
+            } catch (err) { setError(`Failed to unlock: ${err.message}`); }
+          }}
+            title="Clears the lockout counter, allowing the user to sign in again."
+            className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
+            <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>
+            Unlock Account
+          </button>
+        )}
+        {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
+          <button onClick={() => handleReactivate(detailData.duz)}
+            title="Clears the DISUSER flag and termination date, restoring the user's ability to sign in."
+            className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
+            <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
+            Reactivate
+          </button>
+        )}
+      </div>
     </div>
   );
 }

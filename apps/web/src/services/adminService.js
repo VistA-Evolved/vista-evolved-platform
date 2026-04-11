@@ -644,3 +644,8 @@ export async function addMailGroupMember(ien, userDuz) {
 export async function removeMailGroupMember(ien, duz) {
   return tenantApi.delete(`/mail-groups/${ien}/members/${duz}`);
 }
+
+// B8: CPRS Tab Access — read sub-file 200.03 for a user
+export async function getCprsTabAccess(duz) {
+  return tenantApi.get(`/users/${duz}/cprs-tabs`);
+}

@@ -884,6 +884,13 @@ async function main() {
     const taxId = detail[21] || '';
     const authMeds = detail[22] || '';
     const cosigner = detail[23] || '';
+    // Chapter-1 expansion: indices 24-29
+    const restrictPatient = detail[24] || '';
+    const verifyCodeNeverExpires = detail[25] || '';
+    const language = detail[26] || '';
+    const filemanAccess = detail[27] || '';
+    const defaultOrderList = detail[28] || '';
+    const proxyUser = detail[29] || '';
     const keys = [];
     const divs = [];
     for (const line of z.lines.slice(2)) {
@@ -919,6 +926,12 @@ async function main() {
           personClass, taxId,
           authMeds: authMeds === '1' || authMeds.toUpperCase() === 'YES',
           cosigner,
+          restrictPatient,
+          verifyCodeNeverExpires: verifyCodeNeverExpires === '1' || verifyCodeNeverExpires.toUpperCase() === 'YES',
+          language,
+          filemanAccessCode: filemanAccess,
+          defaultOrderList,
+          proxyUser,
         },
         keys, divisions: divs,
       },
@@ -1725,6 +1738,7 @@ async function main() {
       pharmSchedules: { file200: '55', label: 'DEA# SUFFIX / PHARMACY SCHEDULES' },
       sigBlockTitle: { file200: '20.3', label: 'SIGNATURE BLOCK TITLE (piece 2)' },
       title: { file200: '8', label: 'TITLE (pointer to File 3.1)' },
+      taxId: { file200: '53.3', label: 'TAX ID' },
     };
     const fieldKey = body.field;
     const value = body.value;
@@ -1738,6 +1752,35 @@ async function main() {
     const filer = await ddrFilerEdit(200, iens, pf.file200, String(value), 'E');
     if (!filer.ok) return reply.code(502).send({ ok: false, stage: 'DDR FILER', field: pf.label, error: filer.error });
     return { ok: true, tenantId, duz: req.params.duz, field: pf.label, rpcUsed: 'DDR FILER' };
+  });
+
+  // ---- CPRS Tab Access for a user (Chapter-1 B8) ----
+  app.get('/api/tenant-admin/v1/users/:duz/cprs-tabs', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    // File 200.03 = OE/RR LIST sub-file under File 200 (CPRS tab parameters)
+    // DDR LISTER columns: .01 (name), 1 (access)
+    const duz = req.params.duz;
+    const iens = `${duz},`;
+    try {
+      const z = await callZveRpc('ZVE DDR LISTER', [
+        '200.03', iens, '.01;1', '', '', '', '', '', '1000',
+      ]);
+      const o = zveOutcome(z);
+      if (o.kind !== 'ok') {
+        return reply.code(502).send({ ok: false, error: `DDR LISTER 200.03 failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
+      }
+      const tabs = [];
+      for (const line of z.lines.slice(1)) {
+        const p = line.split('^');
+        if (p[0]) tabs.push({ name: p[0], access: p[1] || '' });
+      }
+      return { ok: true, tenantId, duz, tabs, rpcUsed: z.rpcUsed };
+    } catch (err) {
+      return reply.code(502).send({ ok: false, error: err.message });
+    }
   });
 
   app.put('/api/tenant-admin/v1/users/:duz/credentials', async (req, reply) => {

@@ -24,7 +24,7 @@ const ALL_WORKSPACES = [
 // they bundle assignable starter keys per role. The runtime render cross-
 // references with the live /key-inventory and any missing key is hidden,
 // not shown as a "pending install" badge.
-const ROLES = [
+export const ROLES = [
   {
     id: 'physician', name: 'Physician', isSystem: true,
     description: 'Licensed independent practitioner. Full order entry, prescribing, note signing, chart access.',
