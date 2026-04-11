@@ -1774,8 +1774,8 @@ async function main() {
       }
       const tabs = [];
       for (const line of z.lines.slice(1)) {
-        const p = line.split('^');
-        if (p[0]) tabs.push({ name: p[0], access: p[1] || '' });
+        const parts = line.split('^');
+        if (parts[0]) tabs.push({ name: parts[0], access: parts[1] || '' });
       }
       return { ok: true, tenantId, duz, tabs, rpcUsed: z.rpcUsed };
     } catch (err) {

@@ -220,6 +220,10 @@ export default function StaffForm() {
           department: vg.serviceSection || '',
           sigBlockName: vg.electronicSignature?.sigBlockName || esigData?.sigBlockName || '',
           assignedPermissions: keys,
+          language: vg.language || '',
+          verifyCodeNeverExpires: vg.verifyCodeNeverExpires || false,
+          filemanAccess: vg.filemanAccessCode || '',
+          restrictPatient: vg.restrictPatient || '',
         }));
       }).catch((err) => {
         setRefDataError(`Failed to load staff member data: ${err.message || 'unknown error'}`);
@@ -334,6 +338,10 @@ export default function StaffForm() {
         sigBlockName: form.sigBlockName,
         requiresCosign: form.requiresCosign || false,
         cosigner: form.cosigner || '',
+        language: form.language || '',
+        verifyCodeNeverExpires: form.verifyCodeNeverExpires || false,
+        filemanAccess: form.filemanAccess || '',
+        restrictPatient: form.restrictPatient || '',
       };
       if (isEdit) {
         await updateStaffMember(userId, payload);
@@ -1057,6 +1065,8 @@ export default function StaffForm() {
                 <ReviewSection title="Login Credentials" items={[
                   ['Username (Access Code)', form.accessCode ? '✓ Set' : '— Not set'],
                   ['Password (Verify Code)', form.verifyCode ? '✓ Set' : '— Not set'],
+                  ['Password Never Expires', form.verifyCodeNeverExpires ? 'Yes (override)' : 'Normal policy'],
+                  ...(form.filemanAccess ? [['FileMan Access', form.filemanAccess === '@' ? 'Unrestricted (@)' : form.filemanAccess]] : []),
                 ]} />
                 {(form.isProvider || showProviderStep) && (
                   <ReviewSection title="Provider Configuration" items={[
@@ -1065,6 +1075,17 @@ export default function StaffForm() {
                     ['DEA', form.dea || '—'],
                     ['Medication Authority', form.authorizedToWriteMeds ? 'Yes' : 'No'],
                     ['Controlled Schedules', form.controlledSchedules.join(', ') || 'None'],
+                    ...(form.restrictPatient ? [['Patient Selection', 'Restricted']] : []),
+                  ]} />
+                )}
+                {form.language && (
+                  <ReviewSection title="Preferences" items={[
+                    ['Preferred Language', form.language],
+                  ]} />
+                )}
+                {(form.mailGroups || []).length > 0 && (
+                  <ReviewSection title="Mail Groups" items={[
+                    ['Groups', (form.mailGroups || []).map(ien => liveMailGroups.find(g => g.ien === ien)?.name || ien).join(', ')],
                   ]} />
                 )}
               </div>

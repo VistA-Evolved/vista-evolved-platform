@@ -219,13 +219,13 @@ export default function StaffDirectory() {
         restrictPatient: vg.restrictPatient || '',
         verifyCodeNeverExpires: vg.verifyCodeNeverExpires,
         language: vg.language || '',
-        filemanAccessCode: vg.filemanAccess || '',
+        filemanAccessCode: vg.filemanAccessCode || '',
         defaultOrderList: vg.defaultOrderList || '',
         proxyUser: vg.proxyUser || '',
       });
       setDetailKeys(keysRes?.data || []);
       // B8: Load CPRS Tab Access data (non-blocking)
-      getCprsTabAccess(row.duz).then(res => setCprsTabData(res?.data || [])).catch(() => setCprsTabData([]));
+      getCprsTabAccess(row.duz).then(res => setCprsTabData(res?.tabs || res?.data || [])).catch(() => setCprsTabData([]));
     } catch (err) {
       setDetailData(prev => prev || { ...row, _loadError: err.message || 'Failed to load details' });
     } finally {
@@ -882,14 +882,10 @@ function StaffDetailContent({
         <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
           <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">CPRS Tab Access</h3>
           <div className="space-y-1">
-            {cprsTabData.map(tab => (
-              <div key={tab.ien} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">
-                <span className="font-medium">{tab.tabName}</span>
-                <span className="text-[#999]">
-                  {tab.effectiveDate && `From: ${tab.effectiveDate}`}
-                  {tab.expirationDate && ` To: ${tab.expirationDate}`}
-                  {!tab.effectiveDate && !tab.expirationDate && 'Always'}
-                </span>
+            {cprsTabData.map((tab, idx) => (
+              <div key={tab.name || idx} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">
+                <span className="font-medium">{tab.name || tab.tabName || '—'}</span>
+                <span className="text-[#999]">{tab.access || 'Enabled'}</span>
               </div>
             ))}
           </div>
