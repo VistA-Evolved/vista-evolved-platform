@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
@@ -30,6 +30,7 @@ function deriveTitleFromKeys(keys) {
   if (keySet.has('ORES') && keySet.has('PROVIDER')) return 'Physician';
   if (keySet.has('ORELSE') && keySet.has('PROVIDER')) return 'Nurse Practitioner';
   if (keySet.has('ORELSE')) return 'Nurse';
+  if (keySet.has('PSO MANAGER')) return 'Pharmacy Supervisor';
   if (keySet.has('PSJ PHARMACIST') || keySet.has('PSORPH')) return 'Pharmacist';
   if (keySet.has('LRLAB') || keySet.has('LRVERIFY')) return 'Lab Technologist';
   if (keySet.has('LRSUPER')) return 'Lab Supervisor';
@@ -87,6 +88,11 @@ export default function StaffDirectory() {
   const [deactivateTarget, setDeactivateTarget] = useState(null);
   const [clearEsigTarget, setClearEsigTarget] = useState(null);
   const [clearingEsig, setClearingEsig] = useState(false);
+
+  // Clone user modal state
+  const [cloneSource, setCloneSource] = useState(null);
+  const [cloneForm, setCloneForm] = useState({ name: '', accessCode: '', verifyCode: '' });
+  const [cloning, setCloning] = useState(false);
 
   // Live data state
   const [staffList, setStaffList] = useState([]);
@@ -301,6 +307,27 @@ export default function StaffDirectory() {
     } catch (err) { setError(`Failed to reactivate: ${err.message}`); }
   };
 
+  const handleCloneUser = async () => {
+    if (!cloneSource || !cloneForm.name.trim()) return;
+    setCloning(true);
+    try {
+      await cloneStaffMember({
+        sourceDuz: cloneSource.duz,
+        name: cloneForm.name,
+        accessCode: cloneForm.accessCode || undefined,
+        verifyCode: cloneForm.verifyCode || undefined,
+      });
+      setActionSuccess(`Cloned ${cloneSource.name} → ${cloneForm.name}. The new account has the same permissions and settings.`);
+      setCloneSource(null);
+      setCloneForm({ name: '', accessCode: '', verifyCode: '' });
+      loadData();
+    } catch (err) {
+      setError(`Failed to clone user: ${err.message}`);
+    } finally {
+      setCloning(false);
+    }
+  };
+
   const handleClearEsig = async (duz) => {
     setClearEsigTarget(duz);
   };
@@ -496,6 +523,7 @@ export default function StaffDirectory() {
               setDeactivateTarget={setDeactivateTarget} setDetailData={setDetailData}
               unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
               loadData={loadData} setError={setError}
+              setCloneSource={setCloneSource}
             />
           </div>
         )}
@@ -520,6 +548,7 @@ export default function StaffDirectory() {
                 setDeactivateTarget={setDeactivateTarget} setDetailData={setDetailData}
                 unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
                 loadData={loadData} setError={setError}
+                setCloneSource={setCloneSource}
               />
             </div>
           </div>
@@ -637,6 +666,49 @@ export default function StaffDirectory() {
                   <div className="text-xs text-[#BBB] mt-1">Unable to load the permission catalog. Try closing and reopening this panel.</div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clone User Modal */}
+      {cloneSource && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '' }); }}>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-[#222] mb-2">Clone Staff Member</h3>
+            <p className="text-sm text-[#666] mb-4">
+              The new user will receive the same permissions and settings as <strong>{cloneSource.name}</strong>.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-[#333] mb-1">New User Name <span className="text-[#CC3333]">*</span></label>
+                <input type="text" value={cloneForm.name}
+                  onChange={e => setCloneForm(f => ({ ...f, name: e.target.value.toUpperCase() }))}
+                  placeholder="LAST,FIRST MIDDLE" maxLength={35}
+                  className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#333] mb-1">Username (Access Code)</label>
+                <input type="text" value={cloneForm.accessCode}
+                  onChange={e => setCloneForm(f => ({ ...f, accessCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}
+                  placeholder="e.g., JDOE1234" maxLength={20}
+                  className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm" autoComplete="off" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#333] mb-1">Password (Verify Code)</label>
+                <input type="password" value={cloneForm.verifyCode}
+                  onChange={e => setCloneForm(f => ({ ...f, verifyCode: e.target.value }))}
+                  placeholder="Enter password" maxLength={20}
+                  className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm" autoComplete="new-password" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '' }); }}
+                className="px-4 py-2 text-sm text-[#666] hover:bg-[#F5F5F5] rounded-lg">Cancel</button>
+              <button onClick={handleCloneUser} disabled={!cloneForm.name.trim() || cloning}
+                className={`px-4 py-2 text-sm text-white rounded-lg ${cloneForm.name.trim() && !cloning ? 'bg-[#1A1A2E] hover:bg-[#2E5984]' : 'bg-gray-300 cursor-not-allowed'}`}>
+                {cloning ? 'Creating...' : 'Create Clone'}
+              </button>
             </div>
           </div>
         </div>
@@ -783,6 +855,7 @@ function StaffDetailContent({
   handleReactivate, handleRemovePermission,
   setDeactivateTarget, setDetailData,
   unlockUser, setSelectedStaff, loadData, setError,
+  setCloneSource,
 }) {
   const handleProviderFieldSave = (fieldKey, newValue) => {
     setDetailData(prev => ({ ...prev, [fieldKey]: newValue }));
@@ -935,43 +1008,58 @@ function StaffDetailContent({
         </div>
       </div>
 
-      <div className="pt-4 border-t border-[#E2E4E8] space-y-2">
-        <button onClick={() => navigate(`/admin/staff/${detailData.duz}/edit`)}
-          title="Opens the staff editing wizard. Changes are written to VistA File #200 via RPC."
-          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">edit</span>
-          Edit Staff Member
-        </button>
-        <button onClick={handleOpenAssignPerms}
-          title="Add security keys to this user. Keys control what features and actions the user can access in VistA."
-          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">key</span>
-          Assign Permissions
-        </button>
-        <button onClick={() => navigate(`/admin/roles`, { state: { assignToDuz: detailData.duz, assignToName: detailData.name } })}
-          title="Apply a pre-defined role template that bundles related security keys."
-          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">assignment_ind</span>
-          Assign Role
-        </button>
-        <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
-          title="Removes this user's electronic signature code."
-          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
-          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
-          {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
-        </button>
-        <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(detailData.name)}`)}
-          title="Shows all recorded administrative actions related to this user."
-          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">history</span>
-          View Audit Trail
-        </button>
-        {/* B7: Print Access Letter */}
-        <button onClick={() => {
-          const printWindow = window.open('', '_blank');
-          if (!printWindow) return;
-          const safeText = (s) => String(s || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          printWindow.document.write(`<html><head><title>Account Access Letter</title>
+      <div className="pt-4 border-t border-[#E2E4E8] space-y-4">
+        {/* ── Primary Actions ── */}
+        <div>
+          <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1.5">Primary Actions</div>
+          <div className="space-y-1">
+            <button onClick={() => navigate(`/admin/staff/${detailData.duz}/edit`)}
+              title="Opens the staff editing wizard. Changes are written to VistA File #200 via RPC."
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">edit</span>
+              Edit Staff Member
+            </button>
+            <button onClick={() => navigate(`/admin/roles`, { state: { assignToDuz: detailData.duz, assignToName: detailData.name } })}
+              title="Apply a pre-defined role template that bundles related security keys."
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">assignment_ind</span>
+              Assign Role
+            </button>
+          </div>
+        </div>
+        {/* ── Permissions ── */}
+        <div>
+          <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1.5">Permissions</div>
+          <div className="space-y-1">
+            <button onClick={handleOpenAssignPerms}
+              title="Add security keys to this user. Keys control what features and actions the user can access in VistA."
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">key</span>
+              Assign Permissions
+            </button>
+            <button onClick={() => navigate(`/admin/audit?user=${encodeURIComponent(detailData.name)}`)}
+              title="Shows all recorded administrative actions related to this user."
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">history</span>
+              View Audit Trail
+            </button>
+          </div>
+        </div>
+        {/* ── Account ── */}
+        <div>
+          <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1.5">Account</div>
+          <div className="space-y-1">
+            <button onClick={() => setCloneSource(detailData)}
+              title="Create a new account with the same permissions, role, and settings as this person."
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">content_copy</span>
+              Clone User
+            </button>
+            <button onClick={() => {
+              const printWindow = window.open('', '_blank');
+              if (!printWindow) return;
+              const safeText = (s) => String(s || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              printWindow.document.write(`<html><head><title>Account Access Letter</title>
 <style>body{font-family:serif;max-width:700px;margin:40px auto}h1{font-size:18px}table{width:100%;border-collapse:collapse}td{padding:4px 8px;border-bottom:1px solid #eee}</style></head>
 <body><h1>VistA Evolved — User Account Information</h1>
 <p>Date: ${new Date().toLocaleDateString()}</p>
@@ -985,45 +1073,59 @@ function StaffDetailContent({
 </table>
 <p style="margin-top:20px;font-size:12px;color:#666">This letter confirms the creation of a VistA system account. Login credentials were provided separately at account creation time. Contact your system administrator if you need to reset your password.</p>
 </body></html>`);
-          printWindow.document.close();
-          printWindow.print();
-        }}
-          title="Generate a printable account information letter for this staff member"
-          className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
-          <span className="material-symbols-outlined text-[16px] mr-2 align-middle">print</span>
-          Print Access Letter
-        </button>
-        {detailData.status === 'active' && (
-          <button onClick={() => setDeactivateTarget(detailData)}
-            title="Sets the DISUSER flag in VistA File #200, preventing this user from signing in."
-            className="w-full text-left px-3 py-2 text-[13px] text-[#CC3333] hover:bg-[#FDE8E8] rounded-lg transition-colors">
-            <span className="material-symbols-outlined text-[16px] mr-2 align-middle">block</span>
-            Deactivate
-          </button>
-        )}
-        {detailData.status === 'locked' && (
-          <button onClick={async () => {
-            try {
-              await unlockUser(detailData.duz);
-              setSelectedStaff(null);
-              setDetailData(null);
-              loadData();
-            } catch (err) { setError(`Failed to unlock: ${err.message}`); }
-          }}
-            title="Clears the lockout counter, allowing the user to sign in again."
-            className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
-            <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>
-            Unlock Account
-          </button>
-        )}
-        {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
-          <button onClick={() => handleReactivate(detailData.duz)}
-            title="Clears the DISUSER flag and termination date, restoring the user's ability to sign in."
-            className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
-            <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
-            Reactivate
-          </button>
-        )}
+              printWindow.document.close();
+              printWindow.print();
+            }}
+              title="Generate a printable account information letter for this staff member"
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">print</span>
+              Print Access Letter
+            </button>
+            <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
+              title="Removes this user's electronic signature code."
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
+              {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
+            </button>
+          </div>
+        </div>
+        {/* ── Danger Zone ── */}
+        <div>
+          <div className="text-[9px] font-bold text-[#CC3333] uppercase tracking-wider mb-1.5">Danger Zone</div>
+          <div className="space-y-1">
+            {detailData.status === 'active' && (
+              <button onClick={() => setDeactivateTarget(detailData)}
+                title="Sets the DISUSER flag in VistA File #200, preventing this user from signing in."
+                className="w-full text-left px-3 py-2 text-[13px] text-[#CC3333] hover:bg-[#FDE8E8] rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-[16px] mr-2 align-middle">block</span>
+                Deactivate
+              </button>
+            )}
+            {detailData.status === 'locked' && (
+              <button onClick={async () => {
+                try {
+                  await unlockUser(detailData.duz);
+                  setSelectedStaff(null);
+                  setDetailData(null);
+                  loadData();
+                } catch (err) { setError(`Failed to unlock: ${err.message}`); }
+              }}
+                title="Clears the lockout counter, allowing the user to sign in again."
+                className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>
+                Unlock Account
+              </button>
+            )}
+            {(detailData.status === 'inactive' || detailData.status === 'terminated') && (
+              <button onClick={() => handleReactivate(detailData.duz)}
+                title="Clears the DISUSER flag and termination date, restoring the user's ability to sign in."
+                className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
+                Reactivate
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

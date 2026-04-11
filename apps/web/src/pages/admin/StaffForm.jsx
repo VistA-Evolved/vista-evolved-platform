@@ -21,13 +21,9 @@ import { ROLES as SYSTEM_ROLES } from './RoleTemplates';
  */
 
 const STEPS = [
-  { id: 'identity', label: 'Identity' },
-  { id: 'credentials', label: 'Login Credentials' },
-  { id: 'role', label: 'Role & Work Type' },
-  { id: 'location', label: 'Locations' },
-  { id: 'provider', label: 'Provider Setup' },
-  { id: 'esignature', label: 'E-Signature' },
-  { id: 'permissions', label: 'Permissions & Features' },
+  { id: 'person', label: 'Person & Credentials' },
+  { id: 'role-location', label: 'Role & Location' },
+  { id: 'provider', label: 'Provider Setup', conditional: true },
   { id: 'review', label: 'Review & Create' },
 ];
 
@@ -233,19 +229,25 @@ export default function StaffForm() {
 
   const validateStep = (stepId) => {
     const errors = {};
-    if (stepId === 'identity') {
+    if (stepId === 'person') {
       if (!form.fullName.trim()) errors.fullName = 'Name is required';
       else if (form.fullName.length < 3) errors.fullName = 'Name must be at least 3 characters';
       else if (form.fullName.length > 35) errors.fullName = 'Name must be 35 characters or fewer';
       else if (!/^[A-Z]+,[A-Z]/.test(form.fullName.trim())) errors.fullName = 'Name must be in LAST,FIRST format (e.g. SMITH,JOHN A)';
       if (!form.sex) errors.sex = 'Gender is required';
       if (!form.dob) errors.dob = 'Date of birth is required';
+      // Credentials are required for new users
+      if (!isEdit) {
+        if (!form.accessCode || !form.accessCode.trim()) errors.accessCode = 'Username (Access Code) is required';
+        else if (form.accessCode.length < 3) errors.accessCode = 'Username must be at least 3 characters';
+        if (!form.verifyCode) errors.verifyCode = 'Password (Verify Code) is required';
+        else if (form.verifyCode.length < 8) errors.verifyCode = 'Password must be at least 8 characters';
+        if (form.verifyCode && form.verifyCode !== form.verifyCodeConfirm) errors.verifyCodeConfirm = 'Passwords do not match';
+      }
     }
-    if (stepId === 'role') {
+    if (stepId === 'role-location') {
       if (!form.primaryRole) errors.primaryRole = 'Role selection is required';
       if (!form.department.trim()) errors.department = 'Department is required';
-    }
-    if (stepId === 'location') {
       if (!form.primaryLocation) errors.primaryLocation = 'At least one site must be selected';
     }
     if (stepId === 'provider' && showProviderStep) {
@@ -267,12 +269,15 @@ export default function StaffForm() {
     removedDefaults: [],
     language: '', verifyCodeNeverExpires: false, filemanAccess: '',
     restrictPatient: '', mailGroups: [],
+    accessCode: '', verifyCode: '', verifyCodeConfirm: '',
+    requiresCosign: false, cosigner: '',
   });
 
   const [liveMailGroups, setLiveMailGroups] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [createSuccess, setCreateSuccess] = useState(null);
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const step = STEPS[currentStep];
@@ -293,8 +298,8 @@ export default function StaffForm() {
   }, [form.primaryLocation, form.additionalLocations]);
 
   const handleSubmit = async () => {
-    // Permissions are pre-populated from the role selection in step 3.
-    // The user can add/remove individual permissions in step 7.
+    // Permissions are pre-populated from the role selection in Step 2 (Role & Location).
+    // The user can adjust individual permissions in the Review step's collapsible section.
     // Merge with any PERMISSION_STARTERS defaults that are still checked.
     const starterDefaults = PERMISSION_STARTERS.flatMap(g => g.items)
       .filter(item => item.roleDefault.includes(form.primaryRole) && !form.removedDefaults.includes(item.key))
@@ -307,7 +312,7 @@ export default function StaffForm() {
       return;
     }
     // Credential validation for new users
-    if (!isEdit && form.accessCode && form.verifyCode && form.verifyCode !== form.verifyCodeConfirm) {
+    if (!isEdit && form.verifyCode && form.verifyCode !== form.verifyCodeConfirm) {
       setSubmitError('Passwords do not match. Please correct before submitting.');
       return;
     }
@@ -352,6 +357,7 @@ export default function StaffForm() {
             verifyCode: form.verifyCode || undefined,
           });
         }
+        navigate('/admin/staff');
       } else {
         // Include credentials in create payload — ZVE USMG ADD accepts them
         if (form.accessCode) payload.accessCode = form.accessCode;
@@ -364,8 +370,18 @@ export default function StaffForm() {
             try { await addMailGroupMember(groupIen, newDuz); } catch { /* non-blocking */ }
           }
         }
+        // Show success screen with "Create Another" option
+        setCreateSuccess({
+          name: form.fullName,
+          staffId: `S-${newDuz}`,
+          department: form.department,
+          site: liveSites.find(l => l.value === form.primaryLocation)?.label || '',
+          role: SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '',
+          permCount: mergedPermissions.length,
+          mailGroupCount: (form.mailGroups || []).length,
+          duz: newDuz,
+        });
       }
-      navigate('/admin/staff');
     } catch (err) {
       setSubmitError(err.message || 'Failed to save staff member. Please try again.');
     } finally {
@@ -398,8 +414,6 @@ export default function StaffForm() {
 
   const visibleSteps = STEPS.filter(s => {
     if (s.id === 'provider' && !showProviderStep) return false;
-    // Show e-sig step during create only for providers (who will need to set one)
-    if (s.id === 'esignature' && !isEdit && !showProviderStep) return false;
     return true;
   });
 
@@ -430,6 +444,67 @@ export default function StaffForm() {
   return (
     <AppShell breadcrumb={`Admin > ${isEdit ? 'Edit Staff Member' : 'Create Staff Member'}`}>
       <div className="p-6 max-w-5xl">
+        {/* Create Another success screen */}
+        {createSuccess ? (
+          <div className="text-center py-10">
+            <div className="w-16 h-16 rounded-full bg-[#E8F5E9] flex items-center justify-center mx-auto mb-4">
+              <span className="material-symbols-outlined text-[32px] text-[#2E7D32]">check_circle</span>
+            </div>
+            <h2 className="text-xl font-bold text-text mb-2">
+              {createSuccess.name} created successfully ({createSuccess.staffId})
+            </h2>
+            <div className="text-sm text-text-secondary mb-6">
+              Department: {createSuccess.department || '—'} | Site: {createSuccess.site || '—'} | Role: {createSuccess.role || '—'}
+              <br />
+              {createSuccess.permCount} permissions assigned
+              {createSuccess.mailGroupCount > 0 && ` | Added to ${createSuccess.mailGroupCount} mail group(s)`}
+            </div>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => navigate(`/admin/staff/${createSuccess.duz}/edit`)}
+                className="px-5 py-2 text-sm border border-border rounded-md hover:bg-surface-alt transition-colors"
+              >
+                View Profile
+              </button>
+              <button
+                onClick={() => {
+                  const preserveDepartment = form.department;
+                  const preserveLocation = form.primaryLocation;
+                  const preserveMailGroups = form.mailGroups || [];
+                  setForm({
+                    fullName: '', displayName: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
+                    primaryRole: '', department: preserveDepartment, isProvider: false, sigBlockName: '',
+                    primaryLocation: preserveLocation, additionalLocations: [],
+                    providerType: '', npi: '', dea: '', deaExpiration: '',
+                    authorizedToWriteMeds: false, controlledSchedules: [],
+                    assignedPermissions: [],
+                    secondaryFeatures: ['OR CPRS GUI CHART'],
+                    removedDefaults: [],
+                    language: '', verifyCodeNeverExpires: false, filemanAccess: '',
+                    restrictPatient: '', mailGroups: preserveMailGroups,
+                    accessCode: '', verifyCode: '', verifyCodeConfirm: '',
+                    requiresCosign: false, cosigner: '',
+                  });
+                  setCurrentStep(0);
+                  setCreateSuccess(null);
+                  setSubmitError('');
+                  setValidationErrors({});
+                  setDuplicateWarning(null);
+                }}
+                className="px-5 py-2 text-sm font-medium bg-navy text-white rounded-md hover:bg-steel transition-colors"
+              >
+                Create Another Staff Member
+              </button>
+              <button
+                onClick={() => navigate('/admin/staff')}
+                className="px-5 py-2 text-sm border border-border rounded-md hover:bg-surface-alt transition-colors"
+              >
+                Return to Directory
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         <h1 className="text-[22px] font-bold text-text mb-2">
           {isEdit ? 'Edit Staff Member' : 'Create New Staff Member'}
         </h1>
@@ -491,8 +566,8 @@ export default function StaffForm() {
 
         <div className="bg-white border border-border rounded-lg p-6">
 
-          {/* STEP 1: Identity — Doc 2 Section 3.2 Step 1 */}
-          {step.id === 'identity' && (
+          {/* STEP 1: Person & Credentials */}
+          {step.id === 'person' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Identity Basics</h2>
               <div className="grid grid-cols-2 gap-4">
@@ -556,8 +631,8 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP: Login Credentials — VistA Access Code + Verify Code */}
-          {step.id === 'credentials' && (
+          {/* Credentials section (part of Person & Credentials step) */}
+          {step.id === 'person' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-2">Login Credentials</h2>
               <p className="text-sm text-[#666]">
@@ -571,6 +646,7 @@ export default function StaffForm() {
                 </div>
               )}
               <FormField label="Username (Access Code)" required={!isEdit}
+                error={validationErrors.accessCode}
                 hint="The identifier the user enters at the login prompt. 3-20 characters, letters and numbers. Called 'Access Code' in VistA.">
                 <input
                   value={form.accessCode || ''}
@@ -582,6 +658,7 @@ export default function StaffForm() {
                 />
               </FormField>
               <FormField label="Password (Verify Code)" required={!isEdit}
+                error={validationErrors.verifyCode}
                 hint="8-20 characters with mixed case and numbers. Called 'Verify Code' in VistA. Must be changed every 90 days.">
                 <input
                   type="password"
@@ -593,7 +670,7 @@ export default function StaffForm() {
                   autoComplete="new-password"
                 />
               </FormField>
-              <FormField label="Confirm Password" required={!isEdit}>
+              <FormField label="Confirm Password" required={!isEdit} error={validationErrors.verifyCodeConfirm}>
                 <input
                   type="password"
                   value={form.verifyCodeConfirm || ''}
@@ -631,8 +708,8 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 2: Role and Work Type — Doc 2 Section 3.2 Step 2 */}
-          {step.id === 'role' && (
+          {/* STEP 2: Role, Location & Department */}
+          {step.id === 'role-location' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-2">Role & Work Type</h2>
               <p className="text-sm text-[#666] mb-4">
@@ -688,8 +765,8 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 3: Location Assignment — Doc 2 Section 3.2 Step 3 */}
-          {step.id === 'location' && (
+          {/* Location section (part of Role & Location step) */}
+          {step.id === 'role-location' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Location Assignment</h2>
               <p className="text-sm text-text-secondary mb-4">
@@ -748,7 +825,7 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 4: Provider Configuration — Doc 2 Section 3.2 Step 4 */}
+          {/* STEP 3: Provider Configuration (conditional) */}
           {step.id === 'provider' && showProviderStep && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Provider Configuration</h2>
@@ -835,8 +912,8 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 5: E-Signature */}
-          {step.id === 'esignature' && (
+          {/* E-Signature (shown during edit in review step) */}
+          {step.id === 'review' && isEdit && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">E-Signature Configuration</h2>
               <p className="text-sm text-text-secondary mb-4">
@@ -918,17 +995,14 @@ export default function StaffForm() {
             </div>
           )}
 
-          {/* STEP 6: Permissions & Features */}
-          {step.id === 'permissions' && (
-            <div className="space-y-5">
-              <h2 className="text-lg font-semibold text-text mb-4">Permissions & Features</h2>
-              <p className="text-sm text-text-secondary mb-4">
-                Permissions are pre-configured based on the selected role. Adjust individual permissions as needed.
-                Each permission controls specific system capabilities.
-                {livePermissions.length > 0 && (
-                  <span className="ml-1 text-[11px] text-[#999]">({livePermissions.length} permissions available)</span>
-                )}
-              </p>
+          {/* Permissions (collapsible section in Review step) */}
+          {step.id === 'review' && (
+            <details className="border border-border rounded-lg">
+              <summary className="p-4 cursor-pointer text-sm font-semibold text-text hover:bg-surface-alt rounded-lg flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px]">tune</span>
+                Permissions & Features — pre-populated from role (expand to adjust)
+              </summary>
+              <div className="p-4 pt-0">
               {PERMISSION_STARTERS.map(group => {
                 // Only render keys that actually exist in the live inventory.
                 // Anything missing is hidden, not shown as a disabled checkbox.
@@ -1033,10 +1107,11 @@ export default function StaffForm() {
                   Providers with order-writing authority sign their own orders. Verbal order entry is reserved for nursing staff.
                 </div>
               )}
-            </div>
+              </div>
+            </details>
           )}
 
-          {/* STEP 6: Review and Confirm — Doc 2 Section 3.2 Step 6 */}
+          {/* STEP 4: Review and Confirm */}
           {step.id === 'review' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Review and Confirm</h2>
@@ -1142,6 +1217,8 @@ export default function StaffForm() {
             {submitting ? 'Saving...' : currentStep === STEPS.length - 1 ? (isEdit ? 'Save Changes' : 'Create Staff Member') : 'Continue'}
           </button>
         </div>
+        </>
+        )}
       </div>
 
       {showClearEsigDialog && (

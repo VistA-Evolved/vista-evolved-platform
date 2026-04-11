@@ -105,6 +105,7 @@ export const ROLES = [
       { label: 'Enter verbal / telephone orders', key: 'ORELSE' },
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
+      { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'Bar-code medication administration', key: 'PSB NURSE' },
     ],
     mutualExclusions: ['A nurse with verbal-order authority cannot also hold physician order-signing authority.'],
@@ -117,6 +118,7 @@ export const ROLES = [
     permissions: [
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
+      { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'Bar-code medication administration', key: 'PSB NURSE' },
     ],
     mutualExclusions: [],
@@ -154,7 +156,6 @@ export const ROLES = [
     permissions: [
       { label: 'Outpatient pharmacy refill processing', key: 'PSORPH' },
       { label: 'Inpatient pharmacy verification', key: 'PSJ PHARMACIST' },
-      { label: 'Outpatient pharmacy manager', key: 'PSO MANAGER' },
       { label: 'CPRS Chart Access', key: 'OR CPRS GUI CHART' },
       { label: 'Pharmacist Verification', key: 'PSOPHARMACIST' },
       { label: 'Pharmacy Interface', key: 'PSOINTERFACE' },
@@ -174,6 +175,22 @@ export const ROLES = [
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'none', Clinical: 'ro', Pharmacy: 'rw', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
+  },
+  {
+    id: 'pharmacy-supervisor', name: 'Pharmacy Supervisor', isSystem: true,
+    description: 'Oversees pharmacy operations, manages workflow, overrides dispensing locks, and configures pharmacy settings.',
+    userCount: 0,
+    permissions: [
+      { label: 'Outpatient pharmacy refill processing', key: 'PSORPH' },
+      { label: 'Inpatient pharmacy verification', key: 'PSJ PHARMACIST' },
+      { label: 'Outpatient pharmacy manager', key: 'PSO MANAGER' },
+      { label: 'Controlled substances pharmacist', key: 'PSD PHARMACIST' },
+      { label: 'CPRS Chart Access', key: 'OR CPRS GUI CHART' },
+      { label: 'Pharmacist Verification', key: 'PSOPHARMACIST' },
+      { label: 'Pharmacy Interface', key: 'PSOINTERFACE' },
+    ],
+    mutualExclusions: [],
+    workspaceAccess: { Dashboard: 'ro', Patients: 'ro', Scheduling: 'none', Clinical: 'ro', Pharmacy: 'rw', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'ro', Analytics: 'ro' },
   },
   {
     id: 'lab-tech', name: 'Lab Technologist', isSystem: true,
@@ -245,6 +262,9 @@ export const ROLES = [
     id: 'front-desk', name: 'Registration Clerk', isSystem: true,
     description: 'Patient registration, demographics, means testing.',
     userCount: 0,
+    // NOTE: DG REGISTRATION is included alongside DG REGISTER. If DG REGISTRATION
+    // is not a real key in this VistA instance, the runtime cross-reference with
+    // /key-inventory will automatically hide it. No manual removal needed.
     permissions: [
       { label: 'Patient registration clerk', key: 'DG REGISTER' },
       { label: 'Patient registration', key: 'DG REGISTRATION' },
