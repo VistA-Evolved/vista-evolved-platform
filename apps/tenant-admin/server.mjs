@@ -190,8 +190,10 @@ function loadSessionsFromDisk() {
 
 function createSession(duz, userName, keys, division, tenantId) {
   const token = crypto.randomBytes(32).toString('hex');
+  const csrfToken = crypto.randomBytes(16).toString('hex');
   const session = {
     token,
+    csrfToken,
     duz,
     userName,
     keys,
@@ -627,10 +629,23 @@ async function main() {
     if (!request.url.startsWith('/api/tenant-admin/v1/')) return;
     const path = request.url.split('?')[0];
     if (AUTH_BYPASS.some(bp => path === bp)) return;
+    // S7.4: Accept token from httpOnly cookie OR Authorization header (backward compat)
+    const cookieHeader = request.headers['cookie'] || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('ve-session='))?.split('=')[1] || null;
     const authHeader = request.headers['authorization'] || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = cookieToken || bearerToken;
     if (!token) {
       return reply.code(401).send({ ok: false, error: 'Authentication required. POST /api/tenant-admin/v1/auth/login first.' });
+    }
+    // S7.5: CSRF protection for state-changing requests
+    const method = (request.method || '').toUpperCase();
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && !path.endsWith('/auth/login')) {
+      const csrfHeader = request.headers['x-csrf-token'] || '';
+      const session = getSession(token);
+      if (session && session.csrfToken && csrfHeader !== session.csrfToken) {
+        return reply.code(403).send({ ok: false, error: 'CSRF token mismatch' });
+      }
     }
     const session = getSession(token);
     if (!session) {
@@ -745,9 +760,12 @@ async function main() {
 
     const navGroups = resolveNavGroups(userKeys);
     const roleCluster = resolveRoleCluster(userKeys);
+    // S7.4: Set httpOnly cookie for session token
+    reply.header('Set-Cookie', `ve-session=${session.token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`);
     return {
       ok: true,
       token: session.token,
+      csrfToken: session.csrfToken,
       user: { duz, name: userName, keys: userKeys.map(k => k.name) },
       roleCluster,
       navGroups,
@@ -913,6 +931,10 @@ async function main() {
     const filemanAccess = detail[27] || '';
     const defaultOrderList = detail[28] || '';
     const proxyUser = detail[29] || '';
+    // Password expiration fields (indices 30-32) from XUS1A.m-style computation
+    const vcChangeDate = detail[30] || '';
+    const pwdExpirationDays = detail[31] || '';
+    const pwdDaysRemaining = detail[32] ?? '';
     const keys = [];
     const divs = [];
     for (const line of z.lines.slice(2)) {
@@ -920,6 +942,21 @@ async function main() {
       if (p[0] === 'KEY') keys.push({ ien: p[1], name: p[2] });
       else if (p[0] === 'DIV') divs.push({ ien: p[1], name: p[2], station: p[3] || '' });
     }
+    // S1.2/S1.4: Fetch extension data (employeeId, role) from ZVE UEXT
+    let extEmployeeId = '';
+    let extRole = '';
+    try {
+      const extZ = await callZveRpc('ZVE UEXT GETALL', [String(userId)]);
+      const extO = zveOutcome(extZ);
+      if (extO.kind === 'ok') {
+        for (const line of extZ.lines.slice(1)) {
+          const ep = line.split('^');
+          if (ep[0] === 'EMPID') extEmployeeId = ep[1] || '';
+          if (ep[0] === 'ROLE') extRole = ep[1] || '';
+        }
+      }
+    } catch { /* extension data is non-critical */ }
+
     return {
       ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
       data: {
@@ -928,14 +965,15 @@ async function main() {
         title: detail[6] || '',
         status: (detail[5] || 'ACTIVE').toLowerCase(),
         roles: keys.map(k => k.name),
+        employeeId: extEmployeeId,
+        assignedRole: extRole,
         vistaGrounding: {
           duz: userId, file200Status: 'zve-detail',
-          sex: detail[3] || '', dob: detail[2] || '', ssn: detail[4] || '',
+          sex: detail[3] || '', dob: detail[2] || '',
+          ssn: detail[4] ? `***-**-${detail[4].slice(-4)}` : '',
+          ssnLast4: detail[4] ? detail[4].slice(-4) : '',
           officePhone: detail[9] || '', email: detail[8] || '',
           service: detail[7] || '',
-          // serviceSection kept as an alias for callers that predate the
-          // rename (StaffDirectory.jsx detail panel, etc.). Both fields
-          // carry the same value so neither caller breaks.
           serviceSection: detail[7] || '',
           lastLogin: detail[10] || '',
           npi: detail[11] || '', dea: detail[12] || '',
@@ -954,6 +992,10 @@ async function main() {
           filemanAccessCode: filemanAccess,
           defaultOrderList,
           proxyUser,
+          // Password expiration (same algorithm as Kernel XUS1A.m sign-on)
+          passwordLastChanged: vcChangeDate,
+          passwordExpirationDays: pwdExpirationDays ? parseInt(pwdExpirationDays, 10) : null,
+          passwordDaysRemaining: pwdDaysRemaining !== '' ? parseInt(pwdDaysRemaining, 10) : null,
         },
         keys, divisions: divs,
       },
@@ -1693,6 +1735,21 @@ async function main() {
     return { ok: true, tenantId, targetDuz: req.params.targetDuz, keyName: keyName.trim(), rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
+  /** S9.23: Check access code availability — ZVE USMG CHKAC */
+  app.post('/api/tenant-admin/v1/users/check-access-code', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const ac = (req.body || {}).accessCode;
+    if (!ac || typeof ac !== 'string' || ac.length < 3) {
+      return reply.code(400).send({ ok: false, error: 'accessCode required (min 3 chars)' });
+    }
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE USMG CHKAC', [ac]);
+    const o = zveOutcome(z);
+    return { ok: o.kind === 'ok', available: o.kind === 'ok', error: o.kind !== 'ok' ? o.msg : undefined, rpcUsed: z.rpcUsed };
+  });
+
   /** Create File 200 user — ZVE USMG ADD + save ALL wizard fields (A001-A022) */
   app.post('/api/tenant-admin/v1/users', async (req, reply) => {
     const tenantId = req.query.tenantId;
@@ -1702,6 +1759,14 @@ async function main() {
     if (!name || typeof name !== 'string') {
       return reply.code(400).send({ ok: false, error: 'name required' });
     }
+    // S1.12: Require accessCode + verifyCode for usable accounts
+    if (!body.accessCode || !body.verifyCode) {
+      return reply.code(400).send({ ok: false, error: 'accessCode and verifyCode are required to create a usable account' });
+    }
+    // Warn (non-blocking) on missing demographic fields
+    const warnings = [];
+    if (!body.sex) warnings.push('sex not provided');
+    if (!body.dob) warnings.push('dob not provided');
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG ADD', [name, body.accessCode || '', body.verifyCode || '']);
@@ -1815,8 +1880,27 @@ async function main() {
         }
       }
     }
+
+    // S1.2: Store employeeId in extension global (no File 200 field for this)
+    if (newIen && body.employeeId) {
+      try {
+        const ez = await callZveRpc('ZVE UEXT SET', [String(newIen), 'EMPID', String(body.employeeId)]);
+        const eo = zveOutcome(ez);
+        extraFields.push({ field: 'employeeId', key: 'employeeId', status: eo.kind === 'ok' ? 'ok' : 'error', detail: eo.msg || '' });
+      } catch (e) { extraFields.push({ field: 'employeeId', key: 'employeeId', status: 'error', detail: e.message }); }
+    }
+
+    // S1.4: Persist role name used during creation
+    if (newIen && body.role) {
+      try {
+        const rz = await callZveRpc('ZVE UEXT SET', [String(newIen), 'ROLE', String(body.role)]);
+        const ro = zveOutcome(rz);
+        extraFields.push({ field: 'role', key: 'role', status: ro.kind === 'ok' ? 'ok' : 'error', detail: ro.msg || '' });
+      } catch (e) { extraFields.push({ field: 'role', key: 'role', status: 'error', detail: e.message }); }
+    }
+
     // Y003: Return full user data so frontend doesn't need to re-fetch
-    return { ok: true, tenantId, newIen, duz: newIen, ien: newIen, rpcUsed: z.rpcUsed, lines: z.lines, extraFields,
+    return { ok: true, tenantId, newIen, duz: newIen, ien: newIen, rpcUsed: z.rpcUsed, lines: z.lines, extraFields, warnings,
       data: { duz: newIen, ien: newIen, name: name, status: 'active' } };
   });
 
@@ -1942,6 +2026,23 @@ async function main() {
     const o = zveOutcome(z);
     if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG REACT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };
+  });
+
+  /** S2.2: Assign or remove a division for a user via ZVE DIVISION ASSIGN */
+  app.post('/api/tenant-admin/v1/users/:duz/division', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const body = req.body || {};
+    const divisionIen = body.divisionIen;
+    const action = (body.action || 'ADD').toUpperCase();
+    if (!divisionIen) return reply.code(400).send({ ok: false, error: 'divisionIen required' });
+    if (!['ADD', 'REMOVE'].includes(action)) return reply.code(400).send({ ok: false, error: 'action must be ADD or REMOVE' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const z = await callZveRpc('ZVE DIVISION ASSIGN', [String(req.params.duz), String(divisionIen), action]);
+    const o = zveOutcome(z);
+    if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `ZVE DIVISION ASSIGN failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
+    return { ok: true, tenantId, duz: req.params.duz, divisionIen, action, rpcUsed: z.rpcUsed };
   });
 
   /** Unlock a locked-out user account via ZVE wrapper or DDR FILER fallback */

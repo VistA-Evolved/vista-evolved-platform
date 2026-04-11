@@ -17,6 +17,7 @@ INSTALL ; Register RPCs in File #8994 (idempotent)
  D REGONE("ZVE USMG TERM","TERM","ZVEUSMG","Full account termination (DISUSER + clear creds)")
  D REGONE("ZVE USMG UNLOCK","UNLOCK","ZVEUSMG","Release a locked-out account")
  D REGONE("ZVE USMG RENAME","RENAME","ZVEUSMG","Rename user (.01)")
+ D REGONE("ZVE USMG CHKAC","CHKAC","ZVEUSMG","Check access code availability")
  W !,"=== ZVE USMG install complete ==="
  Q
  ;
@@ -107,7 +108,9 @@ CRED(R,TDUZ,AC,VC) ; RPC ZVE USMG CRED
  S FDA(200,TDUZ_",",2)=$$EN^XUSHSH(AC)
  S FDA(200,TDUZ_",",11)=$$EN^XUSHSH(VC)
  ; Force password change on first login — set verify code change date to past
- S FDA(200,TDUZ_",",11.2)=2000101
+ ; S1.6: Use $$FMADD to compute yesterday in proper FileMan YYYMMDD format
+ ; (2000101 was year 3700; DT-based math ensures a valid past date)
+ S FDA(200,TDUZ_",",11.2)=$$FMADD^XLFDT(DT,-1)
  D FILE^DIE("","FDA","DIERR")
  I $D(DIERR) S R(0)="0^FILE^DIE error" Q
  D AUDITLOG^ZVEADMIN("CRED-SET",+TDUZ,"Credentials updated via admin")
@@ -124,6 +127,8 @@ ADD(R,NM,AC,VC) ; RPC ZVE USMG ADD — minimal user creation
  ; Refuse if name already exists to avoid accidental duplicate creation
  S DUPDUZ=$O(^VA(200,"B",NM,0))
  I +DUPDUZ>0 S R(0)="0^User already exists: "_NM_" (DUZ "_DUPDUZ_")" Q
+ ; S9.23: Refuse if access code already in use (check "A" xref)
+ I $G(AC)]"" N ACHASH S ACHASH=$$EN^XUSHSH(AC) I $O(^VA(200,"A",ACHASH,0))>0 S R(0)="0^Access code already in use" Q
  S DIC="^VA(200,"
  S DIC(0)="LX"
  S DIC("DR")=""
@@ -140,7 +145,8 @@ ADD(R,NM,AC,VC) ; RPC ZVE USMG ADD — minimal user creation
  . I $G(AC)]"" S CFDA(200,NEWDUZ_",",2)=$$EN^XUSHSH(AC)
  . I $G(VC)]"" S CFDA(200,NEWDUZ_",",11)=$$EN^XUSHSH(VC)
  . ; Force password change on first login
- . S CFDA(200,NEWDUZ_",",11.2)=2000101
+ . ; S1.6: Use $$FMADD to compute yesterday in proper FileMan YYYMMDD format
+ . S CFDA(200,NEWDUZ_",",11.2)=$$FMADD^XLFDT(DT,-1)
  . D FILE^DIE("","CFDA","CERR")
  D AUDITLOG^ZVEADMIN("USER-ADD",NEWDUZ,"Created user "_NM)
  S R(0)="1^"_NEWDUZ Q
@@ -284,4 +290,15 @@ AUDLOG(R,TDUZ,MAX) ; RPC ZVE USMG AUDLOG — ZVE administrative audit log
  ;
  S R(0)="1^"_CNT_"^OK"
  N I F I=1:1:CNT S R(I)=OUT(I)
+ Q
+ ;
+CHKAC(R,AC) ; RPC ZVE USMG CHKAC — check access code availability
+ ; S9.23: Checks ^VA(200,"A") xref for hashed access code collisions.
+ ; Returns 1^Available or 0^Access code already in use.
+ I $G(AC)="" S R(0)="0^Access code required" Q
+ N HASH,DUP
+ S HASH=$$EN^XUSHSH(AC)
+ S DUP=$O(^VA(200,"A",HASH,0))
+ I +DUP>0 S R(0)="0^Access code already in use" Q
+ S R(0)="1^Available"
  Q

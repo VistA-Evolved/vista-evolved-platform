@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner } from '../../components/shared/SharedComponents';
-import { getSiteParameters, updateSiteParameters, getSession, submit2PChange, get2PRequests, approve2PRequest, reject2PRequest } from '../../services/adminService';
+import { getSiteParameters, updateSiteParameters, getSession, submit2PChange, get2PRequests, approve2PRequest, reject2PRequest, getMailGroups } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
 /**
@@ -85,7 +85,7 @@ function zeroWarning(value, paramName) {
   return warnings[paramName] || null;
 }
 
-function buildFields(params, sectionId) {
+function buildFields(params, sectionId, mailGroupOptions = []) {
   if (!params) return [];
 
   if (sectionId === 'login') {
@@ -184,10 +184,17 @@ function buildFields(params, sectionId) {
     const brokerTimeout = params['BROKER TIMEOUT']?.value ?? '';
     const defaultInstitution = params['DEFAULT INSTITUTION']?.value ?? '';
     const guiPostSignOn = params['GUI POST SIGN-ON']?.value ?? '';
+    const mgOpts = mailGroupOptions.length > 0
+      ? [{ value: '', label: '— Select Mail Group —' }, ...mailGroupOptions]
+      : null;
     return [
-      { name: 'IRM MAIL GROUP', label: 'IRM Mail Group', type: 'text', value: irmMailGroup,
+      { name: 'IRM MAIL GROUP', label: 'IRM Mail Group',
+        type: mgOpts ? 'select' : 'text', value: irmMailGroup,
+        ...(mgOpts ? { options: mgOpts } : {}),
         hint: 'The MailMan group that receives system notifications and alerts. Set this to your IT support team\'s mail group.' },
-      { name: 'AFTER HOURS MAIL GROUP', label: 'After-Hours Mail Group', type: 'text', value: afterHoursGroup,
+      { name: 'AFTER HOURS MAIL GROUP', label: 'After-Hours Mail Group',
+        type: mgOpts ? 'select' : 'text', value: afterHoursGroup,
+        ...(mgOpts ? { options: mgOpts } : {}),
         hint: 'Mail group for notifications outside business hours. Typically your on-call IT staff.' },
       { name: 'BROKER TIMEOUT', label: 'Server Response Timeout', type: 'number', value: brokerTimeout, unit: 'seconds',
         hint: 'How long the server waits for a VistA response before timing out. Default: 60 seconds. Increase for slow networks.' },
@@ -216,6 +223,8 @@ export default function SecurityAuth() {
   const [currentDuz, setCurrentDuz] = useState('');
   // S004: Confirm when disabling audit
   const [confirmAuditDisable, setConfirmAuditDisable] = useState(false);
+  // S7.3: Mail groups for dropdown
+  const [mailGroupOptions, setMailGroupOptions] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -223,6 +232,15 @@ export default function SecurityAuth() {
         const sess = await getSession();
         if (sess?.user?.duz) setCurrentDuz(String(sess.user.duz));
       } catch { /* non-fatal */ }
+      // S7.3: Load mail groups for IRM dropdown
+      try {
+        const mgRes = await getMailGroups();
+        const groups = (mgRes?.data || []).map(g => ({
+          value: g.name || g.groupName || '',
+          label: g.name || g.groupName || `Group ${g.ien}`,
+        })).filter(g => g.value);
+        setMailGroupOptions(groups);
+      } catch { /* non-fatal — falls back to text input */ }
     })();
   }, []);
 
@@ -260,7 +278,7 @@ export default function SecurityAuth() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const sectionMeta = SECTION_CONFIG.find(s => s.id === selectedSection);
-  const fields = buildFields(kernelParams, selectedSection);
+  const fields = buildFields(kernelParams, selectedSection, mailGroupOptions);
   const hasChanges = Object.keys(editedValues).length > 0;
 
   const hasViolation = Object.entries(editedValues).some(([name, val]) => {

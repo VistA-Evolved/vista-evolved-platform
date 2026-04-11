@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission } from '../../services/adminService';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission, assignDivision, checkAccessCode } from '../../services/adminService';
 import { ROLES as SYSTEM_ROLES } from './RoleTemplates';
 
 /**
@@ -149,6 +149,24 @@ export default function StaffForm() {
   const [clearingEsig, setClearingEsig] = useState(false);
   const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
 
+  // S9.23: Debounced access code uniqueness check
+  const [acStatus, setAcStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
+  const acTimerRef = useRef(null);
+  useEffect(() => () => { if (acTimerRef.current) clearTimeout(acTimerRef.current); }, []);
+  const checkAccessCodeAvailability = (code) => {
+    if (acTimerRef.current) clearTimeout(acTimerRef.current);
+    if (!code || code.length < 3) { setAcStatus(null); return; }
+    setAcStatus('checking');
+    acTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await checkAccessCode(code);
+        setAcStatus(res.available ? 'available' : 'taken');
+      } catch {
+        setAcStatus(null); // network error — don't block the form
+      }
+    }, 500);
+  };
+
   useEffect(() => {
     const loadRefData = async () => {
       setDataLoading(true);
@@ -280,6 +298,7 @@ export default function StaffForm() {
       if (!isEdit) {
         if (!form.accessCode || !form.accessCode.trim()) errors.accessCode = 'Username (Access Code) is required';
         else if (form.accessCode.length < 3) errors.accessCode = 'Username must be at least 3 characters';
+        else if (acStatus === 'taken') errors.accessCode = 'This username is already in use';
         if (!form.verifyCode) errors.verifyCode = 'Password (Verify Code) is required';
         else if (form.verifyCode.length < 8) errors.verifyCode = 'Password must be at least 8 characters';
         if (form.verifyCode && form.verifyCode !== form.verifyCodeConfirm) errors.verifyCodeConfirm = 'Passwords do not match';
@@ -384,10 +403,9 @@ export default function StaffForm() {
       const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
       const payload = {
         name: composedName,
-        displayName: form.displayName,
         sex: form.sex,
         dob: form.dob,
-        govIdLast4: form.govIdLast4,
+        ssn: form.govIdLast4 || '',
         email: form.email,
         phone: form.phone,
         role: form.primaryRole,
@@ -473,6 +491,27 @@ export default function StaffForm() {
           }
         }
 
+        // S2.2: Division change tracking
+        const origPrimary = orig.primaryLocation || '';
+        if (form.primaryLocation && form.primaryLocation !== origPrimary) {
+          try { await assignDivision(userId, form.primaryLocation, 'ADD'); }
+          catch (e) { errors.push(`Division ${form.primaryLocation}: ${e.message}`); }
+        }
+        const origAdditional = new Set(orig.additionalLocations || []);
+        const newAdditional = new Set(form.additionalLocations || []);
+        for (const loc of newAdditional) {
+          if (!origAdditional.has(loc)) {
+            try { await assignDivision(userId, loc, 'ADD'); }
+            catch (e) { errors.push(`+division ${loc}: ${e.message}`); }
+          }
+        }
+        for (const loc of origAdditional) {
+          if (!newAdditional.has(loc)) {
+            try { await assignDivision(userId, loc, 'REMOVE'); }
+            catch (e) { errors.push(`-division ${loc}: ${e.message}`); }
+          }
+        }
+
         // Update credentials if provided during edit
         if (form.accessCode || form.verifyCode) {
           try {
@@ -495,11 +534,25 @@ export default function StaffForm() {
         const createRes = await createStaffMember(payload);
         // B6: Assign mail groups after creation
         const newDuz = createRes?.data?.duz || createRes?.data?.ien;
+        const mailGroupResults = [];
         if (newDuz && form.mailGroups && form.mailGroups.length > 0) {
           for (const groupIen of form.mailGroups) {
-            try { await addMailGroupMember(groupIen, newDuz); } catch { /* non-blocking */ }
+            try {
+              await addMailGroupMember(groupIen, newDuz);
+              mailGroupResults.push({ groupIen, status: 'ok' });
+            } catch (e) {
+              mailGroupResults.push({ groupIen, status: 'error', detail: e.message });
+            }
           }
         }
+        // Parse extraFields to find key assignment results
+        const extraFields = createRes?.data?.extraFields || createRes?.extraFields || [];
+        const permEntry = extraFields.find(f => f.field === 'permissions');
+        const keyResults = permEntry?.keys || [];
+        const failedKeys = keyResults.filter(k => k.status !== 'ok');
+        const successKeyCount = keyResults.filter(k => k.status === 'ok').length;
+        const failedMailGroups = mailGroupResults.filter(m => m.status !== 'ok');
+        const successMailGroupCount = mailGroupResults.filter(m => m.status === 'ok').length;
         // Show success screen with "Create Another" option
         setCreateSuccess({
           name: `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}`,
@@ -507,8 +560,11 @@ export default function StaffForm() {
           department: form.department,
           site: liveSites.find(l => l.value === form.primaryLocation)?.label || '',
           role: SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '',
-          permCount: mergedPermissions.length,
-          mailGroupCount: (form.mailGroups || []).length,
+          permCount: keyResults.length > 0 ? successKeyCount : mergedPermissions.length,
+          permTotal: mergedPermissions.length,
+          failedKeys,
+          mailGroupCount: successMailGroupCount,
+          failedMailGroups,
           duz: newDuz,
         });
       }
@@ -587,9 +643,33 @@ export default function StaffForm() {
             <div className="text-sm text-text-secondary mb-6">
               Department: {createSuccess.department || '—'} | Site: {createSuccess.site || '—'} | Role: {createSuccess.role || '—'}
               <br />
-              {createSuccess.permCount} permissions assigned
+              {createSuccess.permCount}{createSuccess.permTotal && createSuccess.permTotal !== createSuccess.permCount ? ` of ${createSuccess.permTotal}` : ''} permissions assigned
               {createSuccess.mailGroupCount > 0 && ` | Added to ${createSuccess.mailGroupCount} mail group(s)`}
             </div>
+            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && (
+              <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFF3E0] border border-[#FFB74D] rounded-lg text-left">
+                <p className="text-sm font-medium text-[#E65100] mb-1">
+                  {createSuccess.failedKeys.length} permission(s) failed to assign:
+                </p>
+                <ul className="text-xs text-[#BF360C] list-disc list-inside">
+                  {createSuccess.failedKeys.map((k, i) => (
+                    <li key={i}>{k.key}{k.detail ? ` — ${k.detail}` : ''}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {createSuccess.failedMailGroups && createSuccess.failedMailGroups.length > 0 && (
+              <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFF3E0] border border-[#FFB74D] rounded-lg text-left">
+                <p className="text-sm font-medium text-[#E65100] mb-1">
+                  {createSuccess.failedMailGroups.length} mail group(s) failed:
+                </p>
+                <ul className="text-xs text-[#BF360C] list-disc list-inside">
+                  {createSuccess.failedMailGroups.map((m, i) => (
+                    <li key={i}>Group {m.groupIen}{m.detail ? ` — ${m.detail}` : ''}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={() => navigate(`/admin/staff/${createSuccess.duz}/edit`)}
@@ -832,16 +912,29 @@ export default function StaffForm() {
                 </>
               )}
               <FormField label="Username" required={!isEdit}
-                error={validationErrors.accessCode}
+                error={validationErrors.accessCode || (acStatus === 'taken' ? 'This username is already in use' : undefined)}
                 hint="The identifier the user enters at the login prompt. 3-20 characters, letters and numbers. Called 'Access Code' in VistA.">
+                <div className="relative">
                 <input
                   value={form.accessCode || ''}
-                  onChange={e => updateField('accessCode', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  onChange={e => {
+                    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    updateField('accessCode', val);
+                    if (!isEdit) checkAccessCodeAvailability(val);
+                  }}
                   placeholder="e.g., JSMITH1234"
                   maxLength={20}
-                  className="w-full h-10 px-3 border border-border rounded-md text-sm"
+                  className={`w-full h-10 px-3 pr-9 border rounded-md text-sm ${acStatus === 'taken' ? 'border-[#CC3333]' : acStatus === 'available' ? 'border-[#2E7D32]' : 'border-border'}`}
                   autoComplete="off"
                 />
+                {acStatus && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                    {acStatus === 'checking' && <span className="material-symbols-outlined text-[18px] text-[#999] animate-spin">progress_activity</span>}
+                    {acStatus === 'available' && <span className="material-symbols-outlined text-[18px] text-[#2E7D32]">check_circle</span>}
+                    {acStatus === 'taken' && <span className="material-symbols-outlined text-[18px] text-[#CC3333]">cancel</span>}
+                  </span>
+                )}
+                </div>
               </FormField>
               <FormField label="Password" required={!isEdit}
                 error={validationErrors.verifyCode}

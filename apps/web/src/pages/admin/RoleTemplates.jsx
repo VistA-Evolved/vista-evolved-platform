@@ -63,6 +63,7 @@ export const ROLES = [
       { label: 'Write clinical orders (signed)', key: 'ORES' },
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
+      { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
     ],
     mutualExclusions: [],
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'rw', Clinical: 'rw', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'ro' },
@@ -107,6 +108,7 @@ export const ROLES = [
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'Bar-code medication administration', key: 'PSB NURSE' },
+      { label: 'Allergy verification', key: 'GMRA ALLERGY VERIFY' },
     ],
     mutualExclusions: ['A nurse with verbal-order authority cannot also hold physician order-signing authority.'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'ro', Scheduling: 'ro', Clinical: 'rw', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
@@ -339,6 +341,7 @@ export const ROLES = [
     userCount: 0,
     permissions: [
       { label: 'Laboratory technician', key: 'LRLAB' },
+      { label: 'Lab collection', key: 'LRCAP' },
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
     ],
@@ -418,6 +421,54 @@ const KEY_IMPACTS = {
   'XUPROGMODE': 'Advanced diagnostic access. Without this: cannot enter programmer mode for system diagnostics.',
   'XUAUDITING': 'Security auditing access. Without this: cannot view or manage security audit logs.',
   'IBFIN': 'Billing financial access. Without this: cannot process billing claims or financial transactions.',
+};
+
+// S6.6: Key dependencies — some keys require others to function
+export const KEY_DEPENDENCIES = {
+  'ORES': ['PROVIDER'],
+  'ORELSE': ['OR CPRS GUI CHART'],
+  'ORCL-SIGN-NOTES': ['OR CPRS GUI CHART'],
+  'ORCL-PAT-RECS': ['OR CPRS GUI CHART'],
+  'PSB NURSE': ['OR CPRS GUI CHART'],
+  'PSJ PHARMACIST': ['PSORPH'],
+  'PSD PHARMACIST': ['PSDRPH'],
+  'LRVERIFY': ['LRLAB'],
+  'LRSUPER': ['LRLAB', 'LRVERIFY'],
+  'LRMGR': ['LRLAB'],
+  'SD SUPERVISOR': ['SD SCHEDULING'],
+  'SDMGR': ['SD SCHEDULING'],
+  'DG ADMIT': ['DG REGISTER'],
+  'DG DISCHARGE': ['DG REGISTER'],
+  'DG TRANSFER': ['DG REGISTER'],
+  'DG SUPERVISOR': ['DG REGISTER', 'DG MENU'],
+  'XUPROG': ['XUMGR'],
+  'XUPROGMODE': ['XUPROG'],
+};
+
+// S6.7: Task-to-key search — what keys are needed for common clinical tasks
+export const TASK_TO_KEY = {
+  'prescribe medications': ['PROVIDER', 'ORES'],
+  'write orders': ['PROVIDER', 'ORES'],
+  'sign notes': ['ORCL-SIGN-NOTES', 'OR CPRS GUI CHART'],
+  'view patient charts': ['OR CPRS GUI CHART', 'ORCL-PAT-RECS'],
+  'administer medications': ['PSB NURSE', 'OR CPRS GUI CHART'],
+  'enter verbal orders': ['ORELSE', 'OR CPRS GUI CHART'],
+  'verify lab results': ['LRLAB', 'LRVERIFY'],
+  'collect specimens': ['LRLAB', 'LRCAP'],
+  'schedule appointments': ['SD SCHEDULING'],
+  'register patients': ['DG REGISTER', 'DG REGISTRATION'],
+  'admit patients': ['DG REGISTER', 'DG ADMIT'],
+  'discharge patients': ['DG REGISTER', 'DG DISCHARGE'],
+  'transfer patients': ['DG REGISTER', 'DG TRANSFER'],
+  'dispense medications': ['PSORPH', 'PSOPHARMACIST'],
+  'verify prescriptions': ['PSJ PHARMACIST', 'PSOPHARMACIST'],
+  'manage controlled substances': ['PSD PHARMACIST', 'PSDRPH'],
+  'perform imaging': ['RA TECHNOLOGIST', 'MAG SYSTEM'],
+  'capture images': ['MAG SYSTEM', 'MAG CAPTURE'],
+  'manage users': ['XUMGR'],
+  'audit security': ['XUAUDITING'],
+  'process billing': ['IBFIN'],
+  'verify allergies': ['GMRA ALLERGY VERIFY'],
 };
 
 export default function RoleTemplates() {

@@ -12,14 +12,24 @@
  */
 
 const TOKEN_KEY = 've-session-token';
+const CSRF_KEY = 've-csrf-token';
 
 export function setSessionToken(token) {
   if (token) sessionStorage.setItem(TOKEN_KEY, token);
   else sessionStorage.removeItem(TOKEN_KEY);
 }
 
+export function setCsrfToken(token) {
+  if (token) sessionStorage.setItem(CSRF_KEY, token);
+  else sessionStorage.removeItem(CSRF_KEY);
+}
+
 export function getSessionToken() {
   return sessionStorage.getItem(TOKEN_KEY);
+}
+
+export function getCsrfToken() {
+  return sessionStorage.getItem(CSRF_KEY);
 }
 
 class ApiError extends Error {
@@ -36,6 +46,12 @@ async function request(method, path, body = null) {
 
   const token = getSessionToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  // S7.5: Include CSRF token in mutating requests
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+  }
 
   // X002: Configurable API timeout — default 30 seconds
   const controller = new AbortController();

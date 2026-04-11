@@ -144,12 +144,28 @@ DETAIL(R,TARGETDUZ) ;
  N OERR S OERR=$$GET1^DIQ(200,TARGETDUZ_",",200.0001,"E")
  N PROXY S PROXY=$$GET1^DIQ(200,TARGETDUZ_",",203.1,"E")
  ;
+ ; Password expiration computation (replicates XUS1A.m line 17 algorithm)
+ ; Field 11.2 = Verify Code change date (FileMan date in node .1 piece 2)
+ ; KSP field 214 = system-wide PASSWORD EXPIRATION in days
+ ; Formula: daysRemaining = field214 - ($H_today - $H_lastChange)
+ N VCCHGDT,VCCHGFM,VCCHGH,PWDEXPDAYS,PWDREMAIN
+ S VCCHGFM=$$GET1^DIQ(200,TARGETDUZ_",",11.2,"I")
+ S VCCHGDT=$$GET1^DIQ(200,TARGETDUZ_",",11.2,"E")
+ S PWDEXPDAYS=+$$GET1^DIQ(8989.3,"1,",214,"I")
+ S PWDREMAIN=""
+ I VCNOEXP'=1,PWDEXPDAYS>0,VCCHGFM]"" D
+ . ; Convert FileMan date to $H day count for arithmetic
+ . S VCCHGH=+$$FMTH^XLFDT(VCCHGFM)
+ . S PWDREMAIN=PWDEXPDAYS-($H-VCCHGH)
+ ;
  ; Output into R array (RPC broker type=2 ARRAY)
  N LN S LN=0
  S R(LN)="1^1^OK"
  S LN=LN+1,R(LN)=TARGETDUZ_U_NM_U_DOB_U_SEX_U_SSN_U_STAT_U_TITLE_U_SVC_U_EMAIL_U_PHONE_U_LASTLOG_U_NPI_U_DEA_U_TAXON_U_PCLASS_U_ESIG
  S R(LN)=R(LN)_U_PMENU_U_DEGREE_U_TDATE_U_TREASON_U_PCLASS2_U_TAXID_U_AUTHMEDS_U_COSIGNER
  S R(LN)=R(LN)_U_RESTRICT_U_VCNOEXP_U_LANG_U_FMAC_U_OERR_U_PROXY
+ ; Password expiration fields (indices 30-32): vcChangeDate, expirationDays, daysRemaining
+ S R(LN)=R(LN)_U_VCCHGDT_U_PWDEXPDAYS_U_PWDREMAIN
  ;
  ; Keys — field 51 (KEYS) stores a POINTER to SECURITY KEY #19.1 when
  ; populated through the standard Kernel KEYS option. Our in-house ZVE

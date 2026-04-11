@@ -3,12 +3,13 @@ import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { useNavigate } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember } from '../../services/adminService';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
 import { useFacility } from '../../contexts/FacilityContext';
+import { KEY_IMPACTS } from './RoleTemplates';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -91,15 +92,20 @@ const baseColumns = [
 
 const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Locked', 'Terminated'];
 const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
+const ROLE_FILTER_OPTIONS = ['All', 'Physician', 'Nurse', 'Pharmacist', 'Lab', 'Scheduler', 'Registration', 'Admin', 'Other'];
+const SORT_OPTIONS = ['Name (A–Z)', 'Name (Z–A)', 'Recently Created', 'Staff ID', 'Department'];
 
 export default function StaffDirectory() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeSite } = useFacility();
   useEffect(() => { document.title = 'Staff Directory — VistA Evolved'; }, []);
-  const [searchText, setSearchText] = useState('');
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState('Active');
-  const [esigFilter, setEsigFilter] = useState('All');
+  const [searchText, setSearchText] = useState(searchParams.get('q') || '');
+  const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'Active');
+  const [esigFilter, setEsigFilter] = useState(searchParams.get('esig') || 'All');
+  const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'All');
+  const [sortOption, setSortOption] = useState(searchParams.get('sort') || 'Name (A–Z)');
   const [hideSystemAccounts, setHideSystemAccounts] = useState(true);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
@@ -129,6 +135,18 @@ export default function StaffDirectory() {
 
   // CPRS Tab Access data (B8)
   const [cprsTabData, setCprsTabData] = useState([]);
+
+  // S3.8: Sync filters to URL
+  useEffect(() => {
+    const params = {};
+    if (searchText) params.q = searchText;
+    if (statusFilter !== 'Active') params.status = statusFilter;
+    if (esigFilter !== 'All') params.esig = esigFilter;
+    if (roleFilter !== 'All') params.role = roleFilter;
+    if (sortOption !== 'Name (A–Z)') params.sort = sortOption;
+    if (page > 1) params.page = String(page);
+    setSearchParams(params, { replace: true });
+  }, [searchText, statusFilter, esigFilter, roleFilter, sortOption, page, setSearchParams]);
 
   const columns = [
     ...baseColumns,
@@ -251,6 +269,10 @@ export default function StaffDirectory() {
         defaultOrderList: vg.defaultOrderList || '',
         proxyUser: vg.proxyUser || '',
         employeeId: vg.employeeId || userRes?.data?.employeeId || '',
+        // Password expiration (computed M-side, same as Kernel XUS1A.m sign-on)
+        passwordLastChanged: vg.passwordLastChanged || '',
+        passwordExpirationDays: vg.passwordExpirationDays,
+        passwordDaysRemaining: vg.passwordDaysRemaining,
       });
       setDetailKeys(keysRes?.data || []);
       // B8: CPRS Tab Access data now loaded in parallel
@@ -261,6 +283,25 @@ export default function StaffDirectory() {
       setDetailLoading(false);
     }
   };
+
+  // S3.10: Role category mapping for filter
+  const ROLE_CATEGORY_MAP = {
+    'Physician': /physician|surgeon|anesthesiologist/i,
+    'Nurse': /nurse|nursing|lpn/i,
+    'Pharmacist': /pharma/i,
+    'Lab': /lab|patholog/i,
+    'Scheduler': /schedul/i,
+    'Registration': /registr|admit|clerk/i,
+    'Admin': /admin|manager|supervisor/i,
+  };
+  function matchesRoleFilter(title, filter) {
+    if (filter === 'All') return true;
+    const pattern = ROLE_CATEGORY_MAP[filter];
+    if (pattern) return pattern.test(title || '');
+    // 'Other' matches anything not in the known categories
+    if (filter === 'Other') return !Object.values(ROLE_CATEGORY_MAP).some(p => p.test(title || ''));
+    return true;
+  }
 
   // Filters (client-side since list endpoint only returns ien+name)
   const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB|APPLICATION|PROXY|APITEST)/i;
@@ -275,12 +316,24 @@ export default function StaffDirectory() {
     if (statusFilter !== 'All' && u.status !== statusFilter.toLowerCase()) return false;
     if (esigFilter === 'Ready' && !u.hasEsig) return false;
     if (esigFilter === 'Incomplete' && u.hasEsig) return false;
+    if (roleFilter !== 'All' && !matchesRoleFilter(u.title, roleFilter)) return false;
     return true;
   });
 
-  const totalFiltered = filtered.length;
+  // Sort the filtered list
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortOption) {
+      case 'Name (Z–A)': return (b.name || '').localeCompare(a.name || '');
+      case 'Recently Created': return parseInt(b.duz, 10) - parseInt(a.duz, 10);
+      case 'Staff ID': return parseInt(a.duz, 10) - parseInt(b.duz, 10);
+      case 'Department': return (a.department || '').localeCompare(b.department || '') || (a.name || '').localeCompare(b.name || '');
+      default: return (a.name || '').localeCompare(b.name || '');
+    }
+  });
+
+  const totalFiltered = sorted.length;
   const pageStart = (page - 1) * PAGE_SIZE;
-  const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageSlice = sorted.slice(pageStart, pageStart + PAGE_SIZE);
 
   // KPI cards from full staff list
   const totalStaff = staffList.length;
@@ -291,16 +344,19 @@ export default function StaffDirectory() {
   const activeFilters = [
     ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}` }] : []),
     ...(esigFilter !== 'All' ? [{ key: 'esig', label: `E-Signature: ${esigFilter}` }] : []),
+    ...(roleFilter !== 'All' ? [{ key: 'role', label: `Role: ${roleFilter}` }] : []),
   ];
 
   const removeFilter = (key) => {
     if (key === 'status') setStatusFilter('All');
     if (key === 'esig') setEsigFilter('All');
+    if (key === 'role') setRoleFilter('All');
   };
 
   const [actionSuccess, setActionSuccess] = useState(null);
   const [removePermTarget, setRemovePermTarget] = useState(null);
   const [deactivateReason, setDeactivateReason] = useState('');
+  const [terminateTarget, setTerminateTarget] = useState(null);
 
   const handleDeactivate = async (reason) => {
     if (!deactivateTarget) return;
@@ -463,8 +519,8 @@ export default function StaffDirectory() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => {
-                    const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions\n';
-                    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}"`).join('\n');
+                    const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions,Role,NPI,Email,Phone,Last Login\n';
+                    const csv = (sorted || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${r.phone || ''}","${r.lastLogin || ''}"`).join('\n');
                     const blob = new Blob([header + csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -504,6 +560,8 @@ export default function StaffDirectory() {
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <FilterSelect label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => { setStatusFilter(v); setPage(1); }} />
               <FilterSelect label="E-Signature" value={esigFilter} options={ESIG_OPTIONS} onChange={(v) => { setEsigFilter(v); setPage(1); }} />
+              <FilterSelect label="Role" value={roleFilter} options={ROLE_FILTER_OPTIONS} onChange={(v) => { setRoleFilter(v); setPage(1); }} />
+              <FilterSelect label="Sort" value={sortOption} options={SORT_OPTIONS} onChange={(v) => { setSortOption(v); setPage(1); }} />
               <label className="flex items-center gap-1.5 text-[11px] text-[#666] cursor-pointer ml-2">
                 <input type="checkbox" checked={hideSystemAccounts} onChange={e => { setHideSystemAccounts(e.target.checked); setPage(1); }}
                   className="w-3.5 h-3.5 rounded border-[#E2E4E8]" />
@@ -515,7 +573,7 @@ export default function StaffDirectory() {
               <div className="mb-4">
                 <FilterChips filters={activeFilters} onRemove={removeFilter} />
                 {activeFilters.length > 1 && (
-                  <button onClick={() => { setStatusFilter('All'); setEsigFilter('All'); setSearchText(''); setPage(1); }}
+                  <button onClick={() => { setStatusFilter('All'); setEsigFilter('All'); setRoleFilter('All'); setSearchText(''); setPage(1); }}
                     className="ml-2 text-[11px] text-[#2E5984] hover:underline">Clear all</button>
                 )}
               </div>
@@ -543,7 +601,7 @@ export default function StaffDirectory() {
                       {searchText ? `No results for "${searchText}"` : 'Try adjusting your filters'}
                     </p>
                     {(searchText || statusFilter !== 'All' || esigFilter !== 'All') && (
-                      <button onClick={() => { setSearchText(''); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
+                      <button onClick={() => { setSearchText(''); setStatusFilter('All'); setEsigFilter('All'); setRoleFilter('All'); setPage(1); }}
                         className="mt-3 text-xs text-[#2E5984] hover:underline">Clear all filters</button>
                     )}
                   </>
@@ -581,6 +639,7 @@ export default function StaffDirectory() {
               unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
               loadData={loadData} setError={setError}
               setCloneSource={setCloneSource}
+              setTerminateTarget={setTerminateTarget}
             />
           </div>
         )}
@@ -606,11 +665,31 @@ export default function StaffDirectory() {
                 unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
                 loadData={loadData} setError={setError}
                 setCloneSource={setCloneSource}
+                setTerminateTarget={setTerminateTarget}
               />
             </div>
           </div>
         )}
       </div>
+
+      {terminateTarget && (
+        <ConfirmDialog
+          title="Full Account Termination"
+          message={<>This will <strong>permanently</strong> clear credentials, remove all security keys, and set the DISUSER flag for <strong>{terminateTarget.name}</strong>. This action cannot be undone.</>}
+          confirmLabel="Terminate Account"
+          onConfirm={async () => {
+            try {
+              await terminateStaffMember(terminateTarget.duz);
+              setTerminateTarget(null);
+              setSelectedStaff(null);
+              setDetailData(null);
+              loadData();
+            } catch (err) { setError(`Failed to terminate: ${err.message}`); setTerminateTarget(null); }
+          }}
+          onCancel={() => setTerminateTarget(null)}
+          destructive
+        />
+      )}
 
       {deactivateTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -659,7 +738,16 @@ export default function StaffDirectory() {
       {removePermTarget && (
         <ConfirmDialog
           title="Remove Permission"
-          message={`Remove "${removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}" from ${detailData?.name}? This will immediately revoke this access.`}
+          message={
+            <>
+              Remove &quot;{removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}&quot; from {detailData?.name}? This will immediately revoke this access.
+              {KEY_IMPACTS[removePermTarget.name] && (
+                <p className="mt-2 text-xs text-[#CC3333] bg-[#FDE8E8] rounded p-2">
+                  <strong>Impact:</strong> {KEY_IMPACTS[removePermTarget.name]}
+                </p>
+              )}
+            </>
+          }
           confirmLabel="Remove"
           onConfirm={confirmRemovePermission}
           onCancel={() => setRemovePermTarget(null)}
@@ -866,8 +954,8 @@ function ActionsMenu({ row, navigate }) {
   );
 }
 
-/* A4: Inline editable field for provider information */
-function EditableDetailField({ label, value, fieldKey, duz, onSave }) {
+/* A4: Inline editable field for provider information (or any saveFn) */
+function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(value || '');
   const [saving, setSaving] = useState(false);
@@ -877,7 +965,11 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave }) {
     setSaving(true);
     setSaveError(null);
     try {
-      await setProviderFields(duz, { field: fieldKey, value: editValue });
+      if (saveFn) {
+        await saveFn(duz, fieldKey, editValue);
+      } else {
+        await setProviderFields(duz, { field: fieldKey, value: editValue });
+      }
       onSave(fieldKey, editValue);
       setEditing(false);
     } catch (err) { setSaveError(err.message || 'Failed to save'); }
@@ -924,10 +1016,18 @@ function StaffDetailContent({
   handleReactivate, handleRemovePermission,
   setDeactivateTarget, setDetailData,
   unlockUser, setSelectedStaff, loadData, setError,
-  setCloneSource,
+  setCloneSource, setTerminateTarget,
 }) {
   const handleProviderFieldSave = (fieldKey, newValue) => {
     setDetailData(prev => ({ ...prev, [fieldKey]: newValue }));
+  };
+
+  // S4.4: Save handler for basic fields (phone, email, dept, title) via PUT /users/:ien
+  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8' };
+  const handleBasicFieldSave = async (duz, fieldKey, newValue) => {
+    const vistaField = BASIC_FIELD_MAP[fieldKey];
+    if (!vistaField) throw new Error(`Unknown field: ${fieldKey}`);
+    await updateStaffMember(duz, { field: vistaField, value: newValue });
   };
 
   if (detailLoading) {
@@ -961,9 +1061,9 @@ function StaffDetailContent({
         {detailData.employeeId && <DetailField label="Employee ID" value={detailData.employeeId} mono />}
         <DetailField label="System ID" value={detailData.id} mono />
         <DetailField label="Title" value={detailData.title} />
-        <DetailField label="Department" value={detailData.department} />
-        <DetailField label="Phone" value={detailData.phone} />
-        <DetailField label="Email" value={detailData.email} />
+        <EditableDetailField label="Department" value={detailData.department} fieldKey="department" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
+        <EditableDetailField label="Phone" value={detailData.phone} fieldKey="phone" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
+        <EditableDetailField label="Email" value={detailData.email} fieldKey="email" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
         <DetailField label="Status" value={<StatusBadge status={detailData.status} />} />
         {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
         <DetailField label="Initials" value={detailData.initials} />
@@ -980,6 +1080,19 @@ function StaffDetailContent({
         {detailData.restrictPatient && <DetailField label="Patient Selection Restriction" value={detailData.restrictPatient} />}
         {/* B2: Verify Code Never Expires */}
         <DetailField label="Password Never Expires" value={detailData.verifyCodeNeverExpires ? 'Yes (override)' : 'Normal expiration'} />
+        {/* 4.8: Password Expiration Display (XUS1A.m algorithm) */}
+        {detailData.passwordLastChanged && (
+          <DetailField label="Password Changed" value={detailData.passwordLastChanged} />
+        )}
+        {detailData.passwordDaysRemaining != null && !detailData.verifyCodeNeverExpires && (
+          <DetailField label="Password Expiration" value={
+            detailData.passwordDaysRemaining <= 0
+              ? <span className="text-[#CC3333] font-semibold">Expired ({Math.abs(detailData.passwordDaysRemaining)} day{Math.abs(detailData.passwordDaysRemaining) !== 1 ? 's' : ''} ago)</span>
+              : detailData.passwordDaysRemaining <= 5
+                ? <span className="text-[#E6A817] font-semibold">Expires in {detailData.passwordDaysRemaining} day{detailData.passwordDaysRemaining !== 1 ? 's' : ''}</span>
+                : <span className="text-[#2E7D32]">{detailData.passwordDaysRemaining} day{detailData.passwordDaysRemaining !== 1 ? 's' : ''} remaining{detailData.passwordExpirationDays ? ` (${detailData.passwordExpirationDays}-day policy)` : ''}</span>
+          } />
+        )}
         {/* B3: Language Preference */}
         {detailData.language && <DetailField label="Preferred Language" value={detailData.language} />}
         {/* B4: FileMan Access Code — only show if present */}
@@ -1098,19 +1211,33 @@ function StaffDetailContent({
               const printWindow = window.open('', '_blank');
               if (!printWindow) return;
               const safeText = (s) => String(s || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const permList = detailKeys.length > 0
+                ? `<ul style="margin:4px 0;padding-left:20px">${detailKeys.map(k => `<li>${safeText(k.name)}</li>`).join('')}</ul>`
+                : '<em>None assigned</em>';
+              const credRows = [
+                detailData.npi ? `<tr><td><strong>NPI</strong></td><td>${safeText(detailData.npi)}</td></tr>` : '',
+                detailData.dea ? `<tr><td><strong>DEA</strong></td><td>${safeText(detailData.dea)}</td></tr>` : '',
+                detailData.taxId ? `<tr><td><strong>Tax ID</strong></td><td>${safeText(detailData.taxId)}</td></tr>` : '',
+              ].filter(Boolean).join('\n');
               printWindow.document.write(`<html><head><title>Account Access Letter</title>
-<style>body{font-family:serif;max-width:700px;margin:40px auto}h1{font-size:18px}table{width:100%;border-collapse:collapse}td{padding:4px 8px;border-bottom:1px solid #eee}</style></head>
-<body><h1>VistA Evolved — User Account Information</h1>
-<p>Date: ${new Date().toLocaleDateString()}</p>
+<style>body{font-family:serif;max-width:700px;margin:40px auto}h1{font-size:18px}h2{font-size:15px;margin-top:24px;border-bottom:1px solid #ccc;padding-bottom:4px}table{width:100%;border-collapse:collapse}td{padding:4px 8px;border-bottom:1px solid #eee}ul{font-size:13px}p.footer{margin-top:24px;font-size:12px;color:#666;border-top:1px solid #ccc;padding-top:12px}</style></head>
+<body><h1>VistA Evolved — User Account Access Letter</h1>
+<p><strong>Organization:</strong> ${safeText(detailData.division)}</p>
+<p><strong>Date Issued:</strong> ${new Date().toLocaleDateString()}</p>
+<h2>Account Information</h2>
 <table>
 <tr><td><strong>Name</strong></td><td>${safeText(detailData.name)}</td></tr>
-<tr><td><strong>Staff ID</strong></td><td>${safeText(detailData.id)}</td></tr>
+<tr><td><strong>Staff ID (DUZ)</strong></td><td>${safeText(detailData.id)}</td></tr>
+<tr><td><strong>Title</strong></td><td>${safeText(detailData.title)}</td></tr>
+<tr><td><strong>Role</strong></td><td>${safeText(detailData.assignedRole || detailData.role)}</td></tr>
 <tr><td><strong>Department</strong></td><td>${safeText(detailData.department)}</td></tr>
 <tr><td><strong>Primary Site</strong></td><td>${safeText(detailData.division)}</td></tr>
-<tr><td><strong>Permissions</strong></td><td>${detailKeys.length} assigned</td></tr>
 <tr><td><strong>E-Signature</strong></td><td>${detailData.esigStatus === 'active' ? 'Set' : 'Not set'}</td></tr>
 </table>
-<p style="margin-top:20px;font-size:12px;color:#666">This letter confirms the creation of a VistA system account. Login credentials were provided separately at account creation time. Contact your system administrator if you need to reset your password.</p>
+${credRows ? `<h2>Provider Credentials</h2><table>${credRows}</table>` : ''}
+<h2>Assigned Permissions (${detailKeys.length})</h2>
+${permList}
+<p class="footer"><strong>Important:</strong> Your login credentials (Access Code and Verify Code) were provided separately at account creation time and must not be shared. You will be required to change your Verify Code on first login. Contact your system administrator (IRM) if you need to reset your password or have questions about your account permissions.</p>
 </body></html>`);
               printWindow.document.close();
               printWindow.print();
@@ -1168,6 +1295,14 @@ function StaffDetailContent({
                 className="w-full text-left px-3 py-2 text-[13px] text-[#2E7D32] hover:bg-[#E8F5E9] rounded-lg transition-colors">
                 <span className="material-symbols-outlined text-[16px] mr-2 align-middle">check_circle</span>
                 Reactivate
+              </button>
+            )}
+            {detailData.status === 'active' && (
+              <button onClick={() => setTerminateTarget(detailData)}
+                title="Full account termination: clears credentials, removes keys, sets DISUSER flag permanently."
+                className="w-full text-left px-3 py-2 text-[13px] text-[#CC3333] hover:bg-[#FDE8E8] rounded-lg transition-colors font-medium">
+                <span className="material-symbols-outlined text-[16px] mr-2 align-middle">person_off</span>
+                Full Termination
               </button>
             )}
           </div>

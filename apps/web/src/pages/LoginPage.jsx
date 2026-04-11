@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { login } from '../services/adminService';
+import { login, updateCredentials } from '../services/adminService';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passwordExpired, setPasswordExpired] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [failedAttempts, setFailedAttempts] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const timedOut = location.state?.reason === 'timeout';
@@ -20,6 +24,7 @@ export default function LoginPage() {
     try {
       const data = await login(username, password);
       if (data.ok) {
+        setFailedAttempts(0);
         // X005: Redirect back to the page the user was on before session expired
         const returnTo = sessionStorage.getItem('ve-return-to');
         sessionStorage.removeItem('ve-return-to');
@@ -30,14 +35,24 @@ export default function LoginPage() {
         const lower = raw.toLowerCase();
         if (lower.includes('locked') || lower.includes('lockout')) {
           setError('Your account has been locked due to too many failed attempts. Contact your system administrator.');
+          setFailedAttempts(0);
         } else if (lower.includes('disabled') || lower.includes('disuser') || lower.includes('inactive')) {
           setError('Your account has been deactivated. Contact your system administrator to restore access.');
         } else if (lower.includes('expired') || lower.includes('verify code')) {
-          setError('Your password has expired. Contact your system administrator to reset it.');
+          setPasswordExpired(true);
+          setError('Your password has expired. Please create a new password below.');
         } else if (lower.includes('not found') || lower.includes('no such')) {
           setError('Username not found. Check your username and try again.');
         } else {
-          setError(raw || 'Invalid credentials. Please try again.');
+          const attempts = failedAttempts + 1;
+          setFailedAttempts(attempts);
+          // S5.4: Show remaining attempts (VistA default lockout is 5 attempts)
+          const lockoutThreshold = data.lockoutAttempts || 5;
+          const remaining = Math.max(0, lockoutThreshold - attempts);
+          const attemptMsg = remaining > 0
+            ? ` (${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout)`
+            : '';
+          setError((raw || 'Invalid credentials. Please try again.') + attemptMsg);
         }
       }
     } catch (err) {
@@ -111,6 +126,54 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        {/* S5.2: Password change form for expired credentials */}
+        {passwordExpired && (
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setError('');
+            if (newPassword.length < 8) { setError('New password must be at least 8 characters.'); return; }
+            if (newPassword !== confirmNewPassword) { setError('Passwords do not match.'); return; }
+            if (newPassword === password) { setError('New password must be different from the current password.'); return; }
+            setLoading(true);
+            try {
+              await updateCredentials(username, { accessCode: username, verifyCode: newPassword });
+              setPasswordExpired(false);
+              setPassword('');
+              setNewPassword('');
+              setConfirmNewPassword('');
+              setError('');
+              // Re-attempt login with new credentials
+              const data = await login(username, newPassword);
+              if (data.ok) {
+                const returnTo = sessionStorage.getItem('ve-return-to');
+                sessionStorage.removeItem('ve-return-to');
+                navigate(returnTo || '/dashboard');
+              } else {
+                setError('Password changed successfully. Please sign in with your new password.');
+              }
+            } catch (err) {
+              setError(err.message || 'Failed to change password. Contact your system administrator.');
+            } finally { setLoading(false); }
+          }} className="bg-white rounded-lg shadow-md p-6 space-y-4 mt-4">
+            <h2 className="text-lg font-semibold text-text">Change Password</h2>
+            <p className="text-sm text-text-secondary">Your password has expired. Enter a new password to continue.</p>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">New Password</label>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={8} maxLength={20}
+                className="w-full h-10 px-3 border border-border rounded-md text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1">Confirm New Password</label>
+              <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} required
+                className="w-full h-10 px-3 border border-border rounded-md text-sm" />
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full h-10 bg-navy text-white text-sm font-semibold rounded-md hover:bg-steel transition-colors disabled:opacity-50">
+              {loading ? 'Changing...' : 'Change Password'}
+            </button>
+          </form>
+        )}
 
         <p className="text-xs text-text-muted text-center mt-6">
           Session timeout: 15 minutes of inactivity

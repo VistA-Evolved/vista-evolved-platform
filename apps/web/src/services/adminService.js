@@ -16,7 +16,7 @@
  *   docs/specs/41.-wf-11_-admin-_-security-workspace.md
  */
 
-import { tenantApi, setSessionToken } from './api';
+import { tenantApi, setSessionToken, setCsrfToken } from './api';
 
 // ────────────────────────────────────────────────
 // Auth (backend: XWB sign-on via XUS AV CODE)
@@ -26,6 +26,7 @@ export async function login(username, password, tenantId = 'local-dev') {
   const result = await tenantApi.post('/auth/login', { accessCode: username, verifyCode: password, tenantId });
   if (result.ok && result.token) {
     setSessionToken(result.token);
+    if (result.csrfToken) setCsrfToken(result.csrfToken);
   }
   return result;
 }
@@ -39,6 +40,7 @@ export async function logout() {
     return await tenantApi.post('/auth/logout');
   } finally {
     setSessionToken(null);
+    setCsrfToken(null);
   }
 }
 
@@ -74,6 +76,11 @@ export async function createStaffMember(data) {
   return tenantApi.post('/users', data);
 }
 
+/** S9.23: Check if an access code (username) is already taken */
+export async function checkAccessCode(accessCode) {
+  return tenantApi.post('/users/check-access-code', { accessCode });
+}
+
 /** Backend expects PUT, not PATCH */
 export async function updateStaffMember(duz, data) {
   return tenantApi.put(`/users/${duz}`, data);
@@ -89,6 +96,10 @@ export async function deactivateStaffMember(duz, data) {
 
 export async function reactivateStaffMember(duz) {
   return tenantApi.post(`/users/${duz}/reactivate`);
+}
+
+export async function assignDivision(duz, divisionIen, action = 'ADD') {
+  return tenantApi.post(`/users/${duz}/division`, { divisionIen, action });
 }
 
 export async function unlockUser(duz) {
