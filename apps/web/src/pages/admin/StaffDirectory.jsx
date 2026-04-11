@@ -8,6 +8,7 @@ import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deac
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
+import { useFacility } from '../../contexts/FacilityContext';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -27,23 +28,26 @@ function deriveTitleFromKeys(keys) {
   const keySet = new Set(keys.map(k => (k || '').toUpperCase()));
   if (keySet.has('XUMGR') && keySet.has('XUPROG')) return 'System Administrator';
   if (keySet.has('XUMGR')) return 'System Administrator';
+  if (keySet.has('SR SURGEON')) return 'Surgeon';
+  if (keySet.has('SR ANESTHESIOLOGIST')) return 'Anesthesiologist';
   if (keySet.has('ORES') && keySet.has('PROVIDER')) return 'Physician';
   if (keySet.has('ORELSE') && keySet.has('PROVIDER')) return 'Nurse Practitioner';
   if (keySet.has('ORELSE')) return 'Nurse';
   if (keySet.has('PSO MANAGER')) return 'Pharmacy Supervisor';
   if (keySet.has('PSJ PHARMACIST') || keySet.has('PSORPH')) return 'Pharmacist';
-  if (keySet.has('LRLAB') || keySet.has('LRVERIFY')) return 'Lab Technologist';
+  if (keySet.has('PSJ NURSE')) return 'Nursing (Pharmacy Orders)';
   if (keySet.has('LRSUPER')) return 'Lab Supervisor';
+  if (keySet.has('LRLAB') || keySet.has('LRVERIFY')) return 'Lab Technologist';
   if (keySet.has('RA ALLOC')) return 'Radiology Technologist';
   if (keySet.has('SDMGR')) return 'Scheduling Manager';
   if (keySet.has('SD SUPERVISOR')) return 'Scheduling Supervisor';
-  if (keySet.has('DG REGISTER')) return 'Registration Clerk';
+  if (keySet.has('SD SCHEDULING') || keySet.has('SDCLINICAL')) return 'Scheduler';
   if (keySet.has('DG SUPERVISOR')) return 'Registration Supervisor';
+  if (keySet.has('DG REGISTER') || keySet.has('DG REGISTRATION')) return 'Registration Clerk';
   if (keySet.has('MAG SYSTEM')) return 'Imaging Technician';
-  if (keySet.has('IB BILLING')) return 'Billing Specialist';
+  if (keySet.has('IBFIN') || keySet.has('IB BILLING')) return 'Billing Specialist';
   if (keySet.has('TIU SIGN DOCUMENT')) return 'Health Information';
-  if (keySet.has('SR SURGEON')) return 'Surgeon';
-  if (keySet.has('SR ANESTHESIOLOGIST')) return 'Anesthesiologist';
+  if (keySet.has('GMRA ALLERGY VERIFY')) return 'Allergy Verifier';
   if (keySet.has('PROVIDER')) return 'Clinical Staff';
   if (keySet.has('OR CPRS GUI CHART')) return 'Clinical User';
   return '';
@@ -65,7 +69,9 @@ function SigReadinessBadge({ value }) {
 
 const baseColumns = [
   { key: 'name', label: 'Name', bold: true, render: (val, row) => row.isDuplicate ? <span>{val} <span className="text-[10px] text-text-secondary font-mono">({row.id})</span></span> : val },
-  { key: 'id', label: 'Staff ID', render: (val) => <span className="font-mono text-[11px] text-text-secondary">{val}</span> },
+  { key: 'displayId', label: 'ID', render: (val, row) => row.employeeId
+    ? <span className="font-mono text-[11px]">{row.employeeId}</span>
+    : <span className="font-mono text-[11px] text-text-secondary">{row.id}</span> },
   { key: 'title', label: 'Title' },
   { key: 'department', label: 'Department' },
   { key: 'site', label: 'Site' },
@@ -79,6 +85,7 @@ const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 
 export default function StaffDirectory() {
   const navigate = useNavigate();
+  const { activeSite } = useFacility();
   const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('Active');
@@ -157,6 +164,8 @@ export default function StaffDirectory() {
           hasEsig: esig.hasCode || false,
           sigBlockName: esig.sigBlockName || '',
           permissionCount: u.keyCount || 0,
+          employeeId: u.employeeId || '',
+          isProvider: u.isProvider || false,
           lastLogin: u.lastLogin || '',
         };
       });
@@ -245,6 +254,8 @@ export default function StaffDirectory() {
   const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB|APPLICATION|PROXY|APITEST)/i;
   const filtered = staffList.filter(u => {
     if (hideSystemAccounts && SYSTEM_ACCOUNT_PATTERNS.test(u.name)) return false;
+    // Facility filter from context
+    if (activeSite && u.site && !u.site.toUpperCase().includes(activeSite.name.toUpperCase())) return false;
     if (searchText) {
       const s = searchText.toLowerCase();
       if (!u.name.toLowerCase().includes(s) && !u.id.toLowerCase().includes(s) && !(u.title || '').toLowerCase().includes(s) && !(u.department || '').toLowerCase().includes(s)) return false;
@@ -262,7 +273,7 @@ export default function StaffDirectory() {
   // KPI cards from full staff list
   const totalStaff = staffList.length;
   const activeCount = staffList.filter(u => u.status === 'active').length;
-  const esigReadyCount = staffList.filter(u => u.hasEsig).length;
+  const providerCount = staffList.filter(u => u.isProvider).length;
   const lockedCount = staffList.filter(u => u.status === 'locked').length;
 
   const activeFilters = [
@@ -468,7 +479,7 @@ export default function StaffDirectory() {
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
                 <MetricCard label="Total Staff" value={totalStaff} icon="badge" hint="Total user accounts in the VistA NEW PERSON file (#200). Includes active, inactive, and system accounts." />
                 <MetricCard label="Active" value={activeCount} icon="check_circle" color="text-[#2E7D32]" hint="Users with no DISUSER flag and no termination date. These users can currently sign in." />
-                <MetricCard label="E-Signature Ready" value={esigReadyCount} icon="draw" color="text-[#2E5984]" hint="Users who have set an electronic signature code. Required for providers who sign orders and clinical notes." />
+                <MetricCard label="Providers" value={providerCount} icon="stethoscope" color="text-[#2E5984]" hint="Users with the PROVIDER security key or an NPI number. These users can write orders and sign clinical documents." />
                 <MetricCard label="Locked" value={lockedCount} icon="lock" color="text-[#CC3333]" hint="Users whose accounts are temporarily locked due to failed sign-in attempts. Use 'Unlock' to restore access." />
               </div>
             )}
@@ -894,8 +905,8 @@ function StaffDetailContent({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <DetailField label="Staff ID" value={detailData.id} mono />
-        {detailData.employeeId && <DetailField label="Employee ID" value={detailData.employeeId} />}
+        {detailData.employeeId && <DetailField label="Employee ID" value={detailData.employeeId} mono />}
+        <DetailField label="System ID" value={detailData.id} mono />
         <DetailField label="Title" value={detailData.title} />
         <DetailField label="Department" value={detailData.department} />
         <DetailField label="Phone" value={detailData.phone} />
@@ -1087,12 +1098,19 @@ function StaffDetailContent({
               <span className="material-symbols-outlined text-[16px] mr-2 align-middle">print</span>
               Print Access Letter
             </button>
-            <button disabled={clearingEsig || detailData.esigStatus !== 'active'} onClick={() => handleClearEsig(detailData.duz)}
-              title={detailData.esigStatus === 'active' ? 'Removes this user\'s electronic signature code.' : 'E-signature not yet set'}
-              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
-              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
-              {clearingEsig ? 'Clearing E-Signature...' : detailData.esigStatus === 'active' ? 'Clear E-Signature' : 'E-signature not yet set'}
-            </button>
+            {detailData.esigStatus === 'active' ? (
+              <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
+                title="Removes this user's electronic signature code."
+                className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
+                <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
+                {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
+              </button>
+            ) : (
+              <div className="w-full px-3 py-2 text-[13px] text-text-secondary italic">
+                <span className="material-symbols-outlined text-[16px] mr-2 align-middle">info</span>
+                E-signature not yet set
+              </div>
+            )}
           </div>
         </div>
         {/* ── Danger Zone ── */}

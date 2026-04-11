@@ -7,6 +7,7 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import { getSessionToken } from './services/api';
 import { getSession } from './services/adminService';
 import { PatientProvider } from './components/shared/PatientContext';
+import { FacilityProvider } from './contexts/FacilityContext';
 import SessionManager from './components/shared/SessionManager';
 import ESignatureSetup from './components/shared/ESignatureSetup';
 import ErrorBoundary from './components/shared/ErrorBoundary';
@@ -147,6 +148,7 @@ function RequireAdmin({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <FacilityProvider>
       <PatientProvider>
         <SessionManager />
         <Routes>
@@ -218,6 +220,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </PatientProvider>
+      </FacilityProvider>
     </BrowserRouter>
   );
 }

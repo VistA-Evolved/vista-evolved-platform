@@ -92,8 +92,9 @@ ADD(RESULT,P1,P2,P3) ;
  ;
 DEACT(RESULT,P1) ;
  ; P1=DUZ to deactivate — sets DISUSER field 7 via ^DIE
+ ; and sets TERMINATION DATE (field 9.2) to today
  ; Field 7 is SET type (0:NO;1:YES) stored at node 0, piece 7
- N TDUZ,DIE,DA,DR,DUZ0SAVE
+ N TDUZ,DIE,DA,DR,DUZ0SAVE,FDA,ERRS
  S TDUZ=+$G(P1)
  I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
  I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
@@ -104,6 +105,9 @@ DEACT(RESULT,P1) ;
  D DT^DICRW
  S DIE="^VA(200,",DA=TDUZ,DR="7///YES"
  D ^DIE
+ ; Also set termination date (field 9.2) so LIST2 shows TERMINATED
+ K FDA S FDA(200,TDUZ_",",9.2)=DT
+ D UPDATE^DIE("E","FDA","","ERRS")
  S DUZ(0)=DUZ0SAVE
  ;
  I $P($G(^VA(200,TDUZ,0)),U,7)=1 S RESULT(0)="1^User DUZ "_TDUZ_" deactivated" Q

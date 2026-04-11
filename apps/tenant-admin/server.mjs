@@ -852,6 +852,7 @@ async function main() {
         division: p[5] || '',
         lastLogin: p[6] || '',
         keyCount: parseInt(p[7] || '0', 10),
+        isProvider: p[8] === '1',
       });
     }
     return { ok: true, source: 'zve', tenantId, data, rpcUsed: z.rpcUsed };

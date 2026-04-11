@@ -113,6 +113,7 @@ export const KEY_TRANSLATIONS = {
   // Billing
   'IB BILLING': 'Billing Access',
   'IB BILLING CLERK': 'Billing Clerk',
+  'IBFIN': 'Billing Financial Access',
   'IB SUPERVISOR': 'Billing Supervisor',
   'IB SITE MGR': 'Billing Site Manager',
   'IBCNE INSURANCE MANAGEMENT': 'Insurance Management',

@@ -205,11 +205,25 @@ export default function StaffForm() {
         const keys = (keysRes?.data || []).map(k => k.name);
         const esigData = (esigRes?.data || []).find(e => String(e.duz) === String(userId) || String(e.id) === String(userId));
         if (esigData) setEsigStatus({ hasCode: esigData.hasCode || false, sigBlockName: esigData.sigBlockName || '' });
+        // Parse VistA LAST,FIRST MIDDLE format into separate fields
+        const rawName = userRes?.data?.name || '';
+        let parsedLast = '', parsedFirst = '', parsedMI = '';
+        if (rawName.includes(',')) {
+          parsedLast = rawName.split(',')[0].trim();
+          const rest = rawName.split(',').slice(1).join(',').trim();
+          const parts = rest.split(/\s+/);
+          parsedFirst = parts[0] || '';
+          parsedMI = parts.slice(1).join(' ') || '';
+        } else {
+          parsedLast = rawName;
+        }
         setForm(f => ({
           ...f,
-          fullName: userRes?.data?.name || '',
+          fullName: rawName,
+          lastName: parsedLast, firstName: parsedFirst, middleInitial: parsedMI,
           email: vg.email || '',
           phone: vg.officePhone || '',
+          title: userRes?.data?.title || vg.title || '',
           sex: vg.sex || '',
           npi: vg.npi || '',
           dea: vg.dea || '',
@@ -231,10 +245,14 @@ export default function StaffForm() {
   const validateStep = (stepId) => {
     const errors = {};
     if (stepId === 'person') {
-      if (!form.fullName.trim()) errors.fullName = 'Name is required';
-      else if (form.fullName.length < 3) errors.fullName = 'Name must be at least 3 characters';
-      else if (form.fullName.length > 35) errors.fullName = 'Name must be 35 characters or fewer';
-      else if (!/^[A-Z]+,[A-Z]/.test(form.fullName.trim())) errors.fullName = 'Name must be in LAST,FIRST format (e.g. SMITH,JOHN A)';
+      if (!form.lastName.trim()) errors.lastName = 'Last name is required';
+      else if (form.lastName.length < 2) errors.lastName = 'Last name must be at least 2 characters';
+      else if (!/^[A-Z'-]+$/i.test(form.lastName.trim())) errors.lastName = 'Last name contains invalid characters';
+      if (!form.firstName.trim()) errors.firstName = 'First name is required';
+      else if (form.firstName.length < 1) errors.firstName = 'First name is required';
+      // Compose fullName for length check
+      const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
+      if (composedName.length > 35) errors.lastName = 'Combined name must be 35 characters or fewer';
       if (!form.sex) errors.sex = 'Gender is required';
       if (!form.dob) errors.dob = 'Date of birth is required';
       // Credentials are required for new users
@@ -260,7 +278,8 @@ export default function StaffForm() {
   };
 
   const [form, setForm] = useState({
-    fullName: '', displayName: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
+    fullName: '', lastName: '', firstName: '', middleInitial: '',
+    displayName: '', title: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
     employeeId: '',
     primaryRole: '', department: '', isProvider: false, sigBlockName: '',
     primaryLocation: '', additionalLocations: [],
@@ -321,8 +340,10 @@ export default function StaffForm() {
     setSubmitting(true);
     setSubmitError('');
     try {
+      // Compose VistA LAST,FIRST MIDDLE format from separate fields
+      const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
       const payload = {
-        name: form.fullName,
+        name: composedName,
         displayName: form.displayName,
         sex: form.sex,
         dob: form.dob,
@@ -350,6 +371,7 @@ export default function StaffForm() {
         filemanAccess: form.filemanAccess || '',
         restrictPatient: form.restrictPatient || '',
         employeeId: form.employeeId || '',
+        title: form.title || '',
       };
       if (isEdit) {
         await updateStaffMember(userId, payload);
@@ -375,7 +397,7 @@ export default function StaffForm() {
         }
         // Show success screen with "Create Another" option
         setCreateSuccess({
-          name: form.fullName,
+          name: `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}`,
           staffId: `S-${newDuz}`,
           department: form.department,
           site: liveSites.find(l => l.value === form.primaryLocation)?.label || '',
@@ -393,11 +415,12 @@ export default function StaffForm() {
   };
 
   const handleNameBlur = async () => {
-    if (!form.fullName || form.fullName.length < 3) return;
+    const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
+    if (!composedName || composedName.length < 3 || !form.lastName.trim() || !form.firstName.trim()) return;
     try {
-      const res = await getStaff({ search: form.fullName });
+      const res = await getStaff({ search: composedName });
       const matches = (res?.data || []).filter(u => {
-        return u.name && u.name.toUpperCase() === form.fullName.toUpperCase();
+        return u.name && u.name.toUpperCase() === composedName;
       });
       if (matches.length > 0 && !isEdit) {
         setDuplicateWarning({
@@ -475,7 +498,8 @@ export default function StaffForm() {
                   const preserveLocation = form.primaryLocation;
                   const preserveMailGroups = form.mailGroups || [];
                   setForm({
-                    fullName: '', displayName: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
+                    fullName: '', lastName: '', firstName: '', middleInitial: '',
+                    displayName: '', title: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
                     employeeId: '',
                     primaryRole: '', department: preserveDepartment, isProvider: false, sigBlockName: '',
                     primaryLocation: preserveLocation, additionalLocations: [],
@@ -575,16 +599,34 @@ export default function StaffForm() {
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Identity Basics</h2>
               <div className="grid grid-cols-2 gap-4">
-                <FormField label="Full Name" required error={validationErrors.fullName}
-                  hint="Format: LAST,FIRST MIDDLE — uppercase, 3-35 characters. Must contain exactly one comma.">
-                  <input type="text" value={form.fullName}
-                    onChange={e => updateField('fullName', e.target.value.toUpperCase())}
-                    onBlur={handleNameBlur}
-                    placeholder="SMITH,JANE A" className="form-input" maxLength={35} />
-                </FormField>
+                <div className="col-span-2 grid grid-cols-[1fr_1fr_80px] gap-3">
+                  <FormField label="Last Name" required error={validationErrors.lastName}
+                    hint="Family name, uppercase, 2+ characters.">
+                    <input type="text" value={form.lastName}
+                      onChange={e => updateField('lastName', e.target.value.toUpperCase().replace(/[^A-Z'-]/g, ''))}
+                      onBlur={handleNameBlur}
+                      placeholder="SMITH" className="form-input" maxLength={30} />
+                  </FormField>
+                  <FormField label="First Name" required error={validationErrors.firstName}
+                    hint="Given name, uppercase, 2+ characters.">
+                    <input type="text" value={form.firstName}
+                      onChange={e => updateField('firstName', e.target.value.toUpperCase().replace(/[^A-Z'-]/g, ''))}
+                      onBlur={handleNameBlur}
+                      placeholder="JANE" className="form-input" maxLength={20} />
+                  </FormField>
+                  <FormField label="MI" hint="Optional">
+                    <input type="text" value={form.middleInitial}
+                      onChange={e => updateField('middleInitial', e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 1))}
+                      placeholder="A" className="form-input" maxLength={1} />
+                  </FormField>
+                </div>
                 <FormField label="Display Name" hint="Optional friendly name for UI display">
                   <input type="text" value={form.displayName} onChange={e => updateField('displayName', e.target.value)}
                     placeholder="Jane Smith" className="form-input" maxLength={50} />
+                </FormField>
+                <FormField label="Job Title" hint="Position title (e.g. Staff Physician, RN, Pharmacist). Stored in VistA File #200 field 8.">
+                  <input type="text" value={form.title} onChange={e => updateField('title', e.target.value)}
+                    placeholder="Staff Physician" className="form-input" maxLength={60} />
                 </FormField>
                 <FormField label="Sex" required error={validationErrors.sex}
                   hint="Required for VistA File #200. Used for clinical decision support.">
@@ -1139,8 +1181,9 @@ export default function StaffForm() {
               </p>
               <div className="grid grid-cols-2 gap-6">
                 <ReviewSection title="Identity" items={[
-                  ['Name', form.fullName || '—'],
+                  ['Name', (form.lastName && form.firstName) ? `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}` : '—'],
                   ['Display Name', form.displayName || '(auto from name)'],
+                  ['Job Title', form.title || '—'],
                   ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex === 'U' ? 'Unknown' : form.sex || '—'],
                   ['Date of Birth', form.dob || '—'],
                   ['Email', form.email || '—'],
@@ -1192,7 +1235,7 @@ export default function StaffForm() {
                 {form.accessCode && ' Login credentials have been set — communicate them securely to the staff member.'}
               </div>
 
-              {(!form.fullName || !form.sex || !form.dob || !form.primaryRole || !form.primaryLocation) && (
+              {(!form.lastName || !form.firstName || !form.sex || !form.dob || !form.primaryRole || !form.primaryLocation) && (
                 <div className="p-3 bg-warning-bg rounded-md text-sm text-warning flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px]">warning</span>
                   Missing required fields. Go back and complete all required steps before creating.

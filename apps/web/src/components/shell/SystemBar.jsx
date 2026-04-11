@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSites, getVistaStatus, logout } from '../../services/adminService';
 import { getSessionToken, setSessionToken } from '../../services/api';
+import { useFacility } from '../../contexts/FacilityContext';
 
 export default function SystemBar({ breadcrumb = '' }) {
   const navigate = useNavigate();
+  const { activeSite, setActiveSite } = useFacility();
   const [userName, setUserName] = useState('');
   const [vistaConnected, setVistaConnected] = useState(null);
   const [sites, setSites] = useState([]);
-  const [activeSite, setActiveSite] = useState(null);
   const [showSiteMenu, setShowSiteMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const siteRef = useRef(null);
@@ -51,7 +52,7 @@ export default function SystemBar({ breadcrumb = '' }) {
     navigate('/login');
   };
 
-  const siteLabel = activeSite ? `${activeSite.name} (${activeSite.code})` : 'Select Site';
+  const siteLabel = activeSite ? `${activeSite.name} (${activeSite.code})` : 'All Facilities';
   const isSandbox = vistaConnected && (userName?.includes('PRO') || sites.some(s => s.name?.includes('SANDBOX') || s.name?.includes('TEST') || s.code === '500'));
 
   return (
@@ -98,6 +99,10 @@ export default function SystemBar({ breadcrumb = '' }) {
         </button>
         {showSiteMenu && sites.length > 0 && (
           <div className="absolute right-0 mt-1 w-64 bg-white rounded-md shadow-lg border border-[#E2E4E8] z-50 py-1">
+            <button onClick={() => { setActiveSite(null); setShowSiteMenu(false); }}
+              className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] ${!activeSite ? 'bg-[#E8EEF5] font-medium' : ''}`}>
+              All Facilities
+            </button>
             {sites.map(s => (
               <button key={s.id} onClick={() => { setActiveSite(s); setShowSiteMenu(false); }}
                 className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] ${activeSite?.id === s.id ? 'bg-[#E8EEF5] font-medium' : ''}`}>
@@ -107,10 +112,6 @@ export default function SystemBar({ breadcrumb = '' }) {
           </div>
         )}
       </div>
-
-      <button className="relative p-2 text-white/80 hover:text-white transition-colors" title="Notifications">
-        <span className="material-symbols-outlined text-[20px]">notifications</span>
-      </button>
 
       {/* User menu */}
       <div className="relative" ref={userRef}>
