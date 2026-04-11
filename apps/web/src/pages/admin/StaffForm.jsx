@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups } from '../../services/adminService';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission } from '../../services/adminService';
 import { ROLES as SYSTEM_ROLES } from './RoleTemplates';
 
 /**
@@ -143,6 +143,7 @@ export default function StaffForm() {
   const [dataLoading, setDataLoading] = useState(true);
   const [refDataError, setRefDataError] = useState(null);
   const [esigStatus, setEsigStatus] = useState({ hasCode: false, sigBlockName: '' });
+  const [originalForm, setOriginalForm] = useState(null);
   const [clearingEsig, setClearingEsig] = useState(false);
   const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
 
@@ -217,8 +218,7 @@ export default function StaffForm() {
         } else {
           parsedLast = rawName;
         }
-        setForm(f => ({
-          ...f,
+        const editVals = {
           fullName: rawName,
           lastName: parsedLast, firstName: parsedFirst, middleInitial: parsedMI,
           email: vg.email || '',
@@ -235,7 +235,12 @@ export default function StaffForm() {
           filemanAccess: vg.filemanAccessCode || '',
           restrictPatient: vg.restrictPatient || '',
           employeeId: vg.employeeId || userRes?.data?.employeeId || '',
-        }));
+          providerType: vg.providerType || '',
+          cosigner: vg.cosigner || '',
+          authMeds: vg.authMeds || false,
+        };
+        setForm(f => ({ ...f, ...editVals }));
+        setOriginalForm(editVals);
       }).catch((err) => {
         setRefDataError(`Failed to load staff member data: ${err.message || 'unknown error'}`);
       });
@@ -255,6 +260,12 @@ export default function StaffForm() {
       if (composedName.length > 35) errors.lastName = 'Combined name must be 35 characters or fewer';
       if (!form.sex) errors.sex = 'Gender is required';
       if (!form.dob) errors.dob = 'Date of birth is required';
+      // G008: Email validation
+      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Invalid email format';
+      // G009: Phone validation — at least 10 digits
+      if (form.phone && !/^\d{10,}$/.test(form.phone.replace(/[\s\-().]/g, ''))) errors.phone = 'Phone must contain at least 10 digits';
+      // G010: SSN last4 validation
+      if (form.govIdLast4 && !/^\d{4}$/.test(form.govIdLast4)) errors.govIdLast4 = 'Must be exactly 4 digits';
       // Credentials are required for new users
       if (!isEdit) {
         if (!form.accessCode || !form.accessCode.trim()) errors.accessCode = 'Username (Access Code) is required';
@@ -374,13 +385,77 @@ export default function StaffForm() {
         title: form.title || '',
       };
       if (isEdit) {
-        await updateStaffMember(userId, payload);
+        // C001 fix: Send individual field updates instead of bulk payload.
+        // Map form keys to VistA File 200 field numbers for PUT /users/:ien {field, value}.
+        const FIELD_MAP = {
+          email: '.151', phone: '.132', title: '8', sex: '4', npi: '41.99',
+          dea: '53.2', department: '29', sigBlockName: '20.3', language: '200.07',
+          filemanAccess: '3', restrictPatient: '101.01', providerType: '53.5',
+          cosigner: '53.42', deaExpiration: '53.21',
+        };
+        const BOOL_FIELDS = {
+          verifyCodeNeverExpires: '9.5', authorizedToWriteMeds: '53.11',
+          requiresCosign: '53.08',
+        };
+        const orig = originalForm || {};
+        const errors = [];
+
+        // C011: Handle name rename separately
+        const composedOrig = orig.fullName || '';
+        if (composedName !== composedOrig) {
+          try { await renameStaffMember(userId, { newName: composedName }); }
+          catch (e) { errors.push(`Rename: ${e.message}`); }
+        }
+
+        // Simple field updates — only send changed values
+        for (const [key, fld] of Object.entries(FIELD_MAP)) {
+          const cur = form[key] || '';
+          const prev = orig[key] || '';
+          if (cur !== prev) {
+            try { await updateStaffMember(userId, { field: fld, value: cur }); }
+            catch (e) { errors.push(`${key}: ${e.message}`); }
+          }
+        }
+
+        // Boolean field updates
+        for (const [key, fld] of Object.entries(BOOL_FIELDS)) {
+          const cur = form[key] || false;
+          const prev = orig[key] || false;
+          if (cur !== prev) {
+            try { await updateStaffMember(userId, { field: fld, value: cur ? '1' : '0' }); }
+            catch (e) { errors.push(`${key}: ${e.message}`); }
+          }
+        }
+
+        // Permission diff — add new, remove old
+        const origKeys = new Set(orig.assignedPermissions || []);
+        const newKeys = new Set(mergedPermissions);
+        for (const k of newKeys) {
+          if (!origKeys.has(k)) {
+            try { await assignPermission(userId, { keyName: k }); }
+            catch (e) { errors.push(`+key ${k}: ${e.message}`); }
+          }
+        }
+        for (const k of origKeys) {
+          if (!newKeys.has(k)) {
+            try { await removePermission(userId, k); }
+            catch (e) { errors.push(`-key ${k}: ${e.message}`); }
+          }
+        }
+
         // Update credentials if provided during edit
         if (form.accessCode || form.verifyCode) {
-          await updateCredentials(userId, {
-            accessCode: form.accessCode || undefined,
-            verifyCode: form.verifyCode || undefined,
-          });
+          try {
+            await updateCredentials(userId, {
+              accessCode: form.accessCode || undefined,
+              verifyCode: form.verifyCode || undefined,
+            });
+          } catch (e) { errors.push(`Credentials: ${e.message}`); }
+        }
+
+        if (errors.length > 0) {
+          setSubmitError(`Some fields failed to save: ${errors.join('; ')}`);
+          return;
         }
         navigate('/admin/staff');
       } else {

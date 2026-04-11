@@ -1,10 +1,11 @@
 export function StatusBadge({ status, size = 'sm' }) {
   const styles = {
-    active:   'bg-success-bg text-success',
-    inactive: 'bg-[#F5F5F5] text-text-muted',
-    locked:   'bg-danger-bg text-danger',
-    pending:  'bg-info-bg text-info',
-    warning:  'bg-warning-bg text-warning',
+    active:     'bg-success-bg text-success',
+    inactive:   'bg-[#F5F5F5] text-text-muted',
+    locked:     'bg-danger-bg text-danger',
+    terminated: 'bg-[#FFEBEE] text-[#B71C1C]',
+    pending:    'bg-info-bg text-info',
+    warning:    'bg-warning-bg text-warning',
   };
   const s = status || 'unknown';
   const label = s.charAt(0).toUpperCase() + s.slice(1);

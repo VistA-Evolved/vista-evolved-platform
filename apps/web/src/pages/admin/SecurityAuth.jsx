@@ -532,6 +532,12 @@ export default function SecurityAuth() {
                             onChange={e => updateField(field.name, e.target.value)}
                             className="w-28 h-8 px-3 text-sm font-mono border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
                           {field.unit && <span className="text-xs text-[#999]">{field.unit}</span>}
+                          {/* S002: Human-readable time preview for second-based fields */}
+                          {field.unit === 'seconds' && numVal > 0 && (
+                            <span className="text-[11px] text-[#2E5984] font-medium ml-1">
+                              = {numVal >= 60 ? `${Math.floor(numVal / 60)} min${numVal % 60 > 0 ? ` ${numVal % 60}s` : ''}` : `${numVal}s`}
+                            </span>
+                          )}
                           {field.slider && field.enforcedMin && field.enforcedMax && (
                             <div className="flex-1 ml-3 flex items-center gap-2">
                               <input type="range" min={field.enforcedMin} max={field.enforcedMax}

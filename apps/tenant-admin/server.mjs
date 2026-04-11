@@ -667,7 +667,28 @@ async function main() {
 
   // ---- Auth routes ----
 
+  // G001: Login rate limiting — 5 attempts per IP per 60 seconds
+  const loginAttempts = new Map();
+  const LOGIN_RATE_LIMIT = 5;
+  const LOGIN_RATE_WINDOW = 60000; // 60 seconds
+
   app.post('/api/tenant-admin/v1/auth/login', async (req, reply) => {
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const now = Date.now();
+    const attempts = loginAttempts.get(clientIp) || [];
+    const recentAttempts = attempts.filter(t => now - t < LOGIN_RATE_WINDOW);
+    if (recentAttempts.length >= LOGIN_RATE_LIMIT) {
+      return reply.code(429).send({ ok: false, error: 'Too many login attempts. Please wait 60 seconds before trying again.' });
+    }
+    recentAttempts.push(now);
+    loginAttempts.set(clientIp, recentAttempts);
+    // Periodic cleanup of stale entries
+    if (loginAttempts.size > 1000) {
+      for (const [ip, ts] of loginAttempts) {
+        if (ts.every(t => now - t > LOGIN_RATE_WINDOW)) loginAttempts.delete(ip);
+      }
+    }
+
     const body = req.body || {};
     const { accessCode, verifyCode, tenantId } = body;
     if (!accessCode || !verifyCode) {
@@ -1498,17 +1519,26 @@ async function main() {
       '.133': 'VOICE PAGER',
       '.134': 'DIGITAL PAGER',
       '.151': 'EMAIL ADDRESS',
+      '3': 'FILE MANAGER ACCESS CODE',
       '4': 'SEX',
       '5': 'DOB',
       '8': 'TITLE',
       '9': 'SSN',
+      '9.5': 'VERIFY CODE NEVER EXPIRES',
       '20.2': 'ELECTRONIC SIGNATURE INITIALS',
       '20.3': 'SIGNATURE BLOCK PRINTED NAME',
       '20.4': 'ELECTRONIC SIGNATURE CODE',
       '29': 'SERVICE/SECTION',
       '41.99': 'NPI',
+      '53.08': 'REQUIRES COSIGNER',
+      '53.11': 'AUTHORIZED TO WRITE MED ORDERS',
       '53.2': 'DEA#',
+      '53.21': 'DEA EXPIRATION DATE',
+      '53.42': 'COSIGNER',
       '53.5': 'PROVIDER CLASS',
+      '55': 'PHARMACY SCHEDULES',
+      '101.01': 'RESTRICT PATIENT SELECTION',
+      '200.07': 'LANGUAGE',
       '201': 'PRIMARY MENU OPTION',
     };
     if (!field || value === undefined || !ALLOW[field]) {
@@ -1661,7 +1691,7 @@ async function main() {
     return { ok: true, tenantId, targetDuz: req.params.targetDuz, keyName: keyName.trim(), rpcUsed: z.rpcUsed, lines: z.lines };
   });
 
-  /** Create File 200 user (minimal) — ZVE USMG ADD */
+  /** Create File 200 user — ZVE USMG ADD + save ALL wizard fields (A001-A022) */
   app.post('/api/tenant-admin/v1/users', async (req, reply) => {
     const tenantId = req.query.tenantId;
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
@@ -1677,24 +1707,113 @@ async function main() {
     if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG ADD failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     const newIen = (z.line0 || '').split('^')[1] || null;
     const extraFields = [];
+    // DDR-writable fields: body key → File 200 field number
     const EXTRA_MAP = {
       title: '8', ssn: '9', sex: '4', dob: '5',
       serviceSection: '29',
-      division: null, // sub-file 200.02 — requires ZVE USMG routine, not simple DDR FILER
       primaryMenu: '201',
+      // A002: Email
+      email: '.151',
+      // A003: Phone
+      phone: '.132',
+      // A004: NPI
+      npi: '41.99',
+      // A005: DEA#
+      dea: '53.2',
+      // A006: Provider Type/Class
+      providerType: '53.5',
+      // A009: Language
+      language: '200.07',
+      // A013: Signature Block Printed Name
+      sigBlockName: '20.3',
+      // A014: Cosigner (pointer to File 200)
+      cosigner: '53.42',
+      // A016: Authorized to Write Med Orders
+      authorizedToWriteMeds: '53.11',
+      // A017: Controlled substance schedules
+      controlledSchedules: '55',
+      // A018: FileMan Access Code
+      filemanAccess: '3',
+      // A020: DEA Expiration Date
+      deaExpiration: '53.21',
     };
     if (newIen) {
       const iens = `${newIen},`;
       for (const [key, fld] of Object.entries(EXTRA_MAP)) {
-        if (body[key] && fld) {
+        const val = body[key];
+        if (val !== undefined && val !== null && val !== '' && fld) {
           try {
-            await ddrFilerEdit(200, iens, fld, String(body[key]), 'E');
+            // Boolean fields → '1'/'0' for VistA SET types
+            const vistaVal = (val === true) ? '1' : (val === false) ? '0' : String(val);
+            await ddrFilerEdit(200, iens, fld, vistaVal, 'E');
             extraFields.push({ field: fld, key, status: 'ok' });
           } catch (e) { extraFields.push({ field: fld, key, status: 'error', detail: e.message }); }
         }
       }
+
+      // A010: Verify Code Never Expires (field 9.5) — boolean toggle
+      if (body.verifyCodeNeverExpires) {
+        try {
+          await ddrFilerEdit(200, iens, '9.5', '1', 'E');
+          extraFields.push({ field: '9.5', key: 'verifyCodeNeverExpires', status: 'ok' });
+        } catch (e) { extraFields.push({ field: '9.5', key: 'verifyCodeNeverExpires', status: 'error', detail: e.message }); }
+      }
+
+      // A011: Restrict Patient Selection (field 101.01) — boolean toggle
+      if (body.restrictPatient) {
+        try {
+          await ddrFilerEdit(200, iens, '101.01', '1', 'E');
+          extraFields.push({ field: '101.01', key: 'restrictPatient', status: 'ok' });
+        } catch (e) { extraFields.push({ field: '101.01', key: 'restrictPatient', status: 'error', detail: e.message }); }
+      }
+
+      // A015: Requires Cosigner (field 53.08) — boolean
+      if (body.requiresCosign) {
+        try {
+          await ddrFilerEdit(200, iens, '53.08', '1', 'E');
+          extraFields.push({ field: '53.08', key: 'requiresCosign', status: 'ok' });
+        } catch (e) { extraFields.push({ field: '53.08', key: 'requiresCosign', status: 'error', detail: e.message }); }
+      }
+
+      // A001: Assign security keys (permissions)
+      if (Array.isArray(body.permissions) && body.permissions.length > 0) {
+        const keyResults = [];
+        for (const keyName of body.permissions) {
+          const sanitized = String(keyName).toUpperCase().replace(/[^A-Z0-9 \-]/g, '').trim();
+          if (!sanitized) continue;
+          try {
+            const kz = await callZveRpc('ZVE USMG KEYS', ['ADD', String(newIen), sanitized]);
+            const ko = zveOutcome(kz);
+            keyResults.push({ key: sanitized, status: ko.kind === 'ok' ? 'ok' : 'error', detail: ko.msg || '' });
+          } catch (e) { keyResults.push({ key: sanitized, status: 'error', detail: e.message }); }
+        }
+        extraFields.push({ field: 'permissions', status: 'processed', keys: keyResults });
+      }
+
+      // A007: Primary division via ZVE DIVISION ASSIGN
+      if (body.primaryLocation) {
+        try {
+          const dz = await callZveRpc('ZVE DIVISION ASSIGN', [String(newIen), String(body.primaryLocation), 'ADD']);
+          const dd = zveOutcome(dz);
+          extraFields.push({ field: 'primaryLocation', status: dd.kind === 'ok' ? 'ok' : 'error', detail: dd.msg || '' });
+        } catch (e) { extraFields.push({ field: 'primaryLocation', status: 'error', detail: e.message }); }
+      }
+
+      // A008: Additional locations
+      if (Array.isArray(body.additionalLocations)) {
+        for (const locIen of body.additionalLocations) {
+          if (!locIen) continue;
+          try {
+            const lz = await callZveRpc('ZVE DIVISION ASSIGN', [String(newIen), String(locIen), 'ADD']);
+            const ld = zveOutcome(lz);
+            extraFields.push({ field: 'additionalLocation', value: locIen, status: ld.kind === 'ok' ? 'ok' : 'error', detail: ld.msg || '' });
+          } catch (e) { extraFields.push({ field: 'additionalLocation', value: locIen, status: 'error', detail: e.message }); }
+        }
+      }
     }
-    return { ok: true, tenantId, newIen, rpcUsed: z.rpcUsed, lines: z.lines, extraFields };
+    // Y003: Return full user data so frontend doesn't need to re-fetch
+    return { ok: true, tenantId, newIen, duz: newIen, ien: newIen, rpcUsed: z.rpcUsed, lines: z.lines, extraFields,
+      data: { duz: newIen, ien: newIen, name: name, status: 'active' } };
   });
 
   app.post('/api/tenant-admin/v1/users/:duz/esig', async (req, reply) => {
@@ -1804,7 +1923,7 @@ async function main() {
     if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
-    const z = await callZveRpc('ZVE USMG DEACT', [String(req.params.duz)]);
+    const z = await callZveRpc('ZVE USMG DEACT', [String(req.params.duz), (req.body || {}).reason || '']);
     const o = zveOutcome(z);
     if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `RPC ZVE USMG DEACT failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed, lines: z.lines });
     return { ok: true, tenantId, duz: req.params.duz, rpcUsed: z.rpcUsed, lines: z.lines };

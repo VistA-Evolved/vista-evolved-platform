@@ -68,7 +68,12 @@ function SigReadinessBadge({ value }) {
 }
 
 const baseColumns = [
-  { key: 'name', label: 'Name', bold: true, render: (val, row) => row.isDuplicate ? <span>{val} <span className="text-[10px] text-text-secondary font-mono">({row.id})</span></span> : val },
+  { key: 'name', label: 'Name', bold: true, render: (val, row) => (
+    <span>
+      {row.isDuplicate ? <>{val} <span className="text-[10px] text-text-secondary font-mono">({row.id})</span></> : val}
+      {row.isProvider && <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1 rounded">Provider</span>}
+    </span>
+  ) },
   { key: 'displayId', label: 'ID', render: (val, row) => row.employeeId
     ? <span className="font-mono text-[11px]">{row.employeeId}</span>
     : <span className="font-mono text-[11px] text-text-secondary">{row.id}</span> },

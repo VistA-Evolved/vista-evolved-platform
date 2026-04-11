@@ -37,7 +37,11 @@ async function request(method, path, body = null) {
   const token = getSessionToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const options = { method, headers, credentials: 'include' };
+  // X002: Configurable API timeout — default 30 seconds
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  const options = { method, headers, credentials: 'include', signal: controller.signal };
 
   if (body && method !== 'GET') {
     options.body = JSON.stringify(body);
@@ -47,10 +51,25 @@ async function request(method, path, body = null) {
     ? `${path}?${new URLSearchParams(body).toString()}`
     : path;
 
-  const res = await fetch(url, options);
+  let res;
+  try {
+    res = await fetch(url, options);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new ApiError('TIMEOUT', 'Request timed out after 30 seconds. The server may be busy — please try again.', 408);
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (res.status === 401) {
     setSessionToken(null);
+    // X005: Preserve current page so login can redirect back after re-auth
+    const currentPath = window.location.pathname + window.location.search;
+    if (currentPath && currentPath !== '/login') {
+      sessionStorage.setItem('ve-return-to', currentPath);
+    }
     window.location.href = '/login';
     throw new ApiError('SESSION_EXPIRED', 'Your session has expired. Please sign in again.', 401);
   }

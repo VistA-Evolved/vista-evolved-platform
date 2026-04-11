@@ -1,278 +1,287 @@
-ZVEUSMG ;VE/KM - User Management RPCs (FileMan-compliant);2026-03-22
- ;;1.0;VistA-Evolved Tenant Admin;**2**;Mar 22, 2026;Build 2
- ;
- ; RPCs for user key management, creation, deactivation, reactivation,
- ; and name editing. All write operations use sanctioned FileMan APIs
- ; (^DIC LAYGO, ^DIE) and Kernel APIs ($$ADD^XQKEY, $$DEL^XQKEY).
- ;
+ZVEUSMG ; VE — User management broker helpers (keys, e-sig, creds, lifecycle)
+ ;;1.0;VE USERMG;**;Mar 21, 2026
+ ; Overlay RPCs for tenant-admin direct writes. Register via INSTALL^ZVEUSMG.
+ ; Keys use ^XUSEC(KEY,DUZ) (standard Kernel pattern).
+ ; Output uses R() array (broker type 2) — NOT W-based.
+ ; IMPORTANT: Target user param is TDUZ (not DUZ) to avoid shadowing system DUZ.
  Q
  ;
-KEYS(RESULT,P1,P2,P3) ;
- ; P1=action (ADD|DEL), P2=target DUZ, P3=key name
- N ACTION,TDUZ,KNAME,KIEN,%
- S ACTION=$P($G(P1),U,1)
- S TDUZ=+$G(P2)
- S KNAME=$G(P3)
- I ACTION=""!(TDUZ<1)!(KNAME="") S RESULT(0)="-1^Missing params: action, DUZ, keyName" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User DUZ "_TDUZ_" not found" Q
- ;
- S KIEN=$O(^DIC(19.1,"B",KNAME,""))
- I KIEN<1 S RESULT(0)="-1^Key '"_KNAME_"' not found in File 19.1" Q
- ;
- I ACTION="ADD" D  Q
- . S %=$$ADD^XQKEY(TDUZ,KNAME)
- . I % S RESULT(0)="1^Key "_KNAME_" added to DUZ "_TDUZ Q
- . ; $$ADD^XQKEY returns 0 if key already held or allocation failed
- . I $D(^XUSEC(KNAME,TDUZ)) S RESULT(0)="0^Key "_KNAME_" already assigned to DUZ "_TDUZ Q
- . S RESULT(0)="-1^Failed to allocate key "_KNAME_" to DUZ "_TDUZ
- ;
- I ACTION="DEL" D  Q
- . I '$D(^XUSEC(KNAME,TDUZ)) S RESULT(0)="0^Key "_KNAME_" not assigned to DUZ "_TDUZ Q
- . S %=$$DEL^XQKEY(TDUZ,KNAME)
- . I % S RESULT(0)="1^Key "_KNAME_" removed from DUZ "_TDUZ Q
- . ; $$DEL^XQKEY returns 0 for PROVIDER key (Kernel protection)
- . I KNAME="PROVIDER" S RESULT(0)="-1^PROVIDER key is protected by VistA Kernel and cannot be removed via $$DEL^XQKEY" Q
- . S RESULT(0)="-1^Failed to remove key "_KNAME_" from DUZ "_TDUZ
- ;
- S RESULT(0)="-1^Unknown action: "_ACTION_" (use ADD or DEL)"
+INSTALL ; Register RPCs in File #8994 (idempotent)
+ W !,"=== Installing ZVE USMG RPCs ==="
+ D REGONE("ZVE USMG KEYS","KEYS","ZVEUSMG","Assign/remove security keys")
+ D REGONE("ZVE USMG ESIG","ESIG","ZVEUSMG","Set electronic signature code")
+ D REGONE("ZVE USMG CRED","CRED","ZVEUSMG","Set access/verify (XUSHSH)")
+ D REGONE("ZVE USMG ADD","ADD","ZVEUSMG","Create File 200 stub user")
+ D REGONE("ZVE USMG DEACT","DEACT","ZVEUSMG","Set termination date (field 9)")
+ D REGONE("ZVE USMG REACT","REACT","ZVEUSMG","Clear termination date")
+ D REGONE("ZVE USMG TERM","TERM","ZVEUSMG","Full account termination (DISUSER + clear creds)")
+ D REGONE("ZVE USMG UNLOCK","UNLOCK","ZVEUSMG","Release a locked-out account")
+ D REGONE("ZVE USMG RENAME","RENAME","ZVEUSMG","Rename user (.01)")
+ W !,"=== ZVE USMG install complete ==="
  Q
  ;
-ESIG(RESULT,P1,P2) ;
- ; P1=DUZ, P2=code (reserved for future verification)
- N TDUZ,ESIG
- S TDUZ=+$G(P1)
- I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
- S ESIG=$G(^VA(200,TDUZ,20,2))
- S RESULT(0)="1^OK"
- S RESULT(1)="HAS_ESIG^"_$S(ESIG'="":1,1:0)
+REGONE(NAME,TAG,RTN,DESC) ; Register one remote procedure
+ N IEN S IEN=$$FIND1^DIC(8994,,"BX",NAME)
+ I IEN>0 W !,"  ",NAME," already registered" Q
+ N FDA,ERR
+ S FDA(8994,"+1,",.01)=NAME
+ S FDA(8994,"+1,",.02)=TAG
+ S FDA(8994,"+1,",.03)=RTN
+ S FDA(8994,"+1,",.04)=2
+ D UPDATE^DIE("E","FDA","","ERR")
+ I $D(ERR) W !,"  ERROR: ",$G(ERR("DIERR",1,"TEXT",1)) Q
+ W !,"  Registered: ",NAME
  Q
  ;
-CRED(RESULT,P1) ;
- ; P1=DUZ — returns credential metadata (no secrets)
- N TDUZ,NODE0
- S TDUZ=+$G(P1)
- I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
- S NODE0=$G(^VA(200,TDUZ,0))
- S RESULT(0)="1^OK"
- S RESULT(1)="NAME^"_$P(NODE0,U,1)
- S RESULT(2)="HAS_ACCESS^"_$S($G(^VA(200,TDUZ,.1))'="":1,1:0)
- S RESULT(3)="HAS_VERIFY^"_$S($G(^VA(200,TDUZ,11,0))'="":1,1:0)
+KEYS(R,ACT,TDUZ,KNM) ; RPC ZVE USMG KEYS — params: ACTION, target-DUZ, KEY name
+ N E S E=""
+ I $G(ACT)="" S E="ACTION required"
+ I '+$G(TDUZ) S E="DUZ required"
+ I $G(KNM)="" S E="KEY required"
+ I E]"" S R(0)="0^"_E Q
+ I ACT'="ADD",ACT'="DEL" S R(0)="0^Invalid ACTION" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ ;
+ ; Validate the key name exists in SECURITY KEY #19.1. Without this the
+ ; ADD path would happily file arbitrary text as if it were a real key.
+ I '$D(^DIC(19.1,"B",KNM)) S R(0)="0^Security key not found: "_KNM Q
+ ;
+ ; For ADD, also reject if the user already holds this key. VistA's
+ ; ^XUSEC and File 200 field 51 both should remain single-valued per key
+ ; per user — an idempotent ADD shouldn't silently create a duplicate row.
+ I ACT="ADD" I $D(^XUSEC(KNM,+TDUZ)) S R(0)="0^User already holds key: "_KNM Q
+ ;
+ ; ORES/ORELSE mutual exclusion check (CONFLICT NEWed at this level)
+ N CONFLICT S CONFLICT=0
+ I ACT="ADD" D
+ . I KNM="ORES" D  Q:CONFLICT
+ . . N KIEN S KIEN=0
+ . . F  S KIEN=$O(^VA(200,+TDUZ,51,KIEN)) Q:'KIEN  D  Q:CONFLICT
+ . . . I $P($G(^VA(200,+TDUZ,51,KIEN,0)),U,1)="ORELSE" D
+ . . . . S CONFLICT=1,R(0)="0^Cannot assign ORES: user holds ORELSE (mutually exclusive)"
+ . I KNM="ORELSE" D  Q:CONFLICT
+ . . N KIEN S KIEN=0
+ . . F  S KIEN=$O(^VA(200,+TDUZ,51,KIEN)) Q:'KIEN  D  Q:CONFLICT
+ . . . I $P($G(^VA(200,+TDUZ,51,KIEN,0)),U,1)="ORES" D
+ . . . . S CONFLICT=1,R(0)="0^Cannot assign ORELSE: user holds ORES (mutually exclusive)"
+ Q:CONFLICT
+ ;
+ I ACT="ADD" D
+ . S ^XUSEC(KNM,+TDUZ)=""
+ . N MAXK S MAXK=+$O(^VA(200,+TDUZ,51,"A"),-1)+1
+ . S ^VA(200,+TDUZ,51,MAXK,0)=KNM
+ . S ^VA(200,+TDUZ,51,"B",KNM,MAXK)=""
+ . I '$P($G(^VA(200,+TDUZ,51,0)),U,1) S $P(^VA(200,+TDUZ,51,0),U,1)="200.051"
+ . S $P(^VA(200,+TDUZ,51,0),U,3)=MAXK
+ . S $P(^VA(200,+TDUZ,51,0),U,4)=$P($G(^VA(200,+TDUZ,51,0)),U,4)+1
+ . D AUDITLOG^ZVEADMIN("KEY-ASSIGN",+TDUZ,"Key="_KNM)
+ I ACT="DEL" D
+ . N KIEN,FOUND S FOUND=0,KIEN=0
+ . F  S KIEN=$O(^VA(200,+TDUZ,51,KIEN)) Q:'KIEN  D  Q:FOUND
+ . . I $P($G(^VA(200,+TDUZ,51,KIEN,0)),U,1)=KNM D
+ . . . K ^VA(200,+TDUZ,51,KIEN)
+ . . . K ^VA(200,+TDUZ,51,"B",KNM,KIEN)
+ . . . S FOUND=1
+ . I 'FOUND S R(0)="0^Key not assigned: "_KNM Q
+ . K ^XUSEC(KNM,+TDUZ)
+ . S $P(^VA(200,+TDUZ,51,0),U,4)=$P($G(^VA(200,+TDUZ,51,0)),U,4)-1
+ . D AUDITLOG^ZVEADMIN("KEY-REMOVE",+TDUZ,"Key="_KNM)
+ S R(0)="1^OK^"_ACT Q
+ ;
+ESIG(R,TDUZ,CODE) ; RPC ZVE USMG ESIG
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ I $G(CODE)="" S R(0)="0^CODE required" Q
+ N FDA,DIERR
+ S FDA(200,TDUZ_",",20.4)=$$EN^XUSHSH(CODE)
+ D FILE^DIE("","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^FILE^DIE error" Q
+ D AUDITLOG^ZVEADMIN("ESIG-SET",+TDUZ,"E-sig set via USMG")
+ S R(0)="1^OK" Q
+ ;
+CRED(R,TDUZ,AC,VC) ; RPC ZVE USMG CRED
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ I $G(AC)=""!($G(VC)="") S R(0)="0^ACCESS and VERIFY required" Q
+ N FDA,DIERR
+ S FDA(200,TDUZ_",",2)=$$EN^XUSHSH(AC)
+ S FDA(200,TDUZ_",",11)=$$EN^XUSHSH(VC)
+ ; Force password change on first login — set verify code change date to past
+ S FDA(200,TDUZ_",",11.2)=2000101
+ D FILE^DIE("","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^FILE^DIE error" Q
+ D AUDITLOG^ZVEADMIN("CRED-SET",+TDUZ,"Credentials updated via admin")
+ S R(0)="1^OK" Q
+ ;
+ADD(R,NM,AC,VC) ; RPC ZVE USMG ADD — minimal user creation
+ ; File 200's .01 NAME input transform calls LAYGO^XUA4A7 which requires
+ ; the classic DIC variables to be set up. UPDATE^DIE doesn't export DIC,
+ ; so we use the older FILE^DICN pattern which is a standard FileMan
+ ; add-with-LAYGO path. LAYGO^XUA4A7 reads DIC(0) to know it's allowed
+ ; to create a new entry.
+ I $G(NM)="" S R(0)="0^NAME required" Q
+ N DIC,X,Y,DUPDUZ,DIADD,DIC0SAVE
+ ; Refuse if name already exists to avoid accidental duplicate creation
+ S DUPDUZ=$O(^VA(200,"B",NM,0))
+ I +DUPDUZ>0 S R(0)="0^User already exists: "_NM_" (DUZ "_DUPDUZ_")" Q
+ S DIC="^VA(200,"
+ S DIC(0)="LX"
+ S DIC("DR")=""
+ S X=NM
+ D FILE^DICN
+ ; FILE^DICN returns Y = ien^name (positive IEN on success, -1 on failure)
+ I +Y<0 S R(0)="0^FILE^DICN failed for name "_NM Q
+ N NEWDUZ S NEWDUZ=+Y
+ ; Set hashed credentials via FILE^DIE. XUSHSH is the Kernel hash routine
+ ; that produces the same format XUS uses at sign-on, so the user can log
+ ; in immediately with these access/verify codes.
+ I $G(AC)]""!($G(VC)]"") D
+ . N CFDA,CERR
+ . I $G(AC)]"" S CFDA(200,NEWDUZ_",",2)=$$EN^XUSHSH(AC)
+ . I $G(VC)]"" S CFDA(200,NEWDUZ_",",11)=$$EN^XUSHSH(VC)
+ . ; Force password change on first login
+ . S CFDA(200,NEWDUZ_",",11.2)=2000101
+ . D FILE^DIE("","CFDA","CERR")
+ D AUDITLOG^ZVEADMIN("USER-ADD",NEWDUZ,"Created user "_NM)
+ S R(0)="1^"_NEWDUZ Q
+ ;
+DEACT(R,TDUZ,REASON) ; RPC ZVE USMG DEACT — soft deactivation
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ N FDA,DIERR
+ ; Set DISUSER flag (node 7, piece 1) — blocks sign-on
+ S $P(^VA(200,+TDUZ,7),U,1)=1
+ ; Set termination date (field 9.2) to today
+ S FDA(200,TDUZ_",",9.2)=DT
+ ; C006: Write termination reason (field 9.4) if provided
+ I $G(REASON)]"" S FDA(200,TDUZ_",",9.4)=REASON
+ D FILE^DIE("","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^FILE^DIE error" Q
+ D AUDITLOG^ZVEADMIN("USER-DEACT",+TDUZ,"Deactivated"_$S($G(REASON)]"":": "_REASON,1:""))
+ S R(0)="1^OK" Q
+ ;
+REACT(R,TDUZ) ; RPC ZVE USMG REACT — reactivation
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ N FDA,DIERR
+ ; Clear DISUSER flag — restores sign-on
+ S $P(^VA(200,+TDUZ,7),U,1)=""
+ ; Clear termination date (field 9.2)
+ S FDA(200,TDUZ_",",9.2)="@"
+ D FILE^DIE("","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^FILE^DIE error" Q
+ D AUDITLOG^ZVEADMIN("USER-REACT",+TDUZ,"Reactivated")
+ S R(0)="1^OK" Q
+ ;
+TERM(R,TDUZ) ; RPC ZVE USMG TERM — full account termination
+ ; Sets DISUSER (#200 field 7) = 1, sets TERMINATION DATE (field 9.2),
+ ; clears ACCESS CODE (field 2), clears VERIFY CODE (field 11),
+ ; clears the e-signature (field 20.4), and removes all assigned keys.
+ ; Mirrors the terminal "Terminate User" workflow used by site managers.
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ N FDA,DIERR
+ S FDA(200,TDUZ_",",7)=1
+ S FDA(200,TDUZ_",",9.2)=DT
+ S FDA(200,TDUZ_",",2)="@"
+ S FDA(200,TDUZ_",",11)="@"
+ S FDA(200,TDUZ_",",20.4)="@"
+ D FILE^DIE("","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^FILE^DIE error: "_$G(DIERR("DIERR",1,"TEXT",1)) Q
+ ;
+ ; Remove all keys from #200 field 51 and from ^XUSEC. Walk in reverse so
+ ; deletes don't disturb the iteration.
+ N KIEN,KNM
+ S KIEN=$O(^VA(200,+TDUZ,51,""),-1)
+ F  Q:'KIEN  D  S KIEN=$O(^VA(200,+TDUZ,51,KIEN),-1)
+ . S KNM=$P($G(^VA(200,+TDUZ,51,KIEN,0)),U,1)
+ . I KNM]"" K ^XUSEC(KNM,+TDUZ),^VA(200,+TDUZ,51,"B",KNM,KIEN)
+ . K ^VA(200,+TDUZ,51,KIEN)
+ ;
+ ; Reset key subfile header counts and last-IEN
+ I $D(^VA(200,+TDUZ,51,0)) D
+ . S $P(^VA(200,+TDUZ,51,0),U,3)=0
+ . S $P(^VA(200,+TDUZ,51,0),U,4)=0
+ ;
+ ; Also clear the locked-out flag if set, so a future re-activation
+ ; doesn't surface a stale lockout state.
+ K ^XUSEC("LOCKED",+TDUZ)
+ ;
+ D AUDITLOG^ZVEADMIN("USER-TERM",+TDUZ,"Account fully terminated (creds + keys cleared)")
+ S R(0)="1^OK^Terminated" Q
+ ;
+UNLOCK(R,TDUZ) ; RPC ZVE USMG UNLOCK — release a locked-out account
+ ; VistA's standard sign-on lockout uses ^XUSEC("LOCKED",DUZ) to gate
+ ; further sign-on attempts after the failed-attempt threshold. The
+ ; classic terminal option is "Release User [XUSERREL]". Clearing the
+ ; node restores immediate sign-on access.
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ N WASLOCKED S WASLOCKED=$D(^XUSEC("LOCKED",+TDUZ))
+ K ^XUSEC("LOCKED",+TDUZ)
+ ;
+ ; Some sites also use field 7.3 (FAILED SIGN-ON ATTEMPTS counter) to
+ ; track lockout state. Reset it to clear the cumulative count.
+ N FDA,DIERR
+ S FDA(200,TDUZ_",",7.3)="@"
+ D FILE^DIE("","FDA","DIERR")
+ ; Field 7.3 may not exist at every site — DIERR here is non-fatal,
+ ; the lockout xref clear (above) is the canonical action.
+ ;
+ D AUDITLOG^ZVEADMIN("USER-UNLOCK",+TDUZ,"Account released from lockout")
+ S R(0)="1^OK^"_$S(WASLOCKED:"Was locked",1:"Was not locked")
  Q
  ;
-ADD(RESULT,P1,P2,P3) ;
- ; P1=name (LAST,FIRST), P2=accessCode(opt), P3=verifyCode(opt)
- ; Uses ^DIC with DIC(0)="LMQ" for non-interactive LAYGO into File 200.
- ; This matches the VA Kernel's own $$CREATE^XUSAP (ICR#4677, XUSAP.m).
- ; No "E" flag — ^XUA4A7 SOUNDEX LAYGO trigger quits when "E" absent,
- ; bypassing the interactive SOUNDEX prompt that defaults NO in RPC.
- ; Pre-check via $$FIND1^DIC (exact "X" match) mirrors XUSAP pattern.
- N NEWNAME,IEN,DUZ0SAVE
- S NEWNAME=$G(P1)
- I NEWNAME="" S RESULT(0)="-1^Name required (LAST,FIRST format)" Q
- I NEWNAME'["," S RESULT(0)="-1^Name must be LAST,FIRST format" Q
- S IEN=$$FIND1^DIC(200,,"X",NEWNAME,"B")
- I IEN S RESULT(0)="-1^Name already exists in File 200 IEN="_IEN Q
+RENAME(R,TDUZ,NEWNAME) ; RPC ZVE USMG RENAME — rename user (.01)
+ ; Validates LAST,FIRST format and uniqueness, then files via FILE^DIE.
+ I '+$G(TDUZ) S R(0)="0^DUZ required" Q
+ I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
+ S NEWNAME=$$UP^XLFSTR($G(NEWNAME))
+ I NEWNAME="" S R(0)="0^NEWNAME required" Q
+ I NEWNAME'?1.30A1","1.30A.E S R(0)="0^Name must be in LAST,FIRST format" Q
  ;
- S DUZ0SAVE=$G(DUZ(0))
- S DUZ(0)="@"
- K ^TMP("DIERR",$J)
- S DIC="^VA(200,",DIC(0)="LMQ",DLAYGO=200,X=NEWNAME
- S XUNOTRIG=1
- D ^DIC
- S IEN=+Y
- S DUZ(0)=DUZ0SAVE
+ ; Reject duplicate names (FileMan uniqueness on .01 is enforced via input
+ ; transform but we surface a clearer error here).
+ N DUPDUZ S DUPDUZ=$O(^VA(200,"B",NEWNAME,0))
+ I +DUPDUZ>0,+DUPDUZ'=+TDUZ S R(0)="0^Name already in use by DUZ "_DUPDUZ Q
  ;
- I IEN<1 S RESULT(0)="-1^DIC LAYGO failed to create entry in File 200" Q
- I $P(Y,U,3)'=1 S RESULT(0)="-1^Entry already exists IEN="_IEN Q
- S RESULT(0)="1^"_IEN
- S RESULT(1)="Created user "_NEWNAME_" IEN="_IEN
- Q
- ;
-DEACT(RESULT,P1) ;
- ; P1=DUZ to deactivate — sets DISUSER field 7 via ^DIE
- ; and sets TERMINATION DATE (field 9.2) to today
- ; Field 7 is SET type (0:NO;1:YES) stored at node 0, piece 7
- N TDUZ,DIE,DA,DR,DUZ0SAVE,FDA,ERRS
- S TDUZ=+$G(P1)
- I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
- I $P($G(^VA(200,TDUZ,0)),U,7)=1 S RESULT(0)="0^User already deactivated" Q
- ;
- S DUZ0SAVE=$G(DUZ(0))
- S DUZ(0)="@"
- D DT^DICRW
- S DIE="^VA(200,",DA=TDUZ,DR="7///YES"
- D ^DIE
- ; Also set termination date (field 9.2) so LIST2 shows TERMINATED
- K FDA S FDA(200,TDUZ_",",9.2)=DT
- D UPDATE^DIE("E","FDA","","ERRS")
- S DUZ(0)=DUZ0SAVE
- ;
- I $P($G(^VA(200,TDUZ,0)),U,7)=1 S RESULT(0)="1^User DUZ "_TDUZ_" deactivated" Q
- S RESULT(0)="-1^FileMan ^DIE failed to deactivate user"
- Q
- ;
-REACT(RESULT,P1) ;
- ; P1=DUZ to reactivate — clears DISUSER (field 7) via ^DIE,
- ; clears termination date (field 9.2) via UPDATE^DIE like XUSERNEW.m
- ; Field 7 is SET type (0:NO;1:YES) stored at node 0, piece 7
- N TDUZ,DIE,DA,DR,DUZ0SAVE,FDA,ERRS
- S TDUZ=+$G(P1)
- I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
- I $P($G(^VA(200,TDUZ,0)),U,7)'=1 S RESULT(0)="0^User already active" Q
- ;
- S DUZ0SAVE=$G(DUZ(0))
- S DUZ(0)="@"
- D DT^DICRW
- ; Clear DISUSER via ^DIE — set to NO (external value for SET type)
- S DIE="^VA(200,",DA=TDUZ,DR="7///NO"
- D ^DIE
- ; Clear termination date (field 9.2) via UPDATE^DIE like XUSERNEW.m
- K FDA S FDA(200,TDUZ_",",9.2)="@"
- D UPDATE^DIE("E","FDA")
- S DUZ(0)=DUZ0SAVE
- ;
- I $P($G(^VA(200,TDUZ,0)),U,7)'=1 S RESULT(0)="1^User DUZ "_TDUZ_" reactivated" Q
- S RESULT(0)="-1^FileMan failed to reactivate user"
- Q
- ;
-RENAME(RESULT,P1,P2) ;
- ; P1=DUZ, P2=new name (LAST,FIRST format)
- ; Renames user via ^DIE on field .01
- ; XUNOTRIG=1 suppresses SOUNDEX (ASX xref) interactive prompt.
- ; XUITNAME=1 required by the input transform so $$FORMAT^XLFNAME7
- ; result is kept (otherwise XLFNC is killed). DT^DICRW sets the
- ; FileMan date needed by the AE (creator/date) cross-reference.
- N TDUZ,NEWNAME,DIE,DA,DR,DUZ0SAVE,OLDNAME
- S TDUZ=+$G(P1)
- S NEWNAME=$G(P2)
- I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
- I NEWNAME="" S RESULT(0)="-1^New name required (LAST,FIRST format)" Q
- I NEWNAME'["," S RESULT(0)="-1^Name must be LAST,FIRST format" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
- I $D(^VA(200,"B",NEWNAME)) S RESULT(0)="-1^Name already exists in File 200" Q
- ;
- S OLDNAME=$P(^VA(200,TDUZ,0),U,1)
- S DUZ0SAVE=$G(DUZ(0))
- S DUZ(0)="@"
- D DT^DICRW
- S XUNOTRIG=1,XUITNAME=1
- ; UPDATE^DIE with "E" flag: external format, fires input transforms,
- ; triggers auditing, and updates cross-references properly.
- N FDA,ERRS
+ N OLDNAME S OLDNAME=$$GET1^DIQ(200,TDUZ_",",.01,"E")
+ N FDA,DIERR
  S FDA(200,TDUZ_",",.01)=NEWNAME
- D UPDATE^DIE("E","FDA","","ERRS")
- S DUZ(0)=DUZ0SAVE
+ D FILE^DIE("","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^FILE^DIE error: "_$G(DIERR("DIERR",1,"TEXT",1)) Q
  ;
- I $D(ERRS) D  Q
- . N EMSG S EMSG=$G(ERRS("DIERR",1,"TEXT",1))
- . S RESULT(0)="-1^FileMan UPDATE^DIE failed: "_EMSG
- N CURNAME S CURNAME=$P($G(^VA(200,TDUZ,0)),U,1)
- I CURNAME=NEWNAME D  Q
- . ; Check if UPDATE^DIE already created an audit entry for this rename.
- . ; If so, skip explicit write to avoid duplicates.
- . N AIEN,FOUND S FOUND=0
- . S AIEN="" F  S AIEN=$O(^DIA(200,"B",TDUZ,AIEN),-1) Q:AIEN=""  D  Q:FOUND
- . . N AD0 S AD0=$G(^DIA(200,AIEN,0))
- . . I $P(AD0,U,3)=.01,$G(^DIA(200,AIEN,3))=CURNAME S FOUND=AIEN
- . I FOUND S RESULT(0)="1^User DUZ "_TDUZ_" renamed from "_OLDNAME_" to "_CURNAME S RESULT(1)="AUDIT^"_FOUND Q
- . ; FileMan's UPDATE^DIE does not auto-audit .01 changes — write explicit entry.
- . N NIEN
- . S NIEN=$O(^DIA(200,9999999999),-1)
- . I NIEN'?1.N S NIEN=0
- . S NIEN=NIEN+1
- . S ^DIA(200,NIEN,0)=TDUZ_U_$$NOW^XLFDT_U_.01_U_DUZ_U
- . S ^DIA(200,NIEN,2)=OLDNAME
- . S ^DIA(200,NIEN,3)=CURNAME
- . S ^DIA(200,"B",TDUZ,NIEN)=""
- . S RESULT(0)="1^User DUZ "_TDUZ_" renamed from "_OLDNAME_" to "_CURNAME
- . S RESULT(1)="AUDIT^"_NIEN
- S RESULT(0)="-1^FileMan UPDATE^DIE failed to rename user"
- Q
+ D AUDITLOG^ZVEADMIN("USER-RENAME",+TDUZ,"Renamed: "_OLDNAME_" -> "_NEWNAME)
+ S R(0)="1^OK^"_NEWNAME Q
  ;
-TERM(RESULT,P1) ;
- ; P1=DUZ — Full user termination (DISUSER + termination date + clear access)
- ; Follows the VA Kernel termination pattern: XU USER TERMINATE
- ; 1. Set DISUSER(7)=YES  2. Set termination date(9.2)=today
- ; 3. Clear access code(field .1)  4. Leave verify code for audit
- N TDUZ,DIE,DA,DR,DUZ0SAVE,FDA,ERRS
- S TDUZ=+$G(P1)
- I TDUZ<1 S RESULT(0)="-1^DUZ required" Q
- I '$D(^VA(200,TDUZ,0)) S RESULT(0)="-1^User not found" Q
+AUDLOG(R,TDUZ,MAX) ; RPC ZVE USMG AUDLOG — ZVE administrative audit log
+ ; Walks the ZVE-local audit log written by AUDITLOG^ZVEADMIN, stored at
+ ; ^ZVEADM("AUDIT",LN)="EVT^DATE^SRCDUZ^TARGETDUZ^MSG". Returns the most
+ ; recent MAX entries, newest first, with an optional target-DUZ filter.
  ;
- S DUZ0SAVE=$G(DUZ(0))
- S DUZ(0)="@"
- D DT^DICRW
- ; Set DISUSER and termination date together
- S DIE="^VA(200,",DA=TDUZ,DR="7///YES;9.2///TODAY"
- D ^DIE
- ; Clear access code via UPDATE^DIE (prevents login even if DISUSER unset)
- K FDA S FDA(200,TDUZ_",",.1)="@"
- D UPDATE^DIE("E","FDA","","ERRS")
- S DUZ(0)=DUZ0SAVE
+ ; Params:
+ ;   TDUZ — optional target DUZ filter. Empty or "*" for all users.
+ ;   MAX  — optional result cap (default 50, hard cap 500)
  ;
- I $P($G(^VA(200,TDUZ,0)),U,7)=1 D  Q
- . S RESULT(0)="1^User DUZ "_TDUZ_" terminated"
- . S RESULT(1)="DISUSER^1"
- . S RESULT(2)="TERMDATE^"_$P($G(^VA(200,TDUZ,0)),U,11)
- . S RESULT(3)="ACCESSCLEARED^"_$S($G(^VA(200,TDUZ,.1))="":1,1:0)
- S RESULT(0)="-1^FileMan failed to terminate user"
- Q
+ ; Output:
+ ;   Line 0: "1^COUNT^OK"
+ ;   Data  : "IEN^FILE^DATETIME^EVENT^FIELDNUM^USERDUZ^OLD^NEW^DESCRIPTION"
+ N CNT,OUT,LIMIT
+ S TDUZ=$G(TDUZ)
+ S LIMIT=+$G(MAX) I LIMIT<1 S LIMIT=50
+ I LIMIT>500 S LIMIT=500
+ S CNT=0
  ;
-AUDLOG(RESULT,P1,P2) ;
- ; P1=target DUZ (or * for all), P2=max entries (default 50)
- ; Returns VistA's native FileMan audit trail (^DIA(200)) entries
- N TDUZ,MAX,CT,IEN,LINE,FLDNUM,FLDNAME,WHO,WHEN,OLDV,NEWV
- S TDUZ=$G(P1),MAX=+$G(P2)
- I MAX<1 S MAX=50
- I TDUZ="" S TDUZ="*"
+ N LN S LN=""
+ F  S LN=$O(^ZVEADM("AUDIT",LN),-1) Q:LN=""!(CNT'<LIMIT)  D
+ . N Z,EVT,DT,SRC,TGT,MSG
+ . S Z=$G(^ZVEADM("AUDIT",LN))
+ . I Z="" Q
+ . S EVT=$P(Z,U,1),DT=$P(Z,U,2),SRC=$P(Z,U,3),TGT=$P(Z,U,4),MSG=$P(Z,U,5,99)
+ . I TDUZ]"",TDUZ'="*",+TDUZ'=+TGT Q
+ . S CNT=CNT+1
+ . S OUT(CNT)=LN_U_"200"_U_DT_U_EVT_U_""_U_SRC_U_""_U_""_U_MSG
  ;
- I '$D(^DIA(200)) S RESULT(0)="0^No audit trail for File 200" Q
- ;
- S CT=0,RESULT(0)="1^OK"
- S IEN=9999999999 F  S IEN=$O(^DIA(200,IEN),-1) Q:IEN'?1.N  Q:CT'<MAX  D
- . N D0 S D0=$G(^DIA(200,IEN,0))
- . Q:D0=""
- . N ENTRY S ENTRY=$P(D0,U,1)
- . I TDUZ'="*",ENTRY'=TDUZ Q
- . S CT=CT+1
- . S WHEN=$P(D0,U,2)
- . S FLDNUM=$P(D0,U,3)
- . S WHO=$P(D0,U,4)
- . S OLDV=$G(^DIA(200,IEN,2))
- . S NEWV=$G(^DIA(200,IEN,3))
- . ; Look up field name from DD
- . S FLDNAME=$S(FLDNUM'="":$P($G(^DD(200,FLDNUM,0)),U,1),1:"?")
- . S RESULT(CT)=IEN_U_ENTRY_U_WHEN_U_FLDNAME_U_FLDNUM_U_WHO_U_OLDV_U_NEWV
- Q
- ;
-INSTALL ;
- D REGONE("ZVE USMG KEYS","KEYS","ZVEUSMG","Add/remove security keys for a user")
- D REGONE("ZVE USMG ESIG","ESIG","ZVEUSMG","E-signature status check")
- D REGONE("ZVE USMG CRED","CRED","ZVEUSMG","Credential metadata check")
- D REGONE("ZVE USMG ADD","ADD","ZVEUSMG","Create minimal File 200 user")
- D REGONE("ZVE USMG DEACT","DEACT","ZVEUSMG","Deactivate user (DISUSER)")
- D REGONE("ZVE USMG REACT","REACT","ZVEUSMG","Reactivate user")
- D REGONE("ZVE USMG RENAME","RENAME","ZVEUSMG","Rename user (.01 field)")
- D REGONE("ZVE USMG TERM","TERM","ZVEUSMG","Terminate user (DISUSER+date+clear access)")
- D REGONE("ZVE USMG AUDLOG","AUDLOG","ZVEUSMG","Query FileMan audit trail for File 200")
- W !,"ZVEUSMG installed.",!
- Q
- ;
-REGONE(NAME,TAG,RTN,DESC) ;
- N IEN,FDA,IENS,ERRS
- S IEN=$$FIND1^DIC(8994,,"BX",NAME)
- I IEN>0 W !,"RPC '"_NAME_"' already registered, skipping." Q
- S IENS="+1,"
- S FDA(8994,IENS,.01)=NAME
- S FDA(8994,IENS,.02)=TAG
- S FDA(8994,IENS,.03)=RTN
- S FDA(8994,IENS,.04)=2
- D UPDATE^DIE("E","FDA","","ERRS")
- I $D(ERRS) W !,"ERROR: ",$G(ERRS("DIERR",1,"TEXT",1)) Q
- S IEN=$$FIND1^DIC(8994,,"BX",NAME)
- W !,"Registered "_NAME_" (IEN="_IEN_")"
+ S R(0)="1^"_CNT_"^OK"
+ N I F I=1:1:CNT S R(I)=OUT(I)
  Q

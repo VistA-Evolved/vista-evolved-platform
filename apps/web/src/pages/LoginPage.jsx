@@ -18,7 +18,10 @@ export default function LoginPage() {
     try {
       const data = await login(username, password);
       if (data.ok) {
-        navigate('/dashboard');
+        // X005: Redirect back to the page the user was on before session expired
+        const returnTo = sessionStorage.getItem('ve-return-to');
+        sessionStorage.removeItem('ve-return-to');
+        navigate(returnTo || '/dashboard');
       } else {
         setError(data.error || data.message || 'Invalid credentials. Please try again.');
       }

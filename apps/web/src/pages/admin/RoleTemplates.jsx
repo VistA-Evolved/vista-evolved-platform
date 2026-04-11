@@ -509,6 +509,13 @@ export default function RoleTemplates() {
 
   const confirmClone = async () => {
     if (!cloneName.trim() || !cloneModalSource) return;
+    // R009: Validate unique name — no duplicates allowed
+    const nameUpper = cloneName.trim().toUpperCase();
+    const existingNames = [...ROLES.map(r => r.name.toUpperCase()), ...customRoles.map(r => r.name.toUpperCase())];
+    if (existingNames.includes(nameUpper)) {
+      setError(`Role name "${cloneName.trim()}" already exists. Choose a unique name.`);
+      return;
+    }
     setRoleSaving(true);
     const newRole = {
       ...cloneModalSource,
