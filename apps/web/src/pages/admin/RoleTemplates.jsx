@@ -450,6 +450,8 @@ export default function RoleTemplates() {
   // Custom role editing state
   const [editingCustomKeys, setEditingCustomKeys] = useState(false);
   const [customKeySearch, setCustomKeySearch] = useState('');
+  // Workspace access editing for custom roles
+  const [editedWorkspaceAccess, setEditedWorkspaceAccess] = useState(null);
 
   useEffect(() => {
     Promise.allSettled([
@@ -513,6 +515,7 @@ export default function RoleTemplates() {
       id: `custom-${Date.now()}`,
       name: cloneName.trim(),
       isSystem: false,
+      clonedFrom: cloneModalSource.isSystem ? cloneModalSource.id : cloneModalSource.clonedFrom || null,
       userCount: 0,
     };
     try {
@@ -649,7 +652,7 @@ export default function RoleTemplates() {
             {filteredRoles.map(role => (
               <button
                 key={role.id}
-                onClick={() => setSelectedRole(role)}
+                onClick={() => { setSelectedRole(role); setEditedWorkspaceAccess(null); }}
                 className={`w-full text-left p-3 rounded-md transition-colors ${
                   selectedRole.id === role.id ? 'bg-[#E8EEF5] border border-[#2E5984]' : 'hover:bg-[#F5F8FB] border border-transparent'
                 }`}
@@ -899,13 +902,24 @@ export default function RoleTemplates() {
                 </h3>
                 <div className="mb-3 p-3 bg-[#FFF8E1] rounded-lg text-[12px] text-[#F57C00] flex items-start gap-2">
                   <span className="material-symbols-outlined text-[16px] mt-0.5">info</span>
-                  <span>These workspace access levels are <strong>recommended defaults</strong> for this role. Actual page access is determined by the security keys assigned above. Use this grid as a planning reference when configuring environments.</span>
+                  <span>These workspace access levels are <strong>recommended defaults</strong> for this role. Actual page access is determined by the security keys assigned above. {selectedRole.isSystem ? 'Built-in roles cannot be modified directly — click "Clone Role" to create a customizable copy.' : 'Click an access level to cycle through Read/Write → Read Only → No Access.'}</span>
                 </div>
                 <div className="space-y-2">
                   {ALL_WORKSPACES.map(ws => {
-                    const access = selectedRole.workspaceAccess?.[ws] || 'none';
+                    const accessSource = editedWorkspaceAccess && !selectedRole.isSystem ? editedWorkspaceAccess : selectedRole.workspaceAccess;
+                    const access = accessSource?.[ws] || 'none';
+                    const cycleAccess = () => {
+                      if (selectedRole.isSystem) return;
+                      const cycle = { rw: 'ro', ro: 'none', none: 'rw' };
+                      const current = editedWorkspaceAccess || { ...selectedRole.workspaceAccess };
+                      setEditedWorkspaceAccess({ ...current, [ws]: cycle[access] });
+                    };
                     return (
-                      <div key={ws} className={`flex items-center justify-between px-4 py-3 rounded-lg border ${access !== 'none' ? 'border-[#E2E4E8] bg-white' : 'border-transparent bg-[#FAFAFA]'}`}>
+                      <div
+                        key={ws}
+                        onClick={!selectedRole.isSystem ? cycleAccess : undefined}
+                        className={`flex items-center justify-between px-4 py-3 rounded-lg border ${access !== 'none' ? 'border-[#E2E4E8] bg-white' : 'border-transparent bg-[#FAFAFA]'} ${!selectedRole.isSystem ? 'cursor-pointer hover:border-[#2E5984] transition-colors' : ''}`}
+                      >
                         <div className="flex items-center gap-3">
                           <div className={`w-2 h-2 rounded-full ${access === 'rw' ? 'bg-[#1B7D3A]' : access === 'ro' ? 'bg-[#2E5984]' : 'bg-[#DDD]'}`} />
                           <span className={`text-[13px] ${access !== 'none' ? 'text-[#222] font-medium' : 'text-[#999]'}`}>{ws}</span>
@@ -917,6 +931,55 @@ export default function RoleTemplates() {
                     );
                   })}
                 </div>
+                {/* Save / Reset buttons for custom roles with edited workspace access */}
+                {editedWorkspaceAccess && !selectedRole.isSystem && (
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await updateCustomRole(selectedRole.id, {
+                            name: selectedRole.name,
+                            description: selectedRole.description,
+                            keys: selectedRole.permissions.map(p => p.key),
+                            workspaceAccess: editedWorkspaceAccess,
+                          });
+                          const updated = { ...selectedRole, workspaceAccess: editedWorkspaceAccess };
+                          setCustomRoles(prev => prev.map(r => r.id === selectedRole.id ? updated : r));
+                          setSelectedRole(updated);
+                          setEditedWorkspaceAccess(null);
+                        } catch (err) {
+                          setError(err.message || 'Failed to save workspace access');
+                        }
+                      }}
+                      className="px-4 py-2 text-[13px] font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors"
+                    >
+                      Save Workspace Access
+                    </button>
+                    <button
+                      onClick={() => setEditedWorkspaceAccess(null)}
+                      className="px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors"
+                    >
+                      Discard Changes
+                    </button>
+                  </div>
+                )}
+                {/* Reset to Default for custom roles cloned from a built-in */}
+                {!selectedRole.isSystem && selectedRole.clonedFrom && !editedWorkspaceAccess && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => {
+                        const source = ROLES.find(r => r.id === selectedRole.clonedFrom);
+                        if (source) {
+                          setEditedWorkspaceAccess({ ...source.workspaceAccess });
+                        }
+                      }}
+                      className="px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px] mr-1 align-middle">restart_alt</span>
+                      Reset to Default
+                    </button>
+                  </div>
+                )}
               </section>
             )}
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppShell from './components/shell/AppShell';
 import LoginPage from './pages/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import { getSessionToken } from './services/api';
 import { getSession } from './services/adminService';
@@ -151,6 +152,7 @@ export default function App() {
         <Routes>
           {/* Auth */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
           {/* Dashboard */}
           <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />

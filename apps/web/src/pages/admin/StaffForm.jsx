@@ -260,6 +260,7 @@ export default function StaffForm() {
 
   const [form, setForm] = useState({
     fullName: '', displayName: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
+    employeeId: '',
     primaryRole: '', department: '', isProvider: false, sigBlockName: '',
     primaryLocation: '', additionalLocations: [],
     providerType: '', npi: '', dea: '', deaExpiration: '',
@@ -473,6 +474,7 @@ export default function StaffForm() {
                   const preserveMailGroups = form.mailGroups || [];
                   setForm({
                     fullName: '', displayName: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
+                    employeeId: '',
                     primaryRole: '', department: preserveDepartment, isProvider: false, sigBlockName: '',
                     primaryLocation: preserveLocation, additionalLocations: [],
                     providerType: '', npi: '', dea: '', deaExpiration: '',
@@ -610,6 +612,12 @@ export default function StaffForm() {
                   <input type="tel" value={form.phone || ''} onChange={e => updateField('phone', e.target.value)}
                     placeholder="(503) 555-0100" className="form-input" />
                 </FormField>
+                <FormField label="Employee ID / Badge Number"
+                  hint="Your organization's employee identifier. Leave blank to use system-generated Staff ID only.">
+                  <input type="text" value={form.employeeId || ''}
+                    onChange={e => updateField('employeeId', e.target.value)}
+                    placeholder="e.g., EMP-1234" maxLength={30} className="form-input" />
+                </FormField>
                 <FormField label="Preferred Language" hint="The user's preferred language for system messages and reports. VistA File #200 field 200.07.">
                   <select value={form.language || ''} onChange={e => updateField('language', e.target.value)} className="form-input">
                     <option value="">System default (English)</option>
@@ -640,10 +648,16 @@ export default function StaffForm() {
                 In VistA, these are called Access Code and Verify Code.
               </p>
               {!isEdit && (
+                <>
                 <div className="p-4 bg-[#FFF3E0] rounded-lg text-sm text-[#E65100] flex items-start gap-2">
                   <span className="material-symbols-outlined text-[16px] mt-0.5">warning</span>
                   <span>These credentials cannot be retrieved later. Note them now and communicate securely to the staff member.</span>
                 </div>
+                <div className="p-4 bg-[#E3F2FD] rounded-lg text-sm text-[#1565C0] flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] mt-0.5">info</span>
+                  <span>This is a temporary password. The user will be required to change it on their first sign-in. Do not share this password via email — deliver it verbally or in a sealed envelope.</span>
+                </div>
+                </>
               )}
               <FormField label="Username (Access Code)" required={!isEdit}
                 error={validationErrors.accessCode}
@@ -816,7 +830,10 @@ export default function StaffForm() {
                             updateField('mailGroups', next);
                           }}
                           className="w-4 h-4 rounded border-border" />
-                        <span className="font-medium text-text">{g.name}</span>
+                        <div className="flex-1">
+                          <span className="font-medium text-text">{g.name}</span>
+                          {g.description && <p className="text-xs text-[#666] mt-0.5">{g.description}</p>}
+                        </div>
                       </label>
                     ))}
                   </div>

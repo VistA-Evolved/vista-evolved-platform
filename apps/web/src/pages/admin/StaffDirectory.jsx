@@ -187,9 +187,10 @@ export default function StaffDirectory() {
     setDetailLoading(true);
     setCprsTabData([]);
     try {
-      const [userRes, keysRes] = await Promise.all([
+      const [userRes, keysRes, cprsRes] = await Promise.all([
         getStaffMember(row.duz),
         getUserPermissions(row.duz),
+        getCprsTabAccess(row.duz).catch(() => ({ tabs: [], data: [] })),
       ]);
       const vg = userRes?.data?.vistaGrounding || {};
       const esig = vg.electronicSignature || {};
@@ -228,10 +229,11 @@ export default function StaffDirectory() {
         filemanAccessCode: vg.filemanAccessCode || '',
         defaultOrderList: vg.defaultOrderList || '',
         proxyUser: vg.proxyUser || '',
+        employeeId: vg.employeeId || userRes?.data?.employeeId || '',
       });
       setDetailKeys(keysRes?.data || []);
-      // B8: Load CPRS Tab Access data (non-blocking)
-      getCprsTabAccess(row.duz).then(res => setCprsTabData(res?.tabs || res?.data || [])).catch(() => setCprsTabData([]));
+      // B8: CPRS Tab Access data now loaded in parallel
+      setCprsTabData(cprsRes?.tabs || cprsRes?.data || []);
     } catch (err) {
       setDetailData(prev => prev || { ...row, _loadError: err.message || 'Failed to load details' });
     } finally {
@@ -676,8 +678,11 @@ export default function StaffDirectory() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '' }); }}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-[#222] mb-2">Clone Staff Member</h3>
-            <p className="text-sm text-[#666] mb-4">
+            <p className="text-sm text-[#666] mb-1">
               The new user will receive the same permissions and settings as <strong>{cloneSource.name}</strong>.
+            </p>
+            <p className="text-xs text-[#999] mb-4">
+              {cloneSource.permissionCount || 0} permissions{cloneSource.division ? `, ${cloneSource.division}` : ''}{cloneSource.department ? ` — ${cloneSource.department}` : ''} will be copied.
             </p>
             <div className="space-y-3">
               <div>
@@ -890,6 +895,7 @@ function StaffDetailContent({
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <DetailField label="Staff ID" value={detailData.id} mono />
+        {detailData.employeeId && <DetailField label="Employee ID" value={detailData.employeeId} />}
         <DetailField label="Title" value={detailData.title} />
         <DetailField label="Department" value={detailData.department} />
         <DetailField label="Phone" value={detailData.phone} />
@@ -1081,11 +1087,11 @@ function StaffDetailContent({
               <span className="material-symbols-outlined text-[16px] mr-2 align-middle">print</span>
               Print Access Letter
             </button>
-            <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
-              title="Removes this user's electronic signature code."
+            <button disabled={clearingEsig || detailData.esigStatus !== 'active'} onClick={() => handleClearEsig(detailData.duz)}
+              title={detailData.esigStatus === 'active' ? 'Removes this user\'s electronic signature code.' : 'E-signature not yet set'}
               className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors disabled:opacity-50">
               <span className="material-symbols-outlined text-[16px] mr-2 align-middle">backspace</span>
-              {clearingEsig ? 'Clearing E-Signature...' : 'Clear E-Signature'}
+              {clearingEsig ? 'Clearing E-Signature...' : detailData.esigStatus === 'active' ? 'Clear E-Signature' : 'E-signature not yet set'}
             </button>
           </div>
         </div>
