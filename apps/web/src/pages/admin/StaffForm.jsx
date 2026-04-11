@@ -257,22 +257,6 @@ export default function StaffForm() {
     }
   }, [currentStep]);
 
-  // F009: Warn on unsaved changes (beforeunload)
-  const isDirty = form.lastName || form.firstName || form.accessCode || form.verifyCode;
-  useEffect(() => {
-    if (!isDirty || createSuccess) return;
-    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [isDirty, createSuccess]);
-
-  // I006: Scroll to submit error when it appears
-  useEffect(() => {
-    if (submitError && submitErrorRef.current) {
-      submitErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [submitError]);
-
   const validateStep = (stepId) => {
     const errors = {};
     if (stepId === 'person') {
@@ -339,6 +323,22 @@ export default function StaffForm() {
   const [submitError, setSubmitError] = useState('');
   const [createSuccess, setCreateSuccess] = useState(null);
   const submitErrorRef = useRef(null);
+
+  // F009: Warn on unsaved changes (beforeunload)
+  const isDirty = form.lastName || form.firstName || form.accessCode || form.verifyCode;
+  useEffect(() => {
+    if (!isDirty || createSuccess) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty, createSuccess]);
+
+  // I006: Scroll to submit error when it appears
+  useEffect(() => {
+    if (submitError && submitErrorRef.current) {
+      submitErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [submitError]);
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const step = STEPS[currentStep];
