@@ -101,6 +101,7 @@ export function ConfirmDialog({ open = true, title, message, confirmLabel = 'Con
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') onCancel?.();
+    if (e.key === 'Enter') onConfirm?.();
   };
 
   return (

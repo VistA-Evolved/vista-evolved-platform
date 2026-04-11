@@ -202,6 +202,7 @@ function buildFields(params, sectionId) {
 
 export default function SecurityAuth() {
   const [selectedSection, setSelectedSection] = useState('login');
+  useEffect(() => { document.title = 'Security & Auth — VistA Evolved'; }, []);
   const [editedValues, setEditedValues] = useState({});
   const [changeReason, setChangeReason] = useState('');
   const [kernelParams, setKernelParams] = useState(null);
@@ -213,6 +214,8 @@ export default function SecurityAuth() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [currentDuz, setCurrentDuz] = useState('');
+  // S004: Confirm when disabling audit
+  const [confirmAuditDisable, setConfirmAuditDisable] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -283,6 +286,17 @@ export default function SecurityAuth() {
 
   const handleSave = async () => {
     if (hasViolation || !changeReason.trim()) return;
+    // S007: Require minimum 10 characters for change reason
+    if (changeReason.trim().length < 10) {
+      setSaveResult({ type: 'error', msg: 'Reason must be at least 10 characters.' });
+      return;
+    }
+    // S004: Confirm when disabling audit
+    if (editedValues['OPTION AUDIT'] === 'n' && !confirmAuditDisable) {
+      setConfirmAuditDisable(true);
+      return;
+    }
+    setConfirmAuditDisable(false);
     setSaving(true);
     setSaveResult(null);
     try {
@@ -624,6 +638,29 @@ export default function SecurityAuth() {
         </div>
       </div>
 
+      {/* S004: Confirm disabling audit */}
+      {confirmAuditDisable && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 text-[#CC3333] mb-3">
+              <span className="material-symbols-outlined text-[24px]">warning</span>
+              <h3 className="text-lg font-bold">Disable Auditing?</h3>
+            </div>
+            <p className="text-sm text-[#666] mb-4">
+              Disabling data auditing removes the activity trail for user actions.
+              This may violate HIPAA and VHA compliance requirements.
+              Are you sure you want to proceed?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setConfirmAuditDisable(false)}
+                className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F5F5F5]">Cancel</button>
+              <button onClick={() => { setConfirmAuditDisable(false); handleSave(); }}
+                className="px-4 py-2 text-sm bg-[#CC3333] text-white rounded-md hover:bg-[#B71C1C]">Disable Auditing</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sticky save bar — always visible at the bottom when changes are pending */}
       {hasChanges && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t-2 border-[#1A1A2E] shadow-[0_-4px_20px_rgba(0,0,0,0.15)] px-6 py-4">
@@ -634,7 +671,7 @@ export default function SecurityAuth() {
             </div>
             <div className="flex-1">
               <input type="text" value={changeReason} onChange={e => setChangeReason(e.target.value)}
-                placeholder="Reason for change (required) *"
+                placeholder="Reason for change (required, min 10 chars) *"
                 className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
             </div>
             {saveResult?.type === 'error' && (
@@ -652,7 +689,7 @@ export default function SecurityAuth() {
                 Policy violation
               </span>
             )}
-            <button disabled={!changeReason.trim() || hasViolation || saving} onClick={handleSave}
+            <button disabled={changeReason.trim().length < 10 || hasViolation || saving} onClick={handleSave}
               className="px-5 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap">
               {saving ? 'Saving...' : sectionMeta?.twoPersonRequired ? 'Submit for Approval' : 'Save Changes'}
             </button>

@@ -1537,6 +1537,7 @@ async function main() {
       '53.42': 'COSIGNER',
       '53.5': 'PROVIDER CLASS',
       '55': 'PHARMACY SCHEDULES',
+      '10.6': 'DEGREE',
       '101.01': 'RESTRICT PATIENT SELECTION',
       '200.07': 'LANGUAGE',
       '201': 'PRIMARY MENU OPTION',
@@ -1557,7 +1558,7 @@ async function main() {
         const z = await callZveRpc('ZVE USER EDIT', [String(ien), zveFld, String(value)]);
         const o = zveOutcome(z);
         if (o.kind === 'ok') {
-          return { ok: true, source: 'zve', tenantId, ien, field, rpcUsed: z.rpcUsed, lines: z.lines };
+          return { ok: true, source: 'zve', tenantId, ien, field, storedValue: String(value), rpcUsed: z.rpcUsed, lines: z.lines };
         }
         if (o.kind !== 'missing') {
           return reply.code(502).send({ ok: false, source: 'zve', error: o.msg, rpcUsed: z.rpcUsed });
@@ -1584,6 +1585,7 @@ async function main() {
       tenantId,
       ien,
       field,
+      storedValue: String(value),
       rpcUsed: ['DDR VALIDATOR', filer.rpcUsed],
       filerLines: filer.lines,
       validatorLines: valRes.lines,
@@ -1736,6 +1738,8 @@ async function main() {
       filemanAccess: '3',
       // A020: DEA Expiration Date
       deaExpiration: '53.21',
+      // E011: Degree / Suffix
+      degree: '10.6',
     };
     if (newIen) {
       const iens = `${newIen},`;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { login } from '../services/adminService';
 
@@ -10,6 +10,8 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const timedOut = location.state?.reason === 'timeout';
+
+  useEffect(() => { document.title = 'Sign In — VistA Evolved'; }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,7 +25,20 @@ export default function LoginPage() {
         sessionStorage.removeItem('ve-return-to');
         navigate(returnTo || '/dashboard');
       } else {
-        setError(data.error || data.message || 'Invalid credentials. Please try again.');
+        // I004: Parse VistA broker errors into user-friendly messages
+        const raw = data.error || data.message || '';
+        const lower = raw.toLowerCase();
+        if (lower.includes('locked') || lower.includes('lockout')) {
+          setError('Your account has been locked due to too many failed attempts. Contact your system administrator.');
+        } else if (lower.includes('disabled') || lower.includes('disuser') || lower.includes('inactive')) {
+          setError('Your account has been deactivated. Contact your system administrator to restore access.');
+        } else if (lower.includes('expired') || lower.includes('verify code')) {
+          setError('Your password has expired. Contact your system administrator to reset it.');
+        } else if (lower.includes('not found') || lower.includes('no such')) {
+          setError('Username not found. Check your username and try again.');
+        } else {
+          setError(raw || 'Invalid credentials. Please try again.');
+        }
       }
     } catch (err) {
       if (err.name === 'ApiError') {

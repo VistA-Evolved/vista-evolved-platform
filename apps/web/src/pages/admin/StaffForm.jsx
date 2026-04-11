@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
@@ -133,7 +133,9 @@ export default function StaffForm() {
   const { userId } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(userId);
+  useEffect(() => { document.title = isEdit ? 'Edit Staff — VistA Evolved' : 'New Staff — VistA Evolved'; }, [isEdit]);
   const [currentStep, setCurrentStep] = useState(0);
+  const stepContentRef = useRef(null);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
   const [liveSites, setLiveSites] = useState([]);
@@ -247,6 +249,14 @@ export default function StaffForm() {
     }
   }, [isEdit, userId]);
 
+  // J001: Focus first input when step changes
+  useEffect(() => {
+    if (stepContentRef.current) {
+      const firstInput = stepContentRef.current.querySelector('input:not([type=hidden]),select,textarea');
+      if (firstInput) firstInput.focus();
+    }
+  }, [currentStep]);
+
   const validateStep = (stepId) => {
     const errors = {};
     if (stepId === 'person') {
@@ -300,7 +310,7 @@ export default function StaffForm() {
     secondaryFeatures: ['OR CPRS GUI CHART'],
     removedDefaults: [],
     language: '', verifyCodeNeverExpires: false, filemanAccess: '',
-    restrictPatient: '', mailGroups: [],
+    restrictPatient: '', mailGroups: [], degree: '',
     accessCode: '', verifyCode: '', verifyCodeConfirm: '',
     requiresCosign: false, cosigner: '',
   });
@@ -383,6 +393,7 @@ export default function StaffForm() {
         restrictPatient: form.restrictPatient || '',
         employeeId: form.employeeId || '',
         title: form.title || '',
+        degree: form.degree || '',
       };
       if (isEdit) {
         // C001 fix: Send individual field updates instead of bulk payload.
@@ -391,7 +402,7 @@ export default function StaffForm() {
           email: '.151', phone: '.132', title: '8', sex: '4', npi: '41.99',
           dea: '53.2', department: '29', sigBlockName: '20.3', language: '200.07',
           filemanAccess: '3', restrictPatient: '101.01', providerType: '53.5',
-          cosigner: '53.42', deaExpiration: '53.21',
+          cosigner: '53.42', deaExpiration: '53.21', degree: '10.6',
         };
         const BOOL_FIELDS = {
           verifyCodeNeverExpires: '9.5', authorizedToWriteMeds: '53.11',
@@ -584,7 +595,7 @@ export default function StaffForm() {
                     secondaryFeatures: ['OR CPRS GUI CHART'],
                     removedDefaults: [],
                     language: '', verifyCodeNeverExpires: false, filemanAccess: '',
-                    restrictPatient: '', mailGroups: preserveMailGroups,
+                    restrictPatient: '', mailGroups: preserveMailGroups, degree: '',
                     accessCode: '', verifyCode: '', verifyCodeConfirm: '',
                     requiresCosign: false, cosigner: '',
                   });
@@ -667,7 +678,7 @@ export default function StaffForm() {
           </div>
         )}
 
-        <div className="bg-white border border-border rounded-lg p-6">
+        <div ref={stepContentRef} className="bg-white border border-border rounded-lg p-6">
 
           {/* STEP 1: Person & Credentials */}
           {step.id === 'person' && (
@@ -695,6 +706,16 @@ export default function StaffForm() {
                       placeholder="A" className="form-input" maxLength={1} />
                   </FormField>
                 </div>
+                {/* L001/L002: Name character counter */}
+                {(form.lastName || form.firstName) && (() => {
+                  const composed = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`;
+                  const remaining = 35 - composed.length;
+                  return (
+                    <p className={`text-[11px] mt-1 -mb-2 ${remaining < 0 ? 'text-[#CC3333] font-medium' : remaining < 6 ? 'text-[#E65100]' : 'text-[#999]'}`}>
+                      Composed name: <span className="font-mono">{composed.toUpperCase()}</span> — {remaining >= 0 ? `${remaining} characters remaining` : `${-remaining} over limit`}
+                    </p>
+                  );
+                })()}
                 <FormField label="Display Name" hint="Optional friendly name for UI display">
                   <input type="text" value={form.displayName} onChange={e => updateField('displayName', e.target.value)}
                     placeholder="Jane Smith" className="form-input" maxLength={50} />
@@ -737,6 +758,11 @@ export default function StaffForm() {
                     onChange={e => updateField('employeeId', e.target.value)}
                     placeholder="e.g., EMP-1234" maxLength={30} className="form-input" />
                 </FormField>
+                <FormField label="Degree / Suffix" hint="Professional degree or credential suffix (e.g., MD, DO, PhD, RN). Stored in VistA File #200 field 10.6.">
+                  <input type="text" value={form.degree || ''}
+                    onChange={e => updateField('degree', e.target.value.toUpperCase())}
+                    placeholder="MD" maxLength={20} className="form-input" />
+                </FormField>
                 <FormField label="Preferred Language" hint="The user's preferred language for system messages and reports. VistA File #200 field 200.07.">
                   <select value={form.language || ''} onChange={e => updateField('language', e.target.value)} className="form-input">
                     <option value="">System default (English)</option>
@@ -778,7 +804,7 @@ export default function StaffForm() {
                 </div>
                 </>
               )}
-              <FormField label="Username (Access Code)" required={!isEdit}
+              <FormField label="Username" required={!isEdit}
                 error={validationErrors.accessCode}
                 hint="The identifier the user enters at the login prompt. 3-20 characters, letters and numbers. Called 'Access Code' in VistA.">
                 <input
@@ -790,7 +816,7 @@ export default function StaffForm() {
                   autoComplete="off"
                 />
               </FormField>
-              <FormField label="Password (Verify Code)" required={!isEdit}
+              <FormField label="Password" required={!isEdit}
                 error={validationErrors.verifyCode}
                 hint="8-20 characters with mixed case and numbers. Called 'Verify Code' in VistA. Must be changed every 90 days.">
                 <input
@@ -1264,6 +1290,7 @@ export default function StaffForm() {
                   ['Date of Birth', form.dob || '—'],
                   ['Email', form.email || '—'],
                   ...(form.employeeId ? [['Employee ID', form.employeeId]] : []),
+                  ...(form.degree ? [['Degree/Suffix', form.degree]] : []),
                 ]} />
                 <ReviewSection title="Role & Department" items={[
                   ['Role', SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '—'],
@@ -1277,8 +1304,8 @@ export default function StaffForm() {
                     : 'None'],
                 ]} />
                 <ReviewSection title="Login Credentials" items={[
-                  ['Username (Access Code)', form.accessCode ? '✓ Set' : '— Not set'],
-                  ['Password (Verify Code)', form.verifyCode ? '✓ Set' : '— Not set'],
+                  ['Username', form.accessCode ? '✓ Set' : '— Not set'],
+                  ['Password', form.verifyCode ? '✓ Set' : '— Not set'],
                   ['Password Never Expires', form.verifyCodeNeverExpires ? 'Yes (override)' : 'Normal policy'],
                   ...(form.filemanAccess ? [['FileMan Access', form.filemanAccess === '@' ? 'Unrestricted (@)' : form.filemanAccess]] : []),
                 ]} />

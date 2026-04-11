@@ -70,7 +70,11 @@ function SigReadinessBadge({ value }) {
 const baseColumns = [
   { key: 'name', label: 'Name', bold: true, render: (val, row) => (
     <span>
-      {row.isDuplicate ? <>{val} <span className="text-[10px] text-text-secondary font-mono">({row.id})</span></> : val}
+      {val ? (
+        <>{row.isDuplicate ? <>{val} <span className="text-[10px] text-text-secondary font-mono">({row.id})</span></> : val}</>
+      ) : (
+        <span className="italic text-text-secondary">(No Name #{row.id})</span>
+      )}
       {row.isProvider && <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1 rounded">Provider</span>}
     </span>
   ) },
@@ -91,6 +95,7 @@ const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 export default function StaffDirectory() {
   const navigate = useNavigate();
   const { activeSite } = useFacility();
+  useEffect(() => { document.title = 'Staff Directory — VistA Evolved'; }, []);
   const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('Active');
@@ -103,7 +108,7 @@ export default function StaffDirectory() {
 
   // Clone user modal state
   const [cloneSource, setCloneSource] = useState(null);
-  const [cloneForm, setCloneForm] = useState({ name: '', accessCode: '', verifyCode: '' });
+  const [cloneForm, setCloneForm] = useState({ name: '', accessCode: '', verifyCode: '', showCredentials: false });
   const [cloning, setCloning] = useState(false);
 
   // Live data state
@@ -186,6 +191,7 @@ export default function StaffDirectory() {
 
       setStaffList(merged);
     } catch (err) {
+      setStaffList([]);
       setError(err.message || 'Failed to load staff data');
     } finally {
       setLoading(false);
@@ -338,7 +344,7 @@ export default function StaffDirectory() {
       });
       setActionSuccess(`Cloned ${cloneSource.name} → ${cloneForm.name}. The new account has the same permissions and settings.`);
       setCloneSource(null);
-      setCloneForm({ name: '', accessCode: '', verifyCode: '' });
+      setCloneForm({ name: '', accessCode: '', verifyCode: '', showCredentials: false });
       loadData();
     } catch (err) {
       setError(`Failed to clone user: ${err.message}`);
@@ -458,7 +464,7 @@ export default function StaffDirectory() {
                 <button
                   onClick={() => {
                     const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions\n';
-                    const csv = (staffList || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}"`).join('\n');
+                    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}"`).join('\n');
                     const blob = new Blob([header + csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -508,10 +514,26 @@ export default function StaffDirectory() {
             {activeFilters.length > 0 && (
               <div className="mb-4">
                 <FilterChips filters={activeFilters} onRemove={removeFilter} />
+                {activeFilters.length > 1 && (
+                  <button onClick={() => { setStatusFilter('All'); setEsigFilter('All'); setSearchText(''); setPage(1); }}
+                    className="ml-2 text-[11px] text-[#2E5984] hover:underline">Clear all</button>
+                )}
               </div>
             )}
 
-            {loading ? <TableSkeleton rows={10} cols={7} /> : (
+            {loading ? <TableSkeleton rows={10} cols={7} /> : totalFiltered === 0 ? (
+              <div className="py-12 text-center">
+                <span className="material-symbols-outlined text-[48px] text-[#CCC] mb-3 block">search_off</span>
+                <h3 className="text-sm font-semibold text-[#666] mb-1">No matching staff members</h3>
+                <p className="text-xs text-[#999]">
+                  {searchText ? `No results for "${searchText}"` : 'Try adjusting your filters'}
+                </p>
+                {(searchText || statusFilter !== 'All' || esigFilter !== 'All') && (
+                  <button onClick={() => { setSearchText(''); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
+                    className="mt-3 text-xs text-[#2E5984] hover:underline">Clear all filters</button>
+                )}
+              </div>
+            ) : (
               <DataTable
                 columns={columns}
                 data={pageSlice}
@@ -692,7 +714,7 @@ export default function StaffDirectory() {
 
       {/* Clone User Modal */}
       {cloneSource && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '' }); }}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '', showCredentials: false }); }}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-[#222] mb-2">Clone Staff Member</h3>
             <p className="text-sm text-[#666] mb-1">
@@ -710,22 +732,28 @@ export default function StaffDirectory() {
                   className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#333] mb-1">Username (Access Code)</label>
-                <input type="text" value={cloneForm.accessCode}
-                  onChange={e => setCloneForm(f => ({ ...f, accessCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}
-                  placeholder="e.g., JDOE1234" maxLength={20}
-                  className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm" autoComplete="off" />
+                <label className="block text-sm font-medium text-[#333] mb-1">Username</label>
+                <div className="relative">
+                  <input type={cloneForm.showCredentials ? 'text' : 'password'} value={cloneForm.accessCode}
+                    onChange={e => setCloneForm(f => ({ ...f, accessCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))}
+                    placeholder="e.g., JDOE1234" maxLength={20}
+                    className="w-full h-10 px-3 pr-9 border border-[#E2E4E8] rounded-md text-sm" autoComplete="off" />
+                  <button type="button" onClick={() => setCloneForm(f => ({ ...f, showCredentials: !f.showCredentials }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#999] hover:text-[#666]">
+                    <span className="material-symbols-outlined text-[18px]">{cloneForm.showCredentials ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#333] mb-1">Password (Verify Code)</label>
-                <input type="password" value={cloneForm.verifyCode}
+                <label className="block text-sm font-medium text-[#333] mb-1">Password</label>
+                <input type={cloneForm.showCredentials ? 'text' : 'password'} value={cloneForm.verifyCode}
                   onChange={e => setCloneForm(f => ({ ...f, verifyCode: e.target.value }))}
                   placeholder="Enter password" maxLength={20}
                   className="w-full h-10 px-3 border border-[#E2E4E8] rounded-md text-sm" autoComplete="new-password" />
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-5">
-              <button onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '' }); }}
+              <button onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '', showCredentials: false }); }}
                 className="px-4 py-2 text-sm text-[#666] hover:bg-[#F5F5F5] rounded-lg">Cancel</button>
               <button onClick={handleCloneUser} disabled={!cloneForm.name.trim() || cloning}
                 className={`px-4 py-2 text-sm text-white rounded-lg ${cloneForm.name.trim() && !cloning ? 'bg-[#1A1A2E] hover:bg-[#2E5984]' : 'bg-gray-300 cursor-not-allowed'}`}>
@@ -827,14 +855,16 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(value || '');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       await setProviderFields(duz, { field: fieldKey, value: editValue });
       onSave(fieldKey, editValue);
       setEditing(false);
-    } catch { /* show error inline would be ideal, but keep simple */ }
+    } catch (err) { setSaveError(err.message || 'Failed to save'); }
     finally { setSaving(false); }
   };
 
@@ -849,11 +879,12 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave }) {
             className="text-[#2E7D32] hover:bg-[#E8F5E9] p-1 rounded">
             <span className="material-symbols-outlined text-[16px]">check</span>
           </button>
-          <button onClick={() => setEditing(false)}
+          <button onClick={() => { setEditing(false); setSaveError(null); }}
             className="text-[#999] hover:bg-[#F5F5F5] p-1 rounded">
             <span className="material-symbols-outlined text-[16px]">close</span>
           </button>
         </div>
+        {saveError && <p className="text-[10px] text-[#CC3333] mt-1">{saveError}</p>}
       </div>
     );
   }

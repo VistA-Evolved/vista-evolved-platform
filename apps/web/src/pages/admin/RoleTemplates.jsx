@@ -422,6 +422,7 @@ const KEY_IMPACTS = {
 
 export default function RoleTemplates() {
   const navigate = useNavigate();
+  useEffect(() => { document.title = 'Role Templates — VistA Evolved'; }, []);
   const [selectedRole, setSelectedRole] = useState(ROLES[0]);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('permissions');
@@ -671,7 +672,7 @@ export default function RoleTemplates() {
                     <div className="font-medium text-[13px] text-[#222]">{role.name}</div>
                     {role.isSystem && <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#E8EEF5] text-[#2E5984] uppercase font-semibold">Built-in</span>}
                   </div>
-                  <span className="text-[11px] text-[#999] font-mono">{getRoleHolderCount(role)}</span>
+                  <span className="text-[11px] text-[#999] font-mono">~{getRoleHolderCount(role)}</span>
                 </div>
                 <div className="text-[11px] text-[#666] mt-0.5 line-clamp-1">{role.description}</div>
               </button>
@@ -700,10 +701,21 @@ export default function RoleTemplates() {
                 </div>
                 <p className="text-[13px] text-[#666] mt-1">{selectedRole.description}</p>
               </div>
-              <span className="px-3 py-1 bg-[#F5F8FB] rounded-full text-[12px] font-mono text-[#666]">
-                {getRoleHolderCount(selectedRole)} staff assigned
+              <span className="px-3 py-1 bg-[#F5F8FB] rounded-full text-[12px] font-mono text-[#666]" title="Estimated based on intersection of key holders">
+                ~{getRoleHolderCount(selectedRole)} staff (estimated)
               </span>
             </div>
+
+            {/* R003: Guidance for built-in roles */}
+            {selectedRole.isSystem && (
+              <div className="mb-4 p-3 bg-[#E8EEF5] rounded-lg text-[13px] text-[#2E5984] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">info</span>
+                Built-in roles are read-only.
+                <button onClick={() => handleClone(selectedRole)}
+                  className="text-[#2E5984] font-semibold hover:underline">Clone this role</button>
+                to create a customizable copy.
+              </div>
+            )}
 
             {/* Tab bar */}
             <div className="flex gap-1 border-b border-[#E2E4E8] mb-5" role="tablist">
@@ -776,11 +788,28 @@ export default function RoleTemplates() {
                       </div>
                       <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#E2E4E8]">
                         <span className="text-[11px] text-[#666]">{selectedRole.permissions.length} keys selected</span>
-                        <button
-                          onClick={() => saveCustomRoleKeys(selectedRole.id)}
-                          className="px-3 py-1.5 text-[11px] font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984]">
-                          Save Changes
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {/* R002: Reset to Default — restore original built-in role keys */}
+                          {selectedRole.clonedFrom && (() => {
+                            const source = ROLES.find(r => r.id === selectedRole.clonedFrom);
+                            return source ? (
+                              <button
+                                onClick={() => {
+                                  const restored = source.permissions.map(p => ({ ...p }));
+                                  setCustomRoles(prev => prev.map(r => r.id === selectedRole.id ? { ...r, permissions: restored } : r));
+                                  setSelectedRole(prev => ({ ...prev, permissions: restored }));
+                                }}
+                                className="px-3 py-1.5 text-[11px] font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">
+                                Reset to Default
+                              </button>
+                            ) : null;
+                          })()}
+                          <button
+                            onClick={() => saveCustomRoleKeys(selectedRole.id)}
+                            className="px-3 py-1.5 text-[11px] font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984]">
+                            Save Changes
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
