@@ -62,6 +62,7 @@ export default function MailGroupManagement() {
       const items = (res?.data || []).map((d, i) => ({
         id: d.ien || `mg-${i}`,
         name: d.name || '',
+        description: d.description || '',
         type: d.type || '',
         organizer: d.organizer || '',
         selfEnroll: d.selfEnroll || '',

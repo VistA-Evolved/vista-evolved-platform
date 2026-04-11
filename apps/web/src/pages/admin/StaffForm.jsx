@@ -747,12 +747,7 @@ export default function StaffForm() {
                   Leave blank to keep existing credentials unchanged.
                 </div>
               )}
-              {!isEdit && (
-                <div className="p-3 bg-[#FFF3E0] rounded-lg text-sm text-[#E6A817] flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px]">warning</span>
-                  This is a temporary password. The user will be required to change it on first sign-in.
-                </div>
-              )}
+
               <FormField label="Password Never Expires" hint="Override the system-wide password expiration policy for this user. Use only for service accounts or when required by operational policy. VistA field 9.5.">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={form.verifyCodeNeverExpires || false}

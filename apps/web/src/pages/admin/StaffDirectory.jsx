@@ -165,6 +165,7 @@ export default function StaffDirectory() {
           sigBlockName: esig.sigBlockName || '',
           permissionCount: u.keyCount || 0,
           employeeId: u.employeeId || '',
+          displayId: u.employeeId || `S-${u.ien}`,
           isProvider: u.isProvider || false,
           lastLogin: u.lastLogin || '',
         };
