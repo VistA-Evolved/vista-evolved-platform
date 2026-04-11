@@ -485,7 +485,7 @@ export default function RoleTemplates() {
             key: k,
           })),
           mutualExclusions: [],
-          workspaceAccess: {},
+          workspaceAccess: r.workspaceAccess || {},
         }));
         setCustomRoles(loaded);
       }
@@ -523,6 +523,8 @@ export default function RoleTemplates() {
         name: newRole.name,
         description: newRole.description,
         keys: newRole.permissions.map(p => p.key),
+        workspaceAccess: newRole.workspaceAccess || {},
+        clonedFrom: newRole.clonedFrom || null,
       });
       if (res?.id) newRole.id = res.id;
       setCustomRoles(prev => [...prev, newRole]);

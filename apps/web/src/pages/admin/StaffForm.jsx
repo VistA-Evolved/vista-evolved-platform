@@ -181,7 +181,7 @@ export default function StaffForm() {
         setLiveDepartments(deptNames);
 
         // Mail groups for B6 — mail group assignment during user creation
-        const groups = (mailGroupsRes?.data || []).map(g => ({ ien: g.ien, name: g.name })).filter(g => g.ien && g.name);
+        const groups = (mailGroupsRes?.data || []).map(g => ({ ien: g.ien, name: g.name, description: g.description || '' })).filter(g => g.ien && g.name);
         setLiveMailGroups(groups);
 
         if (sites.length === 0) {
@@ -220,6 +220,7 @@ export default function StaffForm() {
           verifyCodeNeverExpires: vg.verifyCodeNeverExpires || false,
           filemanAccess: vg.filemanAccessCode || '',
           restrictPatient: vg.restrictPatient || '',
+          employeeId: vg.employeeId || userRes?.data?.employeeId || '',
         }));
       }).catch((err) => {
         setRefDataError(`Failed to load staff member data: ${err.message || 'unknown error'}`);
@@ -348,6 +349,7 @@ export default function StaffForm() {
         verifyCodeNeverExpires: form.verifyCodeNeverExpires || false,
         filemanAccess: form.filemanAccess || '',
         restrictPatient: form.restrictPatient || '',
+        employeeId: form.employeeId || '',
       };
       if (isEdit) {
         await updateStaffMember(userId, payload);
@@ -1142,6 +1144,7 @@ export default function StaffForm() {
                   ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex === 'U' ? 'Unknown' : form.sex || '—'],
                   ['Date of Birth', form.dob || '—'],
                   ['Email', form.email || '—'],
+                  ...(form.employeeId ? [['Employee ID', form.employeeId]] : []),
                 ]} />
                 <ReviewSection title="Role & Department" items={[
                   ['Role', SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '—'],

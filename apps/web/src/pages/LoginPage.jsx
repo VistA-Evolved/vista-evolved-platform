@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { login } from '../services/adminService';
 
 export default function LoginPage() {
@@ -82,7 +82,7 @@ export default function LoginPage() {
           </div>
 
           <div className="flex justify-end">
-            <a href="/forgot-password" className="text-xs text-steel hover:underline">Forgot password?</a>
+            <Link to="/forgot-password" className="text-xs text-steel hover:underline">Forgot password?</Link>
           </div>
 
           <button
