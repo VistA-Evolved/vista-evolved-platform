@@ -93,6 +93,11 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
           )}
         </tbody>
       </table>
+      {sorted.length > 0 && (
+        <div className="px-3 py-2 text-xs text-[#6B7280] border-t border-border bg-[#FAFAFA]">
+          Showing {sorted.length.toLocaleString()} {sorted.length === 1 ? 'record' : 'records'}
+        </div>
+      )}
     </div>
   );
 }

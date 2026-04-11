@@ -491,7 +491,10 @@ export default function SecurityAuth() {
             {selectedSection === 'esig' && (
               <div className="mb-4 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
                 <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
-                Electronic signature policies are enforced at the code level in VistA. These values cannot be changed through the admin panel — they are system constants.
+                <div>
+                  <strong>These are system-enforced policies.</strong> Electronic signature rules are hard-coded in the VistA Kernel (XUSHSH routine) and CPRS packages.
+                  They cannot be changed through the admin panel. This section is informational only.
+                </div>
               </div>
             )}
 
@@ -553,16 +556,26 @@ export default function SecurityAuth() {
                             </span>
                           )}
                           {field.slider && field.enforcedMin && field.enforcedMax && (
-                            <div className="flex-1 ml-3 flex items-center gap-2">
-                              <input type="range" min={field.enforcedMin} max={field.enforcedMax}
-                                value={displayValue || field.enforcedMin}
-                                onChange={e => updateField(field.name, e.target.value)}
-                                className="flex-1 h-1 accent-[#2E5984]" />
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                                numVal <= 30 ? 'bg-[#FFF3E0] text-[#E65100]' : numVal <= 60 ? 'bg-[#E8F5E9] text-[#2D6A4F]' : 'bg-[#FFFDE7] text-[#F57F17]'
-                              }`}>
-                                {numVal <= 30 ? 'Short' : numVal <= 60 ? 'Standard' : 'Long'}
-                              </span>
+                            <div className="flex-1 ml-3">
+                              <div className="flex items-center gap-2">
+                                <input type="range" min={field.enforcedMin} max={field.enforcedMax}
+                                  value={displayValue || field.enforcedMin}
+                                  onChange={e => updateField(field.name, e.target.value)}
+                                  className="flex-1 h-1 accent-[#2E5984]"
+                                  list={`ticks-${field.name}`} />
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                  numVal <= 30 ? 'bg-[#FFF3E0] text-[#E65100]' : numVal <= 60 ? 'bg-[#E8F5E9] text-[#2D6A4F]' : 'bg-[#FFFDE7] text-[#F57F17]'
+                                }`}>
+                                  {numVal <= 30 ? 'Short' : numVal <= 60 ? 'Standard' : 'Long'}
+                                </span>
+                              </div>
+                              {/* S003: Tick marks at key intervals */}
+                              <datalist id={`ticks-${field.name}`}>
+                                <option value="30" /><option value="60" /><option value="90" />
+                              </datalist>
+                              <div className="flex justify-between text-[9px] text-[#999] mt-0.5 px-0.5">
+                                <span>30d</span><span>60d</span><span>90d</span>
+                              </div>
                             </div>
                           )}
                         </div>

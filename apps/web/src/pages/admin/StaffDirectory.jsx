@@ -524,13 +524,29 @@ export default function StaffDirectory() {
             {loading ? <TableSkeleton rows={10} cols={7} /> : totalFiltered === 0 ? (
               <div className="py-12 text-center">
                 <span className="material-symbols-outlined text-[48px] text-[#CCC] mb-3 block">search_off</span>
-                <h3 className="text-sm font-semibold text-[#666] mb-1">No matching staff members</h3>
-                <p className="text-xs text-[#999]">
-                  {searchText ? `No results for "${searchText}"` : 'Try adjusting your filters'}
-                </p>
-                {(searchText || statusFilter !== 'All' || esigFilter !== 'All') && (
-                  <button onClick={() => { setSearchText(''); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
-                    className="mt-3 text-xs text-[#2E5984] hover:underline">Clear all filters</button>
+                {totalStaff === 0 && !searchText ? (
+                  <>
+                    <h3 className="text-sm font-semibold text-[#666] mb-1">Welcome to the Staff Directory</h3>
+                    <p className="text-xs text-[#999]">
+                      No staff members have been registered yet. Create your first staff member to get started.
+                    </p>
+                    <button onClick={() => navigate('/admin/staff/new')}
+                      className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984]">
+                      <span className="material-symbols-outlined text-[16px]">person_add</span>
+                      Add First Staff Member
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-sm font-semibold text-[#666] mb-1">No matching staff members</h3>
+                    <p className="text-xs text-[#999]">
+                      {searchText ? `No results for "${searchText}"` : 'Try adjusting your filters'}
+                    </p>
+                    {(searchText || statusFilter !== 'All' || esigFilter !== 'All') && (
+                      <button onClick={() => { setSearchText(''); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
+                        className="mt-3 text-xs text-[#2E5984] hover:underline">Clear all filters</button>
+                    )}
+                  </>
                 )}
               </div>
             ) : (
@@ -1020,38 +1036,7 @@ function StaffDetailContent({
       )}
 
       {detailKeys.length > 0 && (
-        <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">
-              Permissions ({detailKeys.length})
-            </h3>
-            <button onClick={handleOpenAssignPerms}
-              className="text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
-          </div>
-          <div className="max-h-[250px] overflow-y-auto space-y-2">
-            {Object.entries(
-              detailKeys.reduce((groups, k) => {
-                const dept = k.department || k.packageName || 'General';
-                (groups[dept] = groups[dept] || []).push(k);
-                return groups;
-              }, {})
-            ).sort(([a], [b]) => a.localeCompare(b)).map(([dept, keys]) => (
-              <div key={dept}>
-                <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
-                <div className="flex flex-wrap gap-1">
-                  {keys.map(k => (
-                    <span key={k.ien || k.name} title={`System key: ${k.name}`}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
-                      {k.displayName || humanizeKeyName(k.name)}
-                      <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
-                        className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PermissionsList detailKeys={detailKeys} handleOpenAssignPerms={handleOpenAssignPerms} handleRemovePermission={handleRemovePermission} />
       )}
 
       <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
@@ -1188,6 +1173,67 @@ function StaffDetailContent({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* L006: Permissions list with collapse for >10 keys */
+function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermission }) {
+  const [expanded, setExpanded] = useState(false);
+  const COLLAPSE_THRESHOLD = 10;
+  const grouped = Object.entries(
+    detailKeys.reduce((groups, k) => {
+      const dept = k.department || k.packageName || 'General';
+      (groups[dept] = groups[dept] || []).push(k);
+      return groups;
+    }, {})
+  ).sort(([a], [b]) => a.localeCompare(b));
+
+  const allKeys = grouped.flatMap(([, keys]) => keys);
+  const shouldCollapse = allKeys.length > COLLAPSE_THRESHOLD && !expanded;
+
+  let visibleCount = 0;
+  return (
+    <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">
+          Permissions ({detailKeys.length})
+        </h3>
+        <button onClick={handleOpenAssignPerms}
+          className="text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
+      </div>
+      <div className="space-y-2">
+        {grouped.map(([dept, keys]) => {
+          const keysToRender = [];
+          for (const k of keys) {
+            if (shouldCollapse && visibleCount >= COLLAPSE_THRESHOLD) break;
+            visibleCount++;
+            keysToRender.push(k);
+          }
+          if (keysToRender.length === 0) return null;
+          return (
+            <div key={dept}>
+              <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
+              <div className="flex flex-wrap gap-1">
+                {keysToRender.map(k => (
+                  <span key={k.ien || k.name} title={`System key: ${k.name}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
+                    {k.displayName || humanizeKeyName(k.name)}
+                    <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
+                      className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {allKeys.length > COLLAPSE_THRESHOLD && (
+        <button onClick={() => setExpanded(e => !e)}
+          className="mt-2 text-[10px] text-[#2E5984] hover:underline">
+          {expanded ? 'Show fewer' : `Show all ${allKeys.length} permissions`}
+        </button>
+      )}
     </div>
   );
 }

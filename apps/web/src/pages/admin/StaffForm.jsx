@@ -257,6 +257,22 @@ export default function StaffForm() {
     }
   }, [currentStep]);
 
+  // F009: Warn on unsaved changes (beforeunload)
+  const isDirty = form.lastName || form.firstName || form.accessCode || form.verifyCode;
+  useEffect(() => {
+    if (!isDirty || createSuccess) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty, createSuccess]);
+
+  // I006: Scroll to submit error when it appears
+  useEffect(() => {
+    if (submitError && submitErrorRef.current) {
+      submitErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [submitError]);
+
   const validateStep = (stepId) => {
     const errors = {};
     if (stepId === 'person') {
@@ -293,6 +309,8 @@ export default function StaffForm() {
     if (stepId === 'provider' && showProviderStep) {
       if (!form.providerType) errors.providerType = 'Provider type is required';
       if (form.npi && form.npi.length !== 10) errors.npi = 'NPI must be exactly 10 digits';
+      // F013: DEA format validation — 2 letters + 7 digits
+      if (form.dea && !/^[A-Za-z]{2}\d{7}$/.test(form.dea)) errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
     }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -320,6 +338,7 @@ export default function StaffForm() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [createSuccess, setCreateSuccess] = useState(null);
+  const submitErrorRef = useRef(null);
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const step = STEPS[currentStep];
@@ -736,8 +755,16 @@ export default function StaffForm() {
                 <FormField label="Date of Birth" required error={validationErrors.dob}
                   hint="Required for identity verification. Stored in VistA File #200 field 5.">
                   <input type="date" value={form.dob}
+                    max={new Date().toISOString().slice(0, 10)}
                     onChange={e => updateField('dob', e.target.value)}
                     className="form-input" />
+                  {form.dob && (() => {
+                    const birth = new Date(form.dob);
+                    const today = new Date();
+                    let age = today.getFullYear() - birth.getFullYear();
+                    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
+                    return age >= 0 && age < 150 ? <span className="text-[10px] text-[#666] ml-2">Age: {age}</span> : null;
+                  })()}
                 </FormField>
                 <FormField label="Government ID (Last 4)" hint="Last 4 digits of SSN or national identifier. Masked for privacy.">
                   <input type="password" value={form.govIdLast4} onChange={e => updateField('govIdLast4', e.target.value)}
@@ -819,26 +846,59 @@ export default function StaffForm() {
               <FormField label="Password" required={!isEdit}
                 error={validationErrors.verifyCode}
                 hint="8-20 characters with mixed case and numbers. Called 'Verify Code' in VistA. Must be changed every 90 days.">
-                <input
-                  type="password"
-                  value={form.verifyCode || ''}
-                  onChange={e => updateField('verifyCode', e.target.value)}
-                  placeholder="Enter password"
-                  maxLength={20}
-                  className="w-full h-10 px-3 border border-border rounded-md text-sm"
-                  autoComplete="new-password"
-                />
+                <div className="relative">
+                  <input
+                    type={form._showPassword ? 'text' : 'password'}
+                    value={form.verifyCode || ''}
+                    onChange={e => updateField('verifyCode', e.target.value)}
+                    placeholder="Enter password"
+                    maxLength={20}
+                    className="w-full h-10 px-3 pr-9 border border-border rounded-md text-sm"
+                    autoComplete="new-password"
+                  />
+                  <button type="button" tabIndex={-1} onClick={() => setForm(f => ({ ...f, _showPassword: !f._showPassword }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#999] hover:text-[#666]">
+                    <span className="material-symbols-outlined text-[18px]">{form._showPassword ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
+                {/* F005: Password strength meter */}
+                {form.verifyCode && (() => {
+                  const pw = form.verifyCode;
+                  let score = 0;
+                  if (pw.length >= 8) score++;
+                  if (pw.length >= 12) score++;
+                  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+                  if (/\d/.test(pw)) score++;
+                  if (/[^A-Za-z0-9]/.test(pw)) score++;
+                  const label = score <= 1 ? 'Weak' : score <= 3 ? 'Fair' : 'Strong';
+                  const color = score <= 1 ? '#CC3333' : score <= 3 ? '#E65100' : '#2E7D32';
+                  const pct = Math.min(100, score * 20);
+                  return (
+                    <div className="mt-1.5">
+                      <div className="h-1.5 rounded-full bg-[#E2E4E8] overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+                      </div>
+                      <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
+                    </div>
+                  );
+                })()}
               </FormField>
               <FormField label="Confirm Password" required={!isEdit} error={validationErrors.verifyCodeConfirm}>
-                <input
-                  type="password"
-                  value={form.verifyCodeConfirm || ''}
-                  onChange={e => updateField('verifyCodeConfirm', e.target.value)}
-                  placeholder="Re-enter password"
-                  maxLength={20}
-                  className="w-full h-10 px-3 border border-border rounded-md text-sm"
-                  autoComplete="new-password"
-                />
+                <div className="relative">
+                  <input
+                    type={form._showPassword ? 'text' : 'password'}
+                    value={form.verifyCodeConfirm || ''}
+                    onChange={e => updateField('verifyCodeConfirm', e.target.value)}
+                    placeholder="Re-enter password"
+                    maxLength={20}
+                    className="w-full h-10 px-3 pr-9 border border-border rounded-md text-sm"
+                    autoComplete="new-password"
+                  />
+                  <button type="button" tabIndex={-1} onClick={() => setForm(f => ({ ...f, _showPassword: !f._showPassword }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[#999] hover:text-[#666]">
+                    <span className="material-symbols-outlined text-[18px]">{form._showPassword ? 'visibility_off' : 'visibility'}</span>
+                  </button>
+                </div>
                 {form.verifyCode && form.verifyCodeConfirm && form.verifyCode !== form.verifyCodeConfirm && (
                   <p className="text-xs text-[#CC3333] mt-1">Passwords do not match.</p>
                 )}
@@ -1346,7 +1406,7 @@ export default function StaffForm() {
               )}
 
               {submitError && (
-                <div className="p-3 bg-danger-bg rounded-md text-sm text-danger flex items-center gap-2">
+                <div ref={submitErrorRef} className="p-3 bg-danger-bg rounded-md text-sm text-danger flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px]">error</span>
                   {submitError}
                 </div>

@@ -51,6 +51,12 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  /* T001 — Auto-refresh dashboard data every 5 minutes */
+  useEffect(() => {
+    const interval = setInterval(loadData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
   if (error && !data) {
     return (
       <AppShell breadcrumb="Admin > Dashboard">

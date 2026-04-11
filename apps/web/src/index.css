@@ -20,3 +20,19 @@ body {
       transition-colors;
   }
 }
+
+/* X009 — Print stylesheet: hide navigation chrome, show content only */
+@media print {
+  nav, [data-navrail], [data-systembar], [data-subnav], [data-sandbox-banner],
+  .no-print {
+    display: none !important;
+  }
+  main {
+    margin-left: 0 !important;
+    margin-top: 0 !important;
+  }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
