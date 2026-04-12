@@ -22,6 +22,7 @@
 
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
+import fastifyCompress from '@fastify/compress';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -592,7 +593,7 @@ const AUTH_BYPASS = ['/api/tenant-admin/v1/auth/login', '/api/tenant-admin/v1/au
 // Server
 // ---------------------------------------------------------------------------
 async function main() {
-  const app = Fastify({ logger: false, bodyLimit: 1048576 }); // #613: 1 MB body limit
+  const app = Fastify({ logger: false, bodyLimit: 1048576 }); // 1MB request body limit
 
   // Enable per-request broker context via AsyncLocalStorage.
   // This must be called before any hooks or routes are registered so that
@@ -601,16 +602,12 @@ async function main() {
   // all writes are attributed to the correct user in VistA's audit trail.
   setupBrokerContext(app);
 
-  // #612: Collect route registrations for /routes endpoint
-  const _registeredRoutes = [];
-  app.addHook('onRoute', (opt) => {
-    const methods = Array.isArray(opt.method) ? opt.method : [opt.method];
-    methods.forEach(m => _registeredRoutes.push({ method: m, url: opt.url }));
-  });
-
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
     try { done(null, body ? JSON.parse(body) : {}); } catch (e) { done(e); }
   });
+
+  // Gzip compression for API responses
+  await app.register(fastifyCompress, { global: true });
 
   // Static files
   app.register(fastifyStatic, {
@@ -629,6 +626,15 @@ async function main() {
     const statusCode = error.statusCode || 500;
     request.log.error(error);
     reply.code(statusCode).send({ ok: false, error: error.message || 'Internal server error' });
+  });
+
+  // Security headers — CSP, X-Frame-Options, X-Content-Type-Options
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('X-XSS-Protection', '0'); // Modern CSP replaces this
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'");
   });
 
   // Session auth middleware — check token on all /api/ routes except bypass list
@@ -684,43 +690,6 @@ async function main() {
         // the route handler will receive a 503 from getBroker() if VistA is truly down.
         // We don't block the request here to avoid cascading failures.
       }
-    }
-  });
-
-  // ---- Security headers (#185 CSP, #186 X-Frame-Options) ----
-  app.addHook('onSend', async (request, reply) => {
-    reply.header('X-Frame-Options', 'DENY');
-    reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-    reply.header('X-XSS-Protection', '0'); // Modern best practice: rely on CSP
-    if (request.url.startsWith('/api/')) {
-      reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
-    } else {
-      reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'");
-    }
-  });
-
-  // ---- API rate limiting for write endpoints (#187) ----
-  const apiWriteAttempts = new Map(); // sessionToken → { count, windowStart }
-  const API_WRITE_RATE_LIMIT = 100; // max write requests per window
-  const API_WRITE_RATE_WINDOW = 60000; // 60 seconds
-  app.addHook('onRequest', async (request, reply) => {
-    if (!request.url.startsWith('/api/tenant-admin/v1/')) return;
-    const method = (request.method || '').toUpperCase();
-    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
-    const token = (request.headers['authorization'] || '').replace('Bearer ', '') ||
-      ((request.headers['cookie'] || '').split(';').find(c => c.trim().startsWith('ve-session=')) || '').split('=')[1] || 'anon';
-    const now = Date.now();
-    const entry = apiWriteAttempts.get(token) || { count: 0, windowStart: now };
-    if (now - entry.windowStart > API_WRITE_RATE_WINDOW) {
-      entry.count = 1;
-      entry.windowStart = now;
-    } else {
-      entry.count++;
-    }
-    apiWriteAttempts.set(token, entry);
-    if (entry.count > API_WRITE_RATE_LIMIT) {
-      return reply.code(429).send({ ok: false, error: 'Rate limit exceeded. Max 100 write requests per minute.' });
     }
   });
 
@@ -954,7 +923,7 @@ async function main() {
         rpcUsed: z.rpcUsed,
       });
     }
-    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG^PMENU^DEGREE^TDATE^TREASON^PCLASS2^TAXID^AUTHMEDS^COSIGNER^RESTRICT^VCNOEXP^LANG^FMAC^OERR^PROXY^VCCHGDT^PWDEXPDAYS^PWDREMAIN^SOCNT^FIRSTSO
+    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG^PMENU^DEGREE^TDATE^TREASON^PCLASS2^TAXID^AUTHMEDS^COSIGNER
     const detail = (z.lines[1] || '').split('^');
     if (!detail[0]) {
       return reply.code(404).send({ ok: false, source: 'zve', error: `User ${userId} not found in File 200`, rpcUsed: z.rpcUsed });
@@ -975,13 +944,10 @@ async function main() {
     const filemanAccess = detail[27] || '';
     const defaultOrderList = detail[28] || '';
     const proxyUser = detail[29] || '';
-    // Password expiration fields (indices 30-32) from XUS1A.m-style computation
+    // S7: Password expiration fields (indices 30-32 from ZVEADMIN DETAIL)
     const vcChangeDate = detail[30] || '';
     const pwdExpirationDays = detail[31] || '';
-    const pwdDaysRemaining = detail[32] ?? '';
-    // Activity summary (indices 33-34)
-    const signOnCount = detail[33] || '0';
-    const firstSignOn = detail[34] || '';
+    const pwdDaysRemaining = detail[32] || '';
     const keys = [];
     const divs = [];
     for (const line of z.lines.slice(2)) {
@@ -989,21 +955,6 @@ async function main() {
       if (p[0] === 'KEY') keys.push({ ien: p[1], name: p[2] });
       else if (p[0] === 'DIV') divs.push({ ien: p[1], name: p[2], station: p[3] || '' });
     }
-    // S1.2/S1.4: Fetch extension data (employeeId, role) from ZVE UEXT
-    let extEmployeeId = '';
-    let extRole = '';
-    try {
-      const extZ = await callZveRpc('ZVE UEXT GETALL', [String(userId)]);
-      const extO = zveOutcome(extZ);
-      if (extO.kind === 'ok') {
-        for (const line of extZ.lines.slice(1)) {
-          const ep = line.split('^');
-          if (ep[0] === 'EMPID') extEmployeeId = ep[1] || '';
-          if (ep[0] === 'ROLE') extRole = ep[1] || '';
-        }
-      }
-    } catch { /* extension data is non-critical */ }
-
     return {
       ok: true, source: 'zve', tenantId, rpcUsed: z.rpcUsed,
       data: {
@@ -1012,8 +963,6 @@ async function main() {
         title: detail[6] || '',
         status: (detail[5] || 'ACTIVE').toLowerCase(),
         roles: keys.map(k => k.name),
-        employeeId: extEmployeeId,
-        assignedRole: extRole,
         vistaGrounding: {
           duz: userId, file200Status: 'zve-detail',
           sex: detail[3] || '', dob: detail[2] || '',
@@ -1021,6 +970,9 @@ async function main() {
           ssnLast4: detail[4] ? detail[4].slice(-4) : '',
           officePhone: detail[9] || '', email: detail[8] || '',
           service: detail[7] || '',
+          // serviceSection kept as an alias for callers that predate the
+          // rename (StaffDirectory.jsx detail panel, etc.). Both fields
+          // carry the same value so neither caller breaks.
           serviceSection: detail[7] || '',
           lastLogin: detail[10] || '',
           npi: detail[11] || '', dea: detail[12] || '',
@@ -1039,13 +991,9 @@ async function main() {
           filemanAccessCode: filemanAccess,
           defaultOrderList,
           proxyUser,
-          // Password expiration (same algorithm as Kernel XUS1A.m sign-on)
-          passwordLastChanged: vcChangeDate,
-          passwordExpirationDays: pwdExpirationDays ? parseInt(pwdExpirationDays, 10) : null,
-          passwordDaysRemaining: pwdDaysRemaining !== '' ? parseInt(pwdDaysRemaining, 10) : null,
-          // Activity summary
-          signOnCount: parseInt(signOnCount, 10) || 0,
-          firstSignOn,
+          vcChangeDate,
+          pwdExpirationDays: pwdExpirationDays ? parseInt(pwdExpirationDays, 10) : null,
+          pwdDaysRemaining: pwdDaysRemaining !== '' ? parseInt(pwdDaysRemaining, 10) : null,
         },
         keys, divisions: divs,
       },
@@ -1168,7 +1116,7 @@ async function main() {
     return reply.code(503).send({ ok: false, source: 'error', tenantId, error: keysRes.error || 'VistA security keys unavailable' });
   });
 
-  // ---- Clinic list (VistA-only) ----
+  // ---- Clinic list (VistA-only, TYPE=C only) ----
 
   app.get('/api/tenant-admin/v1/clinics', async (req, reply) => {
     const tenantId = req.query.tenantId;
@@ -1177,7 +1125,8 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, source: 'error', tenantId, error: p.error || 'VistA unreachable' });
     try {
       const rows = await lockedRpc(async () => {
-        return ddrList({ file: '44', fields: '.01;1;8;1917;2505', fieldNames: ['name', 'abbreviation', 'stopCode', 'apptLength', 'inactivateDate'], search: req.query.search });
+        // Filter File 44 by TYPE (field 2) = "C" (Clinic) — excludes wards, OR rooms, modules
+        return ddrList({ file: '44', fields: '.01;1;2;8;1917;2505', fieldNames: ['name', 'abbreviation', 'type', 'stopCode', 'apptLength', 'inactivateDate'], search: req.query.search, screen: 'I $P(^SC(Y,0),U,3)="C"' });
       });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '44', data: rows };
     } catch (e) {
@@ -1197,23 +1146,6 @@ async function main() {
         return ddrList({ file: '42', fields: '.01', fieldNames: ['name'], search: req.query.search });
       });
       return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '42', data: rows };
-    } catch (e) {
-      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
-    }
-  });
-
-  // ---- #26: OE/RR Teams (File 100.21) ----
-
-  app.get('/api/tenant-admin/v1/oerr-teams', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
-    const p = await probeVista();
-    if (!p.ok) return reply.code(503).send({ ok: false, source: 'error', tenantId, error: p.error || 'VistA unreachable' });
-    try {
-      const rows = await lockedRpc(async () => {
-        return ddrList({ file: '100.21', fields: '.01', fieldNames: ['name'], search: req.query.search });
-      });
-      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '100.21', data: rows };
     } catch (e) {
       return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
     }
@@ -1624,47 +1556,32 @@ async function main() {
     const field = body.field;
     const value = body.value;
     const ALLOW = {
-      '.111': 'STREET ADDRESS 1',
-      '.112': 'STREET ADDRESS 2',
-      '.114': 'CITY',
-      '.115': 'STATE',
-      '.116': 'ZIP CODE',
-      '.131': 'HOME PHONE',
       '.132': 'OFFICE PHONE',
       '.133': 'VOICE PAGER',
       '.134': 'DIGITAL PAGER',
       '.151': 'EMAIL ADDRESS',
-      '1': 'INITIALS',
       '3': 'FILE MANAGER ACCESS CODE',
       '4': 'SEX',
-      '4.5': 'PAY GRADE',
       '5': 'DOB',
       '8': 'TITLE',
       '9': 'SSN',
       '9.5': 'VERIFY CODE NEVER EXPIRES',
-      '10.6': 'DEGREE',
-      '16': 'DIVISION',
       '20.2': 'ELECTRONIC SIGNATURE INITIALS',
       '20.3': 'SIGNATURE BLOCK PRINTED NAME',
       '20.4': 'ELECTRONIC SIGNATURE CODE',
       '29': 'SERVICE/SECTION',
-      '29.5': 'TREATING SPECIALTY',
       '41.99': 'NPI',
       '53.08': 'REQUIRES COSIGNER',
       '53.11': 'AUTHORIZED TO WRITE MED ORDERS',
       '53.2': 'DEA#',
       '53.21': 'DEA EXPIRATION DATE',
-      '53.3': 'TAX ID',
       '53.42': 'COSIGNER',
       '53.5': 'PROVIDER CLASS',
-      '53.6': 'VA#',
       '55': 'PHARMACY SCHEDULES',
+      '10.6': 'DEGREE',
       '101.01': 'RESTRICT PATIENT SELECTION',
       '200.07': 'LANGUAGE',
-      '200.0001': 'OE/RR LIST',
       '201': 'PRIMARY MENU OPTION',
-      '203.1': 'PROXY USER',
-      '8932.1': 'PERSON CLASS',
     };
     if (!field || value === undefined || !ALLOW[field]) {
       return reply.code(400).send({
@@ -1675,7 +1592,7 @@ async function main() {
       });
     }
     // --- ZVE-first: ZVE USER EDIT ---
-    const ZVE_FIELD_MAP = { '.131': 'HOME_PHONE', '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '200.0001': 'OERR', '8': 'TITLE', '29': 'SERVICE', '29.5': 'TREATING_SPEC', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS', '203.1': 'PROXY', '53.42': 'COSIGNER', '10.6': 'DEGREE' };
+    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS' };
     const zveFld = ZVE_FIELD_MAP[field];
     if (zveFld) {
       try {
@@ -1849,34 +1766,6 @@ async function main() {
     const warnings = [];
     if (!body.sex) warnings.push('sex not provided');
     if (!body.dob) warnings.push('dob not provided');
-    // Server-side DEA validation (format + checksum)
-    if (body.dea) {
-      if (!/^[A-Za-z]{2}\d{7}$/.test(body.dea)) {
-        return reply.code(400).send({ ok: false, error: 'Invalid DEA format: must be 2 letters followed by 7 digits' });
-      }
-      const digits = body.dea.slice(2);
-      const odd = parseInt(digits[0]) + parseInt(digits[2]) + parseInt(digits[4]);
-      const even = parseInt(digits[1]) + parseInt(digits[3]) + parseInt(digits[5]);
-      if ((odd + even * 2) % 10 !== parseInt(digits[6])) {
-        return reply.code(400).send({ ok: false, error: 'Invalid DEA check digit' });
-      }
-    }
-    // Server-side NPI Luhn validation
-    if (body.npi) {
-      if (!/^\d{10}$/.test(body.npi)) {
-        return reply.code(400).send({ ok: false, error: 'NPI must be exactly 10 digits' });
-      }
-      const prefixed = '80840' + body.npi;
-      let sum = 0;
-      for (let i = prefixed.length - 1, alt = false; i >= 0; i--, alt = !alt) {
-        let n = parseInt(prefixed[i], 10);
-        if (alt) { n *= 2; if (n > 9) n -= 9; }
-        sum += n;
-      }
-      if (sum % 10 !== 0) {
-        return reply.code(400).send({ ok: false, error: 'Invalid NPI check digit' });
-      }
-    }
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG ADD', [name, body.accessCode || '', body.verifyCode || '']);
@@ -1887,6 +1776,7 @@ async function main() {
     // DDR-writable fields: body key → File 200 field number
     const EXTRA_MAP = {
       title: '8', sex: '4', dob: '5',
+      // NOTE: SSN (field 9) requires full 9 digits — we only collect last-4 for display, so do NOT write to VistA
       serviceSection: '29',
       primaryMenu: '201',
       // A002: Email
@@ -1990,25 +1880,6 @@ async function main() {
         }
       }
     }
-
-    // S1.2: Store employeeId in extension global (no File 200 field for this)
-    if (newIen && body.employeeId) {
-      try {
-        const ez = await callZveRpc('ZVE UEXT SET', [String(newIen), 'EMPID', String(body.employeeId)]);
-        const eo = zveOutcome(ez);
-        extraFields.push({ field: 'employeeId', key: 'employeeId', status: eo.kind === 'ok' ? 'ok' : 'error', detail: eo.msg || '' });
-      } catch (e) { extraFields.push({ field: 'employeeId', key: 'employeeId', status: 'error', detail: e.message }); }
-    }
-
-    // S1.4: Persist role name used during creation
-    if (newIen && body.role) {
-      try {
-        const rz = await callZveRpc('ZVE UEXT SET', [String(newIen), 'ROLE', String(body.role)]);
-        const ro = zveOutcome(rz);
-        extraFields.push({ field: 'role', key: 'role', status: ro.kind === 'ok' ? 'ok' : 'error', detail: ro.msg || '' });
-      } catch (e) { extraFields.push({ field: 'role', key: 'role', status: 'error', detail: e.message }); }
-    }
-
     // Y003: Return full user data so frontend doesn't need to re-fetch
     return { ok: true, tenantId, newIen, duz: newIen, ien: newIen, rpcUsed: z.rpcUsed, lines: z.lines, extraFields, warnings,
       data: { duz: newIen, ien: newIen, name: name, status: 'active' } };
@@ -2081,59 +1952,21 @@ async function main() {
     // File 200.03 = OE/RR LIST sub-file under File 200 (CPRS tab parameters)
     // DDR LISTER columns: .01 (name), 1 (access)
     const duz = req.params.duz;
+    const iens = `${duz},`;
     try {
-      const rawLines = await lockedRpc(async () => {
-        const broker = await getBroker();
-        return broker.callRpcWithList('DDR LISTER', [
-          { type: 'list', value: { FILE: '200.03', IENS: `${duz},`, FIELDS: '.01;1', FLAGS: 'PB', MAX: '1000' } },
-        ]);
-      });
-      const parsed = parseDdrListerResponse(rawLines);
-      if (!parsed.ok) {
-        return reply.code(502).send({ ok: false, error: `DDR LISTER 200.03 failed: ${parsed.errorText || 'unknown'}`, rpcUsed: 'DDR LISTER' });
+      const z = await callZveRpc('ZVE DDR LISTER', [
+        '200.03', iens, '.01;1', '', '', '', '', '', '1000',
+      ]);
+      const o = zveOutcome(z);
+      if (o.kind !== 'ok') {
+        return reply.code(502).send({ ok: false, error: `DDR LISTER 200.03 failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
       }
       const tabs = [];
-      for (const line of parsed.data) {
+      for (const line of z.lines.slice(1)) {
         const parts = line.split('^');
-        // DDR LISTER with PB flag returns: field1^field2^IEN
-        if (parts[0]) tabs.push({ name: parts[0], access: parts[1] || '', ien: parts[2] || '' });
+        if (parts[0]) tabs.push({ name: parts[0], access: parts[1] || '' });
       }
-      return { ok: true, tenantId, duz, tabs, rpcUsed: 'DDR LISTER' };
-    } catch (err) {
-      return reply.code(502).send({ ok: false, error: err.message });
-    }
-  });
-
-  // ---- CPRS Tab Access toggle (P3.12) ----
-  app.put('/api/tenant-admin/v1/users/:duz/cprs-tabs', async (req, reply) => {
-    const tenantId = req.query.tenantId;
-    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
-    const { tabName, access } = req.body || {};
-    if (!tabName) return reply.code(400).send({ ok: false, error: 'tabName required' });
-    const p = await probeVista();
-    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
-    const duz = req.params.duz;
-    try {
-      // Find the sub-file IEN for this tab name via DDR LISTER
-      const rawLines = await lockedRpc(async () => {
-        const broker = await getBroker();
-        return broker.callRpcWithList('DDR LISTER', [
-          { type: 'list', value: { FILE: '200.03', IENS: `${duz},`, FIELDS: '.01;1', FLAGS: 'PB', MAX: '1000' } },
-        ]);
-      });
-      const parsed = parseDdrListerResponse(rawLines);
-      if (!parsed.ok) return reply.code(502).send({ ok: false, error: 'Failed to list CPRS tabs' });
-      let tabIen = null;
-      for (const line of parsed.data) {
-        const parts = line.split('^');
-        if (parts[0] === tabName) { tabIen = parts[2] || null; break; }
-      }
-      if (!tabIen) return reply.code(404).send({ ok: false, error: `Tab "${tabName}" not found` });
-      // Update access field (field 1 of sub-file 200.03)
-      const z = await callZveRpc('ZVE USER EDIT', [String(duz), 'CPRSTAB', `${tabIen}^${access || ''}`]);
-      const o = zveOutcome(z);
-      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `Tab update failed: ${o.msg || o.kind}` });
-      return { ok: true, tenantId, duz, tabName, access: access || '', rpcUsed: z.rpcUsed };
+      return { ok: true, tenantId, duz, tabs, rpcUsed: z.rpcUsed };
     } catch (err) {
       return reply.code(502).send({ ok: false, error: err.message });
     }
@@ -6982,13 +6815,6 @@ async function main() {
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
     }
-  });
-
-  // ---- #612: Route list endpoint for debugging ----
-  app.get('/api/tenant-admin/v1/routes', async () => {
-    const sorted = [..._registeredRoutes].sort((a, b) =>
-      a.url.localeCompare(b.url) || a.method.localeCompare(b.method));
-    return { ok: true, count: sorted.length, routes: sorted };
   });
 
   // ---- SPA fallback ----

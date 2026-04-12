@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission, assignDivision, checkAccessCode } from '../../services/adminService';
-import { ROLES as SYSTEM_ROLES } from './RoleTemplates';
+import { ROLES as SYSTEM_ROLES, KEY_DESCRIPTIONS } from './RoleTemplates';
 
 /**
  * AD-02 / ADM-03+ADM-04: Create / Edit Staff Member (Multi-Step Wizard)
@@ -62,7 +62,7 @@ const PERMISSION_STARTERS = [
       { key: 'OREMAS',         label: 'MAS order entry (unit clerks / ward clerks)',         roleDefault: [] },
       { key: 'ORCL-SIGN-NOTES', label: 'Sign clinical notes (progress notes, consults)',    roleDefault: ['provider'] },
       { key: 'ORCL-PAT-RECS',  label: 'View patient records and chart data',                roleDefault: ['provider', 'nurse', 'front-desk'] },
-      { key: 'GMRA-ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
+      { key: 'GMRA ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
     ],
   },
   {
@@ -149,24 +149,6 @@ export default function StaffForm() {
   const [clearingEsig, setClearingEsig] = useState(false);
   const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
 
-  // P3.3: Cosigner provider picker — typeahead search
-  const [cosignerSuggestions, setCosignerSuggestions] = useState([]);
-  const [cosignerSearching, setCosignerSearching] = useState(false);
-  const cosignerTimerRef = useRef(null);
-  const searchCosignerProviders = (query) => {
-    if (cosignerTimerRef.current) clearTimeout(cosignerTimerRef.current);
-    if (!query || query.length < 2) { setCosignerSuggestions([]); return; }
-    setCosignerSearching(true);
-    cosignerTimerRef.current = setTimeout(async () => {
-      try {
-        const res = await getStaff({ search: query });
-        const providers = (res?.data || []).filter(u => u.isProvider === true || u.isProvider === '1');
-        setCosignerSuggestions(providers.slice(0, 10).map(u => ({ name: u.name || u.username, duz: u.ien || u.id })));
-      } catch (err) { setCosignerSuggestions([]); }
-      finally { setCosignerSearching(false); }
-    }, 400);
-  };
-
   // S9.23: Debounced access code uniqueness check
   const [acStatus, setAcStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
   const acTimerRef = useRef(null);
@@ -179,7 +161,7 @@ export default function StaffForm() {
       try {
         const res = await checkAccessCode(code);
         setAcStatus(res.available ? 'available' : 'taken');
-      } catch (err) {
+      } catch {
         setAcStatus(null); // network error — don't block the form
       }
     }, 500);
@@ -275,8 +257,6 @@ export default function StaffForm() {
           employeeId: vg.employeeId || userRes?.data?.employeeId || '',
           providerType: vg.providerType || '',
           cosigner: vg.cosigner || '',
-          cosignerDuz: '', // DUZ not returned in DETAIL — will be resolved on re-selection
-          requiresCosign: Boolean(vg.cosigner), // #29: infer from cosigner presence
           authMeds: vg.authMeds || false,
         };
         setForm(f => ({ ...f, ...editVals }));
@@ -300,28 +280,25 @@ export default function StaffForm() {
     if (stepId === 'person') {
       if (!form.lastName.trim()) errors.lastName = 'Last name is required';
       else if (form.lastName.length < 2) errors.lastName = 'Last name must be at least 2 characters';
-      else if (form.lastName.length > 25) errors.lastName = 'Last name must be 25 characters or fewer';
-      else if (!/^[A-Z \-']+$/i.test(form.lastName.trim())) errors.lastName = 'Only letters, spaces, hyphens, and apostrophes allowed';
+      else if (!/^[A-Z'-]+$/i.test(form.lastName.trim())) errors.lastName = 'Last name contains invalid characters';
       if (!form.firstName.trim()) errors.firstName = 'First name is required';
       else if (form.firstName.length < 1) errors.firstName = 'First name is required';
-      else if (form.firstName.length > 15) errors.firstName = 'First name must be 15 characters or fewer';
-      if (form.middleInitial && form.middleInitial.length > 1) errors.middleInitial = 'Middle initial must be a single letter';
-      else if (form.middleInitial && !/^[A-Z]$/i.test(form.middleInitial)) errors.middleInitial = 'Middle initial must be a letter';
       // Compose fullName for length check
       const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
       if (composedName.length > 35) errors.lastName = 'Combined name must be 35 characters or fewer';
       if (!form.sex) errors.sex = 'Gender is required';
       if (!form.dob) errors.dob = 'Date of birth is required';
       else {
-        const dobDate = new Date(form.dob);
-        const ageDiff = Date.now() - dobDate.getTime();
-        const ageYears = ageDiff / (365.25 * 24 * 60 * 60 * 1000);
-        if (ageYears < 16) errors.dob = 'Staff member must be at least 16 years old';
+        // S6: Minimum age 16 — VistA users must be at least 16 years old
+        const dobDate = new Date(form.dob + 'T00:00:00');
+        const today = new Date();
+        const age = today.getFullYear() - dobDate.getFullYear() - (today < new Date(today.getFullYear(), dobDate.getMonth(), dobDate.getDate()) ? 1 : 0);
+        if (age < 16) errors.dob = 'User must be at least 16 years old';
       }
-      // G008: Email validation — require TLD
-      if (form.email && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(form.email)) errors.email = 'Invalid email format (must include domain like .com, .gov)';
+      // G008: Email validation
+      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Invalid email format';
       // G009: Phone validation — at least 10 digits
-      if (form.phone && !/^\d{10,}$/.test(form.phone.replace(/[\s\-().+]/g, ''))) errors.phone = 'Phone must contain at least 10 digits';
+      if (form.phone && !/^\d{10,}$/.test(form.phone.replace(/[\s\-().]/g, ''))) errors.phone = 'Phone must contain at least 10 digits';
       // G010: SSN last4 validation
       if (form.govIdLast4 && !/^\d{4}$/.test(form.govIdLast4)) errors.govIdLast4 = 'Must be exactly 4 digits';
       // Credentials are required for new users
@@ -342,9 +319,12 @@ export default function StaffForm() {
     if (stepId === 'provider' && showProviderStep) {
       if (!form.providerType) errors.providerType = 'Provider type is required';
       if (form.npi) {
-        if (!/^\d{10}$/.test(form.npi)) errors.npi = 'NPI must be exactly 10 digits';
-        else {
-          // NPI Luhn check (prefix 80840 per CMS standard)
+        if (form.npi.length !== 10) {
+          errors.npi = 'NPI must be exactly 10 digits';
+        } else if (!/^\d{10}$/.test(form.npi)) {
+          errors.npi = 'NPI must contain only digits';
+        } else {
+          // S6: NPI Luhn checksum validation (ISO/IEC 7812 with 80840 prefix)
           const prefixed = '80840' + form.npi;
           let sum = 0;
           for (let i = prefixed.length - 1, alt = false; i >= 0; i--, alt = !alt) {
@@ -355,17 +335,8 @@ export default function StaffForm() {
           if (sum % 10 !== 0) errors.npi = 'NPI check digit is invalid';
         }
       }
-      // F013: DEA format validation — 2 letters + 7 digits + checksum
-      if (form.dea) {
-        if (!/^[A-Za-z]{2}\d{7}$/.test(form.dea)) errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
-        else {
-          const digits = form.dea.slice(2);
-          const odd = parseInt(digits[0]) + parseInt(digits[2]) + parseInt(digits[4]);
-          const even = parseInt(digits[1]) + parseInt(digits[3]) + parseInt(digits[5]);
-          const checkDigit = (odd + even * 2) % 10;
-          if (checkDigit !== parseInt(digits[6])) errors.dea = 'DEA check digit is invalid';
-        }
-      }
+      // F013: DEA format validation — 2 letters + 7 digits
+      if (form.dea && !/^[A-Za-z]{2}\d{7}$/.test(form.dea)) errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
     }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -385,8 +356,34 @@ export default function StaffForm() {
     language: '', verifyCodeNeverExpires: false, filemanAccess: '',
     restrictPatient: '', mailGroups: [], degree: '',
     accessCode: '', verifyCode: '', verifyCodeConfirm: '',
-    requiresCosign: false, cosigner: '', cosignerDuz: '',
+    requiresCosign: false, cosigner: '',
   });
+
+  // S13: Auto-save wizard state to sessionStorage for crash/disconnect recovery (create mode only)
+  const WIZARD_SAVE_KEY = 've-wizard-draft';
+  useEffect(() => {
+    if (isEdit || createSuccess) return;
+    if (!form.lastName && !form.firstName) return; // nothing meaningful to save
+    const timer = setTimeout(() => {
+      const { accessCode, verifyCode, verifyCodeConfirm, ...safe } = form;
+      sessionStorage.setItem(WIZARD_SAVE_KEY, JSON.stringify({ step: currentStep, form: safe, ts: Date.now() }));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [form, currentStep, isEdit, createSuccess]);
+
+  // Restore draft on mount (create mode only)
+  useEffect(() => {
+    if (isEdit) return;
+    try {
+      const raw = sessionStorage.getItem(WIZARD_SAVE_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      // Discard drafts older than 2 hours
+      if (Date.now() - draft.ts > 2 * 60 * 60 * 1000) { sessionStorage.removeItem(WIZARD_SAVE_KEY); return; }
+      setForm(f => ({ ...f, ...draft.form }));
+      setCurrentStep(draft.step || 0);
+    } catch { /* ignore corrupt draft */ }
+  }, [isEdit]);
 
   const [liveMailGroups, setLiveMailGroups] = useState([]);
 
@@ -457,7 +454,7 @@ export default function StaffForm() {
         name: composedName,
         sex: form.sex,
         dob: form.dob,
-        ssnLast4: form.govIdLast4 || '',
+        ssn: form.govIdLast4 || '',
         email: form.email,
         phone: form.phone,
         role: form.primaryRole,
@@ -475,7 +472,7 @@ export default function StaffForm() {
         secondaryFeatures: form.secondaryFeatures,
         sigBlockName: form.sigBlockName,
         requiresCosign: form.requiresCosign || false,
-        cosigner: form.cosignerDuz || form.cosigner || '',
+        cosigner: form.cosigner || '',
         language: form.language || '',
         verifyCodeNeverExpires: form.verifyCodeNeverExpires || false,
         filemanAccess: form.filemanAccess || '',
@@ -606,8 +603,11 @@ export default function StaffForm() {
         const failedMailGroups = mailGroupResults.filter(m => m.status !== 'ok');
         const successMailGroupCount = mailGroupResults.filter(m => m.status === 'ok').length;
         // Show success screen with "Create Another" option
+        sessionStorage.removeItem(WIZARD_SAVE_KEY);
         setCreateSuccess({
           name: `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}`,
+          firstName: form.firstName,
+          lastName: form.lastName,
           staffId: `S-${newDuz}`,
           department: form.department,
           site: liveSites.find(l => l.value === form.primaryLocation)?.label || '',
@@ -615,9 +615,12 @@ export default function StaffForm() {
           permCount: keyResults.length > 0 ? successKeyCount : mergedPermissions.length,
           permTotal: mergedPermissions.length,
           failedKeys,
+          assignedKeys: keyResults.filter(k => k.status === 'ok').map(k => k.key),
           mailGroupCount: successMailGroupCount,
           failedMailGroups,
           duz: newDuz,
+          accessCode: form.accessCode,
+          verifyCode: form.verifyCode,
         });
       }
     } catch (err) {
@@ -646,7 +649,7 @@ export default function StaffForm() {
           isDuplicate: false,
         });
       }
-    } catch (err) {
+    } catch {
       setDuplicateWarning(null);
     }
   };
@@ -698,20 +701,7 @@ export default function StaffForm() {
               {createSuccess.permCount}{createSuccess.permTotal && createSuccess.permTotal !== createSuccess.permCount ? ` of ${createSuccess.permTotal}` : ''} permissions assigned
               {createSuccess.mailGroupCount > 0 && ` | Added to ${createSuccess.mailGroupCount} mail group(s)`}
             </div>
-            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && createSuccess.permCount === 0 && (
-              <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFEBEE] border border-[#EF5350] rounded-lg text-left" role="alert">
-                <p className="text-sm font-bold text-[#C62828] mb-1">
-                  ⚠ All {createSuccess.failedKeys.length} permission(s) failed to assign — this user has no capabilities
-                </p>
-                <p className="text-xs text-[#C62828] mb-2">The user was created but cannot perform any clinical functions. Check that the security keys exist in VistA and retry.</p>
-                <ul className="text-xs text-[#C62828] list-disc list-inside">
-                  {createSuccess.failedKeys.map((k, i) => (
-                    <li key={i}>{k.key}{k.detail ? ` — ${k.detail}` : ''}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && createSuccess.permCount > 0 && (
+            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && (
               <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFF3E0] border border-[#FFB74D] rounded-lg text-left">
                 <p className="text-sm font-medium text-[#E65100] mb-1">
                   {createSuccess.failedKeys.length} permission(s) failed to assign:
@@ -735,7 +725,123 @@ export default function StaffForm() {
                 </ul>
               </div>
             )}
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <button
+                onClick={() => {
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) return;
+                  const safeText = (s) => String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  // Build human-readable capabilities from assigned keys
+                  const KEY_TO_CAPABILITY = {
+                    'PROVIDER': 'Access clinical patient records',
+                    'ORES': 'Write and sign clinical orders',
+                    'OR CPRS GUI CHART': 'View patient charts',
+                    'ORCL-SIGN-NOTES': 'Sign clinical notes and documents',
+                    'ORCL-PAT-RECS': 'View patient records',
+                    'ORELSE': 'Enter verbal and telephone orders',
+                    'PSB NURSE': 'Administer medications via barcode scanning',
+                    'GMRA ALLERGY VERIFY': 'Verify and review patient allergies',
+                    'OREMAS': 'Enter orders for physicians',
+                    'PSORPH': 'Dispense outpatient prescriptions',
+                    'PSJ PHARMACIST': 'Verify inpatient medication orders',
+                    'PSOPHARMACIST': 'Verify outpatient prescriptions',
+                    'LRLAB': 'Enter and process lab results',
+                    'LRVERIFY': 'Verify laboratory results',
+                    'SD SCHEDULING': 'Schedule patient appointments',
+                    'DG REGISTER': 'Register new patients',
+                    'DG REGISTRATION': 'Access registration workflow',
+                    'DG ADMIT': 'Admit patients to the hospital',
+                    'DG DISCHARGE': 'Discharge patients',
+                    'DG TRANSFER': 'Transfer patients between units',
+                    'XUMGR': 'Manage user accounts',
+                    'IBFIN': 'Process financial and billing transactions',
+                    'RA TECHNOLOGIST': 'Perform imaging exams',
+                    'MAG SYSTEM': 'Access imaging system',
+                    'MAG CAPTURE': 'Capture medical images',
+                  };
+                  const capabilities = (createSuccess.assignedKeys || [])
+                    .map(k => KEY_TO_CAPABILITY[k])
+                    .filter(Boolean);
+                  const capList = capabilities.length > 0
+                    ? capabilities.map(c => `<li style="margin:4px 0">${safeText(c)}</li>`).join('')
+                    : '<li>Standard system access</li>';
+                  const loginUrl = window.location.origin;
+                  printWindow.document.write(`<html><head><title>Welcome Letter - ${safeText(createSuccess.name)}</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;margin:50px auto;color:#222;line-height:1.6}
+.header{border-top:4px solid #1A1A2E;border-bottom:2px solid #E2E4E8;padding:16px 0;margin-bottom:24px}
+.header h1{font-size:20px;margin:0 0 4px 0;color:#1A1A2E}
+.header p{margin:0;font-size:13px;color:#666}
+.creds{background:#F0F4F8;border:2px solid #2E5984;border-radius:8px;padding:20px;margin:20px 0;font-family:monospace}
+.creds .label{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:2px}
+.creds .value{font-size:18px;color:#1A1A2E;margin-bottom:12px}
+.warning{color:#CC3333;font-size:13px;margin:4px 0}
+.section{margin:20px 0}
+.section h2{font-size:15px;color:#1A1A2E;border-bottom:1px solid #E2E4E8;padding-bottom:4px}
+.steps{counter-reset:step;list-style:none;padding:0}
+.steps li{counter-increment:step;padding:6px 0 6px 30px;position:relative;font-size:14px}
+.steps li::before{content:counter(step);position:absolute;left:0;width:22px;height:22px;border-radius:50%;background:#1A1A2E;color:#fff;text-align:center;line-height:22px;font-size:12px;font-weight:bold}
+.caps{list-style:none;padding:0}
+.caps li{padding:4px 0 4px 20px;position:relative;font-size:14px}
+.caps li::before{content:"✓";position:absolute;left:0;color:#2E7D32;font-weight:bold}
+.footer{margin-top:30px;border-top:2px solid #CC3333;padding-top:12px;text-align:center;font-size:12px;color:#CC3333;font-weight:bold}
+@media print{body{margin:30px}}
+</style></head>
+<body>
+<div class="header">
+  <h1>VistA Evolved</h1>
+  <p>${safeText(createSuccess.site || 'Medical Center')}</p>
+</div>
+
+<p>Dear <strong>${safeText(createSuccess.firstName)} ${safeText(createSuccess.lastName)}</strong>,</p>
+<p>Your account has been created. Please use the following credentials to sign in for the first time:</p>
+
+<div class="creds">
+  <div class="label">Username</div>
+  <div class="value">${safeText(createSuccess.accessCode)}</div>
+  <div class="label">Temporary Password</div>
+  <div class="value">${safeText(createSuccess.verifyCode)}</div>
+  <p class="warning">⚠ You MUST change your password on first sign-in.</p>
+  <p class="warning">⚠ Do not share these credentials with anyone.</p>
+</div>
+
+<div class="section">
+  <h2>Your Account Details</h2>
+  <table style="width:100%;font-size:14px">
+    <tr><td style="padding:4px 0;color:#666;width:140px">Role</td><td style="padding:4px 0"><strong>${safeText(createSuccess.role)}</strong></td></tr>
+    <tr><td style="padding:4px 0;color:#666">Department</td><td style="padding:4px 0">${safeText(createSuccess.department)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Primary Location</td><td style="padding:4px 0">${safeText(createSuccess.site)}</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>What You Can Do</h2>
+  <ul class="caps">${capList}</ul>
+</div>
+
+<div class="section">
+  <h2>Getting Started</h2>
+  <ol class="steps">
+    <li>Go to <strong>${safeText(loginUrl)}</strong></li>
+    <li>Enter your username and temporary password above</li>
+    <li>You will be prompted to create a new password (8+ characters, mixed case)</li>
+    <li>Set up your electronic signature when prompted</li>
+  </ol>
+</div>
+
+<p style="font-size:13px;color:#666;margin-top:24px">For help, contact your local IT support or IRM office.</p>
+<p style="font-size:12px;color:#999">Date Issued: ${new Date().toLocaleDateString()} | Issued By: System Administrator</p>
+
+<div class="footer">CONFIDENTIAL — Destroy after first login</div>
+</body></html>`);
+                  printWindow.document.close();
+                  printWindow.print();
+                }}
+                className="px-5 py-2 text-sm font-medium bg-[#2E5984] text-white rounded-md hover:bg-[#1A1A2E] transition-colors flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">print</span>
+                Print Welcome Letter
+              </button>
               <button
                 onClick={() => navigate(`/admin/staff/${createSuccess.duz}/edit`)}
                 className="px-5 py-2 text-sm border border-border rounded-md hover:bg-surface-alt transition-colors"
@@ -799,7 +905,6 @@ export default function StaffForm() {
             return (
               <button
                 key={s.id}
-                aria-current={currentStep === stepIndex ? 'step' : undefined}
                 onClick={() => {
                   if (stepIndex > currentStep) {
                     for (let si = 0; si < stepIndex; si++) {
@@ -895,6 +1000,7 @@ export default function StaffForm() {
                     <option value="">Select...</option>
                     <option value="M">Male</option>
                     <option value="F">Female</option>
+                    <option value="U">Unknown</option>
                   </select>
                 </FormField>
                 <FormField label="Date of Birth" required error={validationErrors.dob}
@@ -902,14 +1008,6 @@ export default function StaffForm() {
                   <input type="date" value={form.dob}
                     max={new Date().toISOString().slice(0, 10)}
                     onChange={e => updateField('dob', e.target.value)}
-                    onBlur={() => {
-                      if (form.dob) {
-                        const ageMs = Date.now() - new Date(form.dob).getTime();
-                        if (ageMs / (365.25 * 24 * 60 * 60 * 1000) < 16)
-                          setValidationErrors(e => ({ ...e, dob: 'Staff member must be at least 16 years old' }));
-                        else setValidationErrors(e => { const { dob, ...rest } = e; return rest; });
-                      }
-                    }}
                     className="form-input" />
                   {form.dob && (() => {
                     const birth = new Date(form.dob);
@@ -923,24 +1021,13 @@ export default function StaffForm() {
                   <input type="password" value={form.govIdLast4} onChange={e => updateField('govIdLast4', e.target.value)}
                     placeholder="••••" maxLength={4} className="form-input" autoComplete="off" />
                 </FormField>
-                <FormField label="Email" hint="Used for system notifications and password resets" error={validationErrors.email}>
+                <FormField label="Email" hint="Used for system notifications and password resets">
                   <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)}
-                    onBlur={() => {
-                      if (form.email && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(form.email))
-                        setValidationErrors(e => ({ ...e, email: 'Invalid email format (must include domain like .com, .gov)' }));
-                      else setValidationErrors(e => { const { email, ...rest } = e; return rest; });
-                    }}
                     placeholder="jane.smith@facility.org" className="form-input" />
                 </FormField>
                 <FormField label="Phone"
-                  hint="Office phone number for this staff member."
-                  error={validationErrors.phone}>
-                  <input type="tel" value={form.phone || ''}
-                    onChange={e => updateField('phone', e.target.value)}
-                    onBlur={e => {
-                      const raw = (e.target.value || '').replace(/[^\d]/g, '');
-                      if (raw.length === 10) updateField('phone', `(${raw.slice(0,3)}) ${raw.slice(3,6)}-${raw.slice(6)}`);
-                    }}
+                  hint="Office phone number for this staff member.">
+                  <input type="tel" value={form.phone || ''} onChange={e => updateField('phone', e.target.value)}
                     placeholder="(503) 555-0100" className="form-input" />
                 </FormField>
                 <FormField label="Employee ID / Badge Number"
@@ -1038,36 +1125,24 @@ export default function StaffForm() {
                     <span className="material-symbols-outlined text-[18px]">{form._showPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
-                {/* F005: Password strength meter + #132 requirements checklist */}
+                {/* F005: Password strength meter */}
                 {form.verifyCode && (() => {
                   const pw = form.verifyCode;
-                  const checks = [
-                    { label: '8+ characters', pass: pw.length >= 8 },
-                    { label: 'Uppercase letter', pass: /[A-Z]/.test(pw) },
-                    { label: 'Lowercase letter', pass: /[a-z]/.test(pw) },
-                    { label: 'Number', pass: /\d/.test(pw) },
-                    { label: 'Special character', pass: /[^A-Za-z0-9]/.test(pw) },
-                  ];
-                  const score = checks.filter(c => c.pass).length;
-                  const label = score <= 2 ? 'Weak' : score <= 4 ? 'Fair' : 'Strong';
-                  const color = score <= 2 ? '#CC3333' : score <= 4 ? '#E65100' : '#2E7D32';
+                  let score = 0;
+                  if (pw.length >= 8) score++;
+                  if (pw.length >= 12) score++;
+                  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+                  if (/\d/.test(pw)) score++;
+                  if (/[^A-Za-z0-9]/.test(pw)) score++;
+                  const label = score <= 1 ? 'Weak' : score <= 3 ? 'Fair' : 'Strong';
+                  const color = score <= 1 ? '#CC3333' : score <= 3 ? '#E65100' : '#2E7D32';
                   const pct = Math.min(100, score * 20);
                   return (
                     <div className="mt-1.5">
                       <div className="h-1.5 rounded-full bg-[#E2E4E8] overflow-hidden">
                         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1">
-                        {checks.map(c => (
-                          <div key={c.label} className="flex items-center gap-1 text-[10px]">
-                            <span style={{ color: c.pass ? '#2E7D32' : '#999' }}>{c.pass ? '✓' : '○'}</span>
-                            <span style={{ color: c.pass ? '#2E7D32' : '#666' }}>{c.label}</span>
-                          </div>
-                        ))}
-                      </div>
+                      <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
                     </div>
                   );
                 })()}
@@ -1256,40 +1331,13 @@ export default function StaffForm() {
                 </FormField>
                 <FormField label="NPI" error={validationErrors.npi} hint="10-digit National Provider Identifier. Required for billing.">
                   <input type="text" value={form.npi} onChange={e => updateField('npi', e.target.value)}
-                    onBlur={() => {
-                      if (form.npi && !/^\d{10}$/.test(form.npi)) {
-                        setValidationErrors(e => ({ ...e, npi: 'NPI must be exactly 10 digits' }));
-                      } else if (form.npi) {
-                        const prefixed = '80840' + form.npi;
-                        let sum = 0;
-                        for (let i = prefixed.length - 1, alt = false; i >= 0; i--, alt = !alt) {
-                          let n = parseInt(prefixed[i], 10);
-                          if (alt) { n *= 2; if (n > 9) n -= 9; }
-                          sum += n;
-                        }
-                        if (sum % 10 !== 0) setValidationErrors(e => ({ ...e, npi: 'NPI check digit is invalid' }));
-                        else setValidationErrors(e => { const { npi, ...rest } = e; return rest; });
-                      } else { setValidationErrors(e => { const { npi, ...rest } = e; return rest; }); }
-                    }}
                     placeholder="1234567890" maxLength={10} className="form-input font-mono" />
                 </FormField>
-                <FormField label="DEA Number" error={validationErrors.dea} hint="Required for controlled substance prescribing">
+                <FormField label="DEA Number" hint="Required for controlled substance prescribing">
                   <input type="text" value={form.dea} onChange={e => updateField('dea', e.target.value)}
-                    onBlur={() => {
-                      if (form.dea && !/^[A-Za-z]{2}\d{7}$/.test(form.dea)) {
-                        setValidationErrors(e => ({ ...e, dea: 'DEA must be 2 letters followed by 7 digits' }));
-                      } else if (form.dea) {
-                        const digits = form.dea.slice(2);
-                        const odd = parseInt(digits[0]) + parseInt(digits[2]) + parseInt(digits[4]);
-                        const even = parseInt(digits[1]) + parseInt(digits[3]) + parseInt(digits[5]);
-                        if ((odd + even * 2) % 10 !== parseInt(digits[6]))
-                          setValidationErrors(e => ({ ...e, dea: 'DEA check digit is invalid' }));
-                        else setValidationErrors(e => { const { dea, ...rest } = e; return rest; });
-                      } else { setValidationErrors(e => { const { dea, ...rest } = e; return rest; }); }
-                    }}
                     placeholder="AB1234567" className="form-input font-mono" />
                 </FormField>
-                <FormField label="DEA Expiration Date" hint="When the DEA registration expires. VistA File #200 field 53.21.">
+                <FormField label="DEA Expiration Date">
                   <input type="date" value={form.deaExpiration} onChange={e => updateField('deaExpiration', e.target.value)} className="form-input" />
                 </FormField>
               </div>
@@ -1319,31 +1367,11 @@ export default function StaffForm() {
                   </div>
                 </label>
                 {form.requiresCosign && (
-                  <FormField label="Cosigner (Attending)" hint="The supervising provider who co-signs this trainee's orders. Search active providers by name.">
-                    <div className="relative">
-                      <input type="text" value={form.cosigner || ''}
-                        onChange={e => { updateField('cosigner', e.target.value); updateField('cosignerDuz', ''); searchCosignerProviders(e.target.value); }}
-                        onFocus={() => { if (form.cosigner?.length >= 2) searchCosignerProviders(form.cosigner); }}
-                        onBlur={() => setTimeout(() => setCosignerSuggestions([]), 200)}
-                        role="combobox"
-                        aria-expanded={cosignerSuggestions.length > 0}
-                        aria-autocomplete="list"
-                        aria-controls="cosigner-listbox"
-                        placeholder="Type provider name to search..." className="form-input" />
-                      {cosignerSearching && <span className="absolute right-2 top-2 text-xs text-text-muted" aria-live="polite">Searching...</span>}
-                      {cosignerSuggestions.length > 0 && (
-                        <ul id="cosigner-listbox" role="listbox" className="absolute z-50 w-full bg-white border border-[#E2E4E8] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
-                          {cosignerSuggestions.map(s => (
-                            <li key={s.duz} role="option"
-                              className="px-3 py-2 text-sm hover:bg-[#E8F0FE] cursor-pointer"
-                              onMouseDown={() => { updateField('cosigner', s.name); updateField('cosignerDuz', s.duz); setCosignerSuggestions([]); }}>
-                              <span className="font-medium">{s.name}</span>
-                              <span className="text-[#999] ml-2 text-xs">DUZ {s.duz}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                  <FormField label="Cosigner (Attending)" hint="The supervising provider who co-signs this trainee's orders. Select from active providers.">
+                    <CosignerSearch
+                      value={form.cosigner || ''}
+                      onSelect={(duz, name) => updateField('cosigner', duz)}
+                    />
                   </FormField>
                 )}
               </div>
@@ -1570,25 +1598,14 @@ export default function StaffForm() {
           )}
 
           {/* STEP 4: Review and Confirm */}
-          {step.id === 'review' && (() => {
-            // Build originals map for edit-mode diff highlighting
-            const of = isEdit && originalForm ? originalForm : null;
-            const identityOrig = of ? {
-              'Name': (of.lastName && of.firstName) ? `${of.lastName},${of.firstName}${of.middleInitial ? ' ' + of.middleInitial : ''}` : '—',
-              'Job Title': of.title || '—', 'Sex': of.sex === 'M' ? 'Male' : of.sex === 'F' ? 'Female' : of.sex || '—',
-              'Email': of.email || '—', 'Employee ID': of.employeeId || '',
-            } : null;
-            const roleOrig = of ? { 'Department': of.department || '—' } : null;
-            const provOrig = of ? { 'NPI': of.npi || '—', 'DEA': of.dea || '—' } : null;
-            return (
+          {step.id === 'review' && (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Review and Confirm</h2>
               <p className="text-sm text-text-secondary mb-4">
                 Verify all details before {isEdit ? 'saving changes to' : 'creating'} this staff member record.
-                {isEdit && <span className="ml-1 text-[#E65100] text-xs">(changed fields highlighted)</span>}
               </p>
               <div className="grid grid-cols-2 gap-6">
-                <ReviewSection title="Identity" originals={identityOrig} items={[
+                <ReviewSection title="Identity" items={[
                   ['Name', (form.lastName && form.firstName) ? `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}` : '—'],
                   ['Display Name', form.displayName || '(auto from name)'],
                   ['Job Title', form.title || '—'],
@@ -1598,7 +1615,7 @@ export default function StaffForm() {
                   ...(form.employeeId ? [['Employee ID', form.employeeId]] : []),
                   ...(form.degree ? [['Degree/Suffix', form.degree]] : []),
                 ]} />
-                <ReviewSection title="Role & Department" originals={roleOrig} items={[
+                <ReviewSection title="Role & Department" items={[
                   ['Role', SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '—'],
                   ['Department', form.department || '—'],
                   ['Provider', form.isProvider ? 'Yes' : 'No'],
@@ -1616,7 +1633,7 @@ export default function StaffForm() {
                   ...(form.filemanAccess ? [['FileMan Access', form.filemanAccess === '@' ? 'Unrestricted (@)' : form.filemanAccess]] : []),
                 ]} />
                 {(form.isProvider || showProviderStep) && (
-                  <ReviewSection title="Provider Configuration" originals={provOrig} items={[
+                  <ReviewSection title="Provider Configuration" items={[
                     ['Provider Type', PROVIDER_TYPES.find(p => p.value === form.providerType)?.label || '—'],
                     ['NPI', form.npi || '—'],
                     ['DEA', form.dea || '—'],
@@ -1658,8 +1675,10 @@ export default function StaffForm() {
                 </div>
               )}
             </div>
-          );})()}
+          )}
         </div>
+
+        {/* Navigation */}
         <div className="flex items-center justify-between mt-6">
           <button onClick={() => {
             if (currentStep === 0) { navigate('/admin/staff'); return; }
@@ -1718,6 +1737,62 @@ export default function StaffForm() {
   );
 }
 
+function CosignerSearch({ value, onSelect }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedName, setSelectedName] = useState('');
+  const debounceRef = useRef(null);
+
+  const doSearch = (text) => {
+    setQuery(text);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!text || text.length < 2) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await getStaff({ search: text.toUpperCase() });
+        const providers = (res?.data || []).filter(u => u.isProvider || u.title?.match(/physician|doctor|md|do|np|pa|attending|surgeon/i));
+        setResults(providers.slice(0, 15));
+      } catch { setResults([]); }
+      finally { setSearching(false); }
+    }, 300);
+  };
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={selectedName || query}
+        onChange={e => { setSelectedName(''); doSearch(e.target.value); }}
+        placeholder="Search for attending provider..."
+        className="form-input"
+      />
+      {value && selectedName && (
+        <button type="button" onClick={() => { setSelectedName(''); setQuery(''); onSelect('', ''); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#999] hover:text-[#CC3333]">
+          <span className="material-symbols-outlined text-[14px]">close</span>
+        </button>
+      )}
+      {searching && <p className="text-[10px] text-text-muted mt-1">Searching providers...</p>}
+      {results.length > 0 && !selectedName && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-[#E2E4E8] rounded-md shadow-lg max-h-48 overflow-auto">
+          {results.map(p => (
+            <button key={p.duz || p.ien} type="button"
+              onClick={() => { const duz = p.duz || p.ien; onSelect(duz, p.name); setSelectedName(p.name); setResults([]); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-[#F5F8FB] border-b border-[#F0F0F0] last:border-0">
+              <span className="font-medium">{p.name}</span>
+              {p.title && <span className="text-[#999] ml-2 text-xs">{p.title}</span>}
+              <span className="text-[#999] ml-2 text-xs">DUZ: {p.duz || p.ien}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {value && <p className="text-[10px] text-[#2E7D32] mt-1">Selected: DUZ {value}</p>}
+    </div>
+  );
+}
+
 function FormField({ label, required, hint, error, children }) {
   return (
     <div>
@@ -1731,23 +1806,17 @@ function FormField({ label, required, hint, error, children }) {
   );
 }
 
-function ReviewSection({ title, items, originals }) {
+function ReviewSection({ title, items }) {
   return (
     <div className="bg-surface-alt rounded-lg p-4">
       <h3 className="text-sm font-semibold text-text mb-3">{title}</h3>
       <dl className="space-y-1.5">
-        {items.map(([label, value]) => {
-          const changed = originals && originals[label] !== undefined && originals[label] !== value;
-          return (
-            <div key={label} className={`flex justify-between text-sm${changed ? ' bg-[#FFFDE7] rounded px-1 -mx-1' : ''}`}>
-              <dt className="text-text-secondary">{label}</dt>
-              <dd className={`font-medium text-right max-w-[60%]${changed ? ' text-[#E65100]' : ' text-text'}`}>
-                {value}
-                {changed && <span className="ml-1 text-[10px] text-[#E65100]">(changed)</span>}
-              </dd>
-            </div>
-          );
-        })}
+        {items.map(([label, value]) => (
+          <div key={label} className="flex justify-between text-sm">
+            <dt className="text-text-secondary">{label}</dt>
+            <dd className="font-medium text-text text-right max-w-[60%]">{value}</dd>
+          </div>
+        ))}
       </dl>
     </div>
   );

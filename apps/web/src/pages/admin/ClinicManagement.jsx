@@ -74,6 +74,7 @@ export default function ClinicManagement() {
         id: d.ien || `clinic-${i}`,
         name: d.name || '',
         abbreviation: d.abbreviation || '',
+        type: d.type || 'C',
         stopCode: d.stopCode || '',
         apptLength: d.apptLength ? `${d.apptLength} min` : '',
         status: d.inactivateDate ? `Inactive (${d.inactivateDate})` : 'Active',

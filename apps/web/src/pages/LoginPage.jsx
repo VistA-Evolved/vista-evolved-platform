@@ -10,7 +10,6 @@ export default function LoginPage() {
   const [passwordExpired, setPasswordExpired] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [failedAttempts, setFailedAttempts] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const timedOut = location.state?.reason === 'timeout';
@@ -24,7 +23,6 @@ export default function LoginPage() {
     try {
       const data = await login(username, password);
       if (data.ok) {
-        setFailedAttempts(0);
         // X005: Redirect back to the page the user was on before session expired
         const returnTo = sessionStorage.getItem('ve-return-to');
         sessionStorage.removeItem('ve-return-to');
@@ -35,7 +33,6 @@ export default function LoginPage() {
         const lower = raw.toLowerCase();
         if (lower.includes('locked') || lower.includes('lockout')) {
           setError('Your account has been locked due to too many failed attempts. Contact your system administrator.');
-          setFailedAttempts(0);
         } else if (lower.includes('disabled') || lower.includes('disuser') || lower.includes('inactive')) {
           setError('Your account has been deactivated. Contact your system administrator to restore access.');
         } else if (lower.includes('expired') || lower.includes('verify code')) {
@@ -44,15 +41,7 @@ export default function LoginPage() {
         } else if (lower.includes('not found') || lower.includes('no such')) {
           setError('Username not found. Check your username and try again.');
         } else {
-          const attempts = failedAttempts + 1;
-          setFailedAttempts(attempts);
-          // S5.4: Show remaining attempts (VistA default lockout is 5 attempts)
-          const lockoutThreshold = data.lockoutAttempts || 5;
-          const remaining = Math.max(0, lockoutThreshold - attempts);
-          const attemptMsg = remaining > 0
-            ? ` (${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout)`
-            : '';
-          setError((raw || 'Invalid credentials. Please try again.') + attemptMsg);
+          setError(raw || 'Invalid credentials. Please try again.');
         }
       }
     } catch (err) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppShell from './components/shell/AppShell';
 import LoginPage from './pages/LoginPage';
@@ -12,37 +12,39 @@ import SessionManager from './components/shared/SessionManager';
 import ESignatureSetup from './components/shared/ESignatureSetup';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 
-import StaffDirectory from './pages/admin/StaffDirectory';
-import StaffForm from './pages/admin/StaffForm';
-import PermissionsCatalog from './pages/admin/PermissionsCatalog';
-import RoleTemplates from './pages/admin/RoleTemplates';
-import SiteManagement from './pages/admin/SiteManagement';
-import SecurityAuth from './pages/admin/SecurityAuth';
-import SystemConfig from './pages/admin/SystemConfig';
-import SystemHealth from './pages/admin/SystemHealth';
-import AuditLog from './pages/admin/AuditLog';
-import AlertsNotifications from './pages/admin/AlertsNotifications';
-import DepartmentsServices from './pages/admin/DepartmentsServices';
-import SiteParameters from './pages/admin/SiteParameters';
-import AdminReports from './pages/admin/AdminReports';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import ClinicManagement from './pages/admin/ClinicManagement';
-import WardManagement from './pages/admin/WardManagement';
-import DeviceManagement from './pages/admin/DeviceManagement';
-import MailGroupManagement from './pages/admin/MailGroupManagement';
+// Lazy-loaded admin pages
+const StaffDirectory = lazy(() => import('./pages/admin/StaffDirectory'));
+const StaffForm = lazy(() => import('./pages/admin/StaffForm'));
+const PermissionsCatalog = lazy(() => import('./pages/admin/PermissionsCatalog'));
+const RoleTemplates = lazy(() => import('./pages/admin/RoleTemplates'));
+const SiteManagement = lazy(() => import('./pages/admin/SiteManagement'));
+const SecurityAuth = lazy(() => import('./pages/admin/SecurityAuth'));
+const SystemConfig = lazy(() => import('./pages/admin/SystemConfig'));
+const SystemHealth = lazy(() => import('./pages/admin/SystemHealth'));
+const AuditLog = lazy(() => import('./pages/admin/AuditLog'));
+const AlertsNotifications = lazy(() => import('./pages/admin/AlertsNotifications'));
+const DepartmentsServices = lazy(() => import('./pages/admin/DepartmentsServices'));
+const SiteParameters = lazy(() => import('./pages/admin/SiteParameters'));
+const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const ClinicManagement = lazy(() => import('./pages/admin/ClinicManagement'));
+const WardManagement = lazy(() => import('./pages/admin/WardManagement'));
+const DeviceManagement = lazy(() => import('./pages/admin/DeviceManagement'));
+const MailGroupManagement = lazy(() => import('./pages/admin/MailGroupManagement'));
 
-import PatientSearch from './pages/patients/PatientSearch';
-import PatientDashboard from './pages/patients/PatientDashboard';
-import PatientDemographics from './pages/patients/PatientDemographics';
-import InsuranceCoverage from './pages/patients/InsuranceCoverage';
-import FinancialAssessment from './pages/patients/FinancialAssessment';
-import Admission from './pages/patients/Admission';
-import Transfer from './pages/patients/Transfer';
-import Discharge from './pages/patients/Discharge';
-import BedManagement from './pages/patients/BedManagement';
-import PatientFlags from './pages/patients/PatientFlags';
-import RecordRestrictions from './pages/patients/RecordRestrictions';
-import RegistrationReports from './pages/patients/RegistrationReports';
+// Lazy-loaded patient pages
+const PatientSearch = lazy(() => import('./pages/patients/PatientSearch'));
+const PatientDashboard = lazy(() => import('./pages/patients/PatientDashboard'));
+const PatientDemographics = lazy(() => import('./pages/patients/PatientDemographics'));
+const InsuranceCoverage = lazy(() => import('./pages/patients/InsuranceCoverage'));
+const FinancialAssessment = lazy(() => import('./pages/patients/FinancialAssessment'));
+const Admission = lazy(() => import('./pages/patients/Admission'));
+const Transfer = lazy(() => import('./pages/patients/Transfer'));
+const Discharge = lazy(() => import('./pages/patients/Discharge'));
+const BedManagement = lazy(() => import('./pages/patients/BedManagement'));
+const PatientFlags = lazy(() => import('./pages/patients/PatientFlags'));
+const RecordRestrictions = lazy(() => import('./pages/patients/RecordRestrictions'));
+const RegistrationReports = lazy(() => import('./pages/patients/RegistrationReports'));
 
 const ESIG_DISMISSED_KEY = 've-esig-dismissed';
 const PROVIDER_KEYS = ['ORES', 'ORELSE', 'PROVIDER', 'OR CPRS GUI CHART'];
@@ -151,6 +153,7 @@ export default function App() {
       <FacilityProvider>
       <PatientProvider>
         <SessionManager />
+        <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-pulse text-sm text-[#999]">Loading...</div></div>}>
         <Routes>
           {/* Auth */}
           <Route path="/login" element={<LoginPage />} />
@@ -219,6 +222,7 @@ export default function App() {
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </Suspense>
       </PatientProvider>
       </FacilityProvider>
     </BrowserRouter>

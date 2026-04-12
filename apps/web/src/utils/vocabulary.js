@@ -31,7 +31,7 @@ export const KEY_TRANSLATIONS = {
   'CPRS CONFIG': 'Clinical Parameter Editor',
   'PROVIDER': 'Provider (Clinical Authority)',
   'TIU SIGN DOCUMENT': 'Sign Clinical Notes',
-  'GMRA-ALLERGY VERIFY': 'Verify Allergies',
+  'GMRA ALLERGY VERIFY': 'Verify Allergies',
   'GMV MANAGER': 'Vitals Manager',
   'SC PCMM': 'Primary Care Management',
   // Pharmacy

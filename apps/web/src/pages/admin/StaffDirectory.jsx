@@ -1,15 +1,14 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, updateCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName } from '../../utils/transforms';
 import { useFacility } from '../../contexts/FacilityContext';
-import { KEY_IMPACTS, ROLES } from './RoleTemplates';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -48,7 +47,7 @@ function deriveTitleFromKeys(keys) {
   if (keySet.has('MAG SYSTEM')) return 'Imaging Technician';
   if (keySet.has('IBFIN') || keySet.has('IB BILLING')) return 'Billing Specialist';
   if (keySet.has('TIU SIGN DOCUMENT')) return 'Health Information';
-  if (keySet.has('GMRA-ALLERGY VERIFY')) return 'Allergy Verifier';
+  if (keySet.has('GMRA ALLERGY VERIFY')) return 'Allergy Verifier';
   if (keySet.has('PROVIDER')) return 'Clinical Staff';
   if (keySet.has('OR CPRS GUI CHART')) return 'Clinical User';
   return '';
@@ -92,8 +91,6 @@ const baseColumns = [
 
 const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Locked', 'Terminated'];
 const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
-const ROLE_FILTER_OPTIONS = ['All', 'Physician', 'Nurse', 'Pharmacist', 'Lab', 'Scheduler', 'Registration', 'Admin', 'Other'];
-const SORT_OPTIONS = ['Name (A–Z)', 'Name (Z–A)', 'Recently Created', 'Staff ID', 'Department'];
 
 export default function StaffDirectory() {
   const navigate = useNavigate();
@@ -101,23 +98,21 @@ export default function StaffDirectory() {
   const { activeSite } = useFacility();
   useEffect(() => { document.title = 'Staff Directory — VistA Evolved'; }, []);
   const [searchText, setSearchText] = useState(searchParams.get('q') || '');
-  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
-  // #111: Debounce search to avoid excessive re-renders on fast typing
-  const searchTimerRef = useRef(null);
-  const handleSearchInput = useCallback((val) => {
-    setSearchInput(val);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => { setSearchText(val); setPage(1); }, 300);
-  }, []);
-  useEffect(() => () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); }, []);
+  // S7: 300ms search debounce to reduce re-renders on keystroke
+  const [debouncedSearch, setDebouncedSearch] = useState(searchText);
+  const debounceRef = useRef(null);
+  const handleSearchChange = (val) => {
+    setSearchText(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
+  };
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'Active');
   const [esigFilter, setEsigFilter] = useState(searchParams.get('esig') || 'All');
-  const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || 'All');
-  const [sortOption, setSortOption] = useState(searchParams.get('sort') || 'Name (A–Z)');
   const [hideSystemAccounts, setHideSystemAccounts] = useState(true);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [terminateTarget, setTerminateTarget] = useState(null);
   const [clearEsigTarget, setClearEsigTarget] = useState(null);
   const [clearingEsig, setClearingEsig] = useState(false);
 
@@ -151,11 +146,9 @@ export default function StaffDirectory() {
     if (searchText) params.q = searchText;
     if (statusFilter !== 'Active') params.status = statusFilter;
     if (esigFilter !== 'All') params.esig = esigFilter;
-    if (roleFilter !== 'All') params.role = roleFilter;
-    if (sortOption !== 'Name (A–Z)') params.sort = sortOption;
     if (page > 1) params.page = String(page);
     setSearchParams(params, { replace: true });
-  }, [searchText, statusFilter, esigFilter, roleFilter, sortOption, page, setSearchParams]);
+  }, [searchText, statusFilter, esigFilter, page, setSearchParams]);
 
   const columns = [
     ...baseColumns,
@@ -278,13 +271,10 @@ export default function StaffDirectory() {
         defaultOrderList: vg.defaultOrderList || '',
         proxyUser: vg.proxyUser || '',
         employeeId: vg.employeeId || userRes?.data?.employeeId || '',
-        // Password expiration (computed M-side, same as Kernel XUS1A.m sign-on)
-        passwordLastChanged: vg.passwordLastChanged || '',
-        passwordExpirationDays: vg.passwordExpirationDays,
-        passwordDaysRemaining: vg.passwordDaysRemaining,
-        // Activity summary
-        signOnCount: vg.signOnCount || 0,
-        firstSignOn: vg.firstSignOn || '',
+        // S7: Password expiration fields
+        vcChangeDate: vg.vcChangeDate || '',
+        pwdExpirationDays: vg.pwdExpirationDays,
+        pwdDaysRemaining: vg.pwdDaysRemaining,
       });
       setDetailKeys(keysRes?.data || []);
       // B8: CPRS Tab Access data now loaded in parallel
@@ -296,82 +286,45 @@ export default function StaffDirectory() {
     }
   };
 
-  // S3.10: Role category mapping for filter
-  const ROLE_CATEGORY_MAP = {
-    'Physician': /physician|surgeon|anesthesiologist/i,
-    'Nurse': /nurse|nursing|lpn/i,
-    'Pharmacist': /pharma/i,
-    'Lab': /lab|patholog/i,
-    'Scheduler': /schedul/i,
-    'Registration': /registr|admit|clerk/i,
-    'Admin': /admin|manager|supervisor/i,
-  };
-  function matchesRoleFilter(title, filter) {
-    if (filter === 'All') return true;
-    const pattern = ROLE_CATEGORY_MAP[filter];
-    if (pattern) return pattern.test(title || '');
-    // 'Other' matches anything not in the known categories
-    if (filter === 'Other') return !Object.values(ROLE_CATEGORY_MAP).some(p => p.test(title || ''));
-    return true;
-  }
-
   // Filters (client-side since list endpoint only returns ien+name)
   const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB|APPLICATION|PROXY|APITEST)/i;
-  // P5: Memoize filter + sort to avoid re-computation on every render
-  const filtered = useMemo(() => staffList.filter(u => {
+  const filtered = staffList.filter(u => {
     if (hideSystemAccounts && SYSTEM_ACCOUNT_PATTERNS.test(u.name)) return false;
     // Facility filter from context
     if (activeSite && u.site && !u.site.toUpperCase().includes(activeSite.name.toUpperCase())) return false;
-    if (searchText) {
-      const s = searchText.toLowerCase();
+    if (debouncedSearch) {
+      const s = debouncedSearch.toLowerCase();
       if (!u.name.toLowerCase().includes(s) && !u.id.toLowerCase().includes(s) && !(u.title || '').toLowerCase().includes(s) && !(u.department || '').toLowerCase().includes(s)) return false;
     }
     if (statusFilter !== 'All' && u.status !== statusFilter.toLowerCase()) return false;
     if (esigFilter === 'Ready' && !u.hasEsig) return false;
     if (esigFilter === 'Incomplete' && u.hasEsig) return false;
-    if (roleFilter !== 'All' && !matchesRoleFilter(u.title, roleFilter)) return false;
     return true;
-  }), [staffList, hideSystemAccounts, activeSite, searchText, statusFilter, esigFilter, roleFilter]);
+  });
 
-  // Sort the filtered list
-  const sorted = useMemo(() => [...filtered].sort((a, b) => {
-    switch (sortOption) {
-      case 'Name (Z–A)': return (b.name || '').localeCompare(a.name || '');
-      case 'Recently Created': return parseInt(b.duz, 10) - parseInt(a.duz, 10);
-      case 'Staff ID': return parseInt(a.duz, 10) - parseInt(b.duz, 10);
-      case 'Department': return (a.department || '').localeCompare(b.department || '') || (a.name || '').localeCompare(b.name || '');
-      default: return (a.name || '').localeCompare(b.name || '');
-    }
-  }), [filtered, sortOption]);
-
-  const totalFiltered = sorted.length;
+  const totalFiltered = filtered.length;
   const pageStart = (page - 1) * PAGE_SIZE;
-  const pageSlice = sorted.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
-  // KPI cards from full staff list (memoized)
-  const { totalStaff, activeCount, providerCount, lockedCount } = useMemo(() => ({
-    totalStaff: staffList.length,
-    activeCount: staffList.filter(u => u.status === 'active').length,
-    providerCount: staffList.filter(u => u.isProvider).length,
-    lockedCount: staffList.filter(u => u.status === 'locked').length,
-  }), [staffList]);
+  // KPI cards from full staff list
+  const totalStaff = staffList.length;
+  const activeCount = staffList.filter(u => u.status === 'active').length;
+  const providerCount = staffList.filter(u => u.isProvider).length;
+  const lockedCount = staffList.filter(u => u.status === 'locked').length;
 
   const activeFilters = [
     ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}` }] : []),
     ...(esigFilter !== 'All' ? [{ key: 'esig', label: `E-Signature: ${esigFilter}` }] : []),
-    ...(roleFilter !== 'All' ? [{ key: 'role', label: `Role: ${roleFilter}` }] : []),
   ];
 
   const removeFilter = (key) => {
     if (key === 'status') setStatusFilter('All');
     if (key === 'esig') setEsigFilter('All');
-    if (key === 'role') setRoleFilter('All');
   };
 
   const [actionSuccess, setActionSuccess] = useState(null);
   const [removePermTarget, setRemovePermTarget] = useState(null);
   const [deactivateReason, setDeactivateReason] = useState('');
-  const [terminateTarget, setTerminateTarget] = useState(null);
 
   const handleDeactivate = async (reason) => {
     if (!deactivateTarget) return;
@@ -386,7 +339,7 @@ export default function StaffDirectory() {
       setActionSuccess(`${name} has been deactivated. Reason: ${reason || 'Not specified'}. This action has been recorded in the audit log.`);
       loadData();
     } catch (err) {
-      setError(`Failed to deactivate ${name}: ${err.message || 'Unknown error. Please try again.'}`);
+      setError(`Failed to deactivate ${name}: ${err.message}`);
       setDeactivateTarget(null);
     }
   };
@@ -400,7 +353,7 @@ export default function StaffDirectory() {
       }
       setActionSuccess(`${name} has been reactivated. They can now sign in.`);
       loadData();
-    } catch (err) { setError(`Failed to reactivate: ${err.message || 'Unknown error. Please try again.'}`); }
+    } catch (err) { setError(`Failed to reactivate: ${err.message}`); }
   };
 
   const handleCloneUser = async () => {
@@ -418,7 +371,7 @@ export default function StaffDirectory() {
       setCloneForm({ name: '', accessCode: '', verifyCode: '', showCredentials: false });
       loadData();
     } catch (err) {
-      setError(`Failed to clone user: ${err.message || 'Unknown error. Please try again.'}`);
+      setError(`Failed to clone user: ${err.message}`);
     } finally {
       setCloning(false);
     }
@@ -535,7 +488,7 @@ export default function StaffDirectory() {
                 <button
                   onClick={() => {
                     const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions,Role,NPI,Email,Phone,Last Login\n';
-                    const csv = (sorted || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${r.phone || ''}","${r.lastLogin || ''}"`).join('\n');
+                    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${r.phone || ''}","${r.lastLogin || ''}"`).join('\n');
                     const blob = new Blob([header + csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -569,14 +522,12 @@ export default function StaffDirectory() {
 
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <div className="flex-1 min-w-[240px]">
-                <SearchBar placeholder="Search by name or ID..." value={searchInput} onSearch={handleSearchInput} />
+                <SearchBar placeholder="Search by name or ID..." delay={0} onSearch={(val) => { handleSearchChange(val); setPage(1); }} />
               </div>
             </div>
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <FilterSelect label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => { setStatusFilter(v); setPage(1); }} />
               <FilterSelect label="E-Signature" value={esigFilter} options={ESIG_OPTIONS} onChange={(v) => { setEsigFilter(v); setPage(1); }} />
-              <FilterSelect label="Role" value={roleFilter} options={ROLE_FILTER_OPTIONS} onChange={(v) => { setRoleFilter(v); setPage(1); }} />
-              <FilterSelect label="Sort" value={sortOption} options={SORT_OPTIONS} onChange={(v) => { setSortOption(v); setPage(1); }} />
               <label className="flex items-center gap-1.5 text-[11px] text-[#666] cursor-pointer ml-2">
                 <input type="checkbox" checked={hideSystemAccounts} onChange={e => { setHideSystemAccounts(e.target.checked); setPage(1); }}
                   className="w-3.5 h-3.5 rounded border-[#E2E4E8]" />
@@ -588,7 +539,7 @@ export default function StaffDirectory() {
               <div className="mb-4">
                 <FilterChips filters={activeFilters} onRemove={removeFilter} />
                 {activeFilters.length > 1 && (
-                  <button onClick={() => { setStatusFilter('All'); setEsigFilter('All'); setRoleFilter('All'); setSearchText(''); setSearchInput(''); setPage(1); }}
+                  <button onClick={() => { setStatusFilter('All'); setEsigFilter('All'); setSearchText(''); setDebouncedSearch(''); setPage(1); }}
                     className="ml-2 text-[11px] text-[#2E5984] hover:underline">Clear all</button>
                 )}
               </div>
@@ -616,7 +567,7 @@ export default function StaffDirectory() {
                       {searchText ? `No results for "${searchText}"` : 'Try adjusting your filters'}
                     </p>
                     {(searchText || statusFilter !== 'All' || esigFilter !== 'All') && (
-                      <button onClick={() => { setSearchText(''); setSearchInput(''); setStatusFilter('All'); setEsigFilter('All'); setRoleFilter('All'); setPage(1); }}
+                      <button onClick={() => { setSearchText(''); setDebouncedSearch(''); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
                         className="mt-3 text-xs text-[#2E5984] hover:underline">Clear all filters</button>
                     )}
                   </>
@@ -646,7 +597,7 @@ export default function StaffDirectory() {
             </div>
             <StaffDetailContent
               detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
-              selectedStaff={selectedStaff} cprsTabData={cprsTabData} setCprsTabData={setCprsTabData}
+              selectedStaff={selectedStaff} cprsTabData={cprsTabData}
               navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
               handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
               handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
@@ -654,7 +605,6 @@ export default function StaffDirectory() {
               unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
               loadData={loadData} setError={setError}
               setCloneSource={setCloneSource}
-              setTerminateTarget={setTerminateTarget}
             />
           </div>
         )}
@@ -672,7 +622,7 @@ export default function StaffDirectory() {
             <div className="p-4">
               <StaffDetailContent
                 detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
-                selectedStaff={selectedStaff} cprsTabData={cprsTabData} setCprsTabData={setCprsTabData}
+                selectedStaff={selectedStaff} cprsTabData={cprsTabData}
                 navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
                 handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
                 handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
@@ -680,35 +630,15 @@ export default function StaffDirectory() {
                 unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
                 loadData={loadData} setError={setError}
                 setCloneSource={setCloneSource}
-                setTerminateTarget={setTerminateTarget}
               />
             </div>
           </div>
         )}
       </div>
 
-      {terminateTarget && (
-        <ConfirmDialog
-          title="Full Account Termination"
-          message={<>This will <strong>permanently</strong> clear credentials, remove all security keys, and set the DISUSER flag for <strong>{terminateTarget.name}</strong>. This action cannot be undone.</>}
-          confirmLabel="Terminate Account"
-          onConfirm={async () => {
-            try {
-              await terminateStaffMember(terminateTarget.duz);
-              setTerminateTarget(null);
-              setSelectedStaff(null);
-              setDetailData(null);
-              loadData();
-            } catch (err) { setError(`Failed to terminate: ${err.message || 'Unknown error. Please try again.'}`); setTerminateTarget(null); }
-          }}
-          onCancel={() => setTerminateTarget(null)}
-          destructive
-        />
-      )}
-
       {deactivateTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" aria-label="Deactivate Staff Member">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true">
             <h3 className="text-lg font-semibold text-[#222] mb-2">Deactivate Staff Member</h3>
             <p className="text-sm text-[#666] mb-4">
               Deactivating <strong>{deactivateTarget.name}</strong> will immediately prevent them from signing in.
@@ -750,19 +680,29 @@ export default function StaffDirectory() {
         />
       )}
 
+      {terminateTarget && (
+        <ConfirmDialog
+          title="Full Termination"
+          message={`FULL TERMINATION of ${terminateTarget.name}: This clears credentials, removes all security keys, and sets DISUSER. This action cannot be undone.`}
+          confirmLabel="Terminate Account"
+          onConfirm={async () => {
+            try {
+              await terminateStaffMember(terminateTarget.duz);
+              setTerminateTarget(null);
+              setSelectedStaff(null);
+              setDetailData(null);
+              loadData();
+            } catch (err) { setError(`Failed to terminate: ${err.message}`); setTerminateTarget(null); }
+          }}
+          onCancel={() => setTerminateTarget(null)}
+          destructive
+        />
+      )}
+
       {removePermTarget && (
         <ConfirmDialog
           title="Remove Permission"
-          message={
-            <>
-              Remove &quot;{removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}&quot; from {detailData?.name}? This will immediately revoke this access.
-              {KEY_IMPACTS[removePermTarget.name] && (
-                <p className="mt-2 text-xs text-[#CC3333] bg-[#FDE8E8] rounded p-2">
-                  <strong>Impact:</strong> {KEY_IMPACTS[removePermTarget.name]}
-                </p>
-              )}
-            </>
-          }
+          message={`Remove "${removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}" from ${detailData?.name}? This will immediately revoke this access.`}
           confirmLabel="Remove"
           onConfirm={confirmRemovePermission}
           onCancel={() => setRemovePermTarget(null)}
@@ -834,7 +774,7 @@ export default function StaffDirectory() {
       {/* Clone User Modal */}
       {cloneSource && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setCloneSource(null); setCloneForm({ name: '', accessCode: '', verifyCode: '', showCredentials: false }); }}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" aria-label="Clone Staff Member" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-[#222] mb-2">Clone Staff Member</h3>
             <p className="text-sm text-[#666] mb-1">
               The new user will receive the same permissions and settings as <strong>{cloneSource.name}</strong>.
@@ -943,26 +883,23 @@ function ActionsMenu({ row, navigate }) {
     <div className="relative" onClick={e => e.stopPropagation()}>
       <button onClick={() => setOpen(o => !o)}
         className="p-1 rounded hover:bg-[#E2E4E8] text-[#999] hover:text-[#222]"
-        aria-label={`Actions for ${row.name}`}
-        aria-haspopup="true"
-        aria-expanded={open}>
+        aria-label={`Actions for ${row.name}`}>
         <span className="material-symbols-outlined text-[18px]">more_vert</span>
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-50 bg-white border border-[#E2E4E8] rounded-lg shadow-lg py-1 w-44" role="menu"
-            onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
+          <div className="absolute right-0 top-8 z-50 bg-white border border-[#E2E4E8] rounded-lg shadow-lg py-1 w-44">
             <button onClick={() => { setOpen(false); navigate(`/admin/staff/${row.duz}/edit`); }}
-              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2" role="menuitem">
+              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
               <span className="material-symbols-outlined text-[14px]">edit</span> Edit
             </button>
             <button onClick={() => { setOpen(false); navigate(`/admin/permissions?view=${encodeURIComponent(row.name)}`); }}
-              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2" role="menuitem">
+              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
               <span className="material-symbols-outlined text-[14px]">vpn_key</span> Permissions
             </button>
             <button onClick={() => { setOpen(false); navigate(`/admin/audit?user=${encodeURIComponent(row.name)}`); }}
-              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2" role="menuitem">
+              className="w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] flex items-center gap-2">
               <span className="material-symbols-outlined text-[14px]">history</span> Audit Trail
             </button>
           </div>
@@ -978,6 +915,12 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn }) {
   const [editValue, setEditValue] = useState(value || '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+
+  // S6: Format phone numbers for display as (XXX) XXX-XXXX
+  const displayValue = fieldKey === 'phone' && value ? (() => {
+    const digits = value.replace(/\D/g, '');
+    return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value;
+  })() : value;
 
   const handleSave = async () => {
     setSaving(true);
@@ -1019,7 +962,7 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn }) {
     <div className="cursor-pointer group" onClick={() => setEditing(true)} title="Click to edit">
       <div className="text-[10px] font-medium text-[#999] uppercase">{label}</div>
       <div className="text-sm text-[#222] group-hover:text-[#2E5984] flex items-center gap-1">
-        {value || '—'}
+        {displayValue || '—'}
         <span className="material-symbols-outlined text-[12px] text-[#BBB] opacity-0 group-hover:opacity-100">edit</span>
       </div>
     </div>
@@ -1028,20 +971,20 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn }) {
 
 /* A3: Extracted detail content shared by desktop side panel and mobile modal */
 function StaffDetailContent({
-  detailData, detailKeys, detailLoading, selectedStaff, cprsTabData, setCprsTabData,
+  detailData, detailKeys, detailLoading, selectedStaff, cprsTabData,
   navigate, handleRowClick, handleOpenAssignPerms,
   handleClearEsig, clearingEsig,
   handleReactivate, handleRemovePermission,
   setDeactivateTarget, setDetailData,
   unlockUser, setSelectedStaff, loadData, setError,
-  setCloneSource, setTerminateTarget,
+  setCloneSource,
 }) {
   const handleProviderFieldSave = (fieldKey, newValue) => {
     setDetailData(prev => ({ ...prev, [fieldKey]: newValue }));
   };
 
   // S4.4: Save handler for basic fields (phone, email, dept, title) via PUT /users/:ien
-  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8', proxyUser: '203.1', degree: '10.6', cosigner: '53.42', primaryMenu: '201', defaultOrderList: '200.0001' };
+  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8' };
   const handleBasicFieldSave = async (duz, fieldKey, newValue) => {
     const vistaField = BASIC_FIELD_MAP[fieldKey];
     if (!vistaField) throw new Error(`Unknown field: ${fieldKey}`);
@@ -1086,20 +1029,20 @@ function StaffDetailContent({
         {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
         <DetailField label="Initials" value={detailData.initials} />
         <DetailField label="Last Sign-In" value={detailData.lastLogin} />
-        <EditableDetailField label="Primary Menu" value={detailData.primaryMenu} fieldKey="primaryMenu" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
+        {detailData.primaryMenu && <DetailField label="Primary Menu" value={detailData.primaryMenu} />}
         {detailData.degree && <DetailField label="Degree" value={detailData.degree} />}
         {detailData.division && <DetailField label="Division" value={detailData.division} />}
         {detailData.divisions?.length > 1 && (
-          <div>
-            <div className="text-[10px] font-medium text-[#999] uppercase">All Divisions</div>
-            <div className="flex flex-wrap gap-1 mt-1">
-              {detailData.divisions.map((div, i) => (
-                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#E8F0FE] text-[#2E5984] border border-[#BDD4EE]">
-                  {div}
+          <DetailField label="All Divisions" value={
+            <div className="flex flex-wrap gap-1">
+              {detailData.divisions.map((d, i) => (
+                <span key={i} className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${d === detailData.division ? 'bg-[#E3F2FD] text-[#1565C0] ring-1 ring-[#90CAF9]' : 'bg-[#F5F5F5] text-[#666]'}`}>
+                  {d === detailData.division && <span className="material-symbols-outlined text-[10px] mr-0.5">star</span>}
+                  {d}
                 </span>
               ))}
             </div>
-          </div>
+          } />
         )}
         {detailData.terminationDate && <DetailField label="Termination Date" value={detailData.terminationDate} />}
         {detailData.terminationReason && <DetailField label="Termination Reason" value={detailData.terminationReason} />}
@@ -1107,18 +1050,17 @@ function StaffDetailContent({
         {detailData.restrictPatient && <DetailField label="Patient Selection Restriction" value={detailData.restrictPatient} />}
         {/* B2: Verify Code Never Expires */}
         <DetailField label="Password Never Expires" value={detailData.verifyCodeNeverExpires ? 'Yes (override)' : 'Normal expiration'} />
-        {/* 4.8: Password Expiration Display (XUS1A.m algorithm) */}
-        {detailData.passwordLastChanged && (
-          <DetailField label="Password Changed" value={detailData.passwordLastChanged} />
-        )}
-        {detailData.passwordDaysRemaining != null && !detailData.verifyCodeNeverExpires && (
-          <DetailField label="Password Expiration" value={
-            detailData.passwordDaysRemaining <= 0
-              ? <span className="text-[#CC3333] font-semibold">Expired ({Math.abs(detailData.passwordDaysRemaining)} day{Math.abs(detailData.passwordDaysRemaining) !== 1 ? 's' : ''} ago)</span>
-              : detailData.passwordDaysRemaining <= 5
-                ? <span className="text-[#E6A817] font-semibold">Expires in {detailData.passwordDaysRemaining} day{detailData.passwordDaysRemaining !== 1 ? 's' : ''}</span>
-                : <span className="text-[#2E7D32]">{detailData.passwordDaysRemaining} day{detailData.passwordDaysRemaining !== 1 ? 's' : ''} remaining{detailData.passwordExpirationDays ? ` (${detailData.passwordExpirationDays}-day policy)` : ''}</span>
-          } />
+        {/* S7: Password expiration display */}
+        {detailData.vcChangeDate && !detailData.verifyCodeNeverExpires && (
+          <DetailField label="Password Expires" value={(() => {
+            const days = detailData.pwdDaysRemaining;
+            if (days == null) return `Changed: ${detailData.vcChangeDate}`;
+            if (days <= 0) return <span className="text-[#CC3333] font-semibold">Expired ({Math.abs(days)} days ago)</span>;
+            if (days <= 14) return <span className="text-[#E6A817] font-semibold">Expires in {days} day{days !== 1 ? 's' : ''}</span>;
+            const expDate = new Date();
+            expDate.setDate(expDate.getDate() + days);
+            return `${expDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} (${days} days)`;
+          })()} />
         )}
         {/* B3: Language Preference */}
         {detailData.language && <DetailField label="Preferred Language" value={detailData.language} />}
@@ -1126,25 +1068,17 @@ function StaffDetailContent({
         {detailData.filemanAccessCode && (
           <DetailField label="FileMan Access" value={detailData.filemanAccessCode === '@' ? 'Unrestricted (@)' : detailData.filemanAccessCode} />
         )}
-        {/* B9: Proxy User — editable (VistA field 203.1, pointer to File 200) */}
-        <EditableDetailField label="Proxy Ordering User" value={detailData.proxyUser} fieldKey="proxyUser" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
+        {/* B9: Proxy User */}
+        {detailData.proxyUser && <DetailField label="Proxy Ordering User" value={detailData.proxyUser} />}
       </div>
 
-      {/* P3.10: Activity Summary */}
-      <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-        <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Activity Summary</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <DetailField label="Last Sign-In" value={detailData.lastLogin || '—'} />
-          <DetailField label="Sign-On Count" value={detailData.signOnCount > 0 ? String(detailData.signOnCount) : '—'} />
-          <DetailField label="First Sign-On" value={detailData.firstSignOn || '—'} />
-        </div>
-      </div>
-
-      {/* B5: Clinical Configuration — #26: editable OE/RR team */}
+      {/* B5: Clinical Configuration */}
+      {detailData.defaultOrderList && (
         <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
           <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Clinical Configuration</h3>
-          <EditableDetailField label="OE/RR Team (Default Order List)" value={detailData.defaultOrderList || ''} fieldKey="defaultOrderList" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
+          <DetailField label="Default Order List" value={detailData.defaultOrderList} />
         </div>
+      )}
 
       {/* A4: Provider Information with inline editing */}
       {detailData.isProvider && (
@@ -1162,7 +1096,7 @@ function StaffDetailContent({
             {detailData.requiresCosigner !== undefined && (
               <DetailField label="Requires Cosigner" value={detailData.requiresCosigner ? 'Yes' : 'No'} />
             )}
-            {detailData.usualCosigner !== undefined && <EditableDetailField label="Usual Cosigner" value={detailData.usualCosigner} fieldKey="cosigner" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />}
+            {detailData.usualCosigner && <DetailField label="Usual Cosigner" value={detailData.usualCosigner} />}
             <DetailField label="E-Signature" value={<SigReadinessBadge value={detailData.esigStatus} />} />
           </div>
         </div>
@@ -1170,11 +1104,21 @@ function StaffDetailContent({
 
       {/* B8: CPRS Tab Access */}
       {cprsTabData && cprsTabData.length > 0 && (
-        <CprsTabList cprsTabData={cprsTabData} setCprsTabData={setCprsTabData} duz={detailData.duz} />
+        <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">CPRS Tab Access</h3>
+          <div className="space-y-1">
+            {cprsTabData.map((tab, idx) => (
+              <div key={tab.name || idx} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">
+                <span className="font-medium">{tab.name || tab.tabName || '—'}</span>
+                <span className="text-[#999]">{tab.access || 'Enabled'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {detailKeys.length > 0 && (
-        <PermissionsList detailKeys={detailKeys} handleOpenAssignPerms={handleOpenAssignPerms} handleRemovePermission={handleRemovePermission} assignedRole={detailData.assignedRole || detailData.role} />
+        <PermissionsList detailKeys={detailKeys} handleOpenAssignPerms={handleOpenAssignPerms} handleRemovePermission={handleRemovePermission} />
       )}
 
       <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
@@ -1235,34 +1179,79 @@ function StaffDetailContent({
             <button onClick={() => {
               const printWindow = window.open('', '_blank');
               if (!printWindow) return;
-              const safeText = (s) => String(s || '—').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              const permList = detailKeys.length > 0
-                ? `<ul style="margin:4px 0;padding-left:20px">${detailKeys.map(k => `<li>${safeText(k.name)}</li>`).join('')}</ul>`
-                : '<em>None assigned</em>';
-              const credRows = [
-                detailData.npi ? `<tr><td><strong>NPI</strong></td><td>${safeText(detailData.npi)}</td></tr>` : '',
-                detailData.dea ? `<tr><td><strong>DEA</strong></td><td>${safeText(detailData.dea)}</td></tr>` : '',
-                detailData.taxId ? `<tr><td><strong>Tax ID</strong></td><td>${safeText(detailData.taxId)}</td></tr>` : '',
-              ].filter(Boolean).join('\n');
-              printWindow.document.write(`<html><head><title>Account Access Letter</title>
-<style>body{font-family:serif;max-width:700px;margin:40px auto}h1{font-size:18px}h2{font-size:15px;margin-top:24px;border-bottom:1px solid #ccc;padding-bottom:4px}table{width:100%;border-collapse:collapse}td{padding:4px 8px;border-bottom:1px solid #eee}ul{font-size:13px}p.footer{margin-top:24px;font-size:12px;color:#666;border-top:1px solid #ccc;padding-top:12px}</style></head>
-<body><h1>VistA Evolved — User Account Access Letter</h1>
-<p><strong>Organization:</strong> ${safeText(detailData.division)}</p>
-<p><strong>Date Issued:</strong> ${new Date().toLocaleDateString()}</p>
-<h2>Account Information</h2>
-<table>
-<tr><td><strong>Name</strong></td><td>${safeText(detailData.name)}</td></tr>
-<tr><td><strong>Staff ID (DUZ)</strong></td><td>${safeText(detailData.id)}</td></tr>
-<tr><td><strong>Title</strong></td><td>${safeText(detailData.title)}</td></tr>
-<tr><td><strong>Role</strong></td><td>${safeText(detailData.assignedRole || detailData.role)}</td></tr>
-<tr><td><strong>Department</strong></td><td>${safeText(detailData.department)}</td></tr>
-<tr><td><strong>Primary Site</strong></td><td>${safeText(detailData.division)}</td></tr>
-<tr><td><strong>E-Signature</strong></td><td>${detailData.esigStatus === 'active' ? 'Set' : 'Not set'}</td></tr>
-</table>
-${credRows ? `<h2>Provider Credentials</h2><table>${credRows}</table>` : ''}
-<h2>Assigned Permissions (${detailKeys.length})</h2>
-${permList}
-<p class="footer"><strong>Important:</strong> Your login credentials (Access Code and Verify Code) were provided separately at account creation time and must not be shared. You will be required to change your Verify Code on first login. Contact your system administrator (IRM) if you need to reset your password or have questions about your account permissions.</p>
+              const safeText = (s) => String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              // Build human-readable capabilities from assigned keys
+              const KEY_TO_CAPABILITY = {
+                'PROVIDER': 'Access clinical patient records',
+                'ORES': 'Write and sign clinical orders',
+                'OR CPRS GUI CHART': 'View patient charts',
+                'ORCL-SIGN-NOTES': 'Sign clinical notes and documents',
+                'ORCL-PAT-RECS': 'View patient records',
+                'ORELSE': 'Enter verbal and telephone orders',
+                'PSB NURSE': 'Administer medications via barcode scanning',
+                'GMRA ALLERGY VERIFY': 'Verify and review patient allergies',
+                'PSORPH': 'Dispense outpatient prescriptions',
+                'PSJ PHARMACIST': 'Verify inpatient medication orders',
+                'LRLAB': 'Enter and process lab results',
+                'LRVERIFY': 'Verify laboratory results',
+                'SD SCHEDULING': 'Schedule patient appointments',
+                'DG REGISTER': 'Register new patients',
+                'DG ADMIT': 'Admit patients to the hospital',
+                'DG DISCHARGE': 'Discharge patients',
+                'XUMGR': 'Manage user accounts',
+                'IBFIN': 'Process financial and billing transactions',
+                'RA TECHNOLOGIST': 'Perform imaging exams',
+                'MAG SYSTEM': 'Access imaging system',
+              };
+              const capabilities = detailKeys
+                .map(k => KEY_TO_CAPABILITY[k.name])
+                .filter(Boolean);
+              const capList = capabilities.length > 0
+                ? capabilities.map(c => `<li style="margin:4px 0;padding:4px 0 4px 20px;position:relative"><span style="position:absolute;left:0;color:#2E7D32;font-weight:bold">✓</span>${safeText(c)}</li>`).join('')
+                : '<li>Standard system access</li>';
+              const loginUrl = window.location.origin;
+              printWindow.document.write(`<html><head><title>Account Information - ${safeText(detailData.name)}</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;margin:50px auto;color:#222;line-height:1.6}
+.header{border-top:4px solid #1A1A2E;border-bottom:2px solid #E2E4E8;padding:16px 0;margin-bottom:24px}
+.header h1{font-size:20px;margin:0 0 4px 0;color:#1A1A2E}
+.header p{margin:0;font-size:13px;color:#666}
+.section{margin:20px 0}
+.section h2{font-size:15px;color:#1A1A2E;border-bottom:1px solid #E2E4E8;padding-bottom:4px}
+.note{background:#FFF3E0;border:1px solid #FFB74D;border-radius:6px;padding:12px;font-size:13px;color:#E65100;margin:16px 0}
+@media print{body{margin:30px}}
+</style></head>
+<body>
+<div class="header">
+  <h1>VistA Evolved</h1>
+  <p>${safeText(detailData.division || 'Medical Center')}</p>
+</div>
+
+<p>Dear <strong>${safeText(detailData.name)}</strong>,</p>
+<p>This letter confirms your current account information in the VistA Evolved system.</p>
+
+<div class="section">
+  <h2>Account Details</h2>
+  <table style="width:100%;font-size:14px">
+    <tr><td style="padding:4px 0;color:#666;width:140px">Role</td><td style="padding:4px 0"><strong>${safeText(detailData.title || detailData.derivedRole || 'Staff')}</strong></td></tr>
+    <tr><td style="padding:4px 0;color:#666">Department</td><td style="padding:4px 0">${safeText(detailData.department)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Location</td><td style="padding:4px 0">${safeText(detailData.division)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Permissions</td><td style="padding:4px 0">${detailKeys.length} assigned</td></tr>
+    <tr><td style="padding:4px 0;color:#666">E-Signature</td><td style="padding:4px 0">${detailData.esigStatus === 'active' ? 'Active' : 'Not set'}</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>System Capabilities</h2>
+  <ul style="list-style:none;padding:0">${capList}</ul>
+</div>
+
+<div class="note">
+  If you need a password reset or have questions about your account, contact your local IT support or IRM office.
+  <br/>Login URL: <strong>${safeText(loginUrl)}</strong>
+</div>
+
+<p style="font-size:12px;color:#999">Date: ${new Date().toLocaleDateString()} | Generated by System Administrator</p>
 </body></html>`);
               printWindow.document.close();
               printWindow.print();
@@ -1338,14 +1327,9 @@ ${permList}
 }
 
 /* L006: Permissions list with collapse for >10 keys */
-function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermission, assignedRole }) {
+function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermission }) {
   const [expanded, setExpanded] = useState(false);
   const COLLAPSE_THRESHOLD = 10;
-
-  // P3.4: Determine which keys came from the role template
-  const roleTemplate = assignedRole ? ROLES.find(r => r.id === assignedRole || r.name === assignedRole) : null;
-  const roleKeySet = new Set(roleTemplate ? roleTemplate.permissions.map(p => p.key) : []);
-
   const grouped = Object.entries(
     detailKeys.reduce((groups, k) => {
       const dept = k.department || k.packageName || 'General';
@@ -1381,16 +1365,11 @@ function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermis
               <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
               <div className="flex flex-wrap gap-1">
                 {keysToRender.map(k => (
-                  <span key={k.ien || k.name} title={`System key: ${k.name}${roleKeySet.has(k.name) ? ' (from role template)' : ' (individually assigned)'}`}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded ${roleKeySet.has(k.name) ? 'bg-[#E8EEF5] text-[#2E5984]' : 'bg-[#FFF3E0] text-[#E65100] border border-[#FFE0B2]'}`}>
+                  <span key={k.ien || k.name} title={`System key: ${k.name}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
                     {k.displayName || humanizeKeyName(k.name)}
-                    {roleKeySet.size > 0 && (
-                      <span className={`text-[8px] font-bold ml-0.5 ${roleKeySet.has(k.name) ? 'text-[#5A8BBF]' : 'text-[#E65100]'}`}>
-                        {roleKeySet.has(k.name) ? 'R' : 'I'}
-                      </span>
-                    )}
                     <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
-                      className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove" aria-label={`Remove permission ${k.displayName || k.name}`}>✕</button>
+                      className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
                   </span>
                 ))}
               </div>
@@ -1400,51 +1379,10 @@ function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermis
       </div>
       {allKeys.length > COLLAPSE_THRESHOLD && (
         <button onClick={() => setExpanded(e => !e)}
-          aria-expanded={expanded}
           className="mt-2 text-[10px] text-[#2E5984] hover:underline">
           {expanded ? 'Show fewer' : `Show all ${allKeys.length} permissions`}
         </button>
       )}
-    </div>
-  );
-}
-
-/* P3.12: CPRS Tab Access with toggle */
-function CprsTabList({ cprsTabData, setCprsTabData, duz }) {
-  const [saving, setSaving] = useState(null);
-  const [tabError, setTabError] = useState(null);
-  const handleToggle = async (tab) => {
-    const newAccess = tab.access === 'Disabled' ? '' : 'Disabled';
-    setSaving(tab.name);
-    setTabError(null);
-    try {
-      await updateCprsTabAccess(duz, tab.name, newAccess);
-      setCprsTabData(prev => prev.map(t => t.name === tab.name ? { ...t, access: newAccess } : t));
-    } catch (err) { setTabError(err.message || 'Failed to update tab'); }
-    finally { setSaving(null); }
-  };
-  return (
-    <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-      <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">CPRS Tab Access</h3>
-      {tabError && <p className="text-[10px] text-[#CC3333] mb-1">{tabError}</p>}
-      <div className="space-y-1">
-        {cprsTabData.map((tab, idx) => (
-          <div key={tab.name || idx} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">
-            <span className="font-medium">{tab.name || tab.tabName || '—'}</span>
-            <button onClick={() => handleToggle(tab)}
-              disabled={saving === tab.name}
-              aria-label={`${tab.name || tab.tabName}: ${tab.access === 'Disabled' ? 'Disabled' : 'Enabled'}. Click to toggle.`}
-              aria-pressed={tab.access !== 'Disabled'}
-              className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                tab.access === 'Disabled'
-                  ? 'bg-[#FFEBEE] text-[#CC3333] hover:bg-[#FFCDD2]'
-                  : 'bg-[#E8F5E9] text-[#2E7D32] hover:bg-[#C8E6C9]'
-              }`}>
-              {saving === tab.name ? '...' : (tab.access === 'Disabled' ? 'Disabled' : 'Enabled')}
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

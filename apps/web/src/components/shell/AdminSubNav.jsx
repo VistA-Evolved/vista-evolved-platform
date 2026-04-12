@@ -26,8 +26,8 @@ const sections = [
     ],
   },
   {
-    group: 'Clinical Setup',
-    icon: 'local_hospital',
+    group: 'Locations',
+    icon: 'location_on',
     items: [
       { label: 'Clinics', path: '/admin/clinics', icon: 'medical_services' },
       { label: 'Wards', path: '/admin/wards', icon: 'bed' },
@@ -37,7 +37,7 @@ const sections = [
     group: 'Organization',
     icon: 'domain',
     items: [
-      { label: 'Facilities & Sites', path: '/admin/sites', icon: 'apartment' },
+      { label: 'Divisions', path: '/admin/sites', icon: 'apartment', tooltip: 'Medical Center Divisions (File 40.8) — administrative units within the institution' },
       { label: 'Departments & Services', path: '/admin/departments', icon: 'account_tree' },
     ],
   },

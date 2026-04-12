@@ -1019,7 +1019,7 @@
       "department": "Clinical",
       "visibility": "advanced"
     },
-    "GMRA-ALLERGY VERIFY": {
+    "GMRA ALLERGY VERIFY": {
       "name": "Verify Allergies",
       "description": "Allows verification of allergy and adverse reaction entries.",
       "department": "Clinical",

@@ -145,19 +145,20 @@ export default function SiteManagement() {
 
   if (error) {
     return (
-      <AppShell breadcrumb="Admin > Facilities & Sites">
+      <AppShell breadcrumb="Admin > Divisions">
         <div className="p-6"><ErrorState message={error} onRetry={loadData} /></div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell breadcrumb="Admin > Facilities & Sites">
+    <AppShell breadcrumb="Admin > Divisions">
       <div className="flex h-[calc(100vh-40px)]">
         <div className="w-full xl:w-[40%] border-r border-border overflow-auto p-4">
-          <h1 className="text-[22px] font-bold text-text mb-1 px-2">Facilities & Sites</h1>
+          <h1 className="text-[22px] font-bold text-text mb-1 px-2">Divisions</h1>
           <p className="text-xs text-text-secondary mb-4 px-2">
-            {loading ? 'Loading sites...' : `${allSites.length} sites loaded.`}
+            Medical Center Divisions (File 40.8) — administrative units within the facility.
+            {!loading && <span className="ml-1">{allSites.length} divisions loaded.</span>}
           </p>
 
           <div className="mb-4 px-2">

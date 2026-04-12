@@ -230,10 +230,6 @@ export async function getWards(params = {}) {
   return tenantApi.get('/wards', params);
 }
 
-export async function getOerrTeams(params = {}) {
-  return tenantApi.get('/oerr-teams', params);
-}
-
 export async function getTopology() {
   return tenantApi.get('/topology');
 }
@@ -663,9 +659,4 @@ export async function removeMailGroupMember(ien, duz) {
 // B8: CPRS Tab Access — read sub-file 200.03 for a user
 export async function getCprsTabAccess(duz) {
   return tenantApi.get(`/users/${duz}/cprs-tabs`);
-}
-
-// P3.12: CPRS Tab Access toggle
-export async function updateCprsTabAccess(duz, tabName, access) {
-  return tenantApi.put(`/users/${duz}/cprs-tabs`, { tabName, access });
 }

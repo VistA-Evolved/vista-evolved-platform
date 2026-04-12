@@ -89,19 +89,34 @@ export default function SystemBar({ breadcrumb = '' }) {
 
       {/* Site selector */}
       <div className="relative" ref={siteRef}>
+        {sites.length <= 1 ? (
+          /* Single division: show as static text, no dropdown */
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 text-white/70 text-[11px] mr-2"
+            title="Medical Center Division — your VistA instance serves this location"
+          >
+            <span className="material-symbols-outlined text-[14px]">location_on</span>
+            <span className="hidden sm:inline max-w-[200px] truncate">{siteLabel}</span>
+          </div>
+        ) : (
         <button
           onClick={() => setShowSiteMenu(!showSiteMenu)}
           className="flex items-center gap-1.5 px-2.5 py-1 text-white/70 hover:text-white text-[11px] rounded hover:bg-[#2E3A5E] transition-colors mr-2"
+          title="Select which division's data to view. Staff and patients will be filtered to this location."
         >
           <span className="material-symbols-outlined text-[14px]">location_on</span>
           <span className="hidden sm:inline max-w-[200px] truncate">{siteLabel}</span>
           <span className="material-symbols-outlined text-[12px]">expand_more</span>
         </button>
-        {showSiteMenu && sites.length > 0 && (
+        )}
+        {showSiteMenu && sites.length > 1 && (
           <div className="absolute right-0 mt-1 w-64 bg-white rounded-md shadow-lg border border-[#E2E4E8] z-50 py-1">
+            <div className="px-3 py-1.5 text-[10px] font-semibold text-[#999] uppercase tracking-wider border-b border-[#E2E4E8]">
+              Select Division
+            </div>
             <button onClick={() => { setActiveSite(null); setShowSiteMenu(false); }}
               className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] ${!activeSite ? 'bg-[#E8EEF5] font-medium' : ''}`}>
-              All Facilities
+              All Divisions
             </button>
             {sites.map(s => (
               <button key={s.id} onClick={() => { setActiveSite(s); setShowSiteMenu(false); }}
