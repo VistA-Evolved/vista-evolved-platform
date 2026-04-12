@@ -440,8 +440,9 @@ AUDITLOG(ACTION,IEN,DETAIL) ;
  S DT=$$NOW^XLFDT
  ; Use $INCREMENT for atomic sequence generation (prevents race condition)
  ; #590: Store in permanent ^ZVEADM global (not ^XTMP which can be purged)
+ ; Use literal "^" (not U) so this works even outside the RPC broker context
  S SEQ=$I(^ZVEADM("AUDIT"))
- S ^ZVEADM("AUDIT",SEQ)=ACTION_U_DT_U_$G(DUZ)_U_IEN_U_$G(DETAIL)
+ S ^ZVEADM("AUDIT",SEQ)=ACTION_"^"_DT_"^"_$G(DUZ)_"^"_IEN_"^"_$G(DETAIL)
  Q
  ;
  ; ============================================================

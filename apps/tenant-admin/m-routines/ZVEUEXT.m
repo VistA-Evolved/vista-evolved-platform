@@ -21,9 +21,9 @@ EXTSET(R,TDUZ,FIELD,VALUE) ; RPC ZVE UEXT SET
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  I $G(FIELD)="" S R(0)="0^FIELD required" Q
  I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
- ; Whitelist of allowed extension fields
- N ALLOWED S ALLOWED="EMPID^ROLE^SECONDARY^DISPLAYNAME"
- I ALLOWED'[FIELD S R(0)="0^Invalid extension field: "_FIELD Q
+ ; Whitelist of allowed extension fields (delimited match prevents substring bypass)
+ N ALLOWED S ALLOWED="^EMPID^ROLE^SECONDARY^DISPLAYNAME^"
+ I ALLOWED'["^"_FIELD_"^" S R(0)="0^Invalid extension field: "_FIELD Q
  D ENSURENODE
  S ^ZVEX(+TDUZ,FIELD)=$G(VALUE)
  D AUDITLOG^ZVEADMIN("UEXT-SET",+TDUZ,"Set "_FIELD_"="_$G(VALUE))
