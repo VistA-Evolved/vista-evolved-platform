@@ -41,9 +41,93 @@ body {
 /* S14/S20: Responsive overrides for tablet and mobile */
 @media (max-width: 768px) {
   .admin-table { overflow-x: auto; }
-  .detail-panel { position: fixed; inset: 0; z-index: 40; }
-}
-@media (max-width: 375px) {
+
+  /* Admin layout: table + detail panel stack vertically */
+  .admin-layout-split { flex-direction: column; }
+  .admin-layout-split > .detail-panel { width: 100% !important; max-width: 100%; }
+
+  /* Tables: hide low-priority columns */
   .admin-table th:nth-child(n+5),
   .admin-table td:nth-child(n+5) { display: none; }
+
+  /* Forms: single column */
+  .form-grid-2col { grid-template-columns: 1fr; }
+
+  /* Dashboard cards: 2-column */
+  .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Wizard steps: compact */
+  .wizard-step-label { font-size: 0.75rem; }
+
+  /* Modals: near full width */
+  .modal-content { width: 95vw !important; max-width: 95vw !important; }
+
+  /* Buttons: minimum tap target */
+  button,
+  [role="button"],
+  a.btn { min-height: 44px; min-width: 44px; }
+}
+
+@media (max-width: 375px) {
+  /* Tables become card layout (all columns visible as rows; overrides tablet column hide) */
+  .admin-table thead { display: none; }
+  .admin-table tbody tr {
+    display: block;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  .admin-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    border: none;
+  }
+  .admin-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    margin-right: 0.5rem;
+  }
+  .admin-table tbody td[colspan] {
+    display: block;
+    text-align: center;
+  }
+  .admin-table tbody td[colspan]::before {
+    display: none;
+  }
+
+  /* Detail panel: full-screen overlay */
+  .detail-panel {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    overflow-y: auto;
+  }
+
+  /* Dashboard cards: single column */
+  .dashboard-grid { grid-template-columns: 1fr; }
+
+  /* Wizard: numbered dots */
+  .wizard-step-label { display: none; }
+  .wizard-step-number { display: inline-flex; }
+
+  /* Filters collapse */
+  .filter-bar { flex-direction: column; gap: 0.5rem; }
+
+  /* Save/Cancel sticky bottom */
+  .form-actions-sticky {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 0.75rem;
+    border-top: 1px solid #e5e7eb;
+    z-index: 10;
+  }
+
+  /* Buttons full width */
+  .btn-full-mobile { width: 100%; }
 }

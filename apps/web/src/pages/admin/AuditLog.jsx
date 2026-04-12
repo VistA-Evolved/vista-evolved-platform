@@ -354,8 +354,8 @@ export default function AuditLog() {
 
         {loading ? <TableSkeleton rows={10} cols={5} /> : pageSlice.length === 0 ? (
           <div className="text-center py-12 border border-[#E2E4E8] rounded-lg bg-white">
-            <span className="material-symbols-outlined text-[32px] text-[#999] block mb-2">search_off</span>
-            <p className="text-sm text-[#666] mb-1">No events match your current filters.</p>
+            <span className="material-symbols-outlined text-[32px] text-gray-500 block mb-2">search_off</span>
+            <p className="text-sm text-gray-500 mb-1">No audit entries found for the selected filters.</p>
             <p className="text-xs text-[#999] mb-3">Try adjusting the date range, staff member, or action type.</p>
             <button onClick={() => { setActionFilter('All'); setUserSearch(''); setSourceFilter('all'); setDateFrom(''); setDateTo(''); setPage(1); }}
               className="px-4 py-2 text-xs font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors">

@@ -8,7 +8,7 @@ import ErrorState from '../../components/shared/ErrorState';
  * @see Spec Part 5 Screen 8 Reports tab, separated into own route per spec nav
  *
  * Each report type maps to tenant-admin GET /reports/admin/:reportType (VistA-backed):
- * staff-access, permission-dist, audit-summary, signin-activity, inactive-accounts, param-changes.
+ * staff-access, permission-dist, audit-summary, signin-activity, inactive-accounts, stale-accounts, param-changes.
  */
 
 const REPORT_TYPES = [
@@ -17,14 +17,16 @@ const REPORT_TYPES = [
   { id: 'audit-summary', name: 'Audit Summary', description: 'Actions by type, workspace, and time period.', icon: 'shield', title: 'Aggregated audit events from sign-on log, FileMan audit, and error trap.' },
   { id: 'signin-activity', name: 'Sign-In Activity', description: 'Sign-in patterns and unusual access detection.', icon: 'login', title: 'Sign-in frequency and patterns by staff. Source: Kernel Sign-On Log File #3.081.' },
   { id: 'inactive-accounts', name: 'Inactive Accounts', description: 'Inactive accounts for security review.', icon: 'person_off', title: 'Accounts with no recent sign-in for security review. Source: File #200 fields 1.1, 202.' },
+  { id: 'stale-accounts', name: 'Stale Accounts', description: 'Users who have not signed in within N days (default 90).', icon: 'schedule', title: 'Stale account listing for security review and optional deactivation. Source: NEW PERSON sign-on activity.' },
   { id: 'param-changes', name: 'Parameter Change History', description: 'All parameter changes in the selected period.', icon: 'tune', title: 'Audit trail of site parameter modifications. Source: FileMan Audit File #1.1.' },
 ];
 
 const REPORT_COLUMN_LABELS = {
-  duz: 'Staff ID', ien: 'Record ID', DUZ: 'Staff ID', IEN: 'Record ID',
+  duz: 'Staff ID', ien: 'Record ID', DUZ: 'DUZ', IEN: 'Record ID',
   name: 'Name', userName: 'Staff Name', holderCount: 'Staff Assigned',
   keyName: 'Permission Name', department: 'Department', module: 'Module',
   lastSignIn: 'Last Sign-In', lastAccess: 'Last Access',
+  lastLoginDate: 'Last Login Date', daysSinceLogin: 'Days Since Login', daysSince: 'Days Since Login',
   createdDate: 'Created', modifiedDate: 'Modified',
   actionType: 'Action', timestamp: 'Date/Time', user: 'Staff Member',
   paramName: 'Parameter', oldValue: 'Previous Value', newValue: 'New Value',
@@ -41,21 +43,27 @@ export default function AdminReports() {
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState(null);
+  /** Default 90 — used for stale-accounts report (audit 8.14) */
+  const [staleAccountsDays, setStaleAccountsDays] = useState(90);
 
-  const handleRunReport = useCallback(async (report) => {
+  const handleRunReport = useCallback(async (report, staleDaysOverride) => {
     setSelectedReport(report);
     setReportLoading(true);
     setReportData(null);
     setError(null);
     try {
-      const res = await getAdminReport(report.id);
+      const params =
+        report.id === 'stale-accounts'
+          ? { days: staleDaysOverride != null ? staleDaysOverride : staleAccountsDays }
+          : {};
+      const res = await getAdminReport(report.id, params);
       setReportData(res?.data || res?.rows || []);
     } catch (err) {
       setError(err.message || 'Failed to generate report');
     } finally {
       setReportLoading(false);
     }
-  }, []);
+  }, [staleAccountsDays]);
 
   const handlePrintReport = () => {
     window.print();
@@ -111,6 +119,37 @@ export default function AdminReports() {
             </button>
           ))}
         </div>
+
+        {selectedReport?.id === 'stale-accounts' && (
+          <div className="flex flex-wrap items-end gap-3 mb-4 p-3 bg-[#F8FAFC] border border-[#E2E4E8] rounded-lg no-print">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="stale-days" className="text-[11px] font-medium text-[#555]">Days since last login (minimum)</label>
+              <input
+                id="stale-days"
+                type="number"
+                min={1}
+                max={3650}
+                value={staleAccountsDays}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  setStaleAccountsDays(Number.isFinite(v) ? Math.min(3650, Math.max(1, v)) : 90);
+                }}
+                className="h-9 w-24 px-2 border border-[#E2E4E8] rounded-md text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => handleRunReport(selectedReport)}
+              disabled={reportLoading}
+              className="h-9 px-4 text-xs font-medium bg-[#2E5984] text-white rounded-md hover:bg-[#1A1A2E] disabled:opacity-50"
+            >
+              Apply & refresh
+            </button>
+            <p className="text-[11px] text-[#666] pb-1 max-w-md">
+              Lists accounts with no sign-in for at least this many days (includes never logged in). Default 90.
+            </p>
+          </div>
+        )}
 
         {error && <ErrorState message={error} onRetry={selectedReport ? () => handleRunReport(selectedReport) : undefined} />}
 

@@ -65,11 +65,8 @@ export default function AdminSubNav() {
       return (
         location.pathname === '/admin/staff' ||
         location.pathname === '/admin' ||
-        /^\/admin\/staff\/\d+/.test(location.pathname)
+        /^\/admin\/staff\//.test(location.pathname)
       );
-    }
-    if (path === '/admin/staff/new') {
-      return location.pathname === '/admin/staff/new';
     }
     return location.pathname === path;
   };

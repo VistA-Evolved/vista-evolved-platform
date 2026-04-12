@@ -106,6 +106,7 @@ export default function DataTable({
                 {columns.map((col) => (
                   <td
                     key={col.key}
+                    data-label={col.label ?? col.header}
                     className={`
                       px-3 py-2.5 text-[13px]
                       ${col.mono ? 'font-mono text-[12px]' : ''}

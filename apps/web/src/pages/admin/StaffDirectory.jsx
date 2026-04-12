@@ -4,7 +4,7 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember, getSites, getSession } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, getPermissionHolders, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember, getSites, getSession } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 import { humanizeKeyName, fmDateToDate } from '../../utils/transforms';
@@ -93,23 +93,154 @@ const baseColumns = [
 const STATUS_OPTIONS = ['All', 'Active', 'Inactive', 'Locked', 'Terminated'];
 const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 
+/** Terminal parity (S22.2): common keys for on-demand holder lookup via GET /key-holders/:keyName */
+const COMMON_KEY_FILTER_OPTIONS = [
+  'PROVIDER', 'ORES', 'ORELSE', 'XUMGR', 'PSJ RPHARM', 'XUPROG', 'OR CPRS GUI CHART',
+  'DG REGISTER', 'PSJ PHARMACIST', 'LRVERIFY', 'LRLAB', 'SD SCHEDULING', 'TIU SIGN DOCUMENT',
+];
+
+/** Escape text for print window HTML */
+function escapePrintHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Opens a print dialog with a full staff profile (S22.14): fields, keys, divisions, CPRS tabs, sign-on info.
+ */
+function openPrintFullProfile({
+  detailData,
+  detailKeys,
+  cprsTabData,
+  selectedStaff,
+  adminDisplayName,
+}) {
+  if (!detailData) return;
+  const w = window.open('', '_blank');
+  if (!w) return;
+
+  const dd = detailData;
+  const skipKeys = new Set(['_loadError']);
+  const profileRows = [];
+  const fmtProfileVal = (v) => {
+    if (v === undefined || v === null || v === '') return null;
+    if (v instanceof Date) return v.toISOString();
+    if (Array.isArray(v)) return v.map((x) => (typeof x === 'object' && x !== null ? JSON.stringify(x) : String(x))).join(', ');
+    if (typeof v === 'object') {
+      try {
+        return JSON.stringify(v);
+      } catch (_e) {
+        return String(v);
+      }
+    }
+    return String(v);
+  };
+  for (const [k, v] of Object.entries(dd)) {
+    if (skipKeys.has(k)) continue;
+    const s = fmtProfileVal(v);
+    if (s === null || s === '') continue;
+    profileRows.push([k, s]);
+  }
+  profileRows.sort(([a], [b]) => a.localeCompare(b));
+
+  const keyRows = (detailKeys || []).map((k) => {
+    const nm = k.name || '';
+    const disp = k.displayName || humanizeKeyName(nm);
+    const pkg = k.packageName || k.department || '';
+    const ien = k.ien != null ? String(k.ien) : '';
+    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8;font-family:monospace;font-size:11px">${escapePrintHtml(nm)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(disp)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(pkg)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(ien)}</td></tr>`;
+  }).join('');
+
+  const tabRows = (cprsTabData || []).map((tab, idx) => {
+    const name = tab.name || tab.tabName || `Tab ${idx + 1}`;
+    const access = tab.access || tab.status || '—';
+    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(name)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(access)}</td></tr>`;
+  }).join('');
+
+  const divList = Array.isArray(dd.divisions) && dd.divisions.length
+    ? dd.divisions.map((d) => `<li style="margin:4px 0">${escapePrintHtml(d)}</li>`).join('')
+    : '<li>—</li>';
+
+  const lastLogin = dd.lastLogin || selectedStaff?.lastLogin || '—';
+  const genDate = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
+  const adminLine = adminDisplayName || 'Administrator';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Full Profile — ${escapePrintHtml(dd.name)}</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,sans-serif;color:#222;max-width:900px;margin:24px auto;padding:0 16px;line-height:1.45;font-size:13px}
+h1{font-size:20px;color:#1A1A2E;border-bottom:3px solid #1A1A2E;padding-bottom:8px}
+h2{font-size:14px;color:#1A1A2E;margin:20px 0 8px;border-bottom:1px solid #E2E4E8;padding-bottom:4px}
+table{border-collapse:collapse;width:100%;margin:8px 0}
+th{background:#F0F4F8;text-align:left;padding:8px;font-size:11px;text-transform:uppercase;letter-spacing:0.04em}
+.footer{margin-top:28px;padding-top:12px;border-top:1px solid #E2E4E8;font-size:11px;color:#666}
+@media print{body{margin:16px}}
+</style></head><body>
+<h1>Staff — Full Profile Report</h1>
+<p><strong>Name:</strong> ${escapePrintHtml(dd.name)} &nbsp;|&nbsp; <strong>DUZ:</strong> ${escapePrintHtml(String(dd.duz ?? ''))} &nbsp;|&nbsp; <strong>Title:</strong> ${escapePrintHtml(dd.title || '—')}</p>
+<p><strong>Department:</strong> ${escapePrintHtml(dd.department || '—')} &nbsp;|&nbsp; <strong>Site:</strong> ${escapePrintHtml(dd.site || selectedStaff?.site || '—')} &nbsp;|&nbsp; <strong>Division:</strong> ${escapePrintHtml(dd.division || '—')}</p>
+
+<h2>Provider identifiers</h2>
+<table><tr><th>NPI</th><th>DEA</th><th>Tax ID</th><th>Provider type</th></tr>
+<tr><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.npi || '—')}</td><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.dea || '—')}</td><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.taxId || '—')}</td><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.providerType || '—')}</td></tr></table>
+
+<h2>Security keys (${detailKeys?.length || 0})</h2>
+<table><thead><tr><th>Key name</th><th>Display name</th><th>Package / dept</th><th>IEN</th></tr></thead><tbody>${keyRows || '<tr><td colspan="4" style="padding:12px">No keys loaded</td></tr>'}</tbody></table>
+
+<h2>CPRS tab access</h2>
+<table><thead><tr><th>Tab</th><th>Access</th></tr></thead><tbody>${tabRows || '<tr><td colspan="2" style="padding:12px">No CPRS tab data</td></tr>'}</tbody></table>
+
+<h2>Division assignments</h2>
+<ul style="margin:8px 0;padding-left:20px">${divList}</ul>
+
+<h2>Sign-on</h2>
+<p><strong>Last sign-in:</strong> ${escapePrintHtml(lastLogin)}</p>
+<p style="font-size:12px;color:#555">Per-event sign-on history is recorded in the Kernel sign-on log (Audit workspace). Aggregate sign-on counts are not included in this export.</p>
+
+<h2>All profile fields (raw)</h2>
+<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>
+${profileRows.map(([k, v]) => `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px;vertical-align:top;width:28%">${escapePrintHtml(k)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;word-break:break-word">${escapePrintHtml(v)}</td></tr>`).join('')}
+</tbody></table>
+
+<div class="footer">Generated on ${escapePrintHtml(genDate)} by ${escapePrintHtml(adminLine)}</div>
+</body></html>`;
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+function parsePageFromParams(sp) {
+  const p = parseInt(sp.get('page') || '1', 10);
+  return Number.isFinite(p) && p >= 1 ? p : 1;
+}
+
 export default function StaffDirectory() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeSite, setActiveSite } = useFacility();
   useEffect(() => { document.title = 'Staff Directory — VistA Evolved'; }, []);
-  const [searchText, setSearchText] = useState(searchParams.get('q') || '');
+  const initialSearch = searchParams.get('search') ?? searchParams.get('q') ?? '';
+  const [searchText, setSearchText] = useState(initialSearch);
   // S7: 300ms search debounce to reduce re-renders on keystroke
-  const [debouncedSearch, setDebouncedSearch] = useState(searchText);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
   const debounceRef = useRef(null);
   const handleSearchChange = (val) => {
     setSearchText(val);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
   };
-  const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'Active');
-  const [esigFilter, setEsigFilter] = useState(searchParams.get('esig') || 'All');
+  const [page, setPage] = useState(() => parsePageFromParams(searchParams));
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const s = searchParams.get('status') || 'Active';
+    return STATUS_OPTIONS.includes(s) ? s : 'Active';
+  });
+  const [esigFilter, setEsigFilter] = useState(() => {
+    const e = searchParams.get('esig') || 'All';
+    return ESIG_OPTIONS.includes(e) ? e : 'All';
+  });
   const [hideSystemAccounts, setHideSystemAccounts] = useState(true);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [deactivateTarget, setDeactivateTarget] = useState(null);
@@ -144,16 +275,6 @@ export default function StaffDirectory() {
 
   // CPRS Tab Access data (B8)
   const [cprsTabData, setCprsTabData] = useState([]);
-
-  // S3.8: Sync filters to URL
-  useEffect(() => {
-    const params = {};
-    if (searchText) params.q = searchText;
-    if (statusFilter !== 'Active') params.status = statusFilter;
-    if (esigFilter !== 'All') params.esig = esigFilter;
-    if (page > 1) params.page = String(page);
-    setSearchParams(params, { replace: true });
-  }, [searchText, statusFilter, esigFilter, page, setSearchParams]);
 
   const columns = [
     ...baseColumns,
@@ -290,6 +411,7 @@ export default function StaffDirectory() {
       pwdExpirationDays: vg.pwdExpirationDays,
       pwdDaysRemaining: vg.pwdDaysRemaining,
       lastModified: userRes?.data?.lastModified || null,
+      lastLogin: userRes?.data?.lastLogin || row.lastLogin || vg.lastLogin || '',
     });
     setDetailKeys(keysRes?.data || []);
     setCprsTabData(cprsRes?.tabs || cprsRes?.data || []);
@@ -350,6 +472,35 @@ export default function StaffDirectory() {
     }
   };
 
+  // S3.8 / S17: Sync filters, pagination, and selected user (DUZ) to URL for shareable links
+  const userParamInUrl = searchParams.get('user');
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams();
+    if (searchText) params.set('search', searchText);
+    if (statusFilter !== 'Active') params.set('status', statusFilter);
+    if (esigFilter !== 'All') params.set('esig', esigFilter);
+    if (page > 1) params.set('page', String(page));
+    if (selectedStaff?.duz != null) {
+      params.set('user', String(selectedStaff.duz));
+    } else if (
+      userParamInUrl &&
+      staffList.some((s) => String(s.duz) === String(userParamInUrl))
+    ) {
+      params.set('user', userParamInUrl);
+    }
+    setSearchParams(params, { replace: true });
+  }, [loading, searchText, statusFilter, esigFilter, page, selectedStaff, staffList, userParamInUrl, setSearchParams]);
+
+  // Deep link: open detail panel when ?user=<DUZ> matches a loaded staff row
+  useEffect(() => {
+    if (loading || staffList.length === 0 || !userParamInUrl) return;
+    if (selectedStaff && String(selectedStaff.duz) === String(userParamInUrl)) return;
+    const row = staffList.find((u) => String(u.duz) === String(userParamInUrl));
+    if (row) handleRowClick(row);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRowClick is intentionally omitted to avoid re-firing on every render
+  }, [loading, staffList, userParamInUrl, selectedStaff]);
+
   // Filters (client-side since list endpoint only returns ien+name)
   const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB|APPLICATION|PROXY|APITEST)/i;
   const filtered = staffList.filter(u => {
@@ -408,6 +559,14 @@ export default function StaffDirectory() {
   const [deactivateReason, setDeactivateReason] = useState('');
   /** Current signed-in admin DUZ (for self–XUMGR removal guard, S23.6) */
   const [sessionDuz, setSessionDuz] = useState(null);
+  /** Admin display name for print footer (S22.14) */
+  const [adminDisplayName, setAdminDisplayName] = useState('');
+
+  /** S22.2: on-demand key holders (GET /key-holders/:keyName) */
+  const [keyHolderKey, setKeyHolderKey] = useState('');
+  const [keyHolderLoading, setKeyHolderLoading] = useState(false);
+  const [keyHolderError, setKeyHolderError] = useState(null);
+  const [keyHolderResult, setKeyHolderResult] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -416,10 +575,35 @@ export default function StaffDirectory() {
         if (cancelled) return;
         const d = sess?.user?.duz;
         setSessionDuz(d != null && d !== '' ? String(d) : null);
+        const nm = sess?.user?.name || sess?.user?.displayName || sess?.user?.accessCode || '';
+        setAdminDisplayName(nm ? String(nm) : '');
       })
-      .catch(() => { if (!cancelled) setSessionDuz(null); });
+      .catch(() => { if (!cancelled) { setSessionDuz(null); setAdminDisplayName(''); } });
     return () => { cancelled = true; };
   }, []);
+
+  const handleShowKeyHolders = async () => {
+    const kn = String(keyHolderKey || '').trim();
+    if (!kn) return;
+    setKeyHolderLoading(true);
+    setKeyHolderError(null);
+    setKeyHolderResult(null);
+    try {
+      const res = await getPermissionHolders(kn);
+      const holders = res?.holders ?? res?.data ?? [];
+      const holderCount = res?.holderCount ?? (Array.isArray(holders) ? holders.length : 0);
+      const resolvedName = res?.keyName || kn.toUpperCase();
+      setKeyHolderResult({
+        keyName: resolvedName,
+        holderCount,
+        holders: Array.isArray(holders) ? holders : [],
+      });
+    } catch (err) {
+      setKeyHolderError(err?.message || 'Failed to load key holders');
+    } finally {
+      setKeyHolderLoading(false);
+    }
+  };
 
   const handleDeactivate = async (reason) => {
     if (!deactivateTarget) return;
@@ -429,7 +613,7 @@ export default function StaffDirectory() {
       setDeactivateTarget(null);
       // Keep detail panel open — update status in place
       if (detailData && detailData.duz === deactivateTarget.duz) {
-        setDetailData(prev => ({ ...prev, status: 'terminated' }));
+        setDetailData(prev => ({ ...prev, status: 'inactive' }));
       }
       setActionSuccess(`${name} has been deactivated. Reason: ${reason || 'Not specified'}. This action has been recorded in the audit log.`);
       loadData();
@@ -555,6 +739,46 @@ export default function StaffDirectory() {
     finally { setAssigningPerm(false); }
   };
 
+  /** Export current filtered list as CSV (audit: handleExportCsv) */
+  const handleExportCsv = () => {
+    const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions,Role,NPI,Email,Phone,Last Login\n';
+    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${r.phone || ''}","${r.lastLogin || ''}"`).join('\n');
+    const blob = new Blob([header + csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `staff-directory-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /** Full termination after confirm (audit: handleTerminate) */
+  const handleTerminate = async () => {
+    if (!terminateTarget) return;
+    try {
+      await terminateStaffMember(terminateTarget.duz);
+      setTerminateTarget(null);
+      setSelectedStaff(null);
+      setDetailData(null);
+      loadData();
+    } catch (err) {
+      setError(`Failed to terminate: ${err.message}`);
+      setTerminateTarget(null);
+    }
+  };
+
+  /** Unlock locked account (audit: handleUnlock) */
+  const handleUnlock = async (duz) => {
+    try {
+      await unlockUser(duz);
+      setSelectedStaff(null);
+      setDetailData(null);
+      loadData();
+    } catch (err) {
+      setError(`Failed to unlock: ${err.message}`);
+    }
+  };
+
   const isLoadError = error && staffList.length === 0;
 
   if (isLoadError) {
@@ -598,17 +822,8 @@ export default function StaffDirectory() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => {
-                    const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions,Role,NPI,Email,Phone,Last Login\n';
-                    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${r.phone || ''}","${r.lastLogin || ''}"`).join('\n');
-                    const blob = new Blob([header + csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `staff-directory-${new Date().toISOString().slice(0, 10)}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
+                  type="button"
+                  onClick={handleExportCsv}
                   className="flex items-center gap-2 px-4 py-2 text-[13px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">
                   <span className="material-symbols-outlined text-[16px]">download</span>
                   Export
@@ -667,6 +882,29 @@ export default function StaffDirectory() {
                   className="w-3.5 h-3.5 rounded border-[#E2E4E8]" />
                 Hide system accounts
               </label>
+              <select
+                value={keyHolderKey}
+                onChange={(e) => {
+                  setKeyHolderKey(e.target.value);
+                  setKeyHolderResult(null);
+                  setKeyHolderError(null);
+                }}
+                className="h-9 pl-3 pr-8 border border-[#E2E4E8] rounded-md text-[11px] text-[#222] bg-white focus:outline-none focus:border-[#2E5984] max-w-[200px]"
+                aria-label="Key holder lookup"
+              >
+                <option value="">Key: (select)</option>
+                {COMMON_KEY_FILTER_OPTIONS.map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleShowKeyHolders}
+                disabled={!keyHolderKey || keyHolderLoading}
+                className="h-9 px-3 text-[11px] font-medium text-white bg-[#2E5984] rounded-md hover:bg-[#1A1A2E] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {keyHolderLoading ? 'Loading…' : 'Show Holders'}
+              </button>
               {filtersNonDefault && (
                 <button
                   type="button"
@@ -677,6 +915,56 @@ export default function StaffDirectory() {
                 </button>
               )}
             </div>
+
+            {keyHolderError && (
+              <div className="mb-3 p-2 text-[12px] text-[#CC3333] bg-[#FDE8E8] border border-[#F5C6CB] rounded-md" role="alert">
+                {keyHolderError}
+              </div>
+            )}
+            {keyHolderResult && (
+              <div className="mb-4 p-4 border border-[#E2E4E8] rounded-lg bg-white">
+                <div className="text-[13px] font-semibold text-[#1A1A2E]">
+                  Holders of <span className="font-mono">{keyHolderResult.keyName}</span>
+                  <span className="text-[#666] font-normal ml-2">({keyHolderResult.holderCount})</span>
+                </div>
+                <p className="text-[11px] text-[#888] mt-1 mb-2">From VistA ^XUSEC (ZVE KEY HOLDERS). Click a name to open the staff detail panel.</p>
+                {keyHolderResult.holders.length === 0 ? (
+                  <p className="text-xs text-[#999]">No holders found for this key.</p>
+                ) : (
+                  <ul className="max-h-48 overflow-auto text-[12px] space-y-1.5 border-t border-[#F0F0F0] pt-2">
+                    {keyHolderResult.holders.map((h) => (
+                      <li key={`${keyHolderResult.keyName}-${h.duz}`} className="flex items-baseline gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const row = staffList.find((u) => String(u.duz) === String(h.duz)) || {
+                              id: `S-${h.duz}`,
+                              duz: h.duz,
+                              name: h.name || '',
+                              title: '',
+                              department: '',
+                              site: '',
+                              status: 'active',
+                              esigStatus: 'incomplete',
+                              hasEsig: false,
+                              permissionCount: 0,
+                              displayId: `S-${h.duz}`,
+                              isProvider: false,
+                              lastLogin: '',
+                            };
+                            handleRowClick(row);
+                          }}
+                          className="text-[#2E5984] font-medium hover:underline text-left"
+                        >
+                          {h.name || '(No name)'}
+                        </button>
+                        <span className="text-[#999] font-mono text-[11px]">DUZ {h.duz}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {activeFilters.length > 0 && (
               <div className="mb-4">
@@ -749,11 +1037,12 @@ export default function StaffDirectory() {
             <StaffDetailContent
               detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
               selectedStaff={selectedStaff} cprsTabData={cprsTabData}
+              adminDisplayName={adminDisplayName}
               navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
               handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
               handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
               setDeactivateTarget={setDeactivateTarget} setTerminateTarget={setTerminateTarget} setDetailData={setDetailData}
-              unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
+              handleUnlock={handleUnlock}
               loadData={loadData} setError={setError}
               setCloneSource={setCloneSource}
             />
@@ -774,11 +1063,12 @@ export default function StaffDirectory() {
               <StaffDetailContent
                 detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
                 selectedStaff={selectedStaff} cprsTabData={cprsTabData}
+                adminDisplayName={adminDisplayName}
                 navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
                 handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
                 handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
                 setDeactivateTarget={setDeactivateTarget} setTerminateTarget={setTerminateTarget} setDetailData={setDetailData}
-                unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
+                handleUnlock={handleUnlock}
                 loadData={loadData} setError={setError}
                 setCloneSource={setCloneSource}
               />
@@ -836,15 +1126,7 @@ export default function StaffDirectory() {
           title="Full Termination"
           message={`FULL TERMINATION of ${terminateTarget.name}: This clears credentials, removes all security keys, and sets DISUSER. This action cannot be undone.`}
           confirmLabel="Terminate Account"
-          onConfirm={async () => {
-            try {
-              await terminateStaffMember(terminateTarget.duz);
-              setTerminateTarget(null);
-              setSelectedStaff(null);
-              setDetailData(null);
-              loadData();
-            } catch (err) { setError(`Failed to terminate: ${err.message}`); setTerminateTarget(null); }
-          }}
+          onConfirm={handleTerminate}
           onCancel={() => setTerminateTarget(null)}
           destructive
         />
@@ -1191,11 +1473,13 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn, conc
 /* A3: Extracted detail content shared by desktop side panel and mobile modal */
 function StaffDetailContent({
   detailData, detailKeys, detailLoading, selectedStaff, cprsTabData,
+  adminDisplayName,
   navigate, handleRowClick, handleOpenAssignPerms,
   handleClearEsig, clearingEsig,
   handleReactivate, handleRemovePermission,
   setDeactivateTarget, setTerminateTarget, setDetailData,
-  unlockUser, setSelectedStaff, loadData, setError,
+  handleUnlock,
+  loadData, setError,
   setCloneSource,
 }) {
   const [duzCopied, setDuzCopied] = useState(false);
@@ -1431,6 +1715,21 @@ function StaffDetailContent({
               <span className="material-symbols-outlined text-[16px] mr-2 align-middle">content_copy</span>
               Clone User
             </button>
+            <button
+              type="button"
+              onClick={() => openPrintFullProfile({
+                detailData,
+                detailKeys,
+                cprsTabData,
+                selectedStaff,
+                adminDisplayName,
+              })}
+              title="Print a comprehensive profile: all fields, keys, divisions, CPRS tabs, and sign-on info"
+              className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px] mr-2 align-middle">description</span>
+              Print Full Profile
+            </button>
             <button onClick={() => {
               const printWindow = window.open('', '_blank');
               if (!printWindow) return;
@@ -1544,14 +1843,9 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
               </button>
             )}
             {detailData.status === 'locked' && (
-              <button onClick={async () => {
-                try {
-                  await unlockUser(detailData.duz);
-                  setSelectedStaff(null);
-                  setDetailData(null);
-                  loadData();
-                } catch (err) { setError(`Failed to unlock: ${err.message}`); }
-              }}
+              <button
+                type="button"
+                onClick={() => handleUnlock(detailData.duz)}
                 title="Clears the lockout counter, allowing the user to sign in again."
                 className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-[#E8EEF5] rounded-lg transition-colors">
                 <span className="material-symbols-outlined text-[16px] mr-2 align-middle">lock_open</span>

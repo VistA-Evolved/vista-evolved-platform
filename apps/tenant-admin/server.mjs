@@ -6903,6 +6903,28 @@ async function main() {
         return { ok: true, source: 'vista', reportType, data: inactive, total: inactive.length };
       }
 
+      /** Audit 8.14: accounts with no sign-in within N days (default 90) — supports auto-deactivate review */
+      if (reportType === 'stale-accounts') {
+        const usersRes = await fetchVistaUsers('');
+        if (!usersRes.ok) return reply.code(502).send({ ok: false, error: 'Failed to fetch users' });
+        const rawDays = parseInt(req.query.days, 10);
+        const thresholdDays = Number.isFinite(rawDays) ? Math.min(3650, Math.max(1, rawDays)) : 90;
+        const now = new Date();
+        const stale = (usersRes.data || [])
+          .filter((u) => {
+            if (!u.lastSignIn) return true;
+            return (now - new Date(u.lastSignIn)) / 86400000 >= thresholdDays;
+          })
+          .map((u) => ({
+            name: u.name,
+            DUZ: u.ien,
+            lastLoginDate: u.lastSignIn || 'NEVER',
+            daysSinceLogin: u.lastSignIn ? Math.floor((now - new Date(u.lastSignIn)) / 86400000) : 999,
+          }))
+          .sort((a, b) => b.daysSinceLogin - a.daysSinceLogin);
+        return { ok: true, source: 'vista', reportType, data: stale, thresholdDays, total: stale.length };
+      }
+
       if (reportType === 'param-changes') {
         const z = await callZveRpc('ZVE ADMIN AUDIT', ['', '', '50']);
         const o = zveOutcome(z);

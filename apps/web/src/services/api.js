@@ -7,8 +7,8 @@
  *
  * Vite dev server proxies both. In production, reverse proxy handles routing.
  *
- * Authentication: Bearer token stored in sessionStorage after login.
- * The tenant-admin backend issues a session token on POST /auth/login.
+ * Authentication: httpOnly secure cookie set by server on POST /auth/login.
+ * CSRF token kept in module-scope memory only. No tokens in sessionStorage.
  */
 
 // S5.1: Session token is now in httpOnly cookie — never stored in JS.

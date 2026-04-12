@@ -51,8 +51,10 @@ const RELATIONSHIP_OPTIONS = ['Self', 'Spouse', 'Parent', 'Child', 'Sibling', 'G
 /** VA enrollment / demographics audit: employment & eligibility dropdown */
 const VA_EMPLOYMENT_ELIGIBILITY = ['Employed', 'Retired', 'Unemployed', 'Student', 'Self-Employed', 'Unknown'];
 const ENROLLMENT_PRIORITY_GROUPS = ['1', '2', '3', '4', '5', '6', '7', '8'];
-const BRANCHES = ['Army', 'Navy', 'Air Force', 'Marines', 'Coast Guard', 'Space Force'];
-const SERVICE_ERAS = ['WWII', 'Korea', 'Vietnam', 'Gulf War', 'OEF/OIF/OND', 'Post-9/11', 'Peacetime', 'Other'];
+/** File #2 .3211 — Branch of Service */
+const BRANCHES_OF_SERVICE = ['Army', 'Navy', 'Air Force', 'Marines', 'Coast Guard', 'Space Force', 'Other'];
+/** File #2 .3212 — Period of Service */
+const PERIOD_OF_SERVICE = ['WWI', 'WWII', 'Korean', 'Vietnam', 'Persian Gulf', 'OEF/OIF/OND', 'Other'];
 const EXPOSURE_OPTIONS = ['Agent Orange', 'Ionizing Radiation', 'SW Asia', 'Camp Lejeune', 'Burn Pits/PACT Act', 'Other'];
 const PATIENT_CATEGORIES = ['Service Connected', 'Non-Service Connected', 'Compensated', 'Pension', 'Insured', 'Private Pay', 'Other'];
 const COUNTRY_OPTIONS = ['United States', 'Canada', 'Mexico', 'United Kingdom', 'Germany', 'Japan', 'South Korea', 'Philippines', 'Other'];
@@ -83,6 +85,8 @@ const BLANK = {
   phoneHome: '', phoneWork: '', phoneMobile: '', email: '',
   maritalStatus: '', religion: '', race: [], ethnicity: '',
   preferredLanguage: '', interpreterNeeded: false,
+  countryOfBirth: '',
+  motherMaidenName: '',
 
   ecName: '', ecPhone: '', ecRelationship: '',
   nokName: '', nokPhone: '', nokAddress: '', nokRelationship: '',
@@ -90,10 +94,16 @@ const BLANK = {
   empStatus: '', empName: '', empPhone: '',
   enrollmentPriorityGroup: '',
 
-  branch: '', serviceEra: '', serviceConnected: false,
+  branch: '',
+  serviceEntryDate: '',
+  serviceSeparationDate: '',
+  periodOfService: '',
+  serviceConnected: false,
+  claimNumber: '',
   scPercent: '', combatStatus: '', purpleHeart: false, pow: false, exposures: [],
 
   registrationFacility: '', patientCategory: '',
+  advanceDirectiveOnFile: false,
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -329,6 +339,8 @@ export default function PatientDemographics() {
             ethnicity: d.ethnicity || '',
             preferredLanguage: d.preferredLanguage || '',
             interpreterNeeded: d.interpreterNeeded || false,
+            countryOfBirth: d.countryOfBirth || '',
+            motherMaidenName: d.motherMaidenName || '',
             ecName: d.emergencyContact?.name || '',
             ecPhone: d.emergencyContact?.phone || '',
             ecRelationship: d.emergencyContact?.relationship || '',
@@ -343,8 +355,11 @@ export default function PatientDemographics() {
               ? String(d.enrollmentPriorityGroup)
               : (d.eligibility?.priorityGroup != null ? String(d.eligibility.priorityGroup) : ''),
             branch: d.militaryService?.branch || '',
-            serviceEra: d.militaryService?.serviceEra || '',
+            serviceEntryDate: d.militaryService?.serviceEntryDate || '',
+            serviceSeparationDate: d.militaryService?.serviceSeparationDate || '',
+            periodOfService: d.militaryService?.periodOfService || d.militaryService?.serviceEra || '',
             serviceConnected: d.militaryService?.serviceConnected || d.serviceConnected || false,
+            claimNumber: d.militaryService?.claimNumber || '',
             scPercent: String(d.militaryService?.scPercent ?? d.scPercent ?? ''),
             combatStatus: d.militaryService?.combatStatus || '',
             purpleHeart: d.militaryService?.purpleHeart || false,
@@ -352,6 +367,7 @@ export default function PatientDemographics() {
             exposures: d.militaryService?.exposures || [],
             registrationFacility: d.registrationSite?.ien || '',
             patientCategory: d.patientCategory || '',
+            advanceDirectiveOnFile: d.advanceDirectiveOnFile || false,
           };
           setForm(mapped);
           setOriginalForm(mapped);
@@ -452,6 +468,16 @@ export default function PatientDemographics() {
     if (!form.registrationFacility) {
       e.registrationFacility = 'Registration facility is required';
     }
+    // VistA SC%: 0–100 in increments of 10 only (when service-connected)
+    if (form.serviceConnected) {
+      const raw = String(form.scPercent ?? '').trim();
+      if (raw !== '') {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || n > 100 || n % 10 !== 0) {
+          e.scPercent = 'SC percentage must be 0–100 in steps of 10 (0, 10, 20, … 100).';
+        }
+      }
+    }
     setErrors(e);
     if (Object.keys(e).length > 0) {
       if (e.lastName || e.firstName || e.dob || e.sexAtBirth || e.ssn) {
@@ -462,6 +488,11 @@ export default function PatientDemographics() {
       if (e.registrationFacility) {
         if (!expandedSections.includes('registration')) {
           setExpandedSections(prev => [...prev, 'registration']);
+        }
+      }
+      if (e.scPercent) {
+        if (!expandedSections.includes('military')) {
+          setExpandedSections(prev => [...prev, 'military']);
         }
       }
     }
@@ -501,14 +532,21 @@ export default function PatientDemographics() {
         ethnicity: form.ethnicity,
         preferredLanguage: form.preferredLanguage,
         interpreterNeeded: form.interpreterNeeded,
+        countryOfBirth: form.countryOfBirth,
+        motherMaidenName: form.motherMaidenName,
         emergencyContact: { name: form.ecName, phone: form.ecPhone, relationship: form.ecRelationship },
         nextOfKin: { name: form.nokName, phone: form.nokPhone, address: form.nokAddress, relationship: form.nokRelationship },
         employment: { status: form.empStatus, employer: form.empName, phone: form.empPhone },
         enrollmentPriorityGroup: form.enrollmentPriorityGroup,
+        advanceDirectiveOnFile: form.advanceDirectiveOnFile,
         militaryService: {
           branch: form.branch,
-          serviceEra: form.serviceEra,
+          serviceEntryDate: form.serviceEntryDate,
+          serviceSeparationDate: form.serviceSeparationDate,
+          periodOfService: form.periodOfService,
+          serviceEra: form.periodOfService,
           serviceConnected: form.serviceConnected,
+          claimNumber: form.claimNumber,
           scPercent: Number(form.scPercent) || 0,
           combatStatus: form.combatStatus,
           purpleHeart: form.purpleHeart,
@@ -549,6 +587,13 @@ export default function PatientDemographics() {
   /* ── Section error helpers ── */
   const identityHasError = ['lastName', 'firstName', 'dob', 'sexAtBirth', 'ssn'].some(f => errors[f]);
   const registrationHasError = !!errors.registrationFacility;
+  const militaryHasError = !!errors.scPercent;
+  const scPctStr = String(form.scPercent ?? '').trim();
+  const scPctNum = scPctStr === '' ? NaN : Number(scPctStr);
+  const scPctLegacyInvalid =
+    form.serviceConnected &&
+    scPctStr !== '' &&
+    (!Number.isInteger(scPctNum) || scPctNum % 10 !== 0 || scPctNum < 0 || scPctNum > 100);
 
   /* ── Loading state ── */
   if (loading) {
@@ -815,6 +860,16 @@ export default function PatientDemographics() {
                   className={inputCls + ' w-full'} />
               </Field>
             </div>
+            <div className="grid grid-cols-2 gap-4 mb-5">
+              <Field label="Country of Birth" changed={isChanged('countryOfBirth')}>
+                <input value={form.countryOfBirth} onChange={e => set('countryOfBirth', e.target.value)}
+                  className={inputCls + ' w-full'} placeholder="e.g. United States" />
+              </Field>
+              <Field label="Mother's Maiden Name" changed={isChanged('motherMaidenName')}>
+                <input value={form.motherMaidenName} onChange={e => set('motherMaidenName', e.target.value)}
+                  className={inputCls + ' w-full'} />
+              </Field>
+            </div>
             <div className="grid grid-cols-3 gap-4">
               {isVA && (
                 <Field label="Veteran Status" changed={isChanged('veteranStatus')}>
@@ -1025,21 +1080,38 @@ export default function PatientDemographics() {
           {/* ─────── SECTION 5: MILITARY SERVICE (VA tenant + Veteran Status = Yes) ─────── */}
           {isVA && form.veteranStatus && (
             <AccordionSection
-              id="military" title="Military Service" icon="military_tech"
+              id="military" title="Military Service & Eligibility" icon="military_tech"
               expanded={expandedSections.includes('military')}
               onToggle={toggleSection}
+              hasError={militaryHasError}
             >
               <div className="grid grid-cols-3 gap-4 mb-5">
                 <Field label="Branch of Service" changed={isChanged('branch')}>
                   <select value={form.branch} onChange={e => set('branch', e.target.value)} className={selectCls + ' w-full'}>
                     <option value="">Select...</option>
-                    {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+                    {form.branch && !BRANCHES_OF_SERVICE.includes(form.branch) && (
+                      <option value={form.branch}>{form.branch} (saved)</option>
+                    )}
+                    {BRANCHES_OF_SERVICE.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </Field>
-                <Field label="Service Era" changed={isChanged('serviceEra')}>
-                  <select value={form.serviceEra} onChange={e => set('serviceEra', e.target.value)} className={selectCls + ' w-full'}>
+                <Field label="Service Entry Date" changed={isChanged('serviceEntryDate')}>
+                  <input type="date" value={form.serviceEntryDate} onChange={e => set('serviceEntryDate', e.target.value)}
+                    className={inputCls + ' w-full'} />
+                </Field>
+                <Field label="Service Separation Date" changed={isChanged('serviceSeparationDate')}>
+                  <input type="date" value={form.serviceSeparationDate} onChange={e => set('serviceSeparationDate', e.target.value)}
+                    className={inputCls + ' w-full'} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                <Field label="Period of Service" changed={isChanged('periodOfService')}>
+                  <select value={form.periodOfService} onChange={e => set('periodOfService', e.target.value)} className={selectCls + ' w-full'}>
                     <option value="">Select...</option>
-                    {SERVICE_ERAS.map(s => <option key={s} value={s}>{s}</option>)}
+                    {form.periodOfService && !PERIOD_OF_SERVICE.includes(form.periodOfService) && (
+                      <option value={form.periodOfService}>{form.periodOfService} (saved)</option>
+                    )}
+                    {PERIOD_OF_SERVICE.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </Field>
                 <Field label="Service Connected" changed={isChanged('serviceConnected')}>
@@ -1047,13 +1119,27 @@ export default function PatientDemographics() {
                     <Toggle checked={form.serviceConnected} onChange={v => set('serviceConnected', v)} label={form.serviceConnected ? 'Yes' : 'No'} />
                   </div>
                 </Field>
+                <Field label="Claim Number" changed={isChanged('claimNumber')}>
+                  <input value={form.claimNumber} onChange={e => set('claimNumber', e.target.value)}
+                    className={inputCls + ' w-full'} />
+                </Field>
               </div>
               <div className="grid grid-cols-3 gap-4 mb-5">
                 {form.serviceConnected && (
-                  <Field label="SC Percentage" changed={isChanged('scPercent')}>
-                    <input type="number" min="0" max="100" value={form.scPercent}
+                  <Field label="SC Percentage" changed={isChanged('scPercent')} error={errors.scPercent}>
+                    <select
+                      value={scPctStr === '' ? '' : String(form.scPercent)}
                       onChange={e => set('scPercent', e.target.value)}
-                      className={inputCls + ' w-full'} placeholder="0-100" />
+                      className={selectCls + ' w-full'}
+                    >
+                      <option value="">Select…</option>
+                      {scPctLegacyInvalid && (
+                        <option value={String(form.scPercent)}>{form.scPercent}% (invalid — pick a 10% step)</option>
+                      )}
+                      {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((p) => (
+                        <option key={p} value={String(p)}>{p}%</option>
+                      ))}
+                    </select>
                   </Field>
                 )}
                 <Field label="Combat Veteran" changed={isChanged('combatStatus')}>
@@ -1126,6 +1212,13 @@ export default function PatientDemographics() {
                   <option value="">Select...</option>
                   {PATIENT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-4 mt-4 max-w-md">
+              <Field label="Advance Directive on File" changed={isChanged('advanceDirectiveOnFile')}>
+                <div className="h-10 flex items-center">
+                  <Toggle checked={form.advanceDirectiveOnFile} onChange={v => set('advanceDirectiveOnFile', v)} label={form.advanceDirectiveOnFile ? 'Yes' : 'No'} />
+                </div>
               </Field>
             </div>
           </AccordionSection>

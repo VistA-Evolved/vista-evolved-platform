@@ -257,11 +257,13 @@ export default function StaffForm() {
         }
         const editVals = {
           fullName: rawName,
-          lastName: parsedLast, firstName: parsedFirst, middleInitial: parsedMI,
+          lastName: parsedLast,
+          firstName: parsedFirst,
+          middleInitial: (parsedMI || '').replace(/[^A-Za-z]/g, '').slice(0, 1).toUpperCase(),
           email: vg.email || '',
           phone: vg.officePhone || '',
           title: userRes?.data?.title || vg.title || '',
-          sex: vg.sex || '',
+          sex: (vg.sex === 'M' || vg.sex === 'F') ? vg.sex : '',
           npi: vg.npi || '',
           dea: vg.dea || '',
           department: vg.serviceSection || '',
@@ -297,22 +299,31 @@ export default function StaffForm() {
     if (stepId === 'person') {
       if (!form.lastName.trim()) errors.lastName = 'Last name is required';
       else if (form.lastName.length < 2) errors.lastName = 'Last name must be at least 2 characters';
-      // S3.1/S15: VistA input transform only allows A-Z, hyphen, space. No apostrophes.
-      else if (!/^[A-Z -]+$/i.test(form.lastName.trim())) errors.lastName = 'Last name: only letters, hyphens, and spaces allowed (no apostrophes)';
+      // S15: VistA input transform — A-Z, hyphen, space, comma only; uppercase; no apostrophes
+      else if (!/^[A-Z ,\-]+$/.test(form.lastName.trim())) errors.lastName = 'Last name: only A–Z, spaces, hyphens, and commas (no apostrophes)';
       if (!form.firstName.trim()) errors.firstName = 'First name is required';
       else if (form.firstName.length < 1) errors.firstName = 'First name is required';
-      else if (!/^[A-Z -]+$/i.test(form.firstName.trim())) errors.firstName = 'First name: only letters, hyphens, and spaces allowed';
-      // Compose fullName for length check
-      const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
+      else if (!/^[A-Z ,\-]+$/.test(form.firstName.trim())) errors.firstName = 'First name: only A–Z, spaces, hyphens, and commas (no apostrophes)';
+      if (form.middleInitial && !/^[A-Z]$/.test(form.middleInitial.trim())) errors.middleInitial = 'Middle initial must be a single letter A–Z';
+      // Compose full name for length check (VistA .01: 3–35 chars)
+      const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`;
       if (composedName.length > 35) errors.lastName = 'Combined name must be 35 characters or fewer';
-      if (!form.sex) errors.sex = 'Gender is required';
+      else if (composedName.length < 3) errors.lastName = 'Combined name must be at least 3 characters';
+      if (!form.sex) errors.sex = 'Sex is required';
+      else if (form.sex !== 'M' && form.sex !== 'F') errors.sex = 'Sex must be M or F (VistA SET OF CODES)';
       if (!form.dob) errors.dob = 'Date of birth is required';
       else {
-        // S6: Minimum age 16 — VistA users must be at least 16 years old
         const dobDate = new Date(form.dob + 'T00:00:00');
         const today = new Date();
-        const age = today.getFullYear() - dobDate.getFullYear() - (today < new Date(today.getFullYear(), dobDate.getMonth(), dobDate.getDate()) ? 1 : 0);
-        if (age < 16) errors.dob = 'User must be at least 16 years old';
+        today.setHours(0, 0, 0, 0);
+        const dobMid = new Date(dobDate);
+        dobMid.setHours(0, 0, 0, 0);
+        if (dobMid > today) errors.dob = 'Date of birth cannot be in the future';
+        else {
+          // S6: Minimum age 16 — VistA users must be at least 16 years old
+          const age = today.getFullYear() - dobDate.getFullYear() - (today < new Date(today.getFullYear(), dobDate.getMonth(), dobDate.getDate()) ? 1 : 0);
+          if (age < 16) errors.dob = 'User must be at least 16 years old';
+        }
       }
       // G008: Email validation
       if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Invalid email format';
@@ -432,6 +443,13 @@ export default function StaffForm() {
     setCreateSuccess(prev => (prev ? { ...prev, accessCode: '', verifyCode: '' } : prev));
     setForm(prev => ({ ...prev, accessCode: '', verifyCode: '', verifyCodeConfirm: '' }));
   };
+
+  // S1.1: Clear credentials from memory when component unmounts
+  useEffect(() => {
+    return () => {
+      clearCredentialState();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // F009: Warn on unsaved changes (beforeunload)
   const isDirty = form.lastName || form.firstName || form.accessCode || form.verifyCode;
@@ -1089,20 +1107,20 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 grid grid-cols-[1fr_1fr_80px] gap-3">
                   <FormField label="Last Name" required error={validationErrors.lastName}
-                    hint="Family name, uppercase, 2+ characters.">
+                    hint="A–Z, spaces, hyphens, commas; combined name 3–35 chars.">
                     <input type="text" value={form.lastName}
-                      onChange={e => updateField('lastName', e.target.value.toUpperCase().replace(/[^A-Z'-]/g, ''))}
+                      onChange={e => updateField('lastName', e.target.value.toUpperCase().replace(/[^A-Z ,\-]/g, ''))}
                       onBlur={handleNameBlur}
                       placeholder="SMITH" className="form-input" maxLength={30} />
                   </FormField>
                   <FormField label="First Name" required error={validationErrors.firstName}
-                    hint="Given name, uppercase, 2+ characters.">
+                    hint="A–Z, spaces, hyphens, commas; combined name 3–35 chars.">
                     <input type="text" value={form.firstName}
-                      onChange={e => updateField('firstName', e.target.value.toUpperCase().replace(/[^A-Z'-]/g, ''))}
+                      onChange={e => updateField('firstName', e.target.value.toUpperCase().replace(/[^A-Z ,\-]/g, ''))}
                       onBlur={handleNameBlur}
                       placeholder="JANE" className="form-input" maxLength={20} />
                   </FormField>
-                  <FormField label="MI" hint="Optional">
+                  <FormField label="MI" hint="Optional" error={validationErrors.middleInitial}>
                     <input type="text" value={form.middleInitial}
                       onChange={e => updateField('middleInitial', e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 1))}
                       placeholder="A" className="form-input" maxLength={1} />
@@ -1128,13 +1146,12 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                     {liveTitles.map(t => <option key={t.ien} value={t.ien}>{t.name}</option>)}
                   </select>
                 </FormField>
-                <FormField label="Sex" required error={validationErrors.sex}
-                  hint="Required for VistA File #200. Used for clinical decision support.">
+                  <FormField label="Sex" required error={validationErrors.sex}
+                  hint="VistA File #200 field 4 — M or F only (SET OF CODES).">
                   <select value={form.sex} onChange={e => updateField('sex', e.target.value)} className="form-input">
                     <option value="">Select...</option>
                     <option value="M">Male</option>
                     <option value="F">Female</option>
-                    <option value="U">Unknown</option>
                   </select>
                 </FormField>
                 <FormField label="Date of Birth" required error={validationErrors.dob}
@@ -1743,7 +1760,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                   ['Name', (form.lastName && form.firstName) ? `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}` : '—'],
                   ['Display Name', form.displayName || '(auto from name)'],
                   ['Job Title', liveTitles.find(t => t.ien === form.title)?.name || form.title || '—'],
-                  ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex === 'U' ? 'Unknown' : form.sex || '—'],
+                  ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex || '—'],
                   ['Date of Birth', form.dob || '—'],
                   ['Email', form.email || '—'],
                   ...(form.employeeId ? [['Employee ID', form.employeeId]] : []),
