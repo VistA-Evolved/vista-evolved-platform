@@ -895,7 +895,6 @@ export default function StaffForm() {
                     <option value="">Select...</option>
                     <option value="M">Male</option>
                     <option value="F">Female</option>
-                    <option value="U">Unknown</option>
                   </select>
                 </FormField>
                 <FormField label="Date of Birth" required error={validationErrors.dob}
@@ -1290,7 +1289,7 @@ export default function StaffForm() {
                     }}
                     placeholder="AB1234567" className="form-input font-mono" />
                 </FormField>
-                <FormField label="DEA Expiration Date">
+                <FormField label="DEA Expiration Date" hint="When the DEA registration expires. VistA File #200 field 53.21.">
                   <input type="date" value={form.deaExpiration} onChange={e => updateField('deaExpiration', e.target.value)} className="form-input" />
                 </FormField>
               </div>

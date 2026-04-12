@@ -1624,34 +1624,47 @@ async function main() {
     const field = body.field;
     const value = body.value;
     const ALLOW = {
+      '.111': 'STREET ADDRESS 1',
+      '.112': 'STREET ADDRESS 2',
+      '.114': 'CITY',
+      '.115': 'STATE',
+      '.116': 'ZIP CODE',
+      '.131': 'HOME PHONE',
       '.132': 'OFFICE PHONE',
       '.133': 'VOICE PAGER',
       '.134': 'DIGITAL PAGER',
       '.151': 'EMAIL ADDRESS',
+      '1': 'INITIALS',
       '3': 'FILE MANAGER ACCESS CODE',
       '4': 'SEX',
+      '4.5': 'PAY GRADE',
       '5': 'DOB',
       '8': 'TITLE',
       '9': 'SSN',
       '9.5': 'VERIFY CODE NEVER EXPIRES',
+      '10.6': 'DEGREE',
+      '16': 'DIVISION',
       '20.2': 'ELECTRONIC SIGNATURE INITIALS',
       '20.3': 'SIGNATURE BLOCK PRINTED NAME',
       '20.4': 'ELECTRONIC SIGNATURE CODE',
       '29': 'SERVICE/SECTION',
+      '29.5': 'TREATING SPECIALTY',
       '41.99': 'NPI',
       '53.08': 'REQUIRES COSIGNER',
       '53.11': 'AUTHORIZED TO WRITE MED ORDERS',
       '53.2': 'DEA#',
       '53.21': 'DEA EXPIRATION DATE',
+      '53.3': 'TAX ID',
       '53.42': 'COSIGNER',
       '53.5': 'PROVIDER CLASS',
+      '53.6': 'VA#',
       '55': 'PHARMACY SCHEDULES',
-      '10.6': 'DEGREE',
       '101.01': 'RESTRICT PATIENT SELECTION',
       '200.07': 'LANGUAGE',
-      '201': 'PRIMARY MENU OPTION',
       '200.0001': 'OE/RR LIST',
+      '201': 'PRIMARY MENU OPTION',
       '203.1': 'PROXY USER',
+      '8932.1': 'PERSON CLASS',
     };
     if (!field || value === undefined || !ALLOW[field]) {
       return reply.code(400).send({
@@ -1662,7 +1675,7 @@ async function main() {
       });
     }
     // --- ZVE-first: ZVE USER EDIT ---
-    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '200.0001': 'OERR', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS', '203.1': 'PROXY', '53.42': 'COSIGNER', '10.6': 'DEGREE' };
+    const ZVE_FIELD_MAP = { '.131': 'HOME_PHONE', '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '200.0001': 'OERR', '8': 'TITLE', '29': 'SERVICE', '29.5': 'TREATING_SPEC', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS', '203.1': 'PROXY', '53.42': 'COSIGNER', '10.6': 'DEGREE' };
     const zveFld = ZVE_FIELD_MAP[field];
     if (zveFld) {
       try {

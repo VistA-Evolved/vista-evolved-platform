@@ -386,7 +386,7 @@ export default function StaffDirectory() {
       setActionSuccess(`${name} has been deactivated. Reason: ${reason || 'Not specified'}. This action has been recorded in the audit log.`);
       loadData();
     } catch (err) {
-      setError(`Failed to deactivate ${name}: ${err.message}`);
+      setError(`Failed to deactivate ${name}: ${err.message || 'Unknown error. Please try again.'}`);
       setDeactivateTarget(null);
     }
   };
@@ -400,7 +400,7 @@ export default function StaffDirectory() {
       }
       setActionSuccess(`${name} has been reactivated. They can now sign in.`);
       loadData();
-    } catch (err) { setError(`Failed to reactivate: ${err.message}`); }
+    } catch (err) { setError(`Failed to reactivate: ${err.message || 'Unknown error. Please try again.'}`); }
   };
 
   const handleCloneUser = async () => {
@@ -418,7 +418,7 @@ export default function StaffDirectory() {
       setCloneForm({ name: '', accessCode: '', verifyCode: '', showCredentials: false });
       loadData();
     } catch (err) {
-      setError(`Failed to clone user: ${err.message}`);
+      setError(`Failed to clone user: ${err.message || 'Unknown error. Please try again.'}`);
     } finally {
       setCloning(false);
     }
@@ -699,7 +699,7 @@ export default function StaffDirectory() {
               setSelectedStaff(null);
               setDetailData(null);
               loadData();
-            } catch (err) { setError(`Failed to terminate: ${err.message}`); setTerminateTarget(null); }
+            } catch (err) { setError(`Failed to terminate: ${err.message || 'Unknown error. Please try again.'}`); setTerminateTarget(null); }
           }}
           onCancel={() => setTerminateTarget(null)}
           destructive
