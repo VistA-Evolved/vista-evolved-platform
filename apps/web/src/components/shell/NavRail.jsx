@@ -70,8 +70,8 @@ export default function NavRail() {
             });
             setSiteDisabledIds(disabled);
           }
-        } catch { /* site workspaces not configured yet — show all */ }
-      } catch { /* session load failed — show all workspaces */ }
+        } catch (err) { /* site workspaces not configured yet — show all */ }
+      } catch (err) { /* session load failed — show all workspaces */ }
     })();
 
     return () => { cancelled = true; };

@@ -228,13 +228,13 @@ export default function PatientDemographics() {
         if (res.ok && Array.isArray(res.data)) {
           setDivisions(res.data);
         }
-      } catch {
+      } catch (err) {
         setDivisions([]);
       }
       try {
         const sess = await getSession();
         if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
-      } catch { /* non-fatal */ }
+      } catch (err) { /* non-fatal */ }
     })();
   }, []);
 

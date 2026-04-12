@@ -49,7 +49,7 @@ function StaffTypeahead({ value, onChange }) {
         const names = [...new Set(list.map(u => u.name || u.userName || '').filter(Boolean))].slice(0, 8);
         setSuggestions(names);
         setOpen(names.length > 0);
-      } catch { setSuggestions([]); }
+      } catch (err) { setSuggestions([]); }
     }, 250);
   }, []);
 

@@ -82,7 +82,7 @@ export default function DepartmentsServices() {
         parentService: d.parentService || '',
       };
       setDetailData(detail);
-    } catch {
+    } catch (err) {
       setDetailData(dept);
     } finally {
       setDetailLoading(false);

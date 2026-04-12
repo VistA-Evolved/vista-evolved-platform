@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
@@ -102,6 +102,14 @@ export default function StaffDirectory() {
   useEffect(() => { document.title = 'Staff Directory — VistA Evolved'; }, []);
   const [searchText, setSearchText] = useState(searchParams.get('q') || '');
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
+  // #111: Debounce search to avoid excessive re-renders on fast typing
+  const searchTimerRef = useRef(null);
+  const handleSearchInput = useCallback((val) => {
+    setSearchInput(val);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => { setSearchText(val); setPage(1); }, 300);
+  }, []);
+  useEffect(() => () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); }, []);
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'Active');
   const [esigFilter, setEsigFilter] = useState(searchParams.get('esig') || 'All');
@@ -561,7 +569,7 @@ export default function StaffDirectory() {
 
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <div className="flex-1 min-w-[240px]">
-                <SearchBar placeholder="Search by name or ID..." value={searchInput} onSearch={(val) => { setSearchInput(val); setSearchText(val); setPage(1); }} />
+                <SearchBar placeholder="Search by name or ID..." value={searchInput} onSearch={handleSearchInput} />
               </div>
             </div>
             <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -1033,7 +1041,7 @@ function StaffDetailContent({
   };
 
   // S4.4: Save handler for basic fields (phone, email, dept, title) via PUT /users/:ien
-  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8', proxyUser: '203.1', degree: '10.6', cosigner: '53.42', primaryMenu: '201' };
+  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8', proxyUser: '203.1', degree: '10.6', cosigner: '53.42', primaryMenu: '201', defaultOrderList: '200.0001' };
   const handleBasicFieldSave = async (duz, fieldKey, newValue) => {
     const vistaField = BASIC_FIELD_MAP[fieldKey];
     if (!vistaField) throw new Error(`Unknown field: ${fieldKey}`);
@@ -1132,13 +1140,11 @@ function StaffDetailContent({
         </div>
       </div>
 
-      {/* B5: Clinical Configuration */}
-      {detailData.defaultOrderList && (
+      {/* B5: Clinical Configuration — #26: editable OE/RR team */}
         <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
           <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Clinical Configuration</h3>
-          <DetailField label="Default Order List" value={detailData.defaultOrderList} />
+          <EditableDetailField label="OE/RR Team (Default Order List)" value={detailData.defaultOrderList || ''} fieldKey="defaultOrderList" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
         </div>
-      )}
 
       {/* A4: Provider Information with inline editing */}
       {detailData.isProvider && (

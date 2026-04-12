@@ -118,7 +118,7 @@ export default function PatientSearch() {
       const res = await searchPatients(searchQuery);
       setPatients(res.data || []);
       setHasSearched(true);
-    } catch {
+    } catch (err) {
       setError('Unable to reach the patient server. Please check your connection and try again.');
       setPatients([]);
     } finally {

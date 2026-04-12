@@ -97,7 +97,7 @@ export default function DeviceManagement() {
         if (val !== undefined && val !== '') mapped[ef.key] = val;
       }
       setDetailData({ ...device, ...mapped, id: device.id });
-    } catch {
+    } catch (err) {
       setDetailData(device);
     } finally {
       setDetailLoading(false);

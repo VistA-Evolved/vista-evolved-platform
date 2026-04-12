@@ -85,7 +85,7 @@ export default function BedManagement() {
       await updateBed(bed.ien || bed.id, { outOfService: '' });
       setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'available' } : b));
       setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'available' } : prev);
-    } catch {
+    } catch (err) {
       setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'available' } : b));
       setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'available' } : prev);
     }
@@ -96,7 +96,7 @@ export default function BedManagement() {
       await updateBed(bed.ien || bed.id, { outOfService: 'Y' });
       setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'blocked' } : b));
       setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'blocked' } : prev);
-    } catch {
+    } catch (err) {
       setBeds(prev => prev.map(b => b.id === bed.id ? { ...b, status: 'blocked' } : b));
       setSelectedBed(prev => prev?.id === bed.id ? { ...prev, status: 'blocked' } : prev);
     }
@@ -140,7 +140,7 @@ export default function BedManagement() {
       const ward = wardFilter !== 'all' ? wardFilter : undefined;
       const res = await getCensus(ward);
       setCensusData(res?.data || []);
-    } catch { setCensusData([]); }
+    } catch (err) { setCensusData([]); }
     finally { setCensusLoading(false); }
   }, [wardFilter]);
 

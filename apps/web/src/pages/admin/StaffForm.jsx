@@ -160,9 +160,9 @@ export default function StaffForm() {
     cosignerTimerRef.current = setTimeout(async () => {
       try {
         const res = await getStaff({ search: query });
-        const providers = (res?.data || []).filter(u => u.roles?.includes('ORES') || u.roles?.includes('OR CPRS GUI CHART'));
+        const providers = (res?.data || []).filter(u => u.isProvider === true || u.isProvider === '1');
         setCosignerSuggestions(providers.slice(0, 10).map(u => ({ name: u.name || u.username, duz: u.ien || u.id })));
-      } catch { setCosignerSuggestions([]); }
+      } catch (err) { setCosignerSuggestions([]); }
       finally { setCosignerSearching(false); }
     }, 400);
   };
@@ -179,7 +179,7 @@ export default function StaffForm() {
       try {
         const res = await checkAccessCode(code);
         setAcStatus(res.available ? 'available' : 'taken');
-      } catch {
+      } catch (err) {
         setAcStatus(null); // network error — don't block the form
       }
     }, 500);
@@ -275,6 +275,8 @@ export default function StaffForm() {
           employeeId: vg.employeeId || userRes?.data?.employeeId || '',
           providerType: vg.providerType || '',
           cosigner: vg.cosigner || '',
+          cosignerDuz: '', // DUZ not returned in DETAIL — will be resolved on re-selection
+          requiresCosign: Boolean(vg.cosigner), // #29: infer from cosigner presence
           authMeds: vg.authMeds || false,
         };
         setForm(f => ({ ...f, ...editVals }));
@@ -298,18 +300,28 @@ export default function StaffForm() {
     if (stepId === 'person') {
       if (!form.lastName.trim()) errors.lastName = 'Last name is required';
       else if (form.lastName.length < 2) errors.lastName = 'Last name must be at least 2 characters';
-      else if (!/^[A-Z'-]+$/i.test(form.lastName.trim())) errors.lastName = 'Last name contains invalid characters';
+      else if (form.lastName.length > 25) errors.lastName = 'Last name must be 25 characters or fewer';
+      else if (!/^[A-Z \-']+$/i.test(form.lastName.trim())) errors.lastName = 'Only letters, spaces, hyphens, and apostrophes allowed';
       if (!form.firstName.trim()) errors.firstName = 'First name is required';
       else if (form.firstName.length < 1) errors.firstName = 'First name is required';
+      else if (form.firstName.length > 15) errors.firstName = 'First name must be 15 characters or fewer';
+      if (form.middleInitial && form.middleInitial.length > 1) errors.middleInitial = 'Middle initial must be a single letter';
+      else if (form.middleInitial && !/^[A-Z]$/i.test(form.middleInitial)) errors.middleInitial = 'Middle initial must be a letter';
       // Compose fullName for length check
       const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
       if (composedName.length > 35) errors.lastName = 'Combined name must be 35 characters or fewer';
       if (!form.sex) errors.sex = 'Gender is required';
       if (!form.dob) errors.dob = 'Date of birth is required';
-      // G008: Email validation
-      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Invalid email format';
+      else {
+        const dobDate = new Date(form.dob);
+        const ageDiff = Date.now() - dobDate.getTime();
+        const ageYears = ageDiff / (365.25 * 24 * 60 * 60 * 1000);
+        if (ageYears < 16) errors.dob = 'Staff member must be at least 16 years old';
+      }
+      // G008: Email validation — require TLD
+      if (form.email && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(form.email)) errors.email = 'Invalid email format (must include domain like .com, .gov)';
       // G009: Phone validation — at least 10 digits
-      if (form.phone && !/^\d{10,}$/.test(form.phone.replace(/[\s\-().]/g, ''))) errors.phone = 'Phone must contain at least 10 digits';
+      if (form.phone && !/^\d{10,}$/.test(form.phone.replace(/[\s\-().+]/g, ''))) errors.phone = 'Phone must contain at least 10 digits';
       // G010: SSN last4 validation
       if (form.govIdLast4 && !/^\d{4}$/.test(form.govIdLast4)) errors.govIdLast4 = 'Must be exactly 4 digits';
       // Credentials are required for new users
@@ -329,9 +341,31 @@ export default function StaffForm() {
     }
     if (stepId === 'provider' && showProviderStep) {
       if (!form.providerType) errors.providerType = 'Provider type is required';
-      if (form.npi && form.npi.length !== 10) errors.npi = 'NPI must be exactly 10 digits';
-      // F013: DEA format validation — 2 letters + 7 digits
-      if (form.dea && !/^[A-Za-z]{2}\d{7}$/.test(form.dea)) errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
+      if (form.npi) {
+        if (!/^\d{10}$/.test(form.npi)) errors.npi = 'NPI must be exactly 10 digits';
+        else {
+          // NPI Luhn check (prefix 80840 per CMS standard)
+          const prefixed = '80840' + form.npi;
+          let sum = 0;
+          for (let i = prefixed.length - 1, alt = false; i >= 0; i--, alt = !alt) {
+            let n = parseInt(prefixed[i], 10);
+            if (alt) { n *= 2; if (n > 9) n -= 9; }
+            sum += n;
+          }
+          if (sum % 10 !== 0) errors.npi = 'NPI check digit is invalid';
+        }
+      }
+      // F013: DEA format validation — 2 letters + 7 digits + checksum
+      if (form.dea) {
+        if (!/^[A-Za-z]{2}\d{7}$/.test(form.dea)) errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
+        else {
+          const digits = form.dea.slice(2);
+          const odd = parseInt(digits[0]) + parseInt(digits[2]) + parseInt(digits[4]);
+          const even = parseInt(digits[1]) + parseInt(digits[3]) + parseInt(digits[5]);
+          const checkDigit = (odd + even * 2) % 10;
+          if (checkDigit !== parseInt(digits[6])) errors.dea = 'DEA check digit is invalid';
+        }
+      }
     }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -351,7 +385,7 @@ export default function StaffForm() {
     language: '', verifyCodeNeverExpires: false, filemanAccess: '',
     restrictPatient: '', mailGroups: [], degree: '',
     accessCode: '', verifyCode: '', verifyCodeConfirm: '',
-    requiresCosign: false, cosigner: '',
+    requiresCosign: false, cosigner: '', cosignerDuz: '',
   });
 
   const [liveMailGroups, setLiveMailGroups] = useState([]);
@@ -441,7 +475,7 @@ export default function StaffForm() {
         secondaryFeatures: form.secondaryFeatures,
         sigBlockName: form.sigBlockName,
         requiresCosign: form.requiresCosign || false,
-        cosigner: form.cosigner || '',
+        cosigner: form.cosignerDuz || form.cosigner || '',
         language: form.language || '',
         verifyCodeNeverExpires: form.verifyCodeNeverExpires || false,
         filemanAccess: form.filemanAccess || '',
@@ -612,7 +646,7 @@ export default function StaffForm() {
           isDuplicate: false,
         });
       }
-    } catch {
+    } catch (err) {
       setDuplicateWarning(null);
     }
   };
@@ -664,7 +698,20 @@ export default function StaffForm() {
               {createSuccess.permCount}{createSuccess.permTotal && createSuccess.permTotal !== createSuccess.permCount ? ` of ${createSuccess.permTotal}` : ''} permissions assigned
               {createSuccess.mailGroupCount > 0 && ` | Added to ${createSuccess.mailGroupCount} mail group(s)`}
             </div>
-            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && (
+            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && createSuccess.permCount === 0 && (
+              <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFEBEE] border border-[#EF5350] rounded-lg text-left" role="alert">
+                <p className="text-sm font-bold text-[#C62828] mb-1">
+                  ⚠ All {createSuccess.failedKeys.length} permission(s) failed to assign — this user has no capabilities
+                </p>
+                <p className="text-xs text-[#C62828] mb-2">The user was created but cannot perform any clinical functions. Check that the security keys exist in VistA and retry.</p>
+                <ul className="text-xs text-[#C62828] list-disc list-inside">
+                  {createSuccess.failedKeys.map((k, i) => (
+                    <li key={i}>{k.key}{k.detail ? ` — ${k.detail}` : ''}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && createSuccess.permCount > 0 && (
               <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFF3E0] border border-[#FFB74D] rounded-lg text-left">
                 <p className="text-sm font-medium text-[#E65100] mb-1">
                   {createSuccess.failedKeys.length} permission(s) failed to assign:
@@ -856,6 +903,14 @@ export default function StaffForm() {
                   <input type="date" value={form.dob}
                     max={new Date().toISOString().slice(0, 10)}
                     onChange={e => updateField('dob', e.target.value)}
+                    onBlur={() => {
+                      if (form.dob) {
+                        const ageMs = Date.now() - new Date(form.dob).getTime();
+                        if (ageMs / (365.25 * 24 * 60 * 60 * 1000) < 16)
+                          setValidationErrors(e => ({ ...e, dob: 'Staff member must be at least 16 years old' }));
+                        else setValidationErrors(e => { const { dob, ...rest } = e; return rest; });
+                      }
+                    }}
                     className="form-input" />
                   {form.dob && (() => {
                     const birth = new Date(form.dob);
@@ -869,13 +924,24 @@ export default function StaffForm() {
                   <input type="password" value={form.govIdLast4} onChange={e => updateField('govIdLast4', e.target.value)}
                     placeholder="••••" maxLength={4} className="form-input" autoComplete="off" />
                 </FormField>
-                <FormField label="Email" hint="Used for system notifications and password resets">
+                <FormField label="Email" hint="Used for system notifications and password resets" error={validationErrors.email}>
                   <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)}
+                    onBlur={() => {
+                      if (form.email && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(form.email))
+                        setValidationErrors(e => ({ ...e, email: 'Invalid email format (must include domain like .com, .gov)' }));
+                      else setValidationErrors(e => { const { email, ...rest } = e; return rest; });
+                    }}
                     placeholder="jane.smith@facility.org" className="form-input" />
                 </FormField>
                 <FormField label="Phone"
-                  hint="Office phone number for this staff member.">
-                  <input type="tel" value={form.phone || ''} onChange={e => updateField('phone', e.target.value)}
+                  hint="Office phone number for this staff member."
+                  error={validationErrors.phone}>
+                  <input type="tel" value={form.phone || ''}
+                    onChange={e => updateField('phone', e.target.value)}
+                    onBlur={e => {
+                      const raw = (e.target.value || '').replace(/[^\d]/g, '');
+                      if (raw.length === 10) updateField('phone', `(${raw.slice(0,3)}) ${raw.slice(3,6)}-${raw.slice(6)}`);
+                    }}
                     placeholder="(503) 555-0100" className="form-input" />
                 </FormField>
                 <FormField label="Employee ID / Badge Number"
@@ -973,24 +1039,36 @@ export default function StaffForm() {
                     <span className="material-symbols-outlined text-[18px]">{form._showPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
-                {/* F005: Password strength meter */}
+                {/* F005: Password strength meter + #132 requirements checklist */}
                 {form.verifyCode && (() => {
                   const pw = form.verifyCode;
-                  let score = 0;
-                  if (pw.length >= 8) score++;
-                  if (pw.length >= 12) score++;
-                  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
-                  if (/\d/.test(pw)) score++;
-                  if (/[^A-Za-z0-9]/.test(pw)) score++;
-                  const label = score <= 1 ? 'Weak' : score <= 3 ? 'Fair' : 'Strong';
-                  const color = score <= 1 ? '#CC3333' : score <= 3 ? '#E65100' : '#2E7D32';
+                  const checks = [
+                    { label: '8+ characters', pass: pw.length >= 8 },
+                    { label: 'Uppercase letter', pass: /[A-Z]/.test(pw) },
+                    { label: 'Lowercase letter', pass: /[a-z]/.test(pw) },
+                    { label: 'Number', pass: /\d/.test(pw) },
+                    { label: 'Special character', pass: /[^A-Za-z0-9]/.test(pw) },
+                  ];
+                  const score = checks.filter(c => c.pass).length;
+                  const label = score <= 2 ? 'Weak' : score <= 4 ? 'Fair' : 'Strong';
+                  const color = score <= 2 ? '#CC3333' : score <= 4 ? '#E65100' : '#2E7D32';
                   const pct = Math.min(100, score * 20);
                   return (
                     <div className="mt-1.5">
                       <div className="h-1.5 rounded-full bg-[#E2E4E8] overflow-hidden">
                         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
                       </div>
-                      <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 mt-1">
+                        {checks.map(c => (
+                          <div key={c.label} className="flex items-center gap-1 text-[10px]">
+                            <span style={{ color: c.pass ? '#2E7D32' : '#999' }}>{c.pass ? '✓' : '○'}</span>
+                            <span style={{ color: c.pass ? '#2E7D32' : '#666' }}>{c.label}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   );
                 })()}
@@ -1179,10 +1257,37 @@ export default function StaffForm() {
                 </FormField>
                 <FormField label="NPI" error={validationErrors.npi} hint="10-digit National Provider Identifier. Required for billing.">
                   <input type="text" value={form.npi} onChange={e => updateField('npi', e.target.value)}
+                    onBlur={() => {
+                      if (form.npi && !/^\d{10}$/.test(form.npi)) {
+                        setValidationErrors(e => ({ ...e, npi: 'NPI must be exactly 10 digits' }));
+                      } else if (form.npi) {
+                        const prefixed = '80840' + form.npi;
+                        let sum = 0;
+                        for (let i = prefixed.length - 1, alt = false; i >= 0; i--, alt = !alt) {
+                          let n = parseInt(prefixed[i], 10);
+                          if (alt) { n *= 2; if (n > 9) n -= 9; }
+                          sum += n;
+                        }
+                        if (sum % 10 !== 0) setValidationErrors(e => ({ ...e, npi: 'NPI check digit is invalid' }));
+                        else setValidationErrors(e => { const { npi, ...rest } = e; return rest; });
+                      } else { setValidationErrors(e => { const { npi, ...rest } = e; return rest; }); }
+                    }}
                     placeholder="1234567890" maxLength={10} className="form-input font-mono" />
                 </FormField>
-                <FormField label="DEA Number" hint="Required for controlled substance prescribing">
+                <FormField label="DEA Number" error={validationErrors.dea} hint="Required for controlled substance prescribing">
                   <input type="text" value={form.dea} onChange={e => updateField('dea', e.target.value)}
+                    onBlur={() => {
+                      if (form.dea && !/^[A-Za-z]{2}\d{7}$/.test(form.dea)) {
+                        setValidationErrors(e => ({ ...e, dea: 'DEA must be 2 letters followed by 7 digits' }));
+                      } else if (form.dea) {
+                        const digits = form.dea.slice(2);
+                        const odd = parseInt(digits[0]) + parseInt(digits[2]) + parseInt(digits[4]);
+                        const even = parseInt(digits[1]) + parseInt(digits[3]) + parseInt(digits[5]);
+                        if ((odd + even * 2) % 10 !== parseInt(digits[6]))
+                          setValidationErrors(e => ({ ...e, dea: 'DEA check digit is invalid' }));
+                        else setValidationErrors(e => { const { dea, ...rest } = e; return rest; });
+                      } else { setValidationErrors(e => { const { dea, ...rest } = e; return rest; }); }
+                    }}
                     placeholder="AB1234567" className="form-input font-mono" />
                 </FormField>
                 <FormField label="DEA Expiration Date">
@@ -1218,7 +1323,7 @@ export default function StaffForm() {
                   <FormField label="Cosigner (Attending)" hint="The supervising provider who co-signs this trainee's orders. Search active providers by name.">
                     <div className="relative">
                       <input type="text" value={form.cosigner || ''}
-                        onChange={e => { updateField('cosigner', e.target.value); searchCosignerProviders(e.target.value); }}
+                        onChange={e => { updateField('cosigner', e.target.value); updateField('cosignerDuz', ''); searchCosignerProviders(e.target.value); }}
                         onFocus={() => { if (form.cosigner?.length >= 2) searchCosignerProviders(form.cosigner); }}
                         onBlur={() => setTimeout(() => setCosignerSuggestions([]), 200)}
                         role="combobox"
@@ -1232,7 +1337,7 @@ export default function StaffForm() {
                           {cosignerSuggestions.map(s => (
                             <li key={s.duz} role="option"
                               className="px-3 py-2 text-sm hover:bg-[#E8F0FE] cursor-pointer"
-                              onMouseDown={() => { updateField('cosigner', s.name); setCosignerSuggestions([]); }}>
+                              onMouseDown={() => { updateField('cosigner', s.name); updateField('cosignerDuz', s.duz); setCosignerSuggestions([]); }}>
                               <span className="font-medium">{s.name}</span>
                               <span className="text-[#999] ml-2 text-xs">DUZ {s.duz}</span>
                             </li>

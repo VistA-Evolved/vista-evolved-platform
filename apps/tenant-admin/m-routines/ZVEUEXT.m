@@ -1,9 +1,9 @@
 ZVEUEXT ; VE — User extension data (fields not in File 200)
  ;;1.0;VE USEREXT;**;Apr 12, 2026
- ; Stores custom extension fields for File 200 users in ^XTMP("ZVE-USEREXT").
+ ; Stores custom extension fields for File 200 users in ^ZVEX.
  ; Fields: EMPID (Employee ID), ROLE (admin panel role used at creation),
  ;         SECONDARY (secondary feature flags).
- ; ^XTMP purge date set 10 years out so data is effectively permanent.
+ ; #597: Moved from ^XTMP("ZVE-USEREXT") to permanent ^ZVEX global.
  Q
  ;
 INSTALL ; Register RPCs in File #8994
@@ -14,11 +14,7 @@ INSTALL ; Register RPCs in File #8994
  W !,"=== ZVE UEXT install complete ==="
  Q
  ;
-ENSURENODE ; Ensure ^XTMP("ZVE-USEREXT") exists with a far-future purge date
- I '$D(^XTMP("ZVE-USEREXT",0)) D
- . ; Set purge date 10 years from now and description
- . S ^XTMP("ZVE-USEREXT",0)=$$FMADD^XLFDT(DT,3650)_U_DT
- . S ^XTMP("ZVE-USEREXT","DESC")="VistA Evolved user extension fields"
+ENSURENODE ; Ensure ^ZVEX exists (no-op for permanent global, kept for compatibility)
  Q
  ;
 EXTSET(R,TDUZ,FIELD,VALUE) ; RPC ZVE UEXT SET
@@ -29,21 +25,30 @@ EXTSET(R,TDUZ,FIELD,VALUE) ; RPC ZVE UEXT SET
  N ALLOWED S ALLOWED="EMPID^ROLE^SECONDARY^DISPLAYNAME"
  I ALLOWED'[FIELD S R(0)="0^Invalid extension field: "_FIELD Q
  D ENSURENODE
- S ^XTMP("ZVE-USEREXT",+TDUZ,FIELD)=$G(VALUE)
+ S ^ZVEX(+TDUZ,FIELD)=$G(VALUE)
  D AUDITLOG^ZVEADMIN("UEXT-SET",+TDUZ,"Set "_FIELD_"="_$G(VALUE))
  S R(0)="1^OK" Q
  ;
 EXTGET(R,TDUZ,FIELD) ; RPC ZVE UEXT GET
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  I $G(FIELD)="" S R(0)="0^FIELD required" Q
- S R(0)="1^"_$G(^XTMP("ZVE-USEREXT",+TDUZ,FIELD)) Q
+ S R(0)="1^"_$G(^ZVEX(+TDUZ,FIELD)) Q
  ;
 EXTALL(R,TDUZ) ; RPC ZVE UEXT GETALL — returns all extension fields for a user
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  N FLD,I S I=0
  S R(0)="1^OK"
  S FLD=""
- F  S FLD=$O(^XTMP("ZVE-USEREXT",+TDUZ,FLD)) Q:FLD=""  D
+ F  S FLD=$O(^ZVEX(+TDUZ,FLD)) Q:FLD=""  D
  . S I=I+1
- . S R(I)=FLD_U_$G(^XTMP("ZVE-USEREXT",+TDUZ,FLD))
+ . S R(I)=FLD_U_$G(^ZVEX(+TDUZ,FLD))
+ Q
+ ;
+MIGRATE ; Migrate ^XTMP("ZVE-USEREXT") → ^ZVEX (run once, idempotent)
+ I '$D(^XTMP("ZVE-USEREXT")) W !,"No ^XTMP data to migrate" Q
+ N DUZ2,FLD,CNT S CNT=0
+ S DUZ2=0 F  S DUZ2=$O(^XTMP("ZVE-USEREXT",DUZ2)) Q:'DUZ2  D
+ . S FLD="" F  S FLD=$O(^XTMP("ZVE-USEREXT",DUZ2,FLD)) Q:FLD=""  D
+ . . I '$D(^ZVEX(DUZ2,FLD)) S ^ZVEX(DUZ2,FLD)=^XTMP("ZVE-USEREXT",DUZ2,FLD) S CNT=CNT+1
+ W !,"Migrated ",CNT," extension fields to ^ZVEX"
  Q

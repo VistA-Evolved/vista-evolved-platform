@@ -79,7 +79,7 @@ export default function SiteManagement() {
               toggles[s.id] = {};
               ALL_WORKSPACES.forEach(ws => { toggles[s.id][ws] = true; });
             }
-          } catch {
+          } catch (err) {
             toggles[s.id] = {};
             ALL_WORKSPACES.forEach(ws => { toggles[s.id][ws] = true; });
           }

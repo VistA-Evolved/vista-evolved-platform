@@ -237,6 +237,7 @@ EDIT(R,TARGETDUZ,FIELD,VALUE) ;
  E  I FIELD="COSIGNER" S FNUM=53.42
  E  I FIELD="DEGREE" S FNUM=10.6
  E  I FIELD="MENU" S FNUM=201
+ E  I FIELD="OERR" S FNUM=200.0001
  E  I FIELD="CPRSTAB" D EDITCPRS(.R,TARGETDUZ,VALUE) Q
  E  D  Q
  . S R(0)="0^Unknown field: "_FIELD Q
@@ -302,12 +303,16 @@ TERM(R,TARGETDUZ,REASON) ;
  ; Clear e-signature
  K ^VA(200,TARGETDUZ,20)
  ;
- ; Remove from ^XUSEC AND clear ^VA(200,x,51) to stay in sync
- N KEY S KEY="" F  S KEY=$O(^XUSEC(KEY)) Q:KEY=""  K ^XUSEC(KEY,TARGETDUZ)
+ ; #594: Log and remove each key — collect key names for audit trail
+ N KEY,KEYLIST S KEY="",KEYLIST=""
+ F  S KEY=$O(^XUSEC(KEY)) Q:KEY=""  D
+ . I $D(^XUSEC(KEY,TARGETDUZ)) D
+ . . S KEYLIST=KEYLIST_$S(KEYLIST]"":",",1:"")_KEY
+ . . K ^XUSEC(KEY,TARGETDUZ)
  K ^VA(200,TARGETDUZ,51)
  ;
- ; Audit
- D AUDITLOG("USER-TERM",TARGETDUZ,$G(REASON,"No reason provided"))
+ ; Audit — include list of removed keys
+ D AUDITLOG("USER-TERM",TARGETDUZ,$G(REASON,"No reason provided")_$S(KEYLIST]"":" [Keys: "_KEYLIST_"]",1:""))
  ;
  S R(0)="1^OK" Q
  ;
@@ -415,13 +420,13 @@ AUDERR(OUT,CNT,MAXR) ;
  ;
  ; --- Audit: ZVE custom audit ---
 AUDZVE(OUT,CNT,USERDUZ,MAXR) ;
- N SEQ,DT,USR,ACT,DETAIL,USRNM
- S SEQ="" F  S SEQ=$O(^XTMP("ZVE-AUDIT",SEQ),-1) Q:SEQ=""  Q:SEQ=0  Q:CNT'<MAXR  D
- . S DT=$P($G(^XTMP("ZVE-AUDIT",SEQ)),U,1) Q:DT=""
- . S USR=$P($G(^XTMP("ZVE-AUDIT",SEQ)),U,2)
- . I USERDUZ]"",USR'=USERDUZ Q
- . S ACT=$P($G(^XTMP("ZVE-AUDIT",SEQ)),U,3)
- . S DETAIL=$P($G(^XTMP("ZVE-AUDIT",SEQ)),U,4,99)
+ N SEQ,DT,USR,ACT,DETAIL,USRNM,TGT
+ ; #590: Read from permanent ^ZVEADM global (matches AUDITLOG writes)
+ S SEQ="" F  S SEQ=$O(^ZVEADM("AUDIT",SEQ),-1) Q:SEQ=""  Q:CNT'<MAXR  D
+ . N Z S Z=$G(^ZVEADM("AUDIT",SEQ))
+ . S ACT=$P(Z,U,1),DT=$P(Z,U,2),USR=$P(Z,U,3),TGT=$P(Z,U,4),DETAIL=$P(Z,U,5,99)
+ . Q:DT=""
+ . I USERDUZ]"",USR'=USERDUZ,TGT'=USERDUZ Q
  . S USRNM=$S(USR>0:$$GET1^DIQ(200,USR_",",.01,"E"),1:"SYSTEM")
  . S CNT=CNT+1
  . S OUT(CNT)=$$FMTE^XLFDT(DT)_U_USRNM_U_ACT_U_"ZVE-AUDIT"_U_DETAIL
@@ -434,11 +439,9 @@ AUDITLOG(ACTION,IEN,DETAIL) ;
  N DT,SEQ
  S DT=$$NOW^XLFDT
  ; Use $INCREMENT for atomic sequence generation (prevents race condition)
- S SEQ=$I(^XTMP("ZVE-AUDIT"))
- S ^XTMP("ZVE-AUDIT",SEQ)=DT_U_$G(DUZ)_U_ACTION_U_$G(DETAIL)
- ; Set purge header ONLY if not already present (prevents perpetual rollforward)
- I '$D(^XTMP("ZVE-AUDIT",0)) D
- . S ^XTMP("ZVE-AUDIT",0)=$$FMADD^XLFDT(DT,1095)_U_DT_U_"VistA Evolved Audit Trail"
+ ; #590: Store in permanent ^ZVEADM global (not ^XTMP which can be purged)
+ S SEQ=$I(^ZVEADM("AUDIT"))
+ S ^ZVEADM("AUDIT",SEQ)=ACTION_U_DT_U_$G(DUZ)_U_IEN_U_$G(DETAIL)
  Q
  ;
  ; ============================================================

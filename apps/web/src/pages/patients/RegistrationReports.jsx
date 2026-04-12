@@ -33,7 +33,7 @@ export default function RegistrationReports() {
       try {
         const res = await getDivisions();
         if (res.data) setDivisions(res.data);
-      } catch {
+      } catch (err) {
         // divisions endpoint may not be available
       }
     })();

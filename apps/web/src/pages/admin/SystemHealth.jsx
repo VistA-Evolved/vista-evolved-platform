@@ -177,7 +177,7 @@ export default function SystemHealth() {
       try {
         const capRes = await getCapacity();
         setCapacityData(capRes?.data || null);
-      } catch { /* non-fatal */ }
+      } catch (err) { /* non-fatal */ }
     } catch (err) {
       setError(err.message || 'Failed to load system status');
     } finally {
@@ -728,7 +728,7 @@ function HL7InterfaceList() {
       const res = await getHL7Interfaces();
       if (signal?.aborted) return;
       setInterfaces(res?.data || []);
-    } catch {
+    } catch (err) {
       if (signal?.aborted) return;
       setInterfaces([]);
     } finally {

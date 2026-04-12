@@ -230,6 +230,10 @@ export async function getWards(params = {}) {
   return tenantApi.get('/wards', params);
 }
 
+export async function getOerrTeams(params = {}) {
+  return tenantApi.get('/oerr-teams', params);
+}
+
 export async function getTopology() {
   return tenantApi.get('/topology');
 }

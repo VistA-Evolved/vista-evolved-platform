@@ -99,7 +99,7 @@ export default function MailGroupManagement() {
       }
       setDetailData({ ...group, ...mapped, id: group.id });
       setMembers(memRes?.data || []);
-    } catch {
+    } catch (err) {
       setDetailData(group);
     } finally {
       setDetailLoading(false);
@@ -111,7 +111,7 @@ export default function MailGroupManagement() {
     try {
       const res = await getMailGroupMembers(groupId);
       setMembers(res?.data || []);
-    } catch {
+    } catch (err) {
       setMembers([]);
     } finally {
       setMembersLoading(false);
@@ -162,7 +162,7 @@ export default function MailGroupManagement() {
       const all = res?.data || [];
       const s = staffSearch.toLowerCase();
       setStaffResults(all.filter(u => (u.name || '').toLowerCase().includes(s)).slice(0, 20));
-    } catch {
+    } catch (err) {
       setStaffResults([]);
     } finally {
       setStaffLoading(false);

@@ -182,7 +182,7 @@ export default function SiteParameters() {
       try {
         const sess = await getSession();
         if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
-      } catch { /* non-fatal */ }
+      } catch (err) { /* non-fatal */ }
     })();
   }, []);
 

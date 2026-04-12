@@ -47,7 +47,7 @@ export default function SystemBar({ breadcrumb = '' }) {
   }, []);
 
   const handleLogout = async () => {
-    try { await logout(); } catch { /* best-effort */ }
+    try { await logout(); } catch (err) { /* best-effort */ }
     setSessionToken(null);
     navigate('/login');
   };

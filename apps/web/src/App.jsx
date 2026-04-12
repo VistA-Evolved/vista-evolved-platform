@@ -64,7 +64,7 @@ function RequireAuth({ children }) {
           setEsigUser(res.user);
           setShowEsig(true);
         }
-      } catch { /* non-fatal */ }
+      } catch (err) { /* non-fatal */ }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -117,7 +117,7 @@ function RequireAdmin({ children }) {
         } else {
           setStatus('denied');
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) setStatus('denied');
       }
     })();
@@ -191,20 +191,20 @@ export default function App() {
           <Route path="/admin/monitor" element={<Navigate to="/admin/health" replace />} />
           <Route path="/admin/alerts" element={<Navigate to="/admin/messages" replace />} />
 
-          {/* Patients/Registration workspace */}
-          <Route path="/patients" element={<RequireAuth><PatientSearch /></RequireAuth>} />
-          <Route path="/patients/register" element={<RequireAuth><PatientDemographics /></RequireAuth>} />
-          <Route path="/patients/beds" element={<RequireAuth><BedManagement /></RequireAuth>} />
-          <Route path="/patients/reports" element={<RequireAuth><RegistrationReports /></RequireAuth>} />
-          <Route path="/patients/:patientId" element={<RequireAuth><PatientDashboard /></RequireAuth>} />
-          <Route path="/patients/:patientId/edit" element={<RequireAuth><PatientDemographics /></RequireAuth>} />
-          <Route path="/patients/:patientId/insurance" element={<RequireAuth><InsuranceCoverage /></RequireAuth>} />
-          <Route path="/patients/:patientId/assessment" element={<RequireAuth><FinancialAssessment /></RequireAuth>} />
-          <Route path="/patients/:patientId/admit" element={<RequireAuth><Admission /></RequireAuth>} />
-          <Route path="/patients/:patientId/transfer" element={<RequireAuth><Transfer /></RequireAuth>} />
-          <Route path="/patients/:patientId/discharge" element={<RequireAuth><Discharge /></RequireAuth>} />
-          <Route path="/patients/:patientId/flags" element={<RequireAuth><PatientFlags /></RequireAuth>} />
-          <Route path="/patients/:patientId/restrictions" element={<RequireAuth><RecordRestrictions /></RequireAuth>} />
+          {/* Patients/Registration workspace — wrapped in ErrorBoundary (#328) */}
+          <Route path="/patients" element={<RequireAuth><ErrorBoundary><PatientSearch /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/register" element={<RequireAuth><ErrorBoundary><PatientDemographics /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/beds" element={<RequireAuth><ErrorBoundary><BedManagement /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/reports" element={<RequireAuth><ErrorBoundary><RegistrationReports /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId" element={<RequireAuth><ErrorBoundary><PatientDashboard /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/edit" element={<RequireAuth><ErrorBoundary><PatientDemographics /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/insurance" element={<RequireAuth><ErrorBoundary><InsuranceCoverage /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/assessment" element={<RequireAuth><ErrorBoundary><FinancialAssessment /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/admit" element={<RequireAuth><ErrorBoundary><Admission /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/transfer" element={<RequireAuth><ErrorBoundary><Transfer /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/discharge" element={<RequireAuth><ErrorBoundary><Discharge /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/flags" element={<RequireAuth><ErrorBoundary><PatientFlags /></ErrorBoundary></RequireAuth>} />
+          <Route path="/patients/:patientId/restrictions" element={<RequireAuth><ErrorBoundary><RecordRestrictions /></ErrorBoundary></RequireAuth>} />
 
           {/* Future workspaces — placeholder routes */}
           <Route path="/scheduling/*" element={<RequireAuth><WorkspacePlaceholder name="Scheduling" wave="1" /></RequireAuth>} />

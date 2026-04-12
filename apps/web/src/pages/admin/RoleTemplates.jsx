@@ -622,7 +622,7 @@ export default function RoleTemplates() {
       try {
         const res = await getStaff();
         setAssignStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
-      } catch { setAssignStaffList([]); }
+      } catch (err) { setAssignStaffList([]); }
       finally { setAssignStaffLoading(false); }
     }
   };
@@ -632,7 +632,7 @@ export default function RoleTemplates() {
     try {
       const res = await getUserPermissions(user.duz);
       setAssignUserKeys((res?.data || []).map(k => k.name));
-    } catch { setAssignUserKeys([]); }
+    } catch (err) { setAssignUserKeys([]); }
   };
 
   const handleConfirmAssignRole = async () => {

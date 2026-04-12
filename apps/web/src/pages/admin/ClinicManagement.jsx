@@ -107,7 +107,7 @@ export default function ClinicManagement() {
         if (val !== undefined && val !== '') mapped[ef.key] = val;
       }
       setDetailData({ ...clinic, ...mapped, id: clinic.id });
-    } catch {
+    } catch (err) {
       setDetailData(clinic);
     } finally {
       setDetailLoading(false);
@@ -118,7 +118,7 @@ export default function ClinicManagement() {
     try {
       const res = await getClinicAvailability(clinicId);
       setAvailability(res?.data || []);
-    } catch {
+    } catch (err) {
       setAvailability([]);
     }
   }, []);

@@ -86,7 +86,7 @@ export default function WardManagement() {
         if (val !== undefined && val !== '') mapped[ef.key] = val;
       }
       setDetailData({ ...ward, ...mapped, id: ward.id });
-    } catch {
+    } catch (err) {
       setDetailData(ward);
     } finally {
       setDetailLoading(false);

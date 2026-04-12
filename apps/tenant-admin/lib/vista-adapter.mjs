@@ -713,16 +713,26 @@ export async function ddrFilerAddMulti(file, iens, fieldsObj, flags = 'E') {
  */
 export async function callZveRpc(rpcName, params = []) {
   return lockedRpc(async () => {
-    try {
-      const broker = await getBroker();
-      const lines = await broker.callRpc(rpcName, params);
-      const line0 = (lines[0] || '').trim();
-      const ok = line0.startsWith('1^');
-      return { ok, lines, line0, rpcUsed: rpcName };
-    } catch (err) {
-      return { ok: false, lines: [], line0: '', error: err.message, rpcUsed: rpcName };
+    // #618: Retry once on transient failures (VistA busy, socket hiccup)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const broker = await getBroker();
+        const lines = await broker.callRpc(rpcName, params);
+        const line0 = (lines[0] || '').trim();
+        const ok = line0.startsWith('1^');
+        return { ok, lines, line0, rpcUsed: rpcName };
+      } catch (err) {
+        if (attempt === 0 && isTransientError(err)) continue;
+        return { ok: false, lines: [], line0: '', error: err.message, rpcUsed: rpcName };
+      }
     }
   });
+}
+
+/** Detect transient errors that merit a single retry */
+function isTransientError(err) {
+  const msg = String(err?.message || '');
+  return /ETIMEDOUT|ECONNRESET|EPIPE|socket hang up|broker busy/i.test(msg);
 }
 
 /** True when error text indicates the RPC ITSELF is not registered in the

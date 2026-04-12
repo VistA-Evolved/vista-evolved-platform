@@ -198,7 +198,7 @@ export default function FinancialAssessment() {
       } else {
         setSubmitMsg({ type: 'error', text: 'Submission failed. Please try again.' });
       }
-    } catch {
+    } catch (err) {
       setSubmitMsg({ type: 'error', text: 'Submission failed. Please try again.' });
     } finally {
       setSubmitting(false);

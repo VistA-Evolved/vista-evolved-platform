@@ -79,7 +79,7 @@ export function PatientProvider({ children }) {
         if (res?.ok && res.data) {
           setPatient(res.data);
         }
-      } catch {
+      } catch (err) {
         // Non-fatal — individual pages also fetch if needed
       }
     })();

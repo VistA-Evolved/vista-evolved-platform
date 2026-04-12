@@ -76,7 +76,7 @@ export default function PermissionsCatalog() {
     try {
       const res = await getPermissionHolders(row.vistaKey || row.name);
       setHoldersData(res?.data || []);
-    } catch { setHoldersData([]); }
+    } catch (err) { setHoldersData([]); }
     finally { setHoldersLoading(false); }
   };
 
@@ -90,7 +90,7 @@ export default function PermissionsCatalog() {
       try {
         const res = await getStaff();
         setStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
-      } catch { setStaffList([]); }
+      } catch (err) { setStaffList([]); }
       finally { setStaffLoading(false); }
     }
   };
@@ -111,7 +111,7 @@ export default function PermissionsCatalog() {
           setAssignError(`Cannot assign "${keyLabel}": this staff member already holds "${conflictLabel}". These permissions are mutually exclusive.`);
           return;
         }
-      } catch { /* proceed — backend will also validate */ }
+      } catch (err) { /* proceed — backend will also validate */ }
     }
     setAssigning(true);
     try {
@@ -149,7 +149,7 @@ export default function PermissionsCatalog() {
             skipped.push(staff?.name || duz);
             continue;
           }
-        } catch { /* proceed and let backend handle it */ }
+        } catch (err) { /* proceed and let backend handle it */ }
       }
       try {
         await assignPermission(duz, { keyName: assignModal.vistaKey || assignModal.name });

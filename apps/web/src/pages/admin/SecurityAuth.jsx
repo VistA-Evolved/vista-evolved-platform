@@ -231,7 +231,7 @@ export default function SecurityAuth() {
       try {
         const sess = await getSession();
         if (sess?.user?.duz) setCurrentDuz(String(sess.user.duz));
-      } catch { /* non-fatal */ }
+      } catch (err) { /* non-fatal */ }
       // S7.3: Load mail groups for IRM dropdown
       try {
         const mgRes = await getMailGroups();
@@ -240,7 +240,7 @@ export default function SecurityAuth() {
           label: g.name || g.groupName || `Group ${g.ien}`,
         })).filter(g => g.value);
         setMailGroupOptions(groups);
-      } catch { /* non-fatal — falls back to text input */ }
+      } catch (err) { /* non-fatal — falls back to text input */ }
     })();
   }, []);
 
@@ -249,7 +249,7 @@ export default function SecurityAuth() {
     try {
       const res = await get2PRequests('ALL');
       setPendingRequests(res?.data || []);
-    } catch { setPendingRequests([]); }
+    } catch (err) { setPendingRequests([]); }
     finally { setPendingLoading(false); }
   }, []);
 

@@ -177,7 +177,7 @@ export default function RecordRestrictions() {
         } else {
           setStaffResults([]);
         }
-      } catch {
+      } catch (err) {
         setStaffResults([]);
       } finally {
         setStaffSearching(false);
@@ -241,7 +241,7 @@ export default function RecordRestrictions() {
           duration: 'Active',
         }, ...prev]);
       }
-    } catch {
+    } catch (err) {
       // error handled silently, audit still logged
     } finally {
       setBtgSubmitting(false);

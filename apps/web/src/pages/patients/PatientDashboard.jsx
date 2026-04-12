@@ -385,7 +385,7 @@ function VitalsPanel({ patient }) {
     try {
       const res = await getPatientVitals(patient.dfn);
       setVitals(res?.data || []);
-    } catch { setVitals([]); }
+    } catch (err) { setVitals([]); }
     finally { setLoading(false); }
   }, [patient?.dfn]);
 

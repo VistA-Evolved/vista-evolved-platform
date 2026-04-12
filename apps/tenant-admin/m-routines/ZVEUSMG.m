@@ -104,6 +104,8 @@ CRED(R,TDUZ,AC,VC) ; RPC ZVE USMG CRED
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
  I $G(AC)=""!($G(VC)="") S R(0)="0^ACCESS and VERIFY required" Q
+ ; #596: VistA access codes are case-insensitive — uppercase before hashing
+ S AC=$$UP^XLFSTR(AC)
  N FDA,DIERR
  S FDA(200,TDUZ_",",2)=$$EN^XUSHSH(AC)
  S FDA(200,TDUZ_",",11)=$$EN^XUSHSH(VC)
@@ -123,17 +125,20 @@ ADD(R,NM,AC,VC) ; RPC ZVE USMG ADD — minimal user creation
  ; add-with-LAYGO path. LAYGO^XUA4A7 reads DIC(0) to know it's allowed
  ; to create a new entry.
  I $G(NM)="" S R(0)="0^NAME required" Q
+ ; #591: Check if File 200 is temporarily locked by another process
+ L +^VA(200,0):2 E  S R(0)="0^File 200 is locked — retry in a moment" Q
  N DIC,X,Y,DUPDUZ,DIADD,DIC0SAVE
  ; Refuse if name already exists to avoid accidental duplicate creation
  S DUPDUZ=$O(^VA(200,"B",NM,0))
- I +DUPDUZ>0 S R(0)="0^User already exists: "_NM_" (DUZ "_DUPDUZ_")" Q
- ; S9.23: Refuse if access code already in use (check "A" xref)
- I $G(AC)]"" N ACHASH S ACHASH=$$EN^XUSHSH(AC) I $O(^VA(200,"A",ACHASH,0))>0 S R(0)="0^Access code already in use" Q
+ I +DUPDUZ>0 L -^VA(200,0) S R(0)="0^User already exists: "_NM_" (DUZ "_DUPDUZ_")" Q
+ ; S9.23: Refuse if access code already in use — #596: uppercase for case-insensitive check
+ I $G(AC)]"" S AC=$$UP^XLFSTR(AC) N ACHASH S ACHASH=$$EN^XUSHSH(AC) I $O(^VA(200,"A",ACHASH,0))>0 L -^VA(200,0) S R(0)="0^Access code already in use" Q
  S DIC="^VA(200,"
  S DIC(0)="LX"
  S DIC("DR")=""
  S X=NM
  D FILE^DICN
+ L -^VA(200,0) ; Release File 200 lock after creation
  ; FILE^DICN returns Y = ien^name (positive IEN on success, -1 on failure)
  I +Y<0 S R(0)="0^FILE^DICN failed for name "_NM Q
  N NEWDUZ S NEWDUZ=+Y
@@ -197,11 +202,14 @@ TERM(R,TDUZ) ; RPC ZVE USMG TERM — full account termination
  ;
  ; Remove all keys from #200 field 51 and from ^XUSEC. Walk in reverse so
  ; deletes don't disturb the iteration.
- N KIEN,KNM
+ ; #594: Build key list for audit trail, then remove
+ N KIEN,KNM,KEYLIST S KEYLIST=""
  S KIEN=$O(^VA(200,+TDUZ,51,""),-1)
  F  Q:'KIEN  D  S KIEN=$O(^VA(200,+TDUZ,51,KIEN),-1)
  . S KNM=$P($G(^VA(200,+TDUZ,51,KIEN,0)),U,1)
- . I KNM]"" K ^XUSEC(KNM,+TDUZ),^VA(200,+TDUZ,51,"B",KNM,KIEN)
+ . I KNM]"" D
+ . . S KEYLIST=KEYLIST_$S(KEYLIST]"":",",1:"")_KNM
+ . . K ^XUSEC(KNM,+TDUZ),^VA(200,+TDUZ,51,"B",KNM,KIEN)
  . K ^VA(200,+TDUZ,51,KIEN)
  ;
  ; Reset key subfile header counts and last-IEN
@@ -213,7 +221,7 @@ TERM(R,TDUZ) ; RPC ZVE USMG TERM — full account termination
  ; doesn't surface a stale lockout state.
  K ^XUSEC("LOCKED",+TDUZ)
  ;
- D AUDITLOG^ZVEADMIN("USER-TERM",+TDUZ,"Account fully terminated (creds + keys cleared)")
+ D AUDITLOG^ZVEADMIN("USER-TERM",+TDUZ,"Terminated (creds+keys cleared)"_$S(KEYLIST]"":" [Keys: "_KEYLIST_"]",1:""))
  S R(0)="1^OK^Terminated" Q
  ;
 UNLOCK(R,TDUZ) ; RPC ZVE USMG UNLOCK — release a locked-out account
@@ -296,6 +304,8 @@ CHKAC(R,AC) ; RPC ZVE USMG CHKAC — check access code availability
  ; S9.23: Checks ^VA(200,"A") xref for hashed access code collisions.
  ; Returns 1^Available or 0^Access code already in use.
  I $G(AC)="" S R(0)="0^Access code required" Q
+ ; #596: VistA access codes are case-insensitive — uppercase before hashing
+ S AC=$$UP^XLFSTR(AC)
  N HASH,DUP
  S HASH=$$EN^XUSHSH(AC)
  S DUP=$O(^VA(200,"A",HASH,0))

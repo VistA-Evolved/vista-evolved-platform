@@ -230,7 +230,7 @@ export default function AlertsNotifications() {
                           try {
                             const res = await getStaff();
                             setStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
-                          } catch { setStaffList([]); }
+                          } catch (err) { setStaffList([]); }
                           finally { setStaffLoading(false); }
                         }
                       }}
@@ -505,7 +505,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
     try {
       const res = await getMailManInbox(folder);
       setMessages(res?.data || []);
-    } catch { setMessages([]); }
+    } catch (err) { setMessages([]); }
     finally { setMessagesLoading(false); }
   }, [setMessages, setMessagesLoading]);
 
@@ -518,7 +518,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
       const res = await getMailManMessage(msg.ien);
       setMessageBody(res?.data || null);
       setMessages(prev => prev.map(m => m.ien === msg.ien ? { ...m, read: true } : m));
-    } catch { setMessageBody(null); }
+    } catch (err) { setMessageBody(null); }
     finally { setMessageBodyLoading(false); }
   };
 

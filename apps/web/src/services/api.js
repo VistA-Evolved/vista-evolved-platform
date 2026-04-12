@@ -96,7 +96,7 @@ async function request(method, path, body = null) {
   let json;
   try {
     json = JSON.parse(text);
-  } catch {
+  } catch (err) {
     if (!res.ok) throw new ApiError('NON_JSON', text || `HTTP ${res.status}`, res.status);
     return { ok: true, raw: text };
   }

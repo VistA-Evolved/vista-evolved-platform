@@ -592,7 +592,7 @@ const AUTH_BYPASS = ['/api/tenant-admin/v1/auth/login', '/api/tenant-admin/v1/au
 // Server
 // ---------------------------------------------------------------------------
 async function main() {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 1048576 }); // #613: 1 MB body limit
 
   // Enable per-request broker context via AsyncLocalStorage.
   // This must be called before any hooks or routes are registered so that
@@ -600,6 +600,13 @@ async function main() {
   // session then gets its own XwbBroker (its own VistA DUZ), ensuring
   // all writes are attributed to the correct user in VistA's audit trail.
   setupBrokerContext(app);
+
+  // #612: Collect route registrations for /routes endpoint
+  const _registeredRoutes = [];
+  app.addHook('onRoute', (opt) => {
+    const methods = Array.isArray(opt.method) ? opt.method : [opt.method];
+    methods.forEach(m => _registeredRoutes.push({ method: m, url: opt.url }));
+  });
 
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
     try { done(null, body ? JSON.parse(body) : {}); } catch (e) { done(e); }
@@ -677,6 +684,43 @@ async function main() {
         // the route handler will receive a 503 from getBroker() if VistA is truly down.
         // We don't block the request here to avoid cascading failures.
       }
+    }
+  });
+
+  // ---- Security headers (#185 CSP, #186 X-Frame-Options) ----
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('X-Frame-Options', 'DENY');
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    reply.header('X-XSS-Protection', '0'); // Modern best practice: rely on CSP
+    if (request.url.startsWith('/api/')) {
+      reply.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    } else {
+      reply.header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-ancestors 'none'");
+    }
+  });
+
+  // ---- API rate limiting for write endpoints (#187) ----
+  const apiWriteAttempts = new Map(); // sessionToken → { count, windowStart }
+  const API_WRITE_RATE_LIMIT = 100; // max write requests per window
+  const API_WRITE_RATE_WINDOW = 60000; // 60 seconds
+  app.addHook('onRequest', async (request, reply) => {
+    if (!request.url.startsWith('/api/tenant-admin/v1/')) return;
+    const method = (request.method || '').toUpperCase();
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return;
+    const token = (request.headers['authorization'] || '').replace('Bearer ', '') ||
+      ((request.headers['cookie'] || '').split(';').find(c => c.trim().startsWith('ve-session=')) || '').split('=')[1] || 'anon';
+    const now = Date.now();
+    const entry = apiWriteAttempts.get(token) || { count: 0, windowStart: now };
+    if (now - entry.windowStart > API_WRITE_RATE_WINDOW) {
+      entry.count = 1;
+      entry.windowStart = now;
+    } else {
+      entry.count++;
+    }
+    apiWriteAttempts.set(token, entry);
+    if (entry.count > API_WRITE_RATE_LIMIT) {
+      return reply.code(429).send({ ok: false, error: 'Rate limit exceeded. Max 100 write requests per minute.' });
     }
   });
 
@@ -1158,6 +1202,23 @@ async function main() {
     }
   });
 
+  // ---- #26: OE/RR Teams (File 100.21) ----
+
+  app.get('/api/tenant-admin/v1/oerr-teams', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, source: 'error', tenantId, error: p.error || 'VistA unreachable' });
+    try {
+      const rows = await lockedRpc(async () => {
+        return ddrList({ file: '100.21', fields: '.01', fieldNames: ['name'], search: req.query.search });
+      });
+      return { ok: true, source: 'vista', tenantId, rpcUsed: 'DDR LISTER', file: '100.21', data: rows };
+    } catch (e) {
+      return reply.code(500).send({ ok: false, tenantId, source: 'error', error: e.message });
+    }
+  });
+
   // ---- Divisions (File 40.8) — dedicated multi-site management ----
 
   app.get('/api/tenant-admin/v1/divisions', async (req, reply) => {
@@ -1589,6 +1650,7 @@ async function main() {
       '101.01': 'RESTRICT PATIENT SELECTION',
       '200.07': 'LANGUAGE',
       '201': 'PRIMARY MENU OPTION',
+      '200.0001': 'OE/RR LIST',
       '203.1': 'PROXY USER',
     };
     if (!field || value === undefined || !ALLOW[field]) {
@@ -1600,7 +1662,7 @@ async function main() {
       });
     }
     // --- ZVE-first: ZVE USER EDIT ---
-    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS', '203.1': 'PROXY', '53.42': 'COSIGNER', '10.6': 'DEGREE' };
+    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '200.0001': 'OERR', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS', '203.1': 'PROXY', '53.42': 'COSIGNER', '10.6': 'DEGREE' };
     const zveFld = ZVE_FIELD_MAP[field];
     if (zveFld) {
       try {
@@ -1774,6 +1836,34 @@ async function main() {
     const warnings = [];
     if (!body.sex) warnings.push('sex not provided');
     if (!body.dob) warnings.push('dob not provided');
+    // Server-side DEA validation (format + checksum)
+    if (body.dea) {
+      if (!/^[A-Za-z]{2}\d{7}$/.test(body.dea)) {
+        return reply.code(400).send({ ok: false, error: 'Invalid DEA format: must be 2 letters followed by 7 digits' });
+      }
+      const digits = body.dea.slice(2);
+      const odd = parseInt(digits[0]) + parseInt(digits[2]) + parseInt(digits[4]);
+      const even = parseInt(digits[1]) + parseInt(digits[3]) + parseInt(digits[5]);
+      if ((odd + even * 2) % 10 !== parseInt(digits[6])) {
+        return reply.code(400).send({ ok: false, error: 'Invalid DEA check digit' });
+      }
+    }
+    // Server-side NPI Luhn validation
+    if (body.npi) {
+      if (!/^\d{10}$/.test(body.npi)) {
+        return reply.code(400).send({ ok: false, error: 'NPI must be exactly 10 digits' });
+      }
+      const prefixed = '80840' + body.npi;
+      let sum = 0;
+      for (let i = prefixed.length - 1, alt = false; i >= 0; i--, alt = !alt) {
+        let n = parseInt(prefixed[i], 10);
+        if (alt) { n *= 2; if (n > 9) n -= 9; }
+        sum += n;
+      }
+      if (sum % 10 !== 0) {
+        return reply.code(400).send({ ok: false, error: 'Invalid NPI check digit' });
+      }
+    }
     const p = await probeVista();
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const z = await callZveRpc('ZVE USMG ADD', [name, body.accessCode || '', body.verifyCode || '']);
@@ -6879,6 +6969,13 @@ async function main() {
     } catch (e) {
       return reply.code(500).send({ ok: false, error: e.message });
     }
+  });
+
+  // ---- #612: Route list endpoint for debugging ----
+  app.get('/api/tenant-admin/v1/routes', async () => {
+    const sorted = [..._registeredRoutes].sort((a, b) =>
+      a.url.localeCompare(b.url) || a.method.localeCompare(b.method));
+    return { ok: true, count: sorted.length, routes: sorted };
   });
 
   // ---- SPA fallback ----
