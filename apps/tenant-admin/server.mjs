@@ -935,6 +935,9 @@ async function main() {
     const vcChangeDate = detail[30] || '';
     const pwdExpirationDays = detail[31] || '';
     const pwdDaysRemaining = detail[32] ?? '';
+    // Activity summary (indices 33-34)
+    const signOnCount = detail[33] || '0';
+    const firstSignOn = detail[34] || '';
     const keys = [];
     const divs = [];
     for (const line of z.lines.slice(2)) {
@@ -996,6 +999,9 @@ async function main() {
           passwordLastChanged: vcChangeDate,
           passwordExpirationDays: pwdExpirationDays ? parseInt(pwdExpirationDays, 10) : null,
           passwordDaysRemaining: pwdDaysRemaining !== '' ? parseInt(pwdDaysRemaining, 10) : null,
+          // Activity summary
+          signOnCount: parseInt(signOnCount, 10) || 0,
+          firstSignOn,
         },
         keys, divisions: divs,
       },
@@ -1583,6 +1589,7 @@ async function main() {
       '101.01': 'RESTRICT PATIENT SELECTION',
       '200.07': 'LANGUAGE',
       '201': 'PRIMARY MENU OPTION',
+      '203.1': 'PROXY USER',
     };
     if (!field || value === undefined || !ALLOW[field]) {
       return reply.code(400).send({
@@ -1593,7 +1600,7 @@ async function main() {
       });
     }
     // --- ZVE-first: ZVE USER EDIT ---
-    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS' };
+    const ZVE_FIELD_MAP = { '.132': 'PHONE', '.133': 'VOICE PAGER', '.134': 'DIGITAL PAGER', '.151': 'EMAIL', '4': 'SEX', '20.2': 'INITIALS', '20.3': 'SIG BLOCK', '20.4': 'ESIG', '201': 'MENU', '8': 'TITLE', '29': 'SERVICE', '5': 'DOB', '9': 'SSN', '41.99': 'NPI', '53.2': 'DEA', '53.5': 'PROVIDER_CLASS', '203.1': 'PROXY', '53.42': 'COSIGNER', '10.6': 'DEGREE' };
     const zveFld = ZVE_FIELD_MAP[field];
     if (zveFld) {
       try {
@@ -1776,7 +1783,7 @@ async function main() {
     const extraFields = [];
     // DDR-writable fields: body key → File 200 field number
     const EXTRA_MAP = {
-      title: '8', ssn: '9', sex: '4', dob: '5',
+      title: '8', sex: '4', dob: '5',
       serviceSection: '29',
       primaryMenu: '201',
       // A002: Email
@@ -1986,6 +1993,38 @@ async function main() {
         if (parts[0]) tabs.push({ name: parts[0], access: parts[1] || '' });
       }
       return { ok: true, tenantId, duz, tabs, rpcUsed: z.rpcUsed };
+    } catch (err) {
+      return reply.code(502).send({ ok: false, error: err.message });
+    }
+  });
+
+  // ---- CPRS Tab Access toggle (P3.12) ----
+  app.put('/api/tenant-admin/v1/users/:duz/cprs-tabs', async (req, reply) => {
+    const tenantId = req.query.tenantId;
+    if (!tenantId) return reply.code(400).send({ ok: false, error: 'tenantId required' });
+    const { tabName, access } = req.body || {};
+    if (!tabName) return reply.code(400).send({ ok: false, error: 'tabName required' });
+    const p = await probeVista();
+    if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
+    const duz = req.params.duz;
+    try {
+      // Find the sub-file IEN for this tab name
+      const listZ = await callZveRpc('ZVE DDR LISTER', [
+        '200.03', `${duz},`, '.01;1', '', '', '', '', '', '1000',
+      ]);
+      const listO = zveOutcome(listZ);
+      if (listO.kind !== 'ok') return reply.code(502).send({ ok: false, error: 'Failed to list CPRS tabs' });
+      let tabIen = null;
+      for (const line of listZ.lines.slice(1)) {
+        const parts = line.split('^');
+        if (parts[0] === tabName) { tabIen = parts[2] || null; break; }
+      }
+      if (!tabIen) return reply.code(404).send({ ok: false, error: `Tab "${tabName}" not found` });
+      // Update access field (field 1 of sub-file 200.03)
+      const z = await callZveRpc('ZVE USER EDIT', [String(duz), 'CPRSTAB', `${tabIen}^${access || ''}`]);
+      const o = zveOutcome(z);
+      if (o.kind !== 'ok') return reply.code(502).send({ ok: false, error: `Tab update failed: ${o.msg || o.kind}` });
+      return { ok: true, tenantId, duz, tabName, access: access || '', rpcUsed: z.rpcUsed };
     } catch (err) {
       return reply.code(502).send({ ok: false, error: err.message });
     }

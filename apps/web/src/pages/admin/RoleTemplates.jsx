@@ -35,7 +35,7 @@ export const ROLES = [
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
-      { label: 'Verify allergies', key: 'GMRA ALLERGY VERIFY' },
+      { label: 'Verify allergies', key: 'GMRA-ALLERGY VERIFY' },
     ],
     mutualExclusions: ['A physician with order-signing authority cannot also hold verbal-order entry (that role is reserved for nursing staff).'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'rw', Clinical: 'rw', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'ro' },
@@ -78,7 +78,7 @@ export const ROLES = [
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
-      { label: 'Verify allergies', key: 'GMRA ALLERGY VERIFY' },
+      { label: 'Verify allergies', key: 'GMRA-ALLERGY VERIFY' },
       { label: 'Sensitive patient access', key: 'DG SENSITIVITY' },
     ],
     mutualExclusions: [],
@@ -108,7 +108,7 @@ export const ROLES = [
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'Bar-code medication administration', key: 'PSB NURSE' },
-      { label: 'Allergy verification', key: 'GMRA ALLERGY VERIFY' },
+      { label: 'Allergy verification', key: 'GMRA-ALLERGY VERIFY' },
     ],
     mutualExclusions: ['A nurse with verbal-order authority cannot also hold physician order-signing authority.'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'ro', Scheduling: 'ro', Clinical: 'rw', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
@@ -378,7 +378,7 @@ export const ROLES = [
 const ACCESS_LABELS = { rw: 'Read & Write', ro: 'Read Only', none: 'No Access' };
 const ACCESS_COLORS = { rw: 'bg-[#E6F4EA] text-[#1B7D3A]', ro: 'bg-[#E8EEF5] text-[#2E5984]', none: 'bg-[#F5F5F5] text-[#999]' };
 
-const KEY_IMPACTS = {
+export const KEY_IMPACTS = {
   'PROVIDER': 'Identifies user as healthcare provider. Without this: cannot appear in provider lookups or be selected as attending.',
   'ORES': 'Allows signing clinical orders. Without this: orders pend indefinitely for someone else to sign.',
   'OR CPRS GUI CHART': 'Grants access to patient charts. WITHOUT THIS KEY, THE USER CANNOT OPEN ANY PATIENT CHART.',
@@ -412,7 +412,7 @@ const KEY_IMPACTS = {
   'DG SUPERVISOR': 'ADT supervisor authority. Without this: cannot override ADT restrictions or access sensitive records.',
   'DG SENSITIVITY': 'Sensitive patient access. Without this: cannot view records flagged as sensitive.',
   'DGMEANS TEST': 'Means test entry. Without this: cannot enter or update patient means test information.',
-  'GMRA ALLERGY VERIFY': 'Allergy verification authority. Without this: cannot verify or mark allergies as reviewed.',
+  'GMRA-ALLERGY VERIFY': 'Allergy verification authority. Without this: cannot verify or mark allergies as reviewed.',
   'RA TECHNOLOGIST': 'Radiology technologist access. Without this: cannot perform or manage imaging exams.',
   'MAG SYSTEM': 'Imaging system access. Without this: cannot access the VistA Imaging system.',
   'MAG CAPTURE': 'Image capture authority. Without this: cannot capture or upload medical images.',
@@ -468,7 +468,7 @@ export const TASK_TO_KEY = {
   'manage users': ['XUMGR'],
   'audit security': ['XUAUDITING'],
   'process billing': ['IBFIN'],
-  'verify allergies': ['GMRA ALLERGY VERIFY'],
+  'verify allergies': ['GMRA-ALLERGY VERIFY'],
 };
 
 export default function RoleTemplates() {

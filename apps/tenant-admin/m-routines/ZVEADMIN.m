@@ -167,6 +167,14 @@ DETAIL(R,TARGETDUZ) ;
  ; Password expiration fields (indices 30-32): vcChangeDate, expirationDays, daysRemaining
  S R(LN)=R(LN)_U_VCCHGDT_U_PWDEXPDAYS_U_PWDREMAIN
  ;
+ ; Activity summary (indices 33-34): signOnCount, firstSignOn
+ N SOCNT,FIRSTSO,SODT
+ S SOCNT=0,FIRSTSO=""
+ I $D(^%ZUA(3.081)) D
+ . S SODT="" F  S SODT=$O(^%ZUA(3.081,"B",TARGETDUZ,SODT)) Q:SODT=""  S SOCNT=SOCNT+1 I FIRSTSO=""!(SODT<FIRSTSO) S FIRSTSO=SODT
+ I FIRSTSO]"" S FIRSTSO=$$FMTE^XLFDT(FIRSTSO)
+ S R(LN)=R(LN)_U_SOCNT_U_FIRSTSO
+ ;
  ; Keys — field 51 (KEYS) stores a POINTER to SECURITY KEY #19.1 when
  ; populated through the standard Kernel KEYS option. Our in-house ZVE
  ; USMG KEYS RPC writes the key NAME as a raw string instead. DETAIL
@@ -225,6 +233,11 @@ EDIT(R,TARGETDUZ,FIELD,VALUE) ;
  E  I FIELD="SSN" S FNUM=9
  E  I FIELD="NPI" S FNUM=41.99
  E  I FIELD="DEA" S FNUM=53.2
+ E  I FIELD="PROXY" S FNUM=203.1
+ E  I FIELD="COSIGNER" S FNUM=53.42
+ E  I FIELD="DEGREE" S FNUM=10.6
+ E  I FIELD="MENU" S FNUM=201
+ E  I FIELD="CPRSTAB" D EDITCPRS(.R,TARGETDUZ,VALUE) Q
  E  D  Q
  . S R(0)="0^Unknown field: "_FIELD Q
  ;
@@ -241,6 +254,19 @@ EDIT(R,TARGETDUZ,FIELD,VALUE) ;
  D AUDITLOG("USER-EDIT",TARGETDUZ,FIELD_"="_$G(VALUE))
  ;
  S R(0)="1^OK^"_FIELD Q
+ ;
+ ; --- CPRS Tab sub-file 200.03 edit helper ---
+ ; VALUE = "tabIEN^newAccess"
+EDITCPRS(R,TARGETDUZ,VALUE) ;
+ N TABIEN,ACC,FDA,DIERR
+ S TABIEN=$P($G(VALUE),"^",1),ACC=$P($G(VALUE),"^",2)
+ I 'TABIEN S R(0)="0^tabIEN required" Q
+ S FDA(200.03,TABIEN_","_TARGETDUZ_",",1)=ACC
+ D FILE^DIE("E","FDA","DIERR")
+ I $D(DIERR) S R(0)="0^Tab update failed: "_$G(DIERR("DIERR",1,"TEXT",1)) Q
+ D AUDITLOG("CPRS-TAB-EDIT",TARGETDUZ,"tab="_TABIEN_" access="_ACC)
+ S R(0)="1^OK^CPRSTAB"
+ Q
  ;
  ; ============================================================
  ; ZVE USER TERM — Terminate user

@@ -660,3 +660,8 @@ export async function removeMailGroupMember(ien, duz) {
 export async function getCprsTabAccess(duz) {
   return tenantApi.get(`/users/${duz}/cprs-tabs`);
 }
+
+// P3.12: CPRS Tab Access toggle
+export async function updateCprsTabAccess(duz, tabName, access) {
+  return tenantApi.put(`/users/${duz}/cprs-tabs`, { tabName, access });
+}

@@ -62,7 +62,7 @@ const PERMISSION_STARTERS = [
       { key: 'OREMAS',         label: 'MAS order entry (unit clerks / ward clerks)',         roleDefault: [] },
       { key: 'ORCL-SIGN-NOTES', label: 'Sign clinical notes (progress notes, consults)',    roleDefault: ['provider'] },
       { key: 'ORCL-PAT-RECS',  label: 'View patient records and chart data',                roleDefault: ['provider', 'nurse', 'front-desk'] },
-      { key: 'GMRA ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
+      { key: 'GMRA-ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
     ],
   },
   {
@@ -148,6 +148,24 @@ export default function StaffForm() {
   const [originalForm, setOriginalForm] = useState(null);
   const [clearingEsig, setClearingEsig] = useState(false);
   const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
+
+  // P3.3: Cosigner provider picker — typeahead search
+  const [cosignerSuggestions, setCosignerSuggestions] = useState([]);
+  const [cosignerSearching, setCosignerSearching] = useState(false);
+  const cosignerTimerRef = useRef(null);
+  const searchCosignerProviders = (query) => {
+    if (cosignerTimerRef.current) clearTimeout(cosignerTimerRef.current);
+    if (!query || query.length < 2) { setCosignerSuggestions([]); return; }
+    setCosignerSearching(true);
+    cosignerTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await getStaff({ search: query });
+        const providers = (res?.data || []).filter(u => u.roles?.includes('ORES') || u.roles?.includes('OR CPRS GUI CHART'));
+        setCosignerSuggestions(providers.slice(0, 10).map(u => ({ name: u.name || u.username, duz: u.ien || u.id })));
+      } catch { setCosignerSuggestions([]); }
+      finally { setCosignerSearching(false); }
+    }, 400);
+  };
 
   // S9.23: Debounced access code uniqueness check
   const [acStatus, setAcStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
@@ -405,7 +423,7 @@ export default function StaffForm() {
         name: composedName,
         sex: form.sex,
         dob: form.dob,
-        ssn: form.govIdLast4 || '',
+        ssnLast4: form.govIdLast4 || '',
         email: form.email,
         phone: form.phone,
         role: form.primaryRole,
@@ -734,6 +752,7 @@ export default function StaffForm() {
             return (
               <button
                 key={s.id}
+                aria-current={currentStep === stepIndex ? 'step' : undefined}
                 onClick={() => {
                   if (stepIndex > currentStep) {
                     for (let si = 0; si < stepIndex; si++) {
@@ -1196,12 +1215,31 @@ export default function StaffForm() {
                   </div>
                 </label>
                 {form.requiresCosign && (
-                  <FormField label="Cosigner (Attending)" hint="The supervising provider who co-signs this trainee's orders. Select from active providers.">
-                    <input type="text" value={form.cosigner || ''} onChange={e => updateField('cosigner', e.target.value)}
-                      placeholder="Enter attending provider name..." className="form-input" />
-                    <p className="text-[10px] text-text-muted mt-1">
-                      Enter the provider's name as it appears in the system (LAST,FIRST format).
-                    </p>
+                  <FormField label="Cosigner (Attending)" hint="The supervising provider who co-signs this trainee's orders. Search active providers by name.">
+                    <div className="relative">
+                      <input type="text" value={form.cosigner || ''}
+                        onChange={e => { updateField('cosigner', e.target.value); searchCosignerProviders(e.target.value); }}
+                        onFocus={() => { if (form.cosigner?.length >= 2) searchCosignerProviders(form.cosigner); }}
+                        onBlur={() => setTimeout(() => setCosignerSuggestions([]), 200)}
+                        role="combobox"
+                        aria-expanded={cosignerSuggestions.length > 0}
+                        aria-autocomplete="list"
+                        aria-controls="cosigner-listbox"
+                        placeholder="Type provider name to search..." className="form-input" />
+                      {cosignerSearching && <span className="absolute right-2 top-2 text-xs text-text-muted" aria-live="polite">Searching...</span>}
+                      {cosignerSuggestions.length > 0 && (
+                        <ul id="cosigner-listbox" role="listbox" className="absolute z-50 w-full bg-white border border-[#E2E4E8] rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
+                          {cosignerSuggestions.map(s => (
+                            <li key={s.duz} role="option"
+                              className="px-3 py-2 text-sm hover:bg-[#E8F0FE] cursor-pointer"
+                              onMouseDown={() => { updateField('cosigner', s.name); setCosignerSuggestions([]); }}>
+                              <span className="font-medium">{s.name}</span>
+                              <span className="text-[#999] ml-2 text-xs">DUZ {s.duz}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </FormField>
                 )}
               </div>
@@ -1428,14 +1466,25 @@ export default function StaffForm() {
           )}
 
           {/* STEP 4: Review and Confirm */}
-          {step.id === 'review' && (
+          {step.id === 'review' && (() => {
+            // Build originals map for edit-mode diff highlighting
+            const of = isEdit && originalForm ? originalForm : null;
+            const identityOrig = of ? {
+              'Name': (of.lastName && of.firstName) ? `${of.lastName},${of.firstName}${of.middleInitial ? ' ' + of.middleInitial : ''}` : '—',
+              'Job Title': of.title || '—', 'Sex': of.sex === 'M' ? 'Male' : of.sex === 'F' ? 'Female' : of.sex || '—',
+              'Email': of.email || '—', 'Employee ID': of.employeeId || '',
+            } : null;
+            const roleOrig = of ? { 'Department': of.department || '—' } : null;
+            const provOrig = of ? { 'NPI': of.npi || '—', 'DEA': of.dea || '—' } : null;
+            return (
             <div className="space-y-5">
               <h2 className="text-lg font-semibold text-text mb-4">Review and Confirm</h2>
               <p className="text-sm text-text-secondary mb-4">
                 Verify all details before {isEdit ? 'saving changes to' : 'creating'} this staff member record.
+                {isEdit && <span className="ml-1 text-[#E65100] text-xs">(changed fields highlighted)</span>}
               </p>
               <div className="grid grid-cols-2 gap-6">
-                <ReviewSection title="Identity" items={[
+                <ReviewSection title="Identity" originals={identityOrig} items={[
                   ['Name', (form.lastName && form.firstName) ? `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}` : '—'],
                   ['Display Name', form.displayName || '(auto from name)'],
                   ['Job Title', form.title || '—'],
@@ -1445,7 +1494,7 @@ export default function StaffForm() {
                   ...(form.employeeId ? [['Employee ID', form.employeeId]] : []),
                   ...(form.degree ? [['Degree/Suffix', form.degree]] : []),
                 ]} />
-                <ReviewSection title="Role & Department" items={[
+                <ReviewSection title="Role & Department" originals={roleOrig} items={[
                   ['Role', SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '—'],
                   ['Department', form.department || '—'],
                   ['Provider', form.isProvider ? 'Yes' : 'No'],
@@ -1463,7 +1512,7 @@ export default function StaffForm() {
                   ...(form.filemanAccess ? [['FileMan Access', form.filemanAccess === '@' ? 'Unrestricted (@)' : form.filemanAccess]] : []),
                 ]} />
                 {(form.isProvider || showProviderStep) && (
-                  <ReviewSection title="Provider Configuration" items={[
+                  <ReviewSection title="Provider Configuration" originals={provOrig} items={[
                     ['Provider Type', PROVIDER_TYPES.find(p => p.value === form.providerType)?.label || '—'],
                     ['NPI', form.npi || '—'],
                     ['DEA', form.dea || '—'],
@@ -1499,16 +1548,14 @@ export default function StaffForm() {
               )}
 
               {submitError && (
-                <div ref={submitErrorRef} className="p-3 bg-danger-bg rounded-md text-sm text-danger flex items-center gap-2">
+                <div ref={submitErrorRef} role="alert" className="p-3 bg-danger-bg rounded-md text-sm text-danger flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px]">error</span>
                   {submitError}
                 </div>
               )}
             </div>
-          )}
+          );})()}
         </div>
-
-        {/* Navigation */}
         <div className="flex items-center justify-between mt-6">
           <button onClick={() => {
             if (currentStep === 0) { navigate('/admin/staff'); return; }
@@ -1580,17 +1627,23 @@ function FormField({ label, required, hint, error, children }) {
   );
 }
 
-function ReviewSection({ title, items }) {
+function ReviewSection({ title, items, originals }) {
   return (
     <div className="bg-surface-alt rounded-lg p-4">
       <h3 className="text-sm font-semibold text-text mb-3">{title}</h3>
       <dl className="space-y-1.5">
-        {items.map(([label, value]) => (
-          <div key={label} className="flex justify-between text-sm">
-            <dt className="text-text-secondary">{label}</dt>
-            <dd className="font-medium text-text text-right max-w-[60%]">{value}</dd>
-          </div>
-        ))}
+        {items.map(([label, value]) => {
+          const changed = originals && originals[label] !== undefined && originals[label] !== value;
+          return (
+            <div key={label} className={`flex justify-between text-sm${changed ? ' bg-[#FFFDE7] rounded px-1 -mx-1' : ''}`}>
+              <dt className="text-text-secondary">{label}</dt>
+              <dd className={`font-medium text-right max-w-[60%]${changed ? ' text-[#E65100]' : ' text-text'}`}>
+                {value}
+                {changed && <span className="ml-1 text-[10px] text-[#E65100]">(changed)</span>}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
     </div>
   );

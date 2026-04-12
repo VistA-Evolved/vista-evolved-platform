@@ -30,8 +30,12 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
             {columns.map((col) => (
               <th
                 key={col.key}
+                scope="col"
                 title={col.headerTitle}
                 onClick={() => col.sortable !== false && handleSort(col.key)}
+                onKeyDown={(e) => { if (col.sortable !== false && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleSort(col.key); } }}
+                tabIndex={col.sortable !== false ? 0 : undefined}
+                aria-sort={sortCol === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
                 className={`
                   text-left px-3 py-2.5 text-white font-semibold text-xs uppercase tracking-wider
                   ${col.sortable !== false ? 'cursor-pointer hover:bg-[#2E3A5E] select-none' : ''}
@@ -57,6 +61,10 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
               <tr
                 key={row[idField] ?? i}
                 onClick={() => onRowClick?.(row)}
+                onKeyDown={(e) => { if (onRowClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRowClick(row); } }}
+                tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? 'button' : undefined}
+                aria-selected={isSelected || undefined}
                 className={`
                   border-t border-border transition-colors
                   ${onRowClick ? 'cursor-pointer' : ''}
