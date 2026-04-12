@@ -33,6 +33,7 @@ function normalizeParams(res) {
 }
 
 export default function SystemConfig() {
+  useEffect(() => { document.title = 'System Configuration — VistA Evolved'; }, []);
   const [params, setParams] = useState(null);
   const [vistaInfo, setVistaInfo] = useState(null);
   const [loading, setLoading] = useState(true);

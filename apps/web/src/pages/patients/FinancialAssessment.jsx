@@ -105,6 +105,7 @@ function CurrencyInput({ value, onChange, placeholder, disabled, id }) {
 }
 
 export default function FinancialAssessment() {
+  useEffect(() => { document.title = 'Financial Assessment — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const { patient, setPatient, hasPatient } = usePatient();
   const [data, setData] = useState(null);

@@ -1,33 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSites, getVistaStatus, logout } from '../../services/adminService';
-import { getSessionToken, setSessionToken } from '../../services/api';
-import { useFacility } from '../../contexts/FacilityContext';
+import { getVistaStatus, logout } from '../../services/adminService';
+import { setSessionToken } from '../../services/api';
+import SessionTimerDisplay from '../shared/SessionTimerDisplay';
 
 export default function SystemBar({ breadcrumb = '' }) {
   const navigate = useNavigate();
-  const { activeSite, setActiveSite } = useFacility();
   const [userName, setUserName] = useState('');
   const [vistaConnected, setVistaConnected] = useState(null);
-  const [sites, setSites] = useState([]);
-  const [showSiteMenu, setShowSiteMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const siteRef = useRef(null);
   const userRef = useRef(null);
 
   useEffect(() => {
-    if (!getSessionToken()) return;
-
+    // S5.1: Session token is in httpOnly cookie — check auth by calling API
     getVistaStatus().then(res => {
       if (res?.currentUser?.userName) setUserName(res.currentUser.userName);
       setVistaConnected(res?.connected !== false);
     }).catch(() => { setVistaConnected(false); });
-
-    getSites().then(res => {
-      const divs = (res?.data || []).map(d => ({ id: d.ien, name: d.name, code: d.stationNumber }));
-      setSites(divs);
-      if (divs.length > 0 && !activeSite) setActiveSite(divs[0]);
-    }).catch(() => {});
 
     const interval = setInterval(() => {
       getVistaStatus().then(res => {
@@ -35,11 +24,10 @@ export default function SystemBar({ breadcrumb = '' }) {
       }).catch(() => { setVistaConnected(false); });
     }, 30000);
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
-      if (siteRef.current && !siteRef.current.contains(e.target)) setShowSiteMenu(false);
       if (userRef.current && !userRef.current.contains(e.target)) setShowUserMenu(false);
     };
     document.addEventListener('mousedown', handler);
@@ -52,8 +40,7 @@ export default function SystemBar({ breadcrumb = '' }) {
     navigate('/login');
   };
 
-  const siteLabel = activeSite ? `${activeSite.name} (${activeSite.code})` : 'All Facilities';
-  const isSandbox = vistaConnected && (userName?.includes('PRO') || sites.some(s => s.name?.includes('SANDBOX') || s.name?.includes('TEST') || s.code === '500'));
+  const isSandbox = vistaConnected && userName?.includes('PRO');
 
   return (
     <header className="fixed top-0 left-0 right-0 h-10 bg-navy flex items-center px-4 z-50">
@@ -78,6 +65,10 @@ export default function SystemBar({ breadcrumb = '' }) {
 
       <div className="flex-1" />
 
+      <div className="mr-2 sm:mr-4 min-w-0 truncate max-w-[120px] sm:max-w-none">
+        <SessionTimerDisplay />
+      </div>
+
       {vistaConnected !== null && (
         <div className="flex items-center gap-1.5 mr-4 text-[11px]" title={vistaConnected ? 'VistA Connected' : 'VistA Disconnected'}>
           <div className={`w-2 h-2 rounded-full ${vistaConnected ? 'bg-green-400' : 'bg-red-500 animate-pulse'}`} />
@@ -86,47 +77,6 @@ export default function SystemBar({ breadcrumb = '' }) {
           </span>
         </div>
       )}
-
-      {/* Site selector */}
-      <div className="relative" ref={siteRef}>
-        {sites.length <= 1 ? (
-          /* Single division: show as static text, no dropdown */
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 text-white/70 text-[11px] mr-2"
-            title="Medical Center Division — your VistA instance serves this location"
-          >
-            <span className="material-symbols-outlined text-[14px]">location_on</span>
-            <span className="hidden sm:inline max-w-[200px] truncate">{siteLabel}</span>
-          </div>
-        ) : (
-        <button
-          onClick={() => setShowSiteMenu(!showSiteMenu)}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-white/70 hover:text-white text-[11px] rounded hover:bg-[#2E3A5E] transition-colors mr-2"
-          title="Select which division's data to view. Staff and patients will be filtered to this location."
-        >
-          <span className="material-symbols-outlined text-[14px]">location_on</span>
-          <span className="hidden sm:inline max-w-[200px] truncate">{siteLabel}</span>
-          <span className="material-symbols-outlined text-[12px]">expand_more</span>
-        </button>
-        )}
-        {showSiteMenu && sites.length > 1 && (
-          <div className="absolute right-0 mt-1 w-64 bg-white rounded-md shadow-lg border border-[#E2E4E8] z-50 py-1">
-            <div className="px-3 py-1.5 text-[10px] font-semibold text-[#999] uppercase tracking-wider border-b border-[#E2E4E8]">
-              Select Division
-            </div>
-            <button onClick={() => { setActiveSite(null); setShowSiteMenu(false); }}
-              className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] ${!activeSite ? 'bg-[#E8EEF5] font-medium' : ''}`}>
-              All Divisions
-            </button>
-            {sites.map(s => (
-              <button key={s.id} onClick={() => { setActiveSite(s); setShowSiteMenu(false); }}
-                className={`w-full text-left px-3 py-2 text-xs hover:bg-[#F5F8FB] ${activeSite?.id === s.id ? 'bg-[#E8EEF5] font-medium' : ''}`}>
-                {s.name} <span className="font-mono text-[#999]">({s.code})</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* User menu */}
       <div className="relative" ref={userRef}>

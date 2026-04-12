@@ -4,11 +4,12 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember, getSites, getSession } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
-import { humanizeKeyName } from '../../utils/transforms';
+import { humanizeKeyName, fmDateToDate } from '../../utils/transforms';
 import { useFacility } from '../../contexts/FacilityContext';
+import { KEY_IMPACTS } from './RoleTemplates';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -95,7 +96,7 @@ const ESIG_OPTIONS = ['All', 'Ready', 'Incomplete'];
 export default function StaffDirectory() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activeSite } = useFacility();
+  const { activeSite, setActiveSite } = useFacility();
   useEffect(() => { document.title = 'Staff Directory — VistA Evolved'; }, []);
   const [searchText, setSearchText] = useState(searchParams.get('q') || '');
   // S7: 300ms search debounce to reduce re-renders on keystroke
@@ -130,12 +131,16 @@ export default function StaffDirectory() {
   const [detailData, setDetailData] = useState(null);
   const [detailKeys, setDetailKeys] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
+  /** S6.3: Hover prefetch — 300ms delay, cancel on mouseleave */
+  const detailPrefetchTimerRef = useRef(null);
+  const detailPrefetchCacheRef = useRef(new Map());
 
   // Assign permissions modal state
   const [showAssignPermsModal, setShowAssignPermsModal] = useState(false);
   const [allPermissions, setAllPermissions] = useState([]);
   const [permSearchText, setPermSearchText] = useState('');
   const [assigningPerm, setAssigningPerm] = useState(false);
+  const [siteOptions, setSiteOptions] = useState([]);
 
   // CPRS Tab Access data (B8)
   const [cprsTabData, setCprsTabData] = useState([]);
@@ -161,12 +166,13 @@ export default function StaffDirectory() {
   const PAGE_SIZE = 25;
 
   // Fetch all staff + esig + sites in parallel
+  // S6.1: Pass max=500 to server to cap DDR LISTER results for large sites
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [usersRes, esigRes] = await Promise.all([
-        getStaff(),
+        getStaff({ max: 500 }),
         getESignatureStatus(),
       ]);
 
@@ -220,65 +226,123 @@ export default function StaffDirectory() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Load detail on row click
+  useEffect(() => {
+    let cancelled = false;
+    getSites()
+      .then((res) => {
+        if (cancelled) return;
+        const opts = (res?.data || []).map((d) => ({
+          id: String(d.ien),
+          name: d.name || '',
+          code: d.stationNumber || '',
+        }));
+        setSiteOptions(opts);
+      })
+      .catch(() => {
+        if (!cancelled) setSiteOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => () => clearTimeout(detailPrefetchTimerRef.current), []);
+
+  const applyDetailResponses = useCallback((row, userRes, keysRes, cprsRes) => {
+    const vg = userRes?.data?.vistaGrounding || {};
+    const esig = vg.electronicSignature || {};
+    const keys = (keysRes?.data || []).map(k => k.name);
+    const derivedTitle = deriveTitleFromKeys(keys);
+    const divs = userRes?.data?.divisions || [];
+    setDetailData({
+      ...row,
+      title: userRes?.data?.title || vg.sigBlockTitle || derivedTitle,
+      department: vg.serviceSection || '',
+      phone: vg.officePhone || '',
+      email: vg.email || '',
+      npi: vg.npi || '',
+      dea: vg.dea || '',
+      providerType: vg.providerType || '',
+      isProvider: Boolean(vg.npi || vg.providerType || vg.authMeds),
+      esigStatus: esig.hasCode ? 'active' : 'incomplete',
+      sigBlockName: esig.sigBlockName || '',
+      ssn: vg.ssn ? `***-**-${vg.ssn.slice(-4)}` : '',
+      initials: vg.initials || '',
+      primaryMenu: vg.primaryMenu || '',
+      degree: vg.degree || '',
+      division: divs?.[0]?.name || '',
+      divisions: divs.map(d => d.name),
+      terminationDate: vg.terminationDate || '',
+      terminationReason: vg.terminationReason || '',
+      personClass: vg.personClass || '',
+      taxId: vg.taxId || '',
+      authorizedToWriteMeds: vg.authMeds,
+      requiresCosigner: Boolean(vg.cosigner),
+      usualCosigner: vg.cosigner || '',
+      restrictPatient: vg.restrictPatient || '',
+      verifyCodeNeverExpires: vg.verifyCodeNeverExpires,
+      language: vg.language || '',
+      filemanAccessCode: vg.filemanAccessCode || '',
+      defaultOrderList: vg.defaultOrderList || '',
+      proxyUser: vg.proxyUser || '',
+      employeeId: vg.employeeId || userRes?.data?.employeeId || '',
+      vcChangeDate: vg.vcChangeDate || '',
+      pwdExpirationDays: vg.pwdExpirationDays,
+      pwdDaysRemaining: vg.pwdDaysRemaining,
+      lastModified: userRes?.data?.lastModified || null,
+    });
+    setDetailKeys(keysRes?.data || []);
+    setCprsTabData(cprsRes?.tabs || cprsRes?.data || []);
+  }, []);
+
+  const handleRowMouseEnter = useCallback((row) => {
+    if (!row?.duz) return;
+    clearTimeout(detailPrefetchTimerRef.current);
+    detailPrefetchTimerRef.current = setTimeout(() => {
+      if (detailPrefetchCacheRef.current.has(row.duz)) return;
+      Promise.all([
+        getStaffMember(row.duz),
+        getUserPermissions(row.duz),
+        getCprsTabAccess(row.duz).catch(() => ({ tabs: [], data: [] })),
+      ])
+        .then(([userRes, keysRes, cprsRes]) => {
+          detailPrefetchCacheRef.current.set(row.duz, { userRes, keysRes, cprsRes });
+        })
+        .catch(() => {});
+    }, 300);
+  }, []);
+
+  const handleRowMouseLeave = useCallback(() => {
+    clearTimeout(detailPrefetchTimerRef.current);
+    detailPrefetchTimerRef.current = null;
+  }, []);
+
+  // Load detail on row click (uses hover prefetch when available — S6.3)
   const handleRowClick = async (row) => {
     setSelectedStaff(row);
     setDetailData(null);
     setDetailKeys([]);
     setDetailLoading(true);
     setCprsTabData([]);
+    const pref = detailPrefetchCacheRef.current.get(row.duz);
+    if (pref) {
+      detailPrefetchCacheRef.current.delete(row.duz);
+      try {
+        applyDetailResponses(row, pref.userRes, pref.keysRes, pref.cprsRes);
+      } catch (err) {
+        setDetailData({ ...row, _loadError: err.message || 'Failed to load details' });
+      } finally {
+        setDetailLoading(false);
+      }
+      return;
+    }
     try {
       const [userRes, keysRes, cprsRes] = await Promise.all([
         getStaffMember(row.duz),
         getUserPermissions(row.duz),
         getCprsTabAccess(row.duz).catch(() => ({ tabs: [], data: [] })),
       ]);
-      const vg = userRes?.data?.vistaGrounding || {};
-      const esig = vg.electronicSignature || {};
-      const keys = (keysRes?.data || []).map(k => k.name);
-      const derivedTitle = deriveTitleFromKeys(keys);
-      const divs = userRes?.data?.divisions || [];
-      setDetailData({
-        ...row,
-        title: userRes?.data?.title || vg.sigBlockTitle || derivedTitle,
-        department: vg.serviceSection || '',
-        phone: vg.officePhone || '',
-        email: vg.email || '',
-        npi: vg.npi || '',
-        dea: vg.dea || '',
-        providerType: vg.providerType || '',
-        isProvider: Boolean(vg.npi || vg.providerType || vg.authMeds),
-        esigStatus: esig.hasCode ? 'active' : 'incomplete',
-        sigBlockName: esig.sigBlockName || '',
-        ssn: vg.ssn ? `***-**-${vg.ssn.slice(-4)}` : '',
-        initials: vg.initials || '',
-        primaryMenu: vg.primaryMenu || '',
-        degree: vg.degree || '',
-        division: divs?.[0]?.name || '',
-        divisions: divs.map(d => d.name),
-        terminationDate: vg.terminationDate || '',
-        terminationReason: vg.terminationReason || '',
-        personClass: vg.personClass || '',
-        taxId: vg.taxId || '',
-        authorizedToWriteMeds: vg.authMeds,
-        requiresCosigner: Boolean(vg.cosigner),
-        usualCosigner: vg.cosigner || '',
-        // B1-B5, B9: New fields from expanded M routine
-        restrictPatient: vg.restrictPatient || '',
-        verifyCodeNeverExpires: vg.verifyCodeNeverExpires,
-        language: vg.language || '',
-        filemanAccessCode: vg.filemanAccessCode || '',
-        defaultOrderList: vg.defaultOrderList || '',
-        proxyUser: vg.proxyUser || '',
-        employeeId: vg.employeeId || userRes?.data?.employeeId || '',
-        // S7: Password expiration fields
-        vcChangeDate: vg.vcChangeDate || '',
-        pwdExpirationDays: vg.pwdExpirationDays,
-        pwdDaysRemaining: vg.pwdDaysRemaining,
-      });
-      setDetailKeys(keysRes?.data || []);
-      // B8: CPRS Tab Access data now loaded in parallel
-      setCprsTabData(cprsRes?.tabs || cprsRes?.data || []);
+      applyDetailResponses(row, userRes, keysRes, cprsRes);
     } catch (err) {
       setDetailData(prev => prev || { ...row, _loadError: err.message || 'Failed to load details' });
     } finally {
@@ -305,6 +369,21 @@ export default function StaffDirectory() {
   const totalFiltered = filtered.length;
   const pageStart = (page - 1) * PAGE_SIZE;
   const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const rangeStart = totalFiltered === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + PAGE_SIZE, totalFiltered);
+  const filtersNonDefault =
+    searchText !== '' ||
+    statusFilter !== 'Active' ||
+    esigFilter !== 'All' ||
+    page !== 1;
+
+  const clearDirectoryFilters = () => {
+    setSearchText('');
+    setDebouncedSearch('');
+    setStatusFilter('Active');
+    setEsigFilter('All');
+    setPage(1);
+  };
 
   // KPI cards from full staff list
   const totalStaff = staffList.length;
@@ -313,11 +392,13 @@ export default function StaffDirectory() {
   const lockedCount = staffList.filter(u => u.status === 'locked').length;
 
   const activeFilters = [
+    ...(activeSite ? [{ key: 'division', label: `Division: ${activeSite.name}` }] : []),
     ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}` }] : []),
     ...(esigFilter !== 'All' ? [{ key: 'esig', label: `E-Signature: ${esigFilter}` }] : []),
   ];
 
   const removeFilter = (key) => {
+    if (key === 'division') setActiveSite(null);
     if (key === 'status') setStatusFilter('All');
     if (key === 'esig') setEsigFilter('All');
   };
@@ -325,6 +406,20 @@ export default function StaffDirectory() {
   const [actionSuccess, setActionSuccess] = useState(null);
   const [removePermTarget, setRemovePermTarget] = useState(null);
   const [deactivateReason, setDeactivateReason] = useState('');
+  /** Current signed-in admin DUZ (for self–XUMGR removal guard, S23.6) */
+  const [sessionDuz, setSessionDuz] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSession()
+      .then((sess) => {
+        if (cancelled) return;
+        const d = sess?.user?.duz;
+        setSessionDuz(d != null && d !== '' ? String(d) : null);
+      })
+      .catch(() => { if (!cancelled) setSessionDuz(null); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleDeactivate = async (reason) => {
     if (!deactivateTarget) return;
@@ -393,6 +488,11 @@ export default function StaffDirectory() {
   };
 
   const handleRemovePermission = async (key) => {
+    const keyName = String(key?.name || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    if (keyName === 'XUMGR' && sessionDuz != null && detailData && String(detailData.duz) === String(sessionDuz)) {
+      setError('Cannot remove your own administrative access');
+      return;
+    }
     setRemovePermTarget(key);
   };
 
@@ -406,6 +506,12 @@ export default function StaffDirectory() {
       setDetailKeys(newKeys);
       setStaffList(prev => prev.map(u => u.duz === detailData.duz
         ? { ...u, permissionCount: newKeys.length } : u));
+      try {
+        const fresh = await getStaffMember(detailData.duz);
+        if (fresh?.data?.lastModified) {
+          setDetailData(prev => (prev ? { ...prev, lastModified: fresh.data.lastModified } : prev));
+        }
+      } catch (_refreshErr) { /* non-fatal */ }
       setActionSuccess(`Removed ${key.displayName || humanizeKeyName(key.name)} from ${detailData.name}.`);
     } catch (err) { setError(err.message || 'Failed to remove permission'); }
     finally { setRemovePermTarget(null); }
@@ -439,6 +545,12 @@ export default function StaffDirectory() {
       const newKeys = keysRes?.data || [];
       setDetailKeys(newKeys);
       setStaffList(prev => prev.map(u => u.duz === detailData.duz ? { ...u, permissionCount: newKeys.length } : u));
+      try {
+        const fresh = await getStaffMember(detailData.duz);
+        if (fresh?.data?.lastModified) {
+          setDetailData(prev => (prev ? { ...prev, lastModified: fresh.data.lastModified } : prev));
+        }
+      } catch (_refreshErr) { /* non-fatal */ }
     } catch (err) { setError(err.message || 'Failed to assign permission'); }
     finally { setAssigningPerm(false); }
   };
@@ -522,10 +634,32 @@ export default function StaffDirectory() {
 
             <div className="flex items-center gap-3 mb-4 flex-wrap">
               <div className="flex-1 min-w-[240px]">
-                <SearchBar placeholder="Search by name or ID..." delay={0} onSearch={(val) => { handleSearchChange(val); setPage(1); }} />
+                <SearchBar placeholder="Search by name or ID..." delay={0} value={searchText} onSearch={(val) => { handleSearchChange(val); setPage(1); }} />
               </div>
             </div>
             <div className="flex items-center gap-3 mb-4 flex-wrap">
+              <select
+                value={activeSite?.id || 'all'}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next === 'all') {
+                    setActiveSite(null);
+                  } else {
+                    const picked = siteOptions.find((s) => s.id === next);
+                    setActiveSite(picked ? { id: picked.id, name: picked.name, code: picked.code } : null);
+                  }
+                  setPage(1);
+                }}
+                className="h-9 pl-3 pr-8 border border-[#E2E4E8] rounded-md text-[11px] text-[#222] bg-white focus:outline-none focus:border-[#2E5984]"
+                aria-label="Division"
+              >
+                <option value="all">Division: All Divisions</option>
+                {siteOptions.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    Division: {site.name}{site.code ? ` (${site.code})` : ''}
+                  </option>
+                ))}
+              </select>
               <FilterSelect label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => { setStatusFilter(v); setPage(1); }} />
               <FilterSelect label="E-Signature" value={esigFilter} options={ESIG_OPTIONS} onChange={(v) => { setEsigFilter(v); setPage(1); }} />
               <label className="flex items-center gap-1.5 text-[11px] text-[#666] cursor-pointer ml-2">
@@ -533,13 +667,22 @@ export default function StaffDirectory() {
                   className="w-3.5 h-3.5 rounded border-[#E2E4E8]" />
                 Hide system accounts
               </label>
+              {filtersNonDefault && (
+                <button
+                  type="button"
+                  onClick={clearDirectoryFilters}
+                  className="h-9 px-3 text-[11px] font-medium text-[#2E5984] border border-[#E2E4E8] rounded-md bg-white hover:bg-[#F5F8FB]"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
 
             {activeFilters.length > 0 && (
               <div className="mb-4">
                 <FilterChips filters={activeFilters} onRemove={removeFilter} />
                 {activeFilters.length > 1 && (
-                  <button onClick={() => { setStatusFilter('All'); setEsigFilter('All'); setSearchText(''); setDebouncedSearch(''); setPage(1); }}
+                  <button onClick={() => { setActiveSite(null); setStatusFilter('All'); setEsigFilter('All'); setSearchText(''); setDebouncedSearch(''); setPage(1); }}
                     className="ml-2 text-[11px] text-[#2E5984] hover:underline">Clear all</button>
                 )}
               </div>
@@ -566,8 +709,8 @@ export default function StaffDirectory() {
                     <p className="text-xs text-[#999]">
                       {searchText ? `No results for "${searchText}"` : 'Try adjusting your filters'}
                     </p>
-                    {(searchText || statusFilter !== 'All' || esigFilter !== 'All') && (
-                      <button onClick={() => { setSearchText(''); setDebouncedSearch(''); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
+                    {(searchText || statusFilter !== 'All' || esigFilter !== 'All' || activeSite) && (
+                      <button onClick={() => { setSearchText(''); setDebouncedSearch(''); setActiveSite(null); setStatusFilter('All'); setEsigFilter('All'); setPage(1); }}
                         className="mt-3 text-xs text-[#2E5984] hover:underline">Clear all filters</button>
                     )}
                   </>
@@ -580,7 +723,15 @@ export default function StaffDirectory() {
                 idField="id"
                 selectedId={selectedStaff?.id}
                 onRowClick={handleRowClick}
+                onRowMouseEnter={handleRowMouseEnter}
+                onRowMouseLeave={handleRowMouseLeave}
               />
+            )}
+
+            {!loading && totalFiltered > 0 && (
+              <div className="text-[11px] text-[#666] mb-3" aria-live="polite">
+                Showing {rangeStart}-{rangeEnd} of {totalFiltered} staff members
+              </div>
             )}
 
             <Pagination page={page} pageSize={PAGE_SIZE} total={totalFiltered} onPageChange={setPage} />
@@ -601,7 +752,7 @@ export default function StaffDirectory() {
               navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
               handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
               handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
-              setDeactivateTarget={setDeactivateTarget} setDetailData={setDetailData}
+              setDeactivateTarget={setDeactivateTarget} setTerminateTarget={setTerminateTarget} setDetailData={setDetailData}
               unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
               loadData={loadData} setError={setError}
               setCloneSource={setCloneSource}
@@ -626,7 +777,7 @@ export default function StaffDirectory() {
                 navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
                 handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
                 handleReactivate={handleReactivate} handleRemovePermission={handleRemovePermission}
-                setDeactivateTarget={setDeactivateTarget} setDetailData={setDetailData}
+                setDeactivateTarget={setDeactivateTarget} setTerminateTarget={setTerminateTarget} setDetailData={setDetailData}
                 unlockUser={unlockUser} setSelectedStaff={setSelectedStaff}
                 loadData={loadData} setError={setError}
                 setCloneSource={setCloneSource}
@@ -700,14 +851,38 @@ export default function StaffDirectory() {
       )}
 
       {removePermTarget && (
-        <ConfirmDialog
-          title="Remove Permission"
-          message={`Remove "${removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}" from ${detailData?.name}? This will immediately revoke this access.`}
-          confirmLabel="Remove"
-          onConfirm={confirmRemovePermission}
-          onCancel={() => setRemovePermTarget(null)}
-          destructive
-        />
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-perm-dialog-title"
+          onClick={() => setRemovePermTarget(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 id="remove-perm-dialog-title" className="text-lg font-semibold text-text mb-2">Remove Permission</h3>
+            <p className="text-sm text-text-secondary mb-3">
+              Remove &quot;{removePermTarget.displayName || humanizeKeyName(removePermTarget.name)}&quot; from {detailData?.name}?
+              This will immediately revoke this access.
+            </p>
+            {(() => {
+              const keyName = removePermTarget.name;
+              const impact = keyName && (KEY_IMPACTS[keyName] || KEY_IMPACTS[String(keyName).toUpperCase()]);
+              return impact ? (
+                <div className="mb-4 p-3 bg-[#FFF8E1] border border-[#FFB74D] rounded-md">
+                  <div className="text-[10px] font-bold text-[#E65100] uppercase tracking-wider mb-1">Impact</div>
+                  <p className="text-xs text-[#555] leading-relaxed">{impact}</p>
+                </div>
+              ) : null;
+            })()}
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setRemovePermTarget(null)} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">Cancel</button>
+              <button type="button" onClick={confirmRemovePermission} className="px-4 py-2 text-sm text-white rounded-md bg-danger hover:bg-[#B02020]">Remove</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAssignPermsModal && detailData && (
@@ -877,6 +1052,45 @@ function DetailField({ label, value, mono }) {
   );
 }
 
+/** Password / verify-code expiry line using pwdDaysRemaining or vcChangeDate + pwdExpirationDays */
+function getPasswordExpiryDisplay(detailData) {
+  if (!detailData || detailData.verifyCodeNeverExpires) return null;
+  const { vcChangeDate, pwdExpirationDays, pwdDaysRemaining } = detailData;
+  const hasVc = vcChangeDate != null && String(vcChangeDate).trim() !== '';
+  if (!hasVc && pwdExpirationDays == null && pwdDaysRemaining == null) return null;
+
+  if (pwdDaysRemaining != null) {
+    if (pwdDaysRemaining <= 0) {
+      return `Password expired ${Math.abs(pwdDaysRemaining)} day${Math.abs(pwdDaysRemaining) !== 1 ? 's' : ''} ago`;
+    }
+    const exp = new Date();
+    exp.setDate(exp.getDate() + pwdDaysRemaining);
+    return `Password expires: ${exp.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+  }
+
+  if (hasVc && pwdExpirationDays != null) {
+    const changed = fmDateToDate(vcChangeDate);
+    if (changed && !isNaN(changed.getTime())) {
+      const exp = new Date(changed);
+      exp.setDate(exp.getDate() + Number(pwdExpirationDays));
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const expDay = new Date(exp);
+      expDay.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((expDay - today) / 86400000);
+      if (diffDays < 0) {
+        return `Password expired ${Math.abs(diffDays)} day${Math.abs(diffDays) !== 1 ? 's' : ''} ago`;
+      }
+      return `Password expires: ${exp.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+    }
+  }
+
+  if (hasVc) {
+    return `Verify code last changed: ${vcChangeDate}`;
+  }
+  return null;
+}
+
 function ActionsMenu({ row, navigate }) {
   const [open, setOpen] = useState(false);
   return (
@@ -910,7 +1124,7 @@ function ActionsMenu({ row, navigate }) {
 }
 
 /* A4: Inline editable field for provider information (or any saveFn) */
-function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn }) {
+function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn, concurrencyToken, onConcurrencyTokenUpdate }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(value || '');
   const [saving, setSaving] = useState(false);
@@ -926,14 +1140,19 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn }) {
     setSaving(true);
     setSaveError(null);
     try {
+      let res;
       if (saveFn) {
-        await saveFn(duz, fieldKey, editValue);
+        res = await saveFn(duz, fieldKey, editValue);
       } else {
-        await setProviderFields(duz, { field: fieldKey, value: editValue });
+        res = await setProviderFields(duz, { field: fieldKey, value: editValue, lastModified: concurrencyToken });
       }
       onSave(fieldKey, editValue);
+      if (res?.lastModified && onConcurrencyTokenUpdate) onConcurrencyTokenUpdate(res.lastModified);
       setEditing(false);
-    } catch (err) { setSaveError(err.message || 'Failed to save'); }
+    } catch (err) {
+      const conflict = err?.status === 409 || err?.code === 'CONCURRENT_EDIT';
+      setSaveError(conflict ? 'This user was modified by another admin. Refresh before saving.' : (err.message || 'Failed to save'));
+    }
     finally { setSaving(false); }
   };
 
@@ -975,12 +1194,24 @@ function StaffDetailContent({
   navigate, handleRowClick, handleOpenAssignPerms,
   handleClearEsig, clearingEsig,
   handleReactivate, handleRemovePermission,
-  setDeactivateTarget, setDetailData,
+  setDeactivateTarget, setTerminateTarget, setDetailData,
   unlockUser, setSelectedStaff, loadData, setError,
   setCloneSource,
 }) {
+  const [duzCopied, setDuzCopied] = useState(false);
   const handleProviderFieldSave = (fieldKey, newValue) => {
     setDetailData(prev => ({ ...prev, [fieldKey]: newValue }));
+  };
+
+  const copyDuzToClipboard = async () => {
+    if (detailData?.duz == null) return;
+    try {
+      await navigator.clipboard.writeText(String(detailData.duz));
+      setDuzCopied(true);
+      window.setTimeout(() => setDuzCopied(false), 2000);
+    } catch (_clipErr) {
+      /* clipboard may be denied */
+    }
   };
 
   // S4.4: Save handler for basic fields (phone, email, dept, title) via PUT /users/:ien
@@ -988,7 +1219,11 @@ function StaffDetailContent({
   const handleBasicFieldSave = async (duz, fieldKey, newValue) => {
     const vistaField = BASIC_FIELD_MAP[fieldKey];
     if (!vistaField) throw new Error(`Unknown field: ${fieldKey}`);
-    await updateStaffMember(duz, { field: vistaField, value: newValue });
+    return updateStaffMember(duz, {
+      field: vistaField,
+      value: newValue,
+      lastModified: detailData?.lastModified,
+    });
   };
 
   if (detailLoading) {
@@ -1021,10 +1256,25 @@ function StaffDetailContent({
       <div className="grid grid-cols-2 gap-3">
         {detailData.employeeId && <DetailField label="Employee ID" value={detailData.employeeId} mono />}
         <DetailField label="System ID" value={detailData.id} mono />
+        <div className="flex items-end justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold text-[#999] uppercase tracking-wider">DUZ</div>
+            <div className="text-[13px] mt-0.5 font-mono text-[#222] truncate">{detailData.duz}</div>
+          </div>
+          <button
+            type="button"
+            onClick={copyDuzToClipboard}
+            title={duzCopied ? 'Copied' : 'Copy DUZ'}
+            aria-label={duzCopied ? 'DUZ copied' : 'Copy DUZ to clipboard'}
+            className="flex-shrink-0 p-1.5 rounded-md border border-[#E2E4E8] bg-white text-[#2E5984] hover:bg-[#E8EEF5]"
+          >
+            <span className="material-symbols-outlined text-[16px]">{duzCopied ? 'check' : 'content_copy'}</span>
+          </button>
+        </div>
         <DetailField label="Title" value={detailData.title} />
-        <EditableDetailField label="Department" value={detailData.department} fieldKey="department" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
-        <EditableDetailField label="Phone" value={detailData.phone} fieldKey="phone" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
-        <EditableDetailField label="Email" value={detailData.email} fieldKey="email" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} />
+        <EditableDetailField label="Department" value={detailData.department} fieldKey="department" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
+        <EditableDetailField label="Phone" value={detailData.phone} fieldKey="phone" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
+        <EditableDetailField label="Email" value={detailData.email} fieldKey="email" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
         <DetailField label="Status" value={<StatusBadge status={detailData.status} />} />
         {detailData.ssn && <DetailField label="SSN (last 4)" value={detailData.ssn} mono />}
         <DetailField label="Initials" value={detailData.initials} />
@@ -1050,18 +1300,23 @@ function StaffDetailContent({
         {detailData.restrictPatient && <DetailField label="Patient Selection Restriction" value={detailData.restrictPatient} />}
         {/* B2: Verify Code Never Expires */}
         <DetailField label="Password Never Expires" value={detailData.verifyCodeNeverExpires ? 'Yes (override)' : 'Normal expiration'} />
-        {/* S7: Password expiration display */}
-        {detailData.vcChangeDate && !detailData.verifyCodeNeverExpires && (
-          <DetailField label="Password Expires" value={(() => {
-            const days = detailData.pwdDaysRemaining;
-            if (days == null) return `Changed: ${detailData.vcChangeDate}`;
-            if (days <= 0) return <span className="text-[#CC3333] font-semibold">Expired ({Math.abs(days)} days ago)</span>;
-            if (days <= 14) return <span className="text-[#E6A817] font-semibold">Expires in {days} day{days !== 1 ? 's' : ''}</span>;
-            const expDate = new Date();
-            expDate.setDate(expDate.getDate() + days);
-            return `${expDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} (${days} days)`;
-          })()} />
-        )}
+        {/* S7 / 4.8: Password expiration — pwdDaysRemaining or vcChangeDate + pwdExpirationDays */}
+        {(() => {
+          const pwdLine = getPasswordExpiryDisplay(detailData);
+          if (!pwdLine) return null;
+          const warn = typeof pwdLine === 'string' && pwdLine.startsWith('Password expired');
+          const soon = typeof pwdLine === 'string' && pwdLine.startsWith('Password expires:') && detailData.pwdDaysRemaining != null && detailData.pwdDaysRemaining > 0 && detailData.pwdDaysRemaining <= 14;
+          return (
+            <DetailField
+              label="Password Expires"
+              value={
+                warn ? <span className="text-[#CC3333] font-semibold">{pwdLine}</span>
+                  : soon ? <span className="text-[#E6A817] font-semibold">{pwdLine}</span>
+                    : pwdLine
+              }
+            />
+          );
+        })()}
         {/* B3: Language Preference */}
         {detailData.language && <DetailField label="Preferred Language" value={detailData.language} />}
         {/* B4: FileMan Access Code — only show if present */}
@@ -1085,11 +1340,11 @@ function StaffDetailContent({
         <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
           <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Provider Information</h3>
           <div className="grid grid-cols-2 gap-3">
-            <EditableDetailField label="NPI" value={detailData.npi} fieldKey="npi" duz={detailData.duz} onSave={handleProviderFieldSave} />
-            <EditableDetailField label="DEA#" value={detailData.dea} fieldKey="dea" duz={detailData.duz} onSave={handleProviderFieldSave} />
-            <EditableDetailField label="Provider Type" value={detailData.providerType} fieldKey="providerType" duz={detailData.duz} onSave={handleProviderFieldSave} />
-            {detailData.personClass && <EditableDetailField label="Person Class" value={detailData.personClass} fieldKey="personClass" duz={detailData.duz} onSave={handleProviderFieldSave} />}
-            {detailData.taxId && <EditableDetailField label="Tax ID" value={detailData.taxId} fieldKey="taxId" duz={detailData.duz} onSave={handleProviderFieldSave} />}
+            <EditableDetailField label="NPI" value={detailData.npi} fieldKey="npi" duz={detailData.duz} onSave={handleProviderFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
+            <EditableDetailField label="DEA#" value={detailData.dea} fieldKey="dea" duz={detailData.duz} onSave={handleProviderFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
+            <EditableDetailField label="Provider Type" value={detailData.providerType} fieldKey="providerType" duz={detailData.duz} onSave={handleProviderFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
+            {detailData.personClass && <EditableDetailField label="Person Class" value={detailData.personClass} fieldKey="personClass" duz={detailData.duz} onSave={handleProviderFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />}
+            {detailData.taxId && <EditableDetailField label="Tax ID" value={detailData.taxId} fieldKey="taxId" duz={detailData.duz} onSave={handleProviderFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />}
             {detailData.authorizedToWriteMeds !== undefined && (
               <DetailField label="Med Order Authority" value={detailData.authorizedToWriteMeds ? 'Yes' : 'No'} />
             )}

@@ -20,7 +20,23 @@ import { fmDateToDate, formatDateTime } from '../../utils/transforms';
  *   GET /audit/failed-access → Failed login attempts
  */
 
-const ACTION_TYPES = ['All', 'Sign-On', 'Sign-Off', 'Error', 'Failed Access', 'Data Change', 'Administrative Access'];
+/** Section 4 Audit: action filter options (mapped in `matchesAuditActionFilter`) */
+const ACTION_FILTER_OPTIONS = ['All', 'Sign-on', 'Key Change', 'User Edit', 'Error'];
+
+function isKeyChangeAuditEntry(e) {
+  if (e.action !== 'Data Change') return false;
+  const d = `${e.detail || ''} ${e.raw?.fileNumber ?? ''} ${e.raw?.fieldChanged ?? ''}`;
+  return /(^|\s)200(\.|$)|security\s*key|\bKEY\b|KEYS|XUSEC/i.test(d);
+}
+
+function matchesAuditActionFilter(e, filter) {
+  if (filter === 'All') return true;
+  if (filter === 'Sign-on') return e.source === 'Sign-On Log';
+  if (filter === 'Error') return e.action === 'Error';
+  if (filter === 'Key Change') return isKeyChangeAuditEntry(e);
+  if (filter === 'User Edit') return e.action === 'Data Change' && !isKeyChangeAuditEntry(e);
+  return true;
+}
 
 function StaffTypeahead({ value, onChange }) {
   const [suggestions, setSuggestions] = useState([]);
@@ -170,6 +186,7 @@ function normalizeAuditEntry(raw, source) {
 }
 
 export default function AuditLog() {
+  useEffect(() => { document.title = 'Audit Log — VistA Evolved'; }, []);
   const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState(null);
@@ -233,7 +250,7 @@ export default function AuditLog() {
 
   const SOURCE_MAP = { signon: 'Sign-On Log', fileman: 'Data Audit', error: 'Error Log', failed: 'Failed Access', programmer: 'Administrative Access' };
   const filtered = allEvents.filter(e => {
-    if (actionFilter !== 'All' && e.action !== actionFilter) return false;
+    if (!matchesAuditActionFilter(e, actionFilter)) return false;
     if (userSearch && !e.user.toLowerCase().includes(userSearch.toLowerCase())) return false;
     if (sourceFilter !== 'all' && e.source !== SOURCE_MAP[sourceFilter]) return false;
     if (dateFrom && e._sortTime && e._sortTime < new Date(dateFrom).getTime()) return false;
@@ -278,10 +295,16 @@ export default function AuditLog() {
               programmer mode usage.
             </p>
           </div>
-          <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
-            <span className="material-symbols-outlined text-[16px]">download</span>
-            Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={handleExportCSV} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
+              <span className="material-symbols-outlined text-[16px]">download</span>
+              Export CSV
+            </button>
+            <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">
+              <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+              Export PDF
+            </button>
+          </div>
         </div>
 
         {/* Audit Source Tabs */}
@@ -307,7 +330,7 @@ export default function AuditLog() {
               <label className="block text-[10px] font-medium text-text-muted uppercase tracking-wider mb-1">Action Type</label>
               <select value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1); }}
                 className="w-full h-8 px-2 text-xs border border-border rounded-md focus:outline-none focus:border-steel">
-                {ACTION_TYPES.map(a => <option key={a} value={a}>{a}</option>)}
+                {ACTION_FILTER_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
             <div>

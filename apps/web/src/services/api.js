@@ -11,25 +11,31 @@
  * The tenant-admin backend issues a session token on POST /auth/login.
  */
 
-const TOKEN_KEY = 've-session-token';
-const CSRF_KEY = 've-csrf-token';
+// S5.1: Session token is now in httpOnly cookie — never stored in JS.
+// S5.2: CSRF token kept in module-scope memory only (survives within SPA
+// session but not across full page reloads — re-fetched via getSession).
+let _csrfToken = null;
+let _authenticated = false; // tracks if user has logged in during this SPA session
 
-export function setSessionToken(token) {
-  if (token) sessionStorage.setItem(TOKEN_KEY, token);
-  else sessionStorage.removeItem(TOKEN_KEY);
+export function setSessionToken(_token) {
+  // S5.1: Session token lives in httpOnly cookie set by server.
+  // This function now manages the in-memory auth flag only.
+  _authenticated = Boolean(_token);
 }
 
 export function setCsrfToken(token) {
-  if (token) sessionStorage.setItem(CSRF_KEY, token);
-  else sessionStorage.removeItem(CSRF_KEY);
+  _csrfToken = token || null;
+  if (token) _authenticated = true; // CSRF token implies successful login
 }
 
 export function getSessionToken() {
-  return sessionStorage.getItem(TOKEN_KEY);
+  // S5.1: Returns auth status flag (not the actual token).
+  // The real token travels in httpOnly cookie automatically.
+  return _authenticated ? 'httponly-cookie' : null;
 }
 
 export function getCsrfToken() {
-  return sessionStorage.getItem(CSRF_KEY);
+  return _csrfToken;
 }
 
 class ApiError extends Error {
@@ -44,8 +50,8 @@ class ApiError extends Error {
 async function request(method, path, body = null) {
   const headers = { 'Content-Type': 'application/json' };
 
-  const token = getSessionToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  // S5.1: Session token travels in httpOnly cookie — no Authorization header needed.
+  // Cookie is sent automatically because credentials: 'include' is set below.
 
   // S7.5: Include CSRF token in mutating requests
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
@@ -75,11 +81,31 @@ async function request(method, path, body = null) {
     if (err.name === 'AbortError') {
       throw new ApiError('TIMEOUT', 'Request timed out after 30 seconds. The server may be busy — please try again.', 408);
     }
-    throw err;
+    // S7.1: Show connection-lost toast for network errors
+    showConnectionToast('Connection lost — your progress is saved. Please check your network and try again.');
+    throw new ApiError('NETWORK', 'Unable to connect to the server. Please check your connection.', 0);
   }
   clearTimeout(timeoutId);
 
   if (res.status === 401) {
+    const text401 = await res.text();
+    let json401;
+    try {
+      json401 = JSON.parse(text401);
+    } catch (_parseErr) {
+      json401 = null;
+    }
+    // Failed sign-in returns 401 with ok:false — do not treat as session expiry / redirect loop
+    const isLoginFailure =
+      path.includes('/auth/login') && json401 && json401.ok === false;
+    if (isLoginFailure) {
+      throw new ApiError(
+        json401.code || 'UNKNOWN',
+        json401.error || json401.message || 'Authentication failed',
+        401
+      );
+    }
+
     setSessionToken(null);
     // X005: Preserve current page so login can redirect back after re-auth
     const currentPath = window.location.pathname + window.location.search;
@@ -96,7 +122,7 @@ async function request(method, path, body = null) {
   let json;
   try {
     json = JSON.parse(text);
-  } catch {
+  } catch (parseErr) {
     if (!res.ok) throw new ApiError('NON_JSON', text || `HTTP ${res.status}`, res.status);
     return { ok: true, raw: text };
   }
@@ -125,3 +151,17 @@ export const operatorApi = {
 };
 
 export { ApiError };
+
+// S7.1: Lightweight DOM-based connection toast (no React dependency)
+let _toastEl = null;
+let _toastTimer = null;
+function showConnectionToast(msg) {
+  if (_toastEl) { clearTimeout(_toastTimer); _toastEl.remove(); }
+  _toastEl = document.createElement('div');
+  _toastEl.setAttribute('role', 'alert');
+  _toastEl.setAttribute('aria-live', 'assertive');
+  _toastEl.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1A1A2E;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,.3);display:flex;align-items:center;gap:8px;max-width:500px';
+  _toastEl.innerHTML = `<span style="font-size:20px">&#9888;</span><span>${msg.replace(/</g, '&lt;')}</span>`;
+  document.body.appendChild(_toastEl);
+  _toastTimer = setTimeout(() => { if (_toastEl) { _toastEl.remove(); _toastEl = null; } }, 8000);
+}

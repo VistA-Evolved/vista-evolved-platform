@@ -41,6 +41,7 @@ const EDIT_FIELDS = [
 ];
 
 export default function ClinicManagement() {
+  useEffect(() => { document.title = 'Clinic Management — VistA Evolved'; }, []);
   const [clinics, setClinics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -52,7 +53,9 @@ export default function ClinicManagement() {
   const [detailTab, setDetailTab] = useState('details');
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', stopCode: '' });
+  const [createForm, setCreateForm] = useState({
+    name: '', stopCode: '', apptLength: '30', maxApptsPerSlot: '', defaultProvider: '',
+  });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
 
@@ -158,12 +161,29 @@ export default function ClinicManagement() {
 
   const handleCreate = async () => {
     if (!createForm.name.trim()) return;
+    const sc = createForm.stopCode.trim();
+    if (!/^\d{3}$/.test(sc)) {
+      setCreateError('Stop code must be exactly 3 digits (e.g. 323).');
+      return;
+    }
     setCreating(true);
     setCreateError(null);
     try {
-      await createClinic({ name: createForm.name.trim(), stopCode: createForm.stopCode.trim() });
+      const res = await createClinic({ name: createForm.name.trim(), stopCode: sc });
+      const ien = res?.newIen;
+      if (ien) {
+        await updateClinicField(ien, '8', sc);
+        const appt = createForm.apptLength?.trim();
+        if (appt) await updateClinicField(ien, '1912', appt);
+        const maxSlot = createForm.maxApptsPerSlot;
+        if (maxSlot !== '' && maxSlot != null && !Number.isNaN(Number(maxSlot))) {
+          await updateClinicField(ien, '1918', String(maxSlot));
+        }
+        const prov = createForm.defaultProvider.trim();
+        if (prov) await updateClinicField(ien, '16', prov);
+      }
       setShowCreateModal(false);
-      setCreateForm({ name: '', stopCode: '' });
+      setCreateForm({ name: '', stopCode: '', apptLength: '30', maxApptsPerSlot: '', defaultProvider: '' });
       await loadData();
     } catch (err) {
       setCreateError(err.message || 'Failed to create clinic');
@@ -221,7 +241,7 @@ export default function ClinicManagement() {
                   {!loading && <span className="ml-2 text-[13px] text-[#999]">({clinics.length} clinics)</span>}
                 </p>
               </div>
-              <button onClick={() => { setShowCreateModal(true); setCreateError(null); setCreateForm({ name: '', stopCode: '' }); }}
+              <button onClick={() => { setShowCreateModal(true); setCreateError(null); setCreateForm({ name: '', stopCode: '', apptLength: '30', maxApptsPerSlot: '', defaultProvider: '' }); }}
                 title="Create a new clinic in VistA File #44"
                 className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors">
                 <span className="material-symbols-outlined text-[16px]">add</span>
@@ -417,16 +437,39 @@ export default function ClinicManagement() {
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" autoFocus />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#333] mb-1">Stop Code</label>
-                <input type="text" value={createForm.stopCode} onChange={e => setCreateForm(f => ({ ...f, stopCode: e.target.value }))}
-                  placeholder="e.g. 323"
-                  title="DSS workload stop code for this clinic. Used for VA workload reporting and billing."
+                <label className="block text-xs font-medium text-[#333] mb-1">Stop Code <span className="text-[#CC3333]">*</span></label>
+                <input type="text" value={createForm.stopCode} onChange={e => setCreateForm(f => ({ ...f, stopCode: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
+                  placeholder="3 digits, e.g. 323"
+                  maxLength={3}
+                  title="DSS workload stop code — exactly 3 digits."
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Appointment Length</label>
+                <select value={createForm.apptLength} onChange={e => setCreateForm(f => ({ ...f, apptLength: e.target.value }))}
+                  title="Default appointment duration in minutes"
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] bg-white">
+                  {[15, 20, 30, 45, 60].map(m => <option key={m} value={String(m)}>{m} minutes</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Max Appointments Per Slot</label>
+                <input type="number" min={0} value={createForm.maxApptsPerSlot} onChange={e => setCreateForm(f => ({ ...f, maxApptsPerSlot: e.target.value }))}
+                  placeholder="e.g. 2"
+                  title="Maximum overbooks per day for this clinic (File #44 field 1918)."
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Default Provider</label>
+                <input type="text" value={createForm.defaultProvider} onChange={e => setCreateForm(f => ({ ...f, defaultProvider: e.target.value }))}
+                  placeholder="Provider name or entry"
+                  title="Default provider for this clinic (File #44 field 16)."
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
             </div>
             <div className="flex gap-3 mt-6 justify-end">
               <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">Cancel</button>
-              <button disabled={creating || !createForm.name.trim()} onClick={handleCreate}
+              <button disabled={creating || !createForm.name.trim() || createForm.stopCode.length !== 3} onClick={handleCreate}
                 className="px-5 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40">
                 {creating ? 'Creating...' : 'Create Clinic'}
               </button>

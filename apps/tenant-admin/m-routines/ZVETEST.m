@@ -1,0 +1,242 @@
+ZVETEST ; VE — Wave 1 RPC Deployment Test Suite ; Apr 2026
+ ;;1.0;VISTA EVOLVED;**1**;Apr 2026;Build 1
+ ;
+ ; RPCs write to principal device via W command.
+ ; We redirect IO to a temp file, call the RPC,
+ ; then read the file back to check results.
+ ; NOTE: Use explicit dual-IF (never ELSE or $TEST)
+ ;   to avoid $TEST clobber from OK()/NOK() internals.
+ ;
+ Q  ; No direct entry
+ ;
+RUN ;
+ S U="^",DUZ=1,DUZ(0)="@"
+ W !,"=== Wave 1 RPC Test Suite ==="
+ W !,"=== ",$$NOW^XLFDT," ==="
+ N PASS,FAIL,TESTDFN,L1,CLINES,P S PASS=0,FAIL=0,TESTDFN=0
+ ;
+ ; T1: USER LIST
+ D TSTART("T1 USER LIST")
+ D LIST2^ZVEADMIN(.R,"","","","5")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)&(+$P(L1,U,2)>0)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T2: USER DETAIL
+ D TSTART("T2 USER DETAIL")
+ D DETAIL^ZVEADMIN(.R,1)
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("")
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T3: KEY LIST
+ D TSTART("T3 KEY LIST")
+ D KEYLIST^ZVEADMN1(.R)
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T4: ESIG STATUS
+ D TSTART("T4 ESIG STATUS")
+ D ESIGMGT^ZVEADMN1(.R,1,"STATUS")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("status="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T5a: VHA AUTOLOGOFF >900
+ D TSTART("T5a VHA AUTOLOGOFF>900")
+ D PARAMST^ZVEADMN1(.R,"AUTOLOGOFF","1800","test")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=0)
+ I P S PASS=PASS+1 D OK("rejected")
+ I 'P S FAIL=FAIL+1 D NOK("should reject: "_L1)
+ ;
+ ; T5b: VHA LOCKOUT >5
+ D TSTART("T5b VHA LOCKOUT>5")
+ D PARAMST^ZVEADMN1(.R,"LOCKOUT ATTEMPTS","10","test")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=0)
+ I P S PASS=PASS+1 D OK("rejected")
+ I 'P S FAIL=FAIL+1 D NOK("should reject: "_L1)
+ ;
+ ; T5c: VHA PASSWORD >90
+ D TSTART("T5c VHA PWEXP>90")
+ D PARAMST^ZVEADMN1(.R,"PASSWORD EXPIRATION","180","test")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=0)
+ I P S PASS=PASS+1 D OK("rejected")
+ I 'P S FAIL=FAIL+1 D NOK("should reject: "_L1)
+ ;
+ ; T6: PARAM GET
+ D TSTART("T6 PARAM GET")
+ D PARAMGT^ZVEADMN1(.R)
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T7: DIVISION LIST
+ D TSTART("T7 DIVISIONS")
+ D DIVLIST^ZVEADMN1(.R)
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T8: ROLE TEMPLATE - pass a known role name
+ D TSTART("T8 ROLES")
+ D ROLETPL^ZVEADMN1(.R,"PHYSICIAN")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T9: AUDIT
+ D TSTART("T9 AUDIT")
+ D AUDIT^ZVEADMIN(.R,"","","50")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T10: PATIENT SEARCH
+ D TSTART("T10 PAT SEARCH")
+ D SRCH^ZVEPAT1(.R,"PATIENT","NAME","","","50")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T11: PATIENT REGISTER (9-digit SSN: 3+4+2=9)
+ N SSN S SSN="666"_$TR($J(+$J#10000,4)," ","0")_"01"
+ D TSTART("T11 PAT REGISTER ssn="_SSN)
+ D REG^ZVEPAT(.R,"ZVETEST,DEPLOY A","2900315",SSN,"M","123 TEST ST","ANYTOWN","ALABAMA","35201","5551234567","","Y","")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ I P S TESTDFN=+$P(L1,U,2),PASS=PASS+1 D OK("DFN="_TESTDFN)
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T12: PATIENT DEMOGRAPHICS
+ I TESTDFN D
+ . D TSTART("T12 PAT DEMO DFN="_TESTDFN)
+ . D DEMO^ZVEPAT(.R,TESTDFN)
+ . S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ . I P S PASS=PASS+1 D OK("")
+ . I 'P S FAIL=FAIL+1 D NOK(L1)
+ I 'TESTDFN W !,"T12 SKIP (no TESTDFN)" S FAIL=FAIL+1
+ ;
+ ; T13: PATIENT EDIT
+ I TESTDFN D
+ . D TSTART("T13 PAT EDIT")
+ . D EDIT^ZVEPAT(.R,TESTDFN,"PHONE","5559876543")
+ . S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ . I P S PASS=PASS+1 D OK("")
+ . I 'P S FAIL=FAIL+1 D NOK(L1)
+ I 'TESTDFN W !,"T13 SKIP (no TESTDFN)" S FAIL=FAIL+1
+ ;
+ ; T14: ADT ADMIT
+ I TESTDFN D
+ . N WD S WD=$O(^DIC(42,0))
+ . I 'WD W !,"T14 FAIL: no wards" S FAIL=FAIL+1 Q
+ . D TSTART("T14 ADMIT ward="_WD)
+ . D ADMIT^ZVEADT(.R,TESTDFN,WD,"1-A","Test admit","",1)
+ . S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ . I P S PASS=PASS+1 D OK("mov="_$P(L1,U,2))
+ . I 'P S FAIL=FAIL+1 D NOK(L1)
+ I 'TESTDFN W !,"T14 SKIP (no TESTDFN)" S FAIL=FAIL+1
+ ;
+ ; T15: CENSUS
+ D TSTART("T15 CENSUS")
+ D CENSUS^ZVEADT(.R,"","","500")
+ S CLINES=$$TSTOPALL()
+ S L1=$P(CLINES,$C(10),1),P=($P(L1,U,1)=1)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2)) I CLINES["ZVETEST" W " test-pt-found"
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T16: ADT TRANSFER
+ I TESTDFN D
+ . N WD S WD=$O(^DIC(42,0)),WD=$O(^DIC(42,WD))
+ . I 'WD S WD=$O(^DIC(42,0))
+ . D TSTART("T16 TRANSFER to="_WD)
+ . D TRANS^ZVEADT(.R,TESTDFN,WD,"2-B","Transfer test")
+ . S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ . I P S PASS=PASS+1 D OK("")
+ . I 'P S FAIL=FAIL+1 D NOK(L1)
+ I 'TESTDFN W !,"T16 SKIP (no TESTDFN)" S FAIL=FAIL+1
+ ;
+ ; T17: ADT DISCHARGE
+ I TESTDFN D
+ . D TSTART("T17 DISCHARGE")
+ . D DISCH^ZVEADT(.R,TESTDFN,"","REGULAR","")
+ . S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ . I P S PASS=PASS+1 D OK("")
+ . I 'P S FAIL=FAIL+1 D NOK(L1)
+ I 'TESTDFN W !,"T17 SKIP (no TESTDFN)" S FAIL=FAIL+1
+ ;
+ ; T18: POST-DISCHARGE CENSUS
+ D TSTART("T18 POST-DISCH")
+ D CENSUS^ZVEADT(.R,"","","500")
+ S CLINES=$$TSTOPALL()
+ S L1=$P(CLINES,$C(10),1),P=($P(L1,U,1)=1)&(CLINES'["ZVETEST")
+ I P S PASS=PASS+1 D OK("gone from census")
+ I 'P S FAIL=FAIL+1 D NOK("still in census or fail: "_L1)
+ ;
+ ; T19: DUPLICATE DETECTION (search by exact name)
+ D TSTART("T19 DUPLICATE")
+ D DUPL^ZVEPAT1(.R,"ZVETEST,DEPLOY A","2900315","","","10")
+ S L1=$$TSTOP(),P=($P(L1,U,1)=1)&(+$P(L1,U,2)>0)
+ I P S PASS=PASS+1 D OK("cnt="_$P(L1,U,2))
+ I 'P S FAIL=FAIL+1 D NOK(L1)
+ ;
+ ; T20: PATIENT FLAGS
+ I TESTDFN D
+ . D TSTART("T20 FLAGS")
+ . D FLAGS^ZVEPAT1(.R,TESTDFN,"LIST","","","","")
+ . S L1=$$TSTOP(),P=($P(L1,U,1)=1)
+ . I P S PASS=PASS+1 D OK("")
+ . I 'P S FAIL=FAIL+1 D NOK(L1)
+ I 'TESTDFN W !,"T20 SKIP (no TESTDFN)" S FAIL=FAIL+1
+ ;
+ ; SUMMARY
+ W !,""
+ W !,"=== TEST SUMMARY ==="
+ W !,"PASS: ",PASS
+ W !,"FAIL: ",FAIL
+ W !,"TOTAL: ",PASS+FAIL
+ W !,"=== ",$$NOW^XLFDT," ===",!
+ Q
+ ;
+ ; --- IO capture helpers ---
+ ;
+TSTART(LABEL) ;
+ W !,LABEL,": "
+ S %ZVESAVEIO=$I
+ S %ZVETMPF="/tmp/zvetest.out"
+ O %ZVETMPF:(NEWVERSION)
+ U %ZVETMPF
+ Q
+ ;
+TSTOP() ;
+ ; Return first line of captured output
+ U %ZVESAVEIO
+ C %ZVETMPF
+ N LINE S LINE=""
+ O %ZVETMPF:(READONLY)
+ U %ZVETMPF
+ R LINE
+ C %ZVETMPF
+ U %ZVESAVEIO
+ Q LINE
+ ;
+TSTOPALL() ;
+ ; Return ALL lines (newline-delimited)
+ U %ZVESAVEIO
+ C %ZVETMPF
+ N ALL,LINE S ALL=""
+ O %ZVETMPF:(READONLY)
+ U %ZVETMPF
+ F  R LINE Q:$ZEOF  S ALL=ALL_$S(ALL="":"",1:$C(10))_LINE
+ C %ZVETMPF
+ U %ZVESAVEIO
+ Q ALL
+ ;
+OK(MSG) ;
+ W "PASS"
+ I $G(MSG)]"" W " (",MSG,")"
+ Q
+ ;
+NOK(MSG) ;
+ W "FAIL"
+ I $G(MSG)]"" W " (",MSG,")"
+ Q

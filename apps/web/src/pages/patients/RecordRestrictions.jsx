@@ -66,6 +66,7 @@ function formatDateShort(iso) {
 }
 
 export default function RecordRestrictions() {
+  useEffect(() => { document.title = 'Record Restrictions — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { setPatient, hasPatient, patient } = usePatient();

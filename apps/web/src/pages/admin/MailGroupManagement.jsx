@@ -2,18 +2,29 @@ import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { SearchBar, Pagination, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getMailGroups, getMailGroupDetail, updateMailGroup, getMailGroupMembers, addMailGroupMember, removeMailGroupMember, getStaff } from '../../services/adminService';
+import { getMailGroups, getMailGroupDetail, createMailGroup, updateMailGroup, getMailGroupMembers, addMailGroupMember, removeMailGroupMember, getStaff } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 
 /**
  * Mail Group Management — Mail Administration page
  * @vista MAIL GROUP #3.8 via GET/PUT /mail-groups
- * Note: No POST /mail-groups route — groups are read/edit only.
  */
 
 const columns = [
-  { key: 'name', label: 'Group Name', bold: true },
+  {
+    key: 'name',
+    label: 'Group Name',
+    bold: true,
+    render: (val, row) => (
+      <span>
+        {val}{' '}
+        <span className="text-[12px] font-normal text-[#888]">
+          ({typeof row.memberCount === 'number' ? `${row.memberCount} members` : '—'})
+        </span>
+      </span>
+    ),
+  },
   { key: 'description', label: 'Description' },
   { key: 'type', label: 'Type' },
   { key: 'organizer', label: 'Organizer' },
@@ -30,6 +41,7 @@ const EDIT_FIELDS = [
 ];
 
 export default function MailGroupManagement() {
+  useEffect(() => { document.title = 'Mail Groups — VistA Evolved'; }, []);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -54,6 +66,12 @@ export default function MailGroupManagement() {
   const [staffLoading, setStaffLoading] = useState(false);
   const [removeMember, setRemoveMember] = useState(null);
 
+  const [memberCounts, setMemberCounts] = useState({});
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', description: '' });
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -77,6 +95,33 @@ export default function MailGroupManagement() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const filtered = groups.filter(g => {
+    if (!searchText) return true;
+    const s = searchText.toLowerCase();
+    return g.name.toLowerCase().includes(s) || g.type.toLowerCase().includes(s) || g.organizer.toLowerCase().includes(s);
+  });
+  const totalFiltered = filtered.length;
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    if (loading || pageSlice.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const updates = {};
+      await Promise.all(pageSlice.map(async (g) => {
+        try {
+          const res = await getMailGroupMembers(g.id);
+          updates[g.id] = (res?.data || []).length;
+        } catch (_countErr) {
+          updates[g.id] = 0;
+        }
+      }));
+      if (!cancelled) setMemberCounts(prev => ({ ...prev, ...updates }));
+    })();
+    return () => { cancelled = true; };
+  }, [loading, page, groups, searchText]);
 
   const loadDetail = useCallback(async (group) => {
     setSelectedGroup(group);
@@ -110,7 +155,9 @@ export default function MailGroupManagement() {
     setMembersLoading(true);
     try {
       const res = await getMailGroupMembers(groupId);
-      setMembers(res?.data || []);
+      const list = res?.data || [];
+      setMembers(list);
+      setMemberCounts(prev => ({ ...prev, [groupId]: list.length }));
     } catch (err) {
       setMembers([]);
     } finally {
@@ -199,15 +246,21 @@ export default function MailGroupManagement() {
     }
   };
 
-  const filtered = groups.filter(g => {
-    if (!searchText) return true;
-    const s = searchText.toLowerCase();
-    return g.name.toLowerCase().includes(s) || g.type.toLowerCase().includes(s) || g.organizer.toLowerCase().includes(s);
-  });
-
-  const totalFiltered = filtered.length;
-  const pageStart = (page - 1) * PAGE_SIZE;
-  const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const handleCreateGroup = async () => {
+    if (!createForm.name.trim()) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await createMailGroup({ name: createForm.name.trim(), description: createForm.description.trim() });
+      setShowCreateModal(false);
+      setCreateForm({ name: '', description: '' });
+      await loadData();
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create mail group');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   if (error) {
     return (
@@ -232,7 +285,12 @@ export default function MailGroupManagement() {
                   {!loading && <span className="ml-2 text-[13px] text-[#999]">({groups.length} groups)</span>}
                 </p>
               </div>
-              {/* No Add button — no POST /mail-groups route */}
+              <button onClick={() => { setShowCreateModal(true); setCreateError(null); setCreateForm({ name: '', description: '' }); }}
+                title="Create a new mail group in VistA File #3.8"
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors">
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Add Group
+              </button>
             </div>
 
             <div className="flex items-center gap-3 mb-4">
@@ -242,7 +300,7 @@ export default function MailGroupManagement() {
             </div>
 
             {loading ? <TableSkeleton rows={10} cols={5} /> : (
-              <DataTable columns={columns} data={pageSlice} idField="id" selectedId={display?.id} onRowClick={(row) => loadDetail(row)} />
+              <DataTable columns={columns} data={pageSlice.map(g => ({ ...g, memberCount: memberCounts[g.id] }))} idField="id" selectedId={display?.id} onRowClick={(row) => loadDetail(row)} />
             )}
 
             <Pagination page={page} pageSize={PAGE_SIZE} total={totalFiltered} onPageChange={setPage} />
@@ -376,6 +434,45 @@ export default function MailGroupManagement() {
           onCancel={() => setRemoveMember(null)}
           destructive
         />
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-[#222]">Add Mail Group</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-[#999] hover:text-[#222]">
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+            {createError && (
+              <div className="mb-4 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[12px] text-[#CC3333] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[14px]">error</span> {createError}
+              </div>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Group Name <span className="text-[#CC3333]">*</span></label>
+                <input type="text" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. IRM.NOTIFICATIONS"
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" autoFocus />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Description</label>
+                <input type="text" value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Purpose of this group"
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">Cancel</button>
+              <button disabled={creating || !createForm.name.trim()} onClick={handleCreateGroup}
+                className="px-5 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40">
+                {creating ? 'Creating...' : 'Create Group'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAddMember && (

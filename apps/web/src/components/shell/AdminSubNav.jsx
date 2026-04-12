@@ -3,68 +3,48 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 const sections = [
   {
-    group: 'Overview',
-    icon: 'dashboard',
-    items: [
-      { label: 'Admin Dashboard', path: '/admin/dashboard', icon: 'space_dashboard' },
-    ],
-  },
-  {
-    group: 'People',
+    group: 'People & Access',
     icon: 'badge',
     items: [
       { label: 'Staff Directory', path: '/admin/staff', icon: 'group' },
-      { label: 'Add Staff Member', path: '/admin/staff/new', icon: 'person_add' },
-    ],
-  },
-  {
-    group: 'Access Control',
-    icon: 'key',
-    items: [
       { label: 'Roles & Permissions', path: '/admin/roles', icon: 'shield_person' },
       { label: 'Permission Catalog', path: '/admin/permissions', icon: 'vpn_key' },
     ],
   },
   {
-    group: 'Locations',
-    icon: 'location_on',
+    group: 'Facility Setup',
+    icon: 'domain',
     items: [
       { label: 'Clinics', path: '/admin/clinics', icon: 'medical_services' },
       { label: 'Wards', path: '/admin/wards', icon: 'bed' },
-    ],
-  },
-  {
-    group: 'Organization',
-    icon: 'domain',
-    items: [
       { label: 'Divisions', path: '/admin/sites', icon: 'apartment', tooltip: 'Medical Center Divisions (File 40.8) — administrative units within the institution' },
-      { label: 'Departments & Services', path: '/admin/departments', icon: 'account_tree' },
+      { label: 'Departments', path: '/admin/departments', icon: 'account_tree' },
+      { label: 'Devices & Printers', path: '/admin/devices', icon: 'print' },
     ],
   },
   {
-    group: 'System Settings',
-    icon: 'tune',
+    group: 'Security & Policy',
+    icon: 'lock',
     items: [
-      { label: 'Security & Authentication', path: '/admin/security', icon: 'lock' },
+      { label: 'Authentication Settings', path: '/admin/security', icon: 'shield' },
+      { label: 'Audit Trail', path: '/admin/audit', icon: 'history' },
       { label: 'System Configuration', path: '/admin/config', icon: 'settings_applications' },
-      { label: 'Module Settings', path: '/admin/module-settings', icon: 'package_2' },
-      { label: 'Devices', path: '/admin/devices', icon: 'print' },
     ],
   },
   {
-    group: 'Mail Administration',
+    group: 'Communication',
     icon: 'mail',
     items: [
+      { label: 'MailMan Messages', path: '/admin/messages', icon: 'notifications_active' },
       { label: 'Mail Groups', path: '/admin/mail-groups', icon: 'groups' },
     ],
   },
   {
-    group: 'Monitoring',
+    group: 'System',
     icon: 'monitoring',
     items: [
       { label: 'System Health', path: '/admin/health', icon: 'monitor_heart' },
-      { label: 'Audit Trail', path: '/admin/audit', icon: 'history' },
-      { label: 'Messages & Alerts', path: '/admin/messages', icon: 'notifications_active' },
+      { label: 'Module Settings', path: '/admin/module-settings', icon: 'package_2' },
       { label: 'Reports', path: '/admin/reports', icon: 'assessment' },
     ],
   },

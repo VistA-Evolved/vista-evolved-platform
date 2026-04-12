@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import AppShell from './components/shell/AppShell';
 import LoginPage from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -11,6 +11,11 @@ import { FacilityProvider } from './contexts/FacilityContext';
 import SessionManager from './components/shared/SessionManager';
 import ESignatureSetup from './components/shared/ESignatureSetup';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+
+function StaffIdRedirect() {
+  const { userId } = useParams();
+  return <Navigate to={`/admin/staff/${userId}/edit`} replace />;
+}
 
 // Lazy-loaded admin pages
 const StaffDirectory = lazy(() => import('./pages/admin/StaffDirectory'));
@@ -168,6 +173,7 @@ export default function App() {
           <Route path="/admin/staff" element={<RequireAdmin><ErrorBoundary><StaffDirectory /></ErrorBoundary></RequireAdmin>} />
           <Route path="/admin/staff/new" element={<RequireAdmin><ErrorBoundary><StaffForm /></ErrorBoundary></RequireAdmin>} />
           <Route path="/admin/staff/:userId/edit" element={<RequireAdmin><ErrorBoundary><StaffForm /></ErrorBoundary></RequireAdmin>} />
+          <Route path="/admin/staff/:userId" element={<RequireAdmin><ErrorBoundary><StaffIdRedirect /></ErrorBoundary></RequireAdmin>} />
           {/* Access Control */}
           <Route path="/admin/roles" element={<RequireAdmin><ErrorBoundary><RoleTemplates /></ErrorBoundary></RequireAdmin>} />
           <Route path="/admin/permissions" element={<RequireAdmin><ErrorBoundary><PermissionsCatalog /></ErrorBoundary></RequireAdmin>} />

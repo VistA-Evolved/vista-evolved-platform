@@ -596,6 +596,14 @@ export function getSessionBrokerCount() {
   return _sessionBrokerPool.size;
 }
 
+/** True if the session broker pool has at least one connected socket (S18.4 health). */
+export function hasActiveSessionBrokers() {
+  for (const b of _sessionBrokerPool.values()) {
+    if (b && b.connected) return true;
+  }
+  return false;
+}
+
 /**
  * Quick TCP probe — checks if broker port is reachable without authentication.
  */

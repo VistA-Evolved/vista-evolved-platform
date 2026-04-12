@@ -32,9 +32,7 @@ export default function AppShell({ breadcrumb, children }) {
 
   return (
     <div className="min-h-screen bg-white font-sans">
-      {/* J005 — Skip-to-content link for keyboard/screen-reader users */}
-      <a href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-navy focus:text-white focus:rounded-md focus:text-sm focus:font-semibold">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:rounded-md focus:shadow-lg focus:ring-2 focus:ring-[#2E5984]">
         Skip to main content
       </a>
       <SystemBar breadcrumb={breadcrumb} />
@@ -42,7 +40,7 @@ export default function AppShell({ breadcrumb, children }) {
       {isAdmin && <AdminSubNav />}
       {isPatients && <PatientsSubNav />}
       {isAdmin && <SandboxBanner />}
-      <main id="main-content" aria-live="polite" className={`mt-10 min-h-content ${hasSidebar ? 'ml-[calc(4rem+180px)] lg:ml-[calc(4rem+220px)]' : 'ml-16'}`}>
+      <main id="main-content" role="main" aria-live="polite" className={`mt-10 min-h-content ${hasSidebar ? 'ml-[calc(4rem+180px)] lg:ml-[calc(4rem+220px)]' : 'ml-16'}`}>
         {children}
       </main>
     </div>

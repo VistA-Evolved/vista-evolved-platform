@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
@@ -48,12 +48,18 @@ const RACE_OPTIONS = [
 ];
 const ETHNICITY_OPTIONS = ['Hispanic or Latino', 'Not Hispanic or Latino', 'Unknown'];
 const RELATIONSHIP_OPTIONS = ['Self', 'Spouse', 'Parent', 'Child', 'Sibling', 'Grandparent', 'Other'];
-const EMPLOYMENT_OPTIONS = ['Employed Full Time', 'Employed Part Time', 'Unemployed', 'Retired', 'Active Duty', 'Self-Employed', 'Student', 'Disabled', 'Not Employed', 'Unknown'];
+/** VA enrollment / demographics audit: employment & eligibility dropdown */
+const VA_EMPLOYMENT_ELIGIBILITY = ['Employed', 'Retired', 'Unemployed', 'Student', 'Self-Employed', 'Unknown'];
+const ENROLLMENT_PRIORITY_GROUPS = ['1', '2', '3', '4', '5', '6', '7', '8'];
 const BRANCHES = ['Army', 'Navy', 'Air Force', 'Marines', 'Coast Guard', 'Space Force'];
 const SERVICE_ERAS = ['WWII', 'Korea', 'Vietnam', 'Gulf War', 'OEF/OIF/OND', 'Post-9/11', 'Peacetime', 'Other'];
 const EXPOSURE_OPTIONS = ['Agent Orange', 'Ionizing Radiation', 'SW Asia', 'Camp Lejeune', 'Burn Pits/PACT Act', 'Other'];
 const PATIENT_CATEGORIES = ['Service Connected', 'Non-Service Connected', 'Compensated', 'Pension', 'Insured', 'Private Pay', 'Other'];
 const COUNTRY_OPTIONS = ['United States', 'Canada', 'Mexico', 'United Kingdom', 'Germany', 'Japan', 'South Korea', 'Philippines', 'Other'];
+
+/** S23.13: sessionStorage draft — same pattern as StaffForm wizard */
+const DEMO_DRAFT_PREFIX = 've-patient-demo-draft:';
+const DEMO_DRAFT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  STYLING
@@ -82,6 +88,7 @@ const BLANK = {
   nokName: '', nokPhone: '', nokAddress: '', nokRelationship: '',
 
   empStatus: '', empName: '', empPhone: '',
+  enrollmentPriorityGroup: '',
 
   branch: '', serviceEra: '', serviceConnected: false,
   scPercent: '', combatStatus: '', purpleHeart: false, pow: false, exposures: [],
@@ -185,6 +192,7 @@ function maskSSN(ssn) {
 
 export default function PatientDemographics() {
   const { patientId } = useParams();
+  useEffect(() => { document.title = patientId ? 'Edit Patient — VistA Evolved' : 'Register Patient — VistA Evolved'; }, [patientId]);
   const navigate = useNavigate();
   const { setPatient } = usePatient();
   const isEdit = !!patientId;
@@ -209,6 +217,49 @@ export default function PatientDemographics() {
   const [dupDismissed, setDupDismissed] = useState(false);
 
   const savedDfnRef = useRef(null);
+
+  const draftStorageKey = useMemo(() => `${DEMO_DRAFT_PREFIX}${patientId || 'new'}`, [patientId]);
+
+  const isDirty = useMemo(
+    () => JSON.stringify(form) !== JSON.stringify(originalForm),
+    [form, originalForm],
+  );
+
+  /* S23.13: Auto-save draft every 1s while there are unsaved changes */
+  useEffect(() => {
+    if (saveSuccess || loading) return;
+    if (!isDirty) return;
+    const id = setInterval(() => {
+      try {
+        sessionStorage.setItem(
+          draftStorageKey,
+          JSON.stringify({ form, ts: Date.now(), patientId: patientId || null }),
+        );
+      } catch (_storageErr) {
+        /* storage full or disabled */
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isDirty, form, saveSuccess, loading, draftStorageKey, patientId]);
+
+  /* Restore register draft on mount */
+  useEffect(() => {
+    if (isEdit) return;
+    try {
+      const raw = sessionStorage.getItem(draftStorageKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (Date.now() - d.ts > DEMO_DRAFT_MAX_AGE_MS) {
+        sessionStorage.removeItem(draftStorageKey);
+        return;
+      }
+      if (d.form && typeof d.form === 'object') {
+        setForm((f) => ({ ...f, ...d.form }));
+      }
+    } catch (_restoreErr) {
+      /* corrupt or missing draft */
+    }
+  }, [isEdit, draftStorageKey]);
 
   const isChanged = useCallback((field) => {
     if (!isEdit) return false;
@@ -288,6 +339,9 @@ export default function PatientDemographics() {
             empStatus: d.employment?.status || '',
             empName: d.employment?.employer || '',
             empPhone: d.employment?.phone || '',
+            enrollmentPriorityGroup: d.enrollmentPriorityGroup != null && d.enrollmentPriorityGroup !== ''
+              ? String(d.enrollmentPriorityGroup)
+              : (d.eligibility?.priorityGroup != null ? String(d.eligibility.priorityGroup) : ''),
             branch: d.militaryService?.branch || '',
             serviceEra: d.militaryService?.serviceEra || '',
             serviceConnected: d.militaryService?.serviceConnected || d.serviceConnected || false,
@@ -302,12 +356,28 @@ export default function PatientDemographics() {
           setForm(mapped);
           setOriginalForm(mapped);
           setPatient(d);
+          try {
+            const raw = sessionStorage.getItem(draftStorageKey);
+            if (raw) {
+              const draft = JSON.parse(raw);
+              if (
+                Date.now() - draft.ts <= DEMO_DRAFT_MAX_AGE_MS &&
+                String(draft.patientId) === String(patientId) &&
+                draft.form &&
+                typeof draft.form === 'object'
+              ) {
+                setForm((prev) => ({ ...mapped, ...draft.form }));
+              }
+            }
+          } catch (_draftErr) {
+            /* corrupt draft */
+          }
         }
       } finally {
         setLoading(false);
       }
     })();
-  }, [patientId, isEdit, setPatient]);
+  }, [patientId, isEdit, setPatient, draftStorageKey]);
 
   /* ── Field setter with error clearing + identity warnings ── */
   const set = (field, value) => {
@@ -434,6 +504,7 @@ export default function PatientDemographics() {
         emergencyContact: { name: form.ecName, phone: form.ecPhone, relationship: form.ecRelationship },
         nextOfKin: { name: form.nokName, phone: form.nokPhone, address: form.nokAddress, relationship: form.nokRelationship },
         employment: { status: form.empStatus, employer: form.empName, phone: form.empPhone },
+        enrollmentPriorityGroup: form.enrollmentPriorityGroup,
         militaryService: {
           branch: form.branch,
           serviceEra: form.serviceEra,
@@ -455,6 +526,11 @@ export default function PatientDemographics() {
       if (res.ok) {
         const newDfn = res.data?.dfn || patientId;
         savedDfnRef.current = newDfn;
+        try {
+          sessionStorage.removeItem(draftStorageKey);
+        } catch (_clearErr) {
+          /* storage unavailable */
+        }
         setSaveSuccess(isEdit ? 'Demographics updated successfully.' : 'Patient registered successfully.');
         if (isEdit) {
           setOriginalForm({ ...form });
@@ -531,6 +607,11 @@ export default function PatientDemographics() {
                   setDupDismissed(false);
                   setExpandedSections(['identity']);
                   savedDfnRef.current = null;
+                  try {
+                    sessionStorage.removeItem(`${DEMO_DRAFT_PREFIX}new`);
+                  } catch (_e) {
+                    /* storage unavailable */
+                  }
                 }}
                 className="px-5 py-2.5 border border-[#E2E4E8] text-[#555] text-sm font-medium rounded-md hover:bg-[#F0F4F8] transition-colors"
               >
@@ -857,13 +938,13 @@ export default function PatientDemographics() {
             </div>
           </AccordionSection>
 
-          {/* ─────── SECTION 3: EMERGENCY CONTACT & NEXT OF KIN ─────── */}
+          {/* ─────── SECTION: EMERGENCY CONTACTS (NOK + emergency contact) ─────── */}
           <AccordionSection
-            id="emergency" title="Emergency Contact & Next of Kin" icon="emergency"
+            id="emergency" title="Emergency Contacts" icon="emergency"
             expanded={expandedSections.includes('emergency')}
             onToggle={toggleSection}
           >
-            <h3 className="text-[14px] font-semibold text-[#1A1A2E] mb-3">Emergency Contact</h3>
+            <h3 className="text-[14px] font-semibold text-[#1A1A2E] mb-3">Emergency contact</h3>
             <div className="grid grid-cols-3 gap-4 mb-6">
               <Field label="Emergency Contact Name" changed={isChanged('ecName')}>
                 <input value={form.ecName} onChange={e => set('ecName', e.target.value)}
@@ -881,7 +962,7 @@ export default function PatientDemographics() {
               </Field>
             </div>
 
-            <h3 className="text-[14px] font-semibold text-[#1A1A2E] mb-3">Next of Kin</h3>
+            <h3 className="text-[14px] font-semibold text-[#1A1A2E] mb-3 mt-1">Next of kin</h3>
             <div className="grid grid-cols-3 gap-4 mb-4">
               <Field label="Next of Kin Name" changed={isChanged('nokName')}>
                 <input value={form.nokName} onChange={e => set('nokName', e.target.value)}
@@ -906,9 +987,9 @@ export default function PatientDemographics() {
             </div>
           </AccordionSection>
 
-          {/* ─────── SECTION 4: EMPLOYMENT ─────── */}
+          {/* ─────── SECTION: EMPLOYMENT & ELIGIBILITY ─────── */}
           <AccordionSection
-            id="employment" title="Employment" icon="work"
+            id="employment" title="Employment & Eligibility" icon="work"
             expanded={expandedSections.includes('employment')}
             onToggle={toggleSection}
           >
@@ -916,13 +997,24 @@ export default function PatientDemographics() {
               <Field label="Employment Status" changed={isChanged('empStatus')}>
                 <select value={form.empStatus} onChange={e => set('empStatus', e.target.value)} className={selectCls + ' w-full'}>
                   <option value="">Select...</option>
-                  {EMPLOYMENT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  {form.empStatus && !VA_EMPLOYMENT_ELIGIBILITY.includes(form.empStatus) && (
+                    <option value={form.empStatus}>{form.empStatus} (saved)</option>
+                  )}
+                  {VA_EMPLOYMENT_ELIGIBILITY.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </Field>
               <Field label="Employer Name" changed={isChanged('empName')}>
                 <input value={form.empName} onChange={e => set('empName', e.target.value)}
                   className={inputCls + ' w-full'} />
               </Field>
+              <Field label="Enrollment Priority Group" changed={isChanged('enrollmentPriorityGroup')}>
+                <select value={form.enrollmentPriorityGroup} onChange={e => set('enrollmentPriorityGroup', e.target.value)} className={selectCls + ' w-full'}>
+                  <option value="">Select...</option>
+                  {ENROLLMENT_PRIORITY_GROUPS.map(g => <option key={g} value={g}>Group {g}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div className="grid grid-cols-3 gap-4 mt-4">
               <Field label="Employer Phone" changed={isChanged('empPhone')}>
                 <input value={form.empPhone} onChange={e => set('empPhone', e.target.value)}
                   className={inputCls + ' w-full'} />

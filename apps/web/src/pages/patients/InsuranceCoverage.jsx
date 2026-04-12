@@ -190,6 +190,7 @@ function InsuranceModal({ title, form, setForm, companies, companySearch, setCom
 }
 
 export default function InsuranceCoverage() {
+  useEffect(() => { document.title = 'Insurance Coverage — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const { setPatient, hasPatient } = usePatient();
   const [insurance, setInsurance] = useState([]);

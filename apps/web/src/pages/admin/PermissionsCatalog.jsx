@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { SearchBar, Pagination } from '../../components/shared/SharedComponents';
-import { getPermissions, getPermissionHolders, assignPermission, getStaff, getUserPermissions } from '../../services/adminService';
+import { getPermissions, getPermissionHolders, assignPermission, getStaff, getUserPermissions, removePermission, getSession } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -41,6 +41,7 @@ const TASK_KEY_MAP = {
 // columns are built inside the component to access handlers
 
 export default function PermissionsCatalog() {
+  useEffect(() => { document.title = 'Permissions Catalog — VistA Evolved'; }, []);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchText, setSearchText] = useState('');
@@ -67,17 +68,54 @@ export default function PermissionsCatalog() {
   const [holdersModal, setHoldersModal] = useState(null);
   const [holdersLoading, setHoldersLoading] = useState(false);
   const [holdersData, setHoldersData] = useState([]);
+  const [selectedHoldersRemove, setSelectedHoldersRemove] = useState(new Set());
+  const [holdersRemoveBusy, setHoldersRemoveBusy] = useState(false);
+  const [holdersActionError, setHoldersActionError] = useState('');
+  const [sessionDuz, setSessionDuz] = useState(null);
 
   const PAGE_SIZE = 25;
 
   const handleViewStaff = async (row) => {
     setHoldersModal(row);
+    setSelectedHoldersRemove(new Set());
+    setHoldersActionError('');
     setHoldersLoading(true);
     try {
       const res = await getPermissionHolders(row.vistaKey || row.name);
       setHoldersData(res?.data || []);
     } catch (err) { setHoldersData([]); }
     finally { setHoldersLoading(false); }
+  };
+
+  const handleBatchRemoveHolders = async () => {
+    if (!holdersModal || selectedHoldersRemove.size === 0) return;
+    const keyName = holdersModal.vistaKey || holdersModal.name;
+    const keyUpper = String(keyName || '').trim().toUpperCase();
+    setHoldersRemoveBusy(true);
+    setHoldersActionError('');
+    const errors = [];
+    for (const duz of selectedHoldersRemove) {
+      if (keyUpper === 'XUMGR' && sessionDuz != null && String(duz) === String(sessionDuz)) {
+        setHoldersActionError('Cannot remove your own administrative access.');
+        setHoldersRemoveBusy(false);
+        return;
+      }
+      try {
+        await removePermission(duz, keyName);
+      } catch (err) {
+        const staff = holdersData.find(h => (typeof h === 'object' ? h.duz : null) === duz);
+        const nm = typeof staff === 'object' ? staff.name : duz;
+        errors.push(`${nm}: ${err?.message || 'failed'}`);
+      }
+    }
+    setHoldersRemoveBusy(false);
+    if (errors.length > 0) {
+      setHoldersActionError(errors.slice(0, 5).join('; '));
+      return;
+    }
+    setSelectedHoldersRemove(new Set());
+    setHoldersModal(null);
+    loadData();
   };
 
   const handleOpenAssign = async (row) => {
@@ -232,15 +270,19 @@ export default function PermissionsCatalog() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Deep-link support: if the URL has ?assign=KEYNAME or ?view=KEYNAME,
-  // auto-open the matching modal once the catalog has loaded. This powers
-  // the cross-page "Assign to staff" / "View staff with this role" buttons
-  // on RoleTemplates so the admin never hits a blank destination page.
+  useEffect(() => {
+    getSession().then(res => {
+      if (res?.user?.duz != null) setSessionDuz(res.user.duz);
+    }).catch(() => {});
+  }, []);
+
+  // Deep-link support: ?assign=KEYNAME | ?view=KEYNAME | ?key=KEYNAME (select key only)
   useEffect(() => {
     if (allKeys.length === 0) return;
     const assignKey = searchParams.get('assign');
     const viewKey = searchParams.get('view');
-    const target = assignKey || viewKey;
+    const keyOnly = searchParams.get('key');
+    const target = assignKey || viewKey || keyOnly;
     if (!target) return;
     const row = allKeys.find(k => k.name === target || k.vistaKey === target);
     if (!row) return;
@@ -250,7 +292,6 @@ export default function PermissionsCatalog() {
     } else if (viewKey) {
       handleViewStaff(row);
     }
-    // Clear the query so the deep-link only fires once.
     setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allKeys]);
@@ -409,9 +450,21 @@ export default function PermissionsCatalog() {
                   <div className="space-y-1 max-h-40 overflow-auto">
                     {selectedPerm.holders.slice(0, 10).map((h, i) => {
                       const name = typeof h === 'string' ? h : (h.name || '');
+                      const duz = typeof h === 'object' ? h.duz : null;
                       if (!name) return null;
                       return (
-                        <div key={h.duz || i} className="text-[11px] text-text-secondary">{name}</div>
+                        <div key={duz || i} className="text-[11px] text-text-secondary">
+                          {duz ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/staff/${duz}`)}
+                              className="text-left text-steel hover:underline font-medium">
+                              {name}
+                            </button>
+                          ) : (
+                            name
+                          )}
+                        </div>
                       );
                     })}
                     {selectedPerm.holderCount > 10 && (
@@ -457,7 +510,7 @@ export default function PermissionsCatalog() {
 
       {/* View Staff Holders Modal */}
       {holdersModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setHoldersModal(null)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setHoldersModal(null); setHoldersActionError(''); }}>
           <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] flex flex-col" role="dialog" aria-modal="true" aria-label="Staff with this permission" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
@@ -469,6 +522,12 @@ export default function PermissionsCatalog() {
               </button>
             </div>
             <div className="flex-1 overflow-auto p-5">
+              {holdersActionError && (
+                <div className="mb-3 p-2 bg-[#FDE8E8] border border-[#CC3333] rounded-md text-[11px] text-[#CC3333] flex items-start gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] mt-0.5 flex-shrink-0">error</span>
+                  <span>{holdersActionError}</span>
+                </div>
+              )}
               {holdersLoading ? (
                 <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-8 animate-pulse bg-[#E2E4E8] rounded" />)}</div>
               ) : holdersData.length === 0 ? (
@@ -480,18 +539,54 @@ export default function PermissionsCatalog() {
                     if (!name) return null;
                     const duz = typeof h === 'object' ? h.duz : null;
                     return (
-                      <div key={duz || i} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-alt text-sm">
-                        <span className="text-text">{name}</span>
+                      <div key={duz || i} className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-surface-alt text-sm">
                         {duz && (
-                          <button onClick={() => { setHoldersModal(null); navigate(`/admin/staff/${duz}/edit`); }}
-                            className="text-[11px] text-steel hover:underline">View</button>
+                          <input
+                            type="checkbox"
+                            className="w-3.5 h-3.5 accent-[#1B7D3A]"
+                            checked={selectedHoldersRemove.has(duz)}
+                            onChange={() => {
+                              setSelectedHoldersRemove(prev => {
+                                const next = new Set(prev);
+                                next.has(duz) ? next.delete(duz) : next.add(duz);
+                                return next;
+                              });
+                            }}
+                            aria-label={`Select ${name}`}
+                          />
                         )}
+                        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                          {duz ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/admin/staff/${duz}`)}
+                              className="text-left text-text font-medium text-steel hover:underline truncate">
+                              {name}
+                            </button>
+                          ) : (
+                            <span className="text-text">{name}</span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
+            {holdersData.length > 0 && !holdersLoading && (
+              <div className="px-5 py-3 border-t border-border flex items-center justify-between flex-shrink-0 gap-2">
+                <span className="text-xs text-[#666]">
+                  {selectedHoldersRemove.size > 0 ? `${selectedHoldersRemove.size} selected — removes "${holdersModal?.vistaKey || holdersModal?.name}" from each` : 'Select staff to remove this key in batch'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleBatchRemoveHolders}
+                  disabled={selectedHoldersRemove.size === 0 || holdersRemoveBusy}
+                  className="px-4 py-2 text-xs font-medium bg-[#CC3333] text-white rounded-md hover:opacity-90 disabled:opacity-40">
+                  {holdersRemoveBusy ? 'Removing…' : `Remove key from ${selectedHoldersRemove.size} selected`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

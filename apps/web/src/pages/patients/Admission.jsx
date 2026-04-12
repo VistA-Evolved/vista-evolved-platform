@@ -13,6 +13,7 @@ const ADMISSION_TYPES = ['Scheduled', 'Emergency', 'Direct', 'Transfer-In'];
 const ADMISSION_SOURCES = ['Emergency Room', 'Clinic Referral', 'Transfer from Another Facility', 'Direct Admission', 'Walk-In'];
 
 export default function Admission() {
+  useEffect(() => { document.title = 'Admission — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { patient, setPatient, hasPatient } = usePatient();

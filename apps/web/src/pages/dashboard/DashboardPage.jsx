@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 
 export default function DashboardPage() {
+  useEffect(() => { document.title = 'Dashboard — VistA Evolved'; }, []);
   return (
     <AppShell breadcrumb="Dashboard">
       <div className="p-6 max-w-7xl mx-auto">

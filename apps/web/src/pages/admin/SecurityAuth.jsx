@@ -223,6 +223,7 @@ export default function SecurityAuth() {
   const [currentDuz, setCurrentDuz] = useState('');
   // S004: Confirm when disabling audit
   const [confirmAuditDisable, setConfirmAuditDisable] = useState(false);
+  const [auditDisableConfirmText, setAuditDisableConfirmText] = useState('');
   // S7.3: Mail groups for dropdown
   const [mailGroupOptions, setMailGroupOptions] = useState([]);
 
@@ -312,9 +313,15 @@ export default function SecurityAuth() {
     // S004: Confirm when disabling audit
     if (editedValues['OPTION AUDIT'] === 'n' && !confirmAuditDisable) {
       setConfirmAuditDisable(true);
+      setAuditDisableConfirmText('');
+      return;
+    }
+    if (editedValues['OPTION AUDIT'] === 'n' && confirmAuditDisable && auditDisableConfirmText !== 'CONFIRM') {
+      setSaveResult({ type: 'error', msg: 'Type CONFIRM exactly to disable auditing.' });
       return;
     }
     setConfirmAuditDisable(false);
+    setAuditDisableConfirmText('');
     setSaving(true);
     setSaveResult(null);
     try {
@@ -677,16 +684,24 @@ export default function SecurityAuth() {
               <span className="material-symbols-outlined text-[24px]">warning</span>
               <h3 className="text-lg font-bold">Disable Auditing?</h3>
             </div>
-            <p className="text-sm text-[#666] mb-4">
+            <p className="text-sm text-[#666] mb-3">
               Disabling data auditing removes the activity trail for user actions.
               This may violate HIPAA and VHA compliance requirements.
-              Are you sure you want to proceed?
+              Type <span className="font-mono font-semibold">CONFIRM</span> to proceed.
             </p>
+            <label className="block text-xs font-medium text-[#333] mb-1">Confirmation</label>
+            <input type="text" value={auditDisableConfirmText} onChange={e => setAuditDisableConfirmText(e.target.value)}
+              placeholder="CONFIRM"
+              autoComplete="off"
+              className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] mb-4 font-mono" />
             <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmAuditDisable(false)}
+              <button type="button" onClick={() => { setConfirmAuditDisable(false); setAuditDisableConfirmText(''); }}
                 className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F5F5F5]">Cancel</button>
-              <button onClick={() => { setConfirmAuditDisable(false); handleSave(); }}
-                className="px-4 py-2 text-sm bg-[#CC3333] text-white rounded-md hover:bg-[#B71C1C]">Disable Auditing</button>
+              <button type="button" disabled={auditDisableConfirmText !== 'CONFIRM'}
+                onClick={() => handleSave()}
+                className="px-4 py-2 text-sm bg-[#CC3333] text-white rounded-md hover:bg-[#B71C1C] disabled:opacity-40 disabled:cursor-not-allowed">
+                Disable Auditing
+              </button>
             </div>
           </div>
         </div>

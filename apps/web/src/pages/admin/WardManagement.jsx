@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { SearchBar, Pagination, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getWards, getWardDetail, createWard, updateWardField } from '../../services/adminService';
+import { getWards, getWardDetail, createWard, updateWardField, getWardCensus } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -19,6 +19,17 @@ const columns = [
 
 const PAGE_SIZE = 25;
 
+/** Parse authorized/operating bed capacity from File #42 DDR fields (.105 preferred, then .1). */
+function parseWardBedCapacity(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const n = (v) => {
+    if (v === undefined || v === null || v === '') return null;
+    const x = parseFloat(String(v).replace(/[^\d.]/g, ''));
+    return Number.isFinite(x) && x >= 0 ? Math.round(x) : null;
+  };
+  return n(raw['.105']) ?? n(raw['.1']) ?? null;
+}
+
 const EDIT_FIELDS = [
   { key: 'name', label: 'Ward Name', field: 'name', help: 'Official name for this ward (File #42 field .01). Appears in bed management, patient tracking, and census reports.' },
   { key: 'division', label: 'Division', field: 'division', help: 'Facility division this ward belongs to. Required for multi-division facilities.' },
@@ -28,6 +39,7 @@ const EDIT_FIELDS = [
 ];
 
 export default function WardManagement() {
+  useEffect(() => { document.title = 'Ward Management — VistA Evolved'; }, []);
   const [wards, setWards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -47,6 +59,8 @@ export default function WardManagement() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [censusOccupied, setCensusOccupied] = useState(null);
+  const [censusLoading, setCensusLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -75,6 +89,7 @@ export default function WardManagement() {
     setEditing(false);
     setSaveMsg(null);
     setActionError(null);
+    setCensusOccupied(null);
     try {
       const res = await getWardDetail(ward.id);
       const d = res?.data || {};
@@ -85,11 +100,23 @@ export default function WardManagement() {
         const val = d[ef.field] ?? d[ef.key];
         if (val !== undefined && val !== '') mapped[ef.key] = val;
       }
-      setDetailData({ ...ward, ...mapped, id: ward.id });
+      setDetailData({ ...ward, ...mapped, id: ward.id, _wardRaw: d });
     } catch (err) {
       setDetailData(ward);
     } finally {
       setDetailLoading(false);
+    }
+    setCensusLoading(true);
+    try {
+      const cRes = await getWardCensus(ward.id);
+      const n = cRes?.total;
+      const arr = cRes?.data;
+      const occ = typeof n === 'number' ? n : (Array.isArray(arr) ? arr.length : null);
+      setCensusOccupied(Number.isFinite(occ) ? occ : null);
+    } catch (_censusErr) {
+      setCensusOccupied(null);
+    } finally {
+      setCensusLoading(false);
     }
   }, []);
 
@@ -213,7 +240,7 @@ export default function WardManagement() {
                     <span className="material-symbols-outlined text-[14px]">edit</span> Edit
                   </button>
                 )}
-                <button onClick={() => { setSelectedWard(null); setDetailData(null); setEditing(false); }}
+                <button onClick={() => { setSelectedWard(null); setDetailData(null); setEditing(false); setCensusOccupied(null); }}
                   className="text-[#999] hover:text-[#222]" aria-label="Close detail panel">
                   <span className="material-symbols-outlined text-[20px]">close</span>
                 </button>
@@ -237,6 +264,30 @@ export default function WardManagement() {
                     </button>
                   </div>
                 )}
+                {!editing && (() => {
+                  const raw = display._wardRaw;
+                  const bedCap = parseWardBedCapacity(raw);
+                  const occ = censusOccupied;
+                  const canShow = bedCap != null && bedCap > 0 && occ !== null;
+                  if (censusLoading && bedCap != null && bedCap > 0) {
+                    return (
+                      <div className="mb-3 p-3 bg-white border border-[#E2E4E8] rounded-lg text-[12px] text-[#666] flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                        Loading ward census…
+                      </div>
+                    );
+                  }
+                  if (!canShow) return null;
+                  const pct = Math.min(100, Math.round((occ / bedCap) * 100));
+                  return (
+                    <div className="mb-3 p-3 bg-white border border-[#E2E4E8] rounded-lg">
+                      <div className="text-[10px] font-bold text-[#999] uppercase tracking-wider">Occupancy</div>
+                      <div className="text-[13px] mt-0.5 text-[#222]">
+                        {occ}/{bedCap} beds occupied ({pct}%)
+                      </div>
+                    </div>
+                  );
+                })()}
                 {editing ? (
                   <div className="space-y-4">
                     {EDIT_FIELDS.map(ef => (

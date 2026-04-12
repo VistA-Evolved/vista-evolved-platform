@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getPermissions, getCustomRoles, createCustomRole, deleteCustomRole, updateCustomRole, getStaff, getUserPermissions, assignPermission } from '../../services/adminService';
+import { getPermissions, getCustomRoles, createCustomRole, deleteCustomRole, updateCustomRole, getStaff, getUserPermissions, assignPermission, removePermission, getSession } from '../../services/adminService';
 
 /**
  * AD-04: Role Templates (VistA Evolved Addition)
@@ -378,7 +378,7 @@ export const ROLES = [
 const ACCESS_LABELS = { rw: 'Read & Write', ro: 'Read Only', none: 'No Access' };
 const ACCESS_COLORS = { rw: 'bg-[#E6F4EA] text-[#1B7D3A]', ro: 'bg-[#E8EEF5] text-[#2E5984]', none: 'bg-[#F5F5F5] text-[#999]' };
 
-const KEY_IMPACTS = {
+export const KEY_IMPACTS = {
   'PROVIDER': 'Identifies user as healthcare provider. Without this: cannot appear in provider lookups or be selected as attending.',
   'ORES': 'Allows signing clinical orders. Without this: orders pend indefinitely for someone else to sign.',
   'OR CPRS GUI CHART': 'Grants access to patient charts. WITHOUT THIS KEY, THE USER CANNOT OPEN ANY PATIENT CHART.',
@@ -423,27 +423,21 @@ const KEY_IMPACTS = {
   'IBFIN': 'Billing financial access. Without this: cannot process billing claims or financial transactions.',
 };
 
-// S6.6: Key dependencies — some keys require others to function
+// Key dependency visualization — which keys require others to function as intended
 export const KEY_DEPENDENCIES = {
   'ORES': ['PROVIDER'],
   'ORELSE': ['OR CPRS GUI CHART'],
-  'ORCL-SIGN-NOTES': ['OR CPRS GUI CHART'],
-  'ORCL-PAT-RECS': ['OR CPRS GUI CHART'],
-  'PSB NURSE': ['OR CPRS GUI CHART'],
   'PSJ PHARMACIST': ['PSORPH'],
-  'PSD PHARMACIST': ['PSDRPH'],
   'LRVERIFY': ['LRLAB'],
-  'LRSUPER': ['LRLAB', 'LRVERIFY'],
-  'LRMGR': ['LRLAB'],
   'SD SUPERVISOR': ['SD SCHEDULING'],
-  'SDMGR': ['SD SCHEDULING'],
-  'DG ADMIT': ['DG REGISTER'],
-  'DG DISCHARGE': ['DG REGISTER'],
-  'DG TRANSFER': ['DG REGISTER'],
-  'DG SUPERVISOR': ['DG REGISTER', 'DG MENU'],
-  'XUPROG': ['XUMGR'],
-  'XUPROGMODE': ['XUPROG'],
+  'DG SUPERVISOR': ['DG REGISTER'],
 };
+
+/** Keys in `roleKeys` that list `parentKey` in their KEY_DEPENDENCIES */
+function getRoleKeysDependingOn(parentKey, roleKeys) {
+  const upper = (parentKey || '').trim();
+  return roleKeys.filter(k => (KEY_DEPENDENCIES[k] || []).includes(upper));
+}
 
 // S6.7: Task-to-key search — what keys are needed for common clinical tasks
 export const TASK_TO_KEY = {
@@ -483,6 +477,9 @@ export default function RoleTemplates() {
   const [cloneName, setCloneName] = useState('');
   const [roleSaving, setRoleSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [dependencyConfirm, setDependencyConfirm] = useState(null);
+  const [sessionDuz, setSessionDuz] = useState(null);
+  const [removingUserKey, setRemovingUserKey] = useState(false);
   const [error, setError] = useState(null);
 
   const [keyHolderMap, setKeyHolderMap] = useState({});
@@ -504,6 +501,12 @@ export default function RoleTemplates() {
   const [customKeySearch, setCustomKeySearch] = useState('');
   // Workspace access editing for custom roles
   const [editedWorkspaceAccess, setEditedWorkspaceAccess] = useState(null);
+
+  useEffect(() => {
+    getSession().then(res => {
+      if (res?.user?.duz != null) setSessionDuz(res.user.duz);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     Promise.allSettled([
@@ -611,18 +614,39 @@ export default function RoleTemplates() {
     setDeleteTarget(null);
   };
 
+  const handleRemoveHeldKey = async (keyName) => {
+    if (!assignSelectedUser) return;
+    const kn = (keyName || '').trim().toUpperCase();
+    if (kn === 'XUMGR' && sessionDuz != null && String(assignSelectedUser.duz) === String(sessionDuz)) {
+      setError('Cannot remove your own administrative access.');
+      return;
+    }
+    setRemovingUserKey(true);
+    setError(null);
+    try {
+      await removePermission(assignSelectedUser.duz, keyName);
+      const res = await getUserPermissions(assignSelectedUser.duz);
+      setAssignUserKeys((res?.data || []).map(k => k.name));
+    } catch (err) {
+      setError(err.message || 'Failed to remove permission');
+    } finally {
+      setRemovingUserKey(false);
+    }
+  };
+
   const handleOpenAssignRole = async (role) => {
     setAssignTarget(role);
     setAssignStaffSearch('');
     setAssignSelectedUser(null);
     setAssignUserKeys([]);
     setAssignSuccess(null);
+    setError(null);
     if (assignStaffList.length === 0) {
       setAssignStaffLoading(true);
       try {
         const res = await getStaff();
         setAssignStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
-      } catch { setAssignStaffList([]); }
+      } catch (err) { console.error('Staff list load failed:', err); setAssignStaffList([]); }
       finally { setAssignStaffLoading(false); }
     }
   };
@@ -632,7 +656,7 @@ export default function RoleTemplates() {
     try {
       const res = await getUserPermissions(user.duz);
       setAssignUserKeys((res?.data || []).map(k => k.name));
-    } catch { setAssignUserKeys([]); }
+    } catch (err) { console.error('User keys load failed:', err); setAssignUserKeys([]); }
   };
 
   const handleConfirmAssignRole = async () => {
@@ -655,9 +679,32 @@ export default function RoleTemplates() {
     setCustomRoles(prev => prev.map(r => {
       if (r.id !== roleId) return r;
       const has = r.permissions.some(p => p.key === keyData.name);
-      const newPerms = has
-        ? r.permissions.filter(p => p.key !== keyData.name)
-        : [...r.permissions, { label: keyData.displayName || keyData.name, key: keyData.name }];
+      if (!has) {
+        const newPerms = [...r.permissions, { label: keyData.displayName || keyData.name, key: keyData.name }];
+        const updated = { ...r, permissions: newPerms };
+        if (selectedRole.id === roleId) setSelectedRole(updated);
+        return updated;
+      }
+      const roleKeyNames = r.permissions.map(p => p.key);
+      const dependents = getRoleKeysDependingOn(keyData.name, roleKeyNames);
+      if (dependents.length > 0) {
+        setDependencyConfirm({ roleId, keyData, dependents });
+        return r;
+      }
+      const newPerms = r.permissions.filter(p => p.key !== keyData.name);
+      const updated = { ...r, permissions: newPerms };
+      if (selectedRole.id === roleId) setSelectedRole(updated);
+      return updated;
+    }));
+  };
+
+  const confirmDependencyRemove = () => {
+    if (!dependencyConfirm) return;
+    const { roleId, keyData } = dependencyConfirm;
+    setDependencyConfirm(null);
+    setCustomRoles(prev => prev.map(r => {
+      if (r.id !== roleId) return r;
+      const newPerms = r.permissions.filter(p => p.key !== keyData.name);
       const updated = { ...r, permissions: newPerms };
       if (selectedRole.id === roleId) setSelectedRole(updated);
       return updated;
@@ -709,7 +756,19 @@ export default function RoleTemplates() {
               className="w-full px-3 py-2 text-[13px] border border-[#E2E4E8] rounded-md focus:ring-2 focus:ring-[#2E5984]/30 focus:border-[#2E5984] outline-none"
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="px-2 mt-2 pt-3 border-t border-[#E2E4E8]">
+            <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Role usage report</h3>
+            <p className="text-[10px] text-[#999] mb-2">Users assigned per role (userCount on each role).</p>
+            <div className="max-h-[200px] overflow-y-auto space-y-1">
+              {allRoles.map(role => (
+                <div key={role.id} className="flex justify-between items-center px-2 py-1.5 rounded-md bg-[#FAFAFA] text-[12px] gap-2">
+                  <span className="text-[#222] truncate" title={role.name}>{role.name}</span>
+                  <span className="text-[11px] font-mono text-[#666] shrink-0">{role.userCount ?? 0} users</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5 mt-4">
             {filteredRoles.map(role => (
               <button
                 key={role.id}
@@ -907,6 +966,21 @@ export default function RoleTemplates() {
                                 {KEY_IMPACTS[perm.key] && (
                                   <div className="text-[11px] text-[#888] ml-6 mt-1 leading-relaxed italic">{KEY_IMPACTS[perm.key]}</div>
                                 )}
+                                {KEY_DEPENDENCIES[perm.key] && (
+                                  <div className="text-[11px] text-[#2E5984] ml-6 mt-1 leading-relaxed">
+                                    <span className="font-medium">Requires:</span> {KEY_DEPENDENCIES[perm.key].join(', ')}
+                                  </div>
+                                )}
+                                {(() => {
+                                  const dependentKeys = getRoleKeysDependingOn(perm.key, validPerms.map(p => p.key));
+                                  if (dependentKeys.length === 0) return null;
+                                  return (
+                                    <div className="text-[11px] text-[#B45309] ml-6 mt-0.5 leading-relaxed">
+                                      <span className="material-symbols-outlined text-[16px] align-middle mr-0.5">link</span>
+                                      Other keys in this role depend on this: <span className="font-mono">{dependentKeys.join(', ')}</span>
+                                    </div>
+                                  );
+                                })()}
                                 <details className="ml-6 mt-0.5">
                                   <summary className="text-[9px] text-[#BBB] cursor-pointer hover:text-[#888]">System reference</summary>
                                   <div className="text-[10px] font-mono text-[#AAA] mt-0.5">{perm.key}</div>
@@ -971,7 +1045,7 @@ export default function RoleTemplates() {
                       <button
                         onClick={() => {
                           const firstKey = selectedRole.permissions.find(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key))?.key;
-                          navigate(firstKey ? `/admin/permissions?view=${encodeURIComponent(firstKey)}` : '/admin/permissions');
+                          navigate(firstKey ? `/admin/permissions?key=${encodeURIComponent(firstKey)}` : '/admin/permissions');
                         }}
                         className="mt-3 px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-white transition-colors">
                         <span className="material-symbols-outlined text-[14px] mr-1 align-middle">open_in_new</span>
@@ -1084,7 +1158,7 @@ export default function RoleTemplates() {
                   // so the operator can see which staff currently hold it.
                   const firstAvailableKey = selectedRole.permissions.find(p => vistaKeySet.size === 0 || vistaKeySet.has(p.key))?.key;
                   if (firstAvailableKey) {
-                    navigate(`/admin/permissions?view=${encodeURIComponent(firstAvailableKey)}`);
+                    navigate(`/admin/permissions?key=${encodeURIComponent(firstAvailableKey)}`);
                   } else {
                     navigate('/admin/permissions');
                   }
@@ -1140,6 +1214,17 @@ export default function RoleTemplates() {
           confirmLabel="Delete"
           onConfirm={confirmDeleteCustom}
           onCancel={() => setDeleteTarget(null)}
+          destructive
+        />
+      )}
+
+      {dependencyConfirm && (
+        <ConfirmDialog
+          title="Key dependency"
+          message={`Other keys in this role still list "${dependencyConfirm.keyData.name}" as a prerequisite: ${dependencyConfirm.dependents.join(', ')}. Remove it anyway?`}
+          confirmLabel="Remove key"
+          onConfirm={confirmDependencyRemove}
+          onCancel={() => setDependencyConfirm(null)}
           destructive
         />
       )}
@@ -1204,14 +1289,25 @@ export default function RoleTemplates() {
                       {assignTarget.permissions.map((perm, i) => {
                         const alreadyHeld = assignUserKeys.includes(perm.key);
                         return (
-                          <div key={i} className="flex items-center gap-2 text-[12px]">
+                          <div key={i} className="flex items-center gap-2 text-[12px] flex-wrap">
                             <span className={`material-symbols-outlined text-[14px] ${alreadyHeld ? 'text-[#999]' : 'text-[#1B7D3A]'}`}>
                               {alreadyHeld ? 'check' : 'add_circle'}
                             </span>
-                            <span className={alreadyHeld ? 'text-[#999]' : 'text-[#222]'}>
+                            <span className={`flex-1 min-w-0 ${alreadyHeld ? 'text-[#999]' : 'text-[#222]'}`}>
                               {keyEnrichMap[perm.key]?.displayName || perm.label}
                             </span>
-                            {alreadyHeld && <span className="text-[10px] text-[#BBB]">(already held)</span>}
+                            {alreadyHeld && (
+                              <>
+                                <span className="text-[10px] text-[#BBB]">(already held)</span>
+                                <button
+                                  type="button"
+                                  disabled={removingUserKey}
+                                  onClick={() => handleRemoveHeldKey(perm.key)}
+                                  className="text-[10px] font-medium text-[#CC3333] hover:underline disabled:opacity-40 ml-1">
+                                  Remove
+                                </button>
+                              </>
+                            )}
                           </div>
                         );
                       })}

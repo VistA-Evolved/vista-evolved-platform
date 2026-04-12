@@ -20,6 +20,7 @@ const columns = [
 const PAGE_SIZE = 25;
 
 export default function DepartmentsServices() {
+  useEffect(() => { document.title = 'Departments & Services — VistA Evolved'; }, []);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

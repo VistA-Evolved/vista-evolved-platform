@@ -97,23 +97,57 @@ export function CautionBanner({ children }) {
 
 export function ConfirmDialog({ open = true, title, message, confirmLabel = 'Confirm', danger = false, destructive = false, onConfirm, onCancel }) {
   const isDanger = danger || destructive;
-  if (!open) return null;
+  const dialogRef = useRef(null);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') onCancel?.();
-    if (e.key === 'Enter') onConfirm?.();
-  };
+  useEffect(() => {
+    if (!open) return;
+    const el = dialogRef.current;
+    if (!el) return;
+
+    const focusable = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (focusable.length) (isDanger ? first : last).focus();
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel?.();
+        return;
+      }
+      if (e.key === 'Enter') {
+        if (e.target?.closest?.('button')) return;
+        e.preventDefault();
+        onConfirm?.();
+        return;
+      }
+      if (e.key === 'Tab' && focusable.length) {
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    el.addEventListener('keydown', onKeyDown);
+    return () => el.removeEventListener('keydown', onKeyDown);
+  }, [open, isDanger, onConfirm, onCancel]);
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
       role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title"
-      onKeyDown={handleKeyDown} onClick={onCancel}>
+      onClick={onCancel} ref={dialogRef}>
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
         <h3 id="confirm-dialog-title" className="text-lg font-semibold text-text mb-2">{title || 'Confirm'}</h3>
         <p className="text-sm text-text-secondary mb-6">{message || 'Are you sure?'}</p>
         <div className="flex justify-end gap-3">
-          <button onClick={onCancel} autoFocus={isDanger} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">Cancel</button>
-          <button onClick={onConfirm} autoFocus={!isDanger}
+          <button onClick={onCancel} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-surface-alt">Cancel</button>
+          <button onClick={onConfirm}
             className={`px-4 py-2 text-sm text-white rounded-md ${isDanger ? 'bg-danger hover:bg-[#B02020]' : 'bg-navy hover:bg-steel'}`}>
             {confirmLabel}
           </button>

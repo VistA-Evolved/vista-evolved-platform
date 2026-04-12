@@ -19,13 +19,34 @@
 import { tenantApi, setSessionToken, setCsrfToken } from './api';
 
 // ────────────────────────────────────────────────
+// S6.5: Reference data cache (5 min TTL) — divisions, keys catalog, services, titles, mail groups
+// ────────────────────────────────────────────────
+
+const _refDataCache = new Map();
+const REF_DATA_TTL = 5 * 60 * 1000; // 5 minutes
+
+function cachedGet(key, fetcher) {
+  const cached = _refDataCache.get(key);
+  if (cached && Date.now() - cached.ts < REF_DATA_TTL) return Promise.resolve(cached.data);
+  return fetcher().then((data) => {
+    _refDataCache.set(key, { data, ts: Date.now() });
+    return data;
+  });
+}
+
+export function clearRefDataCache() {
+  _refDataCache.clear();
+}
+
+// ────────────────────────────────────────────────
 // Auth (backend: XWB sign-on via XUS AV CODE)
 // ────────────────────────────────────────────────
 
 export async function login(username, password, tenantId = 'local-dev') {
   const result = await tenantApi.post('/auth/login', { accessCode: username, verifyCode: password, tenantId });
-  if (result.ok && result.token) {
-    setSessionToken(result.token);
+  if (result.ok) {
+    // S5.1: Session token is in httpOnly cookie (set by server Set-Cookie header).
+    // Only store CSRF token in memory for state-changing requests.
     if (result.csrfToken) setCsrfToken(result.csrfToken);
   }
   return result;
@@ -146,8 +167,13 @@ export async function setProviderFields(duz, data) {
 // Permissions / Security Keys (backend: SECURITY KEY #19.1)
 // ────────────────────────────────────────────────
 
-export async function getPermissions(params = {}) {
+export async function _getPermissions(params = {}) {
   return tenantApi.get('/key-inventory', params);
+}
+
+export function getPermissions(params = {}) {
+  const key = `permissions:${JSON.stringify(params ?? {})}`;
+  return cachedGet(key, () => _getPermissions(params));
 }
 
 export async function getPermissionHolders(keyName) {
@@ -163,7 +189,8 @@ export async function assignPermission(duz, keyData) {
 }
 
 export async function removePermission(duz, keyId) {
-  return tenantApi.delete(`/users/${duz}/keys/${keyId}`);
+  const id = encodeURIComponent(String(keyId ?? '').trim());
+  return tenantApi.delete(`/users/${duz}/keys/${id}`);
 }
 
 export async function analyzeKeyImpact(data) {
@@ -182,8 +209,13 @@ export async function getRoleTemplates() {
 // Departments / Services (backend: SERVICE/SECTION #49)
 // ────────────────────────────────────────────────
 
-export async function getDepartments(params = {}) {
+export async function _getDepartments(params = {}) {
   return tenantApi.get('/services', params);
+}
+
+export function getDepartments(params = {}) {
+  const key = `departments:${JSON.stringify(params ?? {})}`;
+  return cachedGet(key, () => _getDepartments(params));
 }
 
 export async function getDepartmentDetail(ien) {
@@ -206,8 +238,12 @@ export async function deleteDepartment(ien) {
 // Sites / Divisions (backend: INSTITUTION #4 + MEDICAL CENTER DIVISION #40.8)
 // ────────────────────────────────────────────────
 
-export async function getSites() {
+export async function _getSites() {
   return tenantApi.get('/divisions');
+}
+
+export function getSites() {
+  return cachedGet('sites', () => _getSites());
 }
 
 export async function getSite(ien) {
@@ -230,8 +266,28 @@ export async function getWards(params = {}) {
   return tenantApi.get('/wards', params);
 }
 
+/** Ward inpatient census — ZVE ADT CENSUS (optional wardIen filter). */
+export async function getWardCensus(wardIen, params = {}) {
+  const q = { ...params };
+  if (wardIen) q.wardIen = String(wardIen);
+  return tenantApi.get('/census', q);
+}
+
 export async function getTopology() {
   return tenantApi.get('/topology');
+}
+
+// ────────────────────────────────────────────────
+// Titles (backend: TITLE #3.1) — S3.13 pointer dropdown
+// ────────────────────────────────────────────────
+
+export async function _getTitles(params = {}) {
+  return tenantApi.get('/titles', params);
+}
+
+export function getTitles(params = {}) {
+  const key = `titles:${JSON.stringify(params ?? {})}`;
+  return cachedGet(key, () => _getTitles(params));
 }
 
 // ────────────────────────────────────────────────
@@ -423,8 +479,13 @@ export async function getDevices(params = {}) {
 // Mail Groups (backend: MAIL GROUP file)
 // ────────────────────────────────────────────────
 
-export async function getMailGroups(params = {}) {
+export async function _getMailGroups(params = {}) {
   return tenantApi.get('/mail-groups', params);
+}
+
+export function getMailGroups(params = {}) {
+  const key = `mailGroups:${JSON.stringify(params ?? {})}`;
+  return cachedGet(key, () => _getMailGroups(params));
 }
 
 // ────────────────────────────────────────────────
@@ -638,6 +699,10 @@ export async function testPrintDevice(ien) {
 
 export async function getMailGroupDetail(ien) {
   return tenantApi.get(`/mail-groups/${ien}`);
+}
+
+export async function createMailGroup(data) {
+  return tenantApi.post('/mail-groups', data);
 }
 
 export async function updateMailGroup(ien, data) {

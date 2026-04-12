@@ -14,6 +14,9 @@ import { transformErrorTrap, formatDateTime } from '../../utils/transforms';
  * System Health — Screen 8  (replaces SystemMonitor)
  * @vista Background task scheduler, Error Trap, HL7, VistA Status
  *
+ * Data: TaskMan uses GET /taskman/status, /taskman/tasks, /taskman/scheduled;
+ * HL7 uses GET /hl7/filer-status and GET /hl7-interfaces (File #870 logical links).
+ *
  * Key spec requirements:
  *  - Human task names (not raw M routines)
  *  - When background scheduler is stopped → single prominent card, not 15 blank rows
@@ -121,6 +124,7 @@ function humanizeColumnHeader(raw) {
 }
 
 export default function SystemHealth() {
+  useEffect(() => { document.title = 'System Health — VistA Evolved'; }, []);
   const [activeTab, setActiveTab] = useState('health');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -514,7 +518,7 @@ export default function SystemHealth() {
               )}
             </div>
 
-            {/* HL7 Interface link list placeholder — uses GET /hl7-interfaces (File #870) */}
+            {/* Logical links from File #870 via GET /hl7-interfaces (loaded in HL7InterfaceList) */}
             <div className="bg-white border border-[#E2E4E8] rounded-lg p-5">
               <h2 className="text-sm font-semibold text-text uppercase tracking-wider mb-3">Configured Interfaces</h2>
               <HL7InterfaceList />

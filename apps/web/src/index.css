@@ -37,3 +37,13 @@ body {
     print-color-adjust: exact;
   }
 }
+
+/* S14/S20: Responsive overrides for tablet and mobile */
+@media (max-width: 768px) {
+  .admin-table { overflow-x: auto; }
+  .detail-panel { position: fixed; inset: 0; z-index: 40; }
+}
+@media (max-width: 375px) {
+  .admin-table th:nth-child(n+5),
+  .admin-table td:nth-child(n+5) { display: none; }
+}

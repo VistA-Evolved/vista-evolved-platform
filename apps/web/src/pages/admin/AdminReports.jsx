@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { getAdminReport } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
@@ -6,6 +6,9 @@ import ErrorState from '../../components/shared/ErrorState';
 /**
  * Admin Reports — Standalone reporting page
  * @see Spec Part 5 Screen 8 Reports tab, separated into own route per spec nav
+ *
+ * Each report type maps to tenant-admin GET /reports/admin/:reportType (VistA-backed):
+ * staff-access, permission-dist, audit-summary, signin-activity, inactive-accounts, param-changes.
  */
 
 const REPORT_TYPES = [
@@ -33,6 +36,7 @@ function humanizeColumnHeader(raw) {
 }
 
 export default function AdminReports() {
+  useEffect(() => { document.title = 'Reports — VistA Evolved'; }, []);
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -53,6 +57,10 @@ export default function AdminReports() {
     }
   }, []);
 
+  const handlePrintReport = () => {
+    window.print();
+  };
+
   const handleExportCsv = () => {
     if (!reportData || !Array.isArray(reportData) || reportData.length === 0) return;
     const keys = Object.keys(reportData[0]);
@@ -70,6 +78,13 @@ export default function AdminReports() {
 
   return (
     <AppShell breadcrumb="Admin > Reports">
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #admin-report-print-root, #admin-report-print-root * { visibility: visible !important; }
+          #admin-report-print-root { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; }
+        }
+      `}</style>
       <div className="p-6 max-w-5xl">
         <h1 className="text-[22px] font-bold text-text mb-1">Reports</h1>
         <p className="text-xs text-[#999] mb-2">Generate administrative and security reports from live system data.</p>
@@ -108,16 +123,26 @@ export default function AdminReports() {
 
         {!reportLoading && reportData && (
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-text">{selectedReport?.name}</h2>
-              <button onClick={handleExportCsv}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">
-                <span className="material-symbols-outlined text-[14px]">download</span>
-                Export CSV
-              </button>
+            <div className="flex items-center justify-end mb-3 no-print">
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={handlePrintReport}
+                  title="Opens the print dialog — choose Save as PDF in the printer destination to export as PDF."
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">
+                  <span className="material-symbols-outlined text-[14px]">picture_as_pdf</span>
+                  Print / PDF
+                </button>
+                <button type="button" onClick={handleExportCsv}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]">
+                  <span className="material-symbols-outlined text-[14px]">download</span>
+                  Export CSV
+                </button>
+              </div>
             </div>
             {Array.isArray(reportData) && reportData.length > 0 ? (
-              <div className="bg-white border border-[#E2E4E8] rounded-lg overflow-auto max-h-[60vh]">
+              <div id="admin-report-print-root" className="bg-white border border-[#E2E4E8] rounded-lg overflow-auto max-h-[60vh] print:max-h-none print:border-0 print:shadow-none">
+                <div className="px-3 py-2 border-b border-[#E2E4E8] text-sm font-semibold text-text">
+                  {selectedReport?.name}
+                </div>
                 <table className="w-full text-sm">
                   <thead className="bg-[#F4F5F7] sticky top-0">
                     <tr>

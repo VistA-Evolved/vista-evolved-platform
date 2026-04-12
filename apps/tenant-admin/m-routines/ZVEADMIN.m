@@ -32,23 +32,30 @@ INSTALL ;
  ; ZVE USER LIST — List users from NEW PERSON file (#200)
  ; ============================================================
  ; Params: SEARCH (text filter), STATUS (active/inactive/all),
- ;         DIVISION (IEN), MAX (limit, default 200)
+ ;         DIVISION (IEN), MAX (limit, default 200),
+ ;         FROM (skip first N matching rows — use with MAX for paging)
+ ;         PAGED ("1" = full scan; return 1^TOTAL^RETURNED^OK for any page)
  ; Output: multi-line, 1 header + N data rows
- ;   Line 1: "1^COUNT^OK"
+ ;   Line 1 (legacy): "1^RETURNED^OK"
+ ;   Line 1 (PAGED): "1^TOTAL^RETURNED^OK" — TOTAL = all matches
  ;   Line 2+: "IEN^NAME^STATUS^TITLE^SERVICE^DIVISION^LASTLOGIN^KEYCOUNT"
  ; ============================================================
-LIST2(R,SEARCH,STATUS,DIVISION,MAX) ;
+LIST2(R,SEARCH,STATUS,DIVISION,MAX,FROM,PAGED) ;
  ; List users from NEW PERSON #200 — collects into array, writes header first
- N IEN,NM,CNT,MAXR,DISUSER,TITLE,SVC,LASTLOG,KCNT,DIVNM,DIVMATCH,DIEN,OUT,ISPROV
- S CNT=0
+ N IEN,NM,COLLECTED,MAXR,DISUSER,TITLE,SVC,LASTLOG,KCNT,DIVNM,DIVMATCH,DIEN,OUT,ISPROV
+ N MATCHED,FROMN,FULLSCAN
+ S COLLECTED=0
+ S MATCHED=0
  S MAXR=+$G(MAX) I MAXR<1 S MAXR=200
+ S FROMN=+$G(FROM) I FROMN<0 S FROMN=0
+ S FULLSCAN=(FROMN>0)!($G(PAGED)="1")
  S SEARCH=$$UP^XLFSTR($G(SEARCH))
  S STATUS=$G(STATUS,"all")
  S DIVISION=$G(DIVISION)
  ;
- S NM="" F  S NM=$O(^VA(200,"B",NM)) Q:NM=""  Q:CNT'<MAXR  D
+ S NM="" F  S NM=$O(^VA(200,"B",NM)) Q:NM=""  Q:'FULLSCAN&(COLLECTED'<MAXR)  D
  . I SEARCH]"",$$UP^XLFSTR(NM)'[SEARCH Q
- . S IEN=0 F  S IEN=$O(^VA(200,"B",NM,IEN)) Q:'IEN  Q:CNT'<MAXR  D
+ . S IEN=0 F  S IEN=$O(^VA(200,"B",NM,IEN)) Q:'IEN  Q:'FULLSCAN&(COLLECTED'<MAXR)  D
  . . I IEN<1 Q
  . . I NM="POSTMASTER" Q
  . . S DISUSER=$P($G(^VA(200,IEN,7)),U,1)
@@ -73,13 +80,17 @@ LIST2(R,SEARCH,STATUS,DIVISION,MAX) ;
  . . I DIEN>0 D
  . . . N DIVIEN S DIVIEN=$P($G(^VA(200,IEN,2,DIEN,0)),U,1)
  . . . I DIVIEN>0 S DIVNM=$$GET1^DIQ(40.8,DIVIEN_",",1,"E")
- . . S CNT=CNT+1
+ . . S MATCHED=MATCHED+1
+ . . I MATCHED'>FROMN Q
+ . . I COLLECTED'<MAXR Q
+ . . S COLLECTED=COLLECTED+1
  . . S ISPROV=$S($D(^XUSEC("PROVIDER",IEN)):1,$$GET1^DIQ(200,IEN_",",41.99,"I")]"":1,1:0)
- . . S OUT(CNT)=IEN_U_NM_U_STAT_U_TITLE_U_SVC_U_DIVNM_U_LASTLOG_U_KCNT_U_ISPROV
+ . . S OUT(COLLECTED)=IEN_U_NM_U_STAT_U_TITLE_U_SVC_U_DIVNM_U_LASTLOG_U_KCNT_U_ISPROV
  ;
  ; Output results to R array (RPC broker type=2 ARRAY)
- S R(0)="1^"_CNT_"^OK"
- N I F I=1:1:CNT S R(I)=OUT(I)
+ I FULLSCAN S R(0)="1^"_MATCHED_"^"_COLLECTED_"^OK"
+ E  S R(0)="1^"_COLLECTED_"^OK"
+ N I F I=1:1:COLLECTED S R(I)=OUT(I)
  Q
  ;
  ; ============================================================

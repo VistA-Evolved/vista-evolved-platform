@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { tenantApi } from '../services/api';
 
 export default function ForgotPasswordPage() {
+  useEffect(() => { document.title = 'Forgot Password — VistA Evolved'; }, []);
   const [username, setUsername] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);

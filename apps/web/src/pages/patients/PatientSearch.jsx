@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { Pagination } from '../../components/shared/SharedComponents';
-import { searchPatients, getPatientDashboardStats, getDivisions } from '../../services/patientService';
+import { searchPatients, getPatientDashboardStats, getDivisions, assignBed } from '../../services/patientService';
 
 const PAGE_SIZE = 10;
 
@@ -62,7 +62,10 @@ function formatSex(sex) {
 }
 
 export default function PatientSearch() {
+  useEffect(() => { document.title = 'Patient Search — VistA Evolved'; }, []);
   const navigate = useNavigate();
+  const location = useLocation();
+  const assignBedContext = location.state?.assignBedContext;
   const searchInputRef = useRef(null);
   const debounceRef = useRef(null);
 
@@ -86,6 +89,9 @@ export default function PatientSearch() {
   const [sensitiveModal, setSensitiveModal] = useState(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [acknowledgedDfns] = useState(() => new Set());
+  const [assigningBed, setAssigningBed] = useState(false);
+  const [registerDupModal, setRegisterDupModal] = useState(null);
+  const [registerDupLoading, setRegisterDupLoading] = useState(false);
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -171,6 +177,30 @@ export default function PatientSearch() {
     [filteredPatients, page],
   );
 
+  const completeBedAssignment = useCallback(async (patient) => {
+    if (!assignBedContext || !patient?.dfn) return;
+    setAssigningBed(true);
+    setError(null);
+    try {
+      const res = await assignBed({
+        patientDfn: patient.dfn,
+        bedIen: assignBedContext.bedIen,
+        wardIen: assignBedContext.wardIen,
+        roomBed: assignBedContext.roomBed,
+        unit: assignBedContext.unit,
+      });
+      if (!res.ok) {
+        setError(res.error || 'Could not assign patient to bed');
+        return;
+      }
+      navigate(`/patients/${patient.dfn}`, { replace: true, state: {} });
+    } catch (err) {
+      setError(err.message || 'Could not assign patient to bed');
+    } finally {
+      setAssigningBed(false);
+    }
+  }, [assignBedContext, navigate]);
+
   const guardRestricted = useCallback((patient, action) => {
     if (patient.isRestricted && !acknowledgedDfns.has(patient.dfn)) {
       setSensitiveModal(patient);
@@ -191,6 +221,8 @@ export default function PatientSearch() {
       navigate(`/patients/${patient.dfn}`);
     } else if (action === 'edit') {
       navigate(`/patients/${patient.dfn}/edit`);
+    } else if (action === 'assign-bed') {
+      completeBedAssignment(patient);
     } else {
       setSelectedPatient(patient);
     }
@@ -202,12 +234,22 @@ export default function PatientSearch() {
   };
 
   const handleRowClick = (patient) => {
+    if (assignBedContext) {
+      if (guardRestricted(patient, 'assign-bed')) return;
+      completeBedAssignment(patient);
+      return;
+    }
     if (guardRestricted(patient, 'preview')) return;
     setSelectedPatient(patient);
   };
 
   const handleNameClick = (e, patient) => {
     e.stopPropagation();
+    if (assignBedContext) {
+      if (guardRestricted(patient, 'assign-bed')) return;
+      completeBedAssignment(patient);
+      return;
+    }
     if (guardRestricted(patient, 'navigate')) return;
     navigate(`/patients/${patient.dfn}`);
   };
@@ -219,8 +261,40 @@ export default function PatientSearch() {
   };
 
   const handleRecentClick = (patient) => {
+    if (assignBedContext) {
+      if (guardRestricted(patient, 'assign-bed')) return;
+      completeBedAssignment(patient);
+      return;
+    }
     if (guardRestricted(patient, 'navigate')) return;
     navigate(`/patients/${patient.dfn}`);
+  };
+
+  const handleRegisterNewPatient = async () => {
+    const q = query.trim();
+    const dob = dobFilter;
+    if (q.length >= 2 && dob) {
+      setRegisterDupLoading(true);
+      setError(null);
+      try {
+        const res = await searchPatients(q);
+        const matches = (res.data || []).filter(p => p.dob === dob);
+        if (matches.length > 0) {
+          setRegisterDupModal({ matches, dob });
+          return;
+        }
+      } catch (_dupErr) {
+        /* proceed to registration if duplicate search fails */
+      } finally {
+        setRegisterDupLoading(false);
+      }
+    }
+    navigate('/patients/register');
+  };
+
+  const confirmRegisterDespiteDuplicates = () => {
+    setRegisterDupModal(null);
+    navigate('/patients/register');
   };
 
   const exportCSV = () => {
@@ -269,6 +343,16 @@ export default function PatientSearch() {
     <AppShell breadcrumb="Patients">
       <div className="px-6 py-5">
         {/* ── Page Header ── */}
+        {assignBedContext && (
+          <div className="mb-4 px-4 py-3 bg-[#E8EEF5] border border-[#2E5984]/30 rounded-md text-sm text-[#1A1A2E] flex items-start gap-2">
+            <span className="material-symbols-outlined text-[20px] text-[#2E5984] shrink-0">bed</span>
+            <span>
+              Select a patient below to assign to bed <strong>{location.state?.assignBed || assignBedContext.roomBed}</strong>
+              {location.state?.assignUnit ? <> ({location.state.assignUnit})</> : null}. Admission will be submitted to VistA when you choose a row.
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-[28px] font-bold text-[#1A1A2E]">Patient Search</h1>
           <div className="flex items-center gap-3">
@@ -282,10 +366,15 @@ export default function PatientSearch() {
               </button>
             )}
             <button
-              onClick={() => navigate('/patients/register')}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors"
+              onClick={handleRegisterNewPatient}
+              disabled={registerDupLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="material-symbols-outlined text-[18px]">person_add</span>
+              {registerDupLoading ? (
+                <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+              ) : (
+                <span className="material-symbols-outlined text-[18px]">person_add</span>
+              )}
               Register New Patient
             </button>
           </div>
@@ -388,6 +477,13 @@ export default function PatientSearch() {
         </div>
 
         {/* ── Error Banner ── */}
+        {assigningBed && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-[#F0F4F8] border border-[#E2E4E8] rounded-md mb-4 text-sm text-[#555]">
+            <span className="material-symbols-outlined animate-spin text-[18px] text-[#2E5984]">progress_activity</span>
+            Assigning patient to bed…
+          </div>
+        )}
+
         {error && (
           <div className="flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-md mb-4">
             <span className="material-symbols-outlined text-red-600 text-[20px]">error</span>
@@ -477,8 +573,9 @@ export default function PatientSearch() {
                             </span>
                             <p className="text-[#666] mb-4">No patients found matching your search</p>
                             <button
-                              onClick={() => navigate('/patients/register')}
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors"
+                              onClick={handleRegisterNewPatient}
+                              disabled={registerDupLoading}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-50"
                             >
                               <span className="material-symbols-outlined text-[18px]">person_add</span>
                               Register New Patient
@@ -649,6 +746,53 @@ export default function PatientSearch() {
           )}
         </div>
       </div>
+
+      {/* ── Possible duplicate(s) before registration ── */}
+      {registerDupModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-amber-700 text-[22px]">warning</span>
+              </div>
+              <h3 className="text-lg font-semibold text-[#1A1A2E]">Possible duplicate records</h3>
+            </div>
+            <p className="text-sm text-[#555] mb-4">
+              Found {registerDupModal.matches.length} patient{registerDupModal.matches.length !== 1 ? 's' : ''} with the same search name and date of birth ({registerDupModal.dob}). Open an existing chart or continue only if this is a different person.
+            </p>
+            <ul className="max-h-40 overflow-y-auto border border-[#E2E4E8] rounded-md divide-y divide-[#E2E4E8] mb-5 text-sm">
+              {registerDupModal.matches.map(p => (
+                <li key={p.dfn} className="px-3 py-2 flex items-center justify-between gap-2">
+                  <span className="font-medium text-[#1A1A2E]">{p.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setRegisterDupModal(null); navigate(`/patients/${p.dfn}`); }}
+                    className="text-[12px] text-[#2E5984] font-medium hover:underline shrink-0"
+                  >
+                    Open chart
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRegisterDupModal(null)}
+                className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRegisterDespiteDuplicates}
+                className="px-4 py-2 text-sm bg-amber-700 text-white rounded-md hover:bg-amber-800 transition-colors"
+              >
+                Continue registration anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Sensitive Patient Modal ── */}
       {sensitiveModal && (

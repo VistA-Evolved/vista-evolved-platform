@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getBeds, getWards, updateBed, addBed, deleteBed, getCensus } from '../../services/patientService';
+import { getBeds, getWards, updateBed, addBed, deleteBed, getCensus, assignBed } from '../../services/patientService';
 
 const STATUS_COLORS = {
   available: { bg: 'bg-green-100', border: 'border-green-400', text: 'text-green-800', label: 'Available' },
@@ -14,6 +14,7 @@ const STATUS_COLORS = {
 const REFRESH_INTERVAL = 30000;
 
 export default function BedManagement() {
+  useEffect(() => { document.title = 'Bed Management — VistA Evolved'; }, []);
   const navigate = useNavigate();
   const [beds, setBeds] = useState([]);
   const [wards, setWards] = useState([]);
@@ -30,6 +31,7 @@ export default function BedManagement() {
   const [bedSaving, setBedSaving] = useState(false);
   const [deleteBedTarget, setDeleteBedTarget] = useState(null);
   const [opError, setOpError] = useState(null);
+  const [assignLoading, setAssignLoading] = useState(false);
   const refreshTimer = useRef(null);
 
   const fetchData = useCallback(async (showLoading = true) => {
@@ -76,8 +78,29 @@ export default function BedManagement() {
     setSelectedBed(bed);
   };
 
-  const handleAssignPatient = (bed) => {
-    navigate('/patients', { state: { assignBed: bed.bed, assignUnit: bed.unit } });
+  const handleAssignPatient = async (bed) => {
+    const bedIen = bed.ien || (typeof bed.id === 'string' ? bed.id.replace(/^B-/, '') : bed.id);
+    const wardIen = wardList.find(w => w.name === bed.unit || w.ien === bed.wardIen)?.ien || bed.wardIen || '';
+    setOpError(null);
+    setAssignLoading(true);
+    try {
+      const res = await assignBed({ bedIen, wardIen, roomBed: bed.bed, unit: bed.unit });
+      if (!res.ok) {
+        setOpError(res.error || 'Could not verify bed or start assignment');
+        return;
+      }
+      navigate('/patients', {
+        state: {
+          assignBed: bed.bed,
+          assignUnit: bed.unit,
+          assignBedContext: { bedIen, wardIen, roomBed: bed.bed, unit: bed.unit },
+        },
+      });
+    } catch (err) {
+      setOpError(err?.message || 'Could not verify bed or start assignment');
+    } finally {
+      setAssignLoading(false);
+    }
   };
 
   const handleUnblock = async (bed) => {
@@ -317,8 +340,9 @@ export default function BedManagement() {
                       <>
                         <button
                           onClick={() => handleAssignPatient(selectedBed)}
-                          className="w-full mt-2 px-3 py-2 bg-[#1A1A2E] text-white text-[12px] font-medium rounded-md hover:bg-[#2E5984] transition-colors">
-                          Assign Patient
+                          disabled={assignLoading}
+                          className="w-full mt-2 px-3 py-2 bg-[#1A1A2E] text-white text-[12px] font-medium rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                          {assignLoading ? 'Verifying…' : 'Assign Patient'}
                         </button>
                         <button
                           onClick={() => handleBlock(selectedBed)}

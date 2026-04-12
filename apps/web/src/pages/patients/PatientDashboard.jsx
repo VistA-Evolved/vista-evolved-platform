@@ -666,6 +666,7 @@ function LoadingSkeleton() {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function PatientDashboard() {
+  useEffect(() => { document.title = 'Patient Dashboard — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { setPatient } = usePatient();

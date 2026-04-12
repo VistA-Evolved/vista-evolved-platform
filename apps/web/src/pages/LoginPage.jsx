@@ -2,6 +2,76 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { login, updateCredentials } from '../services/adminService';
 
+/** Map tenant-admin / VistA broker errors to clear, actionable copy (Section 4 / 7.3). */
+function mapLoginError(err) {
+  const expiredMsg = 'Your password has expired. Please enter a new password below.';
+  const wrongCreds = 'Invalid credentials. Please check your username and password.';
+  const vistaDown = 'System is currently unavailable. Please try again later.';
+  const locked = 'Your account has been locked after multiple failed attempts. Contact your administrator.';
+
+  if (err.name !== 'ApiError') {
+    return {
+      message: err.message || 'Unable to connect to the server. Please check your connection.',
+      passwordExpired: false,
+    };
+  }
+
+  const code = err.code || '';
+  const raw = (err.message || '').toLowerCase();
+  const status = err.status;
+
+  if (status === 429) {
+    return {
+      message: err.message || 'Too many login attempts. Please wait and try again.',
+      passwordExpired: false,
+    };
+  }
+
+  if (code === 'PASSWORD_EXPIRED' || code === 'VERIFY_EXPIRED') {
+    return { message: expiredMsg, passwordExpired: true };
+  }
+  if (code === 'VISTA_UNAVAILABLE' || code === 'VISTA_DOWN') {
+    return { message: vistaDown, passwordExpired: false };
+  }
+  if (code === 'ACCOUNT_LOCKED' || code === 'LOCKED') {
+    return { message: locked, passwordExpired: false };
+  }
+  if (code === 'ACCOUNT_DISABLED') {
+    return {
+      message: 'Your account has been deactivated. Contact your system administrator to restore access.',
+      passwordExpired: false,
+    };
+  }
+  if (code === 'INVALID_CREDENTIALS') {
+    return { message: wrongCreds, passwordExpired: false };
+  }
+
+  if (raw.includes('locked') || raw.includes('lockout')) {
+    return { message: locked, passwordExpired: false };
+  }
+  if (raw.includes('disabled') || raw.includes('disuser')) {
+    return {
+      message: 'Your account has been deactivated. Contact your system administrator to restore access.',
+      passwordExpired: false,
+    };
+  }
+  if (raw.includes('expired') || raw.includes('verify code')) {
+    return { message: expiredMsg, passwordExpired: true };
+  }
+  if (/tcp|timeout|econnrefused|unavailable|network|connection refused|etimedout|enotfound/i.test(raw)) {
+    return { message: vistaDown, passwordExpired: false };
+  }
+  if (raw.includes('not found') || raw.includes('no such')) {
+    return { message: 'Username not found. Check your username and try again.', passwordExpired: false };
+  }
+
+  if (code === 'UNKNOWN' || !code) {
+    return { message: wrongCreds, passwordExpired: false };
+  }
+
+  return { message: err.message || wrongCreds, passwordExpired: false };
+}
+
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,33 +93,14 @@ export default function LoginPage() {
     try {
       const data = await login(username, password);
       if (data.ok) {
-        // X005: Redirect back to the page the user was on before session expired
         const returnTo = sessionStorage.getItem('ve-return-to');
         sessionStorage.removeItem('ve-return-to');
         navigate(returnTo || '/dashboard');
-      } else {
-        // I004: Parse VistA broker errors into user-friendly messages
-        const raw = data.error || data.message || '';
-        const lower = raw.toLowerCase();
-        if (lower.includes('locked') || lower.includes('lockout')) {
-          setError('Your account has been locked due to too many failed attempts. Contact your system administrator.');
-        } else if (lower.includes('disabled') || lower.includes('disuser') || lower.includes('inactive')) {
-          setError('Your account has been deactivated. Contact your system administrator to restore access.');
-        } else if (lower.includes('expired') || lower.includes('verify code')) {
-          setPasswordExpired(true);
-          setError('Your password has expired. Please create a new password below.');
-        } else if (lower.includes('not found') || lower.includes('no such')) {
-          setError('Username not found. Check your username and try again.');
-        } else {
-          setError(raw || 'Invalid credentials. Please try again.');
-        }
       }
     } catch (err) {
-      if (err.name === 'ApiError') {
-        setError(err.message);
-      } else {
-        setError('Unable to connect to the server. Please check your connection.');
-      }
+      const mapped = mapLoginError(err);
+      setError(mapped.message);
+      setPasswordExpired(mapped.passwordExpired);
     } finally {
       setLoading(false);
     }
@@ -116,7 +167,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* S5.2: Password change form for expired credentials */}
         {passwordExpired && (
           <form onSubmit={async (e) => {
             e.preventDefault();
@@ -132,17 +182,15 @@ export default function LoginPage() {
               setNewPassword('');
               setConfirmNewPassword('');
               setError('');
-              // Re-attempt login with new credentials
               const data = await login(username, newPassword);
               if (data.ok) {
                 const returnTo = sessionStorage.getItem('ve-return-to');
                 sessionStorage.removeItem('ve-return-to');
                 navigate(returnTo || '/dashboard');
-              } else {
-                setError('Password changed successfully. Please sign in with your new password.');
               }
             } catch (err) {
-              setError(err.message || 'Failed to change password. Contact your system administrator.');
+              const mapped = mapLoginError(err);
+              setError(mapped.message || err.message || 'Failed to change password. Contact your system administrator.');
             } finally { setLoading(false); }
           }} className="bg-white rounded-lg shadow-md p-6 space-y-4 mt-4">
             <h2 className="text-lg font-semibold text-text">Change Password</h2>

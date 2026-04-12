@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission, assignDivision, checkAccessCode } from '../../services/adminService';
-import { ROLES as SYSTEM_ROLES, KEY_DESCRIPTIONS } from './RoleTemplates';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission, assignDivision, checkAccessCode, getTitles, getVistaStatus } from '../../services/adminService';
+import SessionTimerDisplay from '../../components/shared/SessionTimerDisplay';
+import { SESSION_TIMEOUT_MS } from '../../services/sessionIdleState';
+import { ROLES as SYSTEM_ROLES, KEY_IMPACTS } from './RoleTemplates';
 
 /**
  * AD-02 / ADM-03+ADM-04: Create / Edit Staff Member (Multi-Step Wizard)
@@ -31,16 +33,21 @@ const STEPS = [
 // The 24 VistA-key-backed roles are the single source of truth for both
 // the StaffForm wizard and the Roles & Permissions page.
 
+// S3.8: Provider types — IENs from VistA File 7 (PROVIDER CLASS).
+// DDR FILER needs internal values (IENs) since we use 'EI' flag for pointer fields.
+// Standard File 7 entries in Kernel 8.0:
 const PROVIDER_TYPES = [
-  { value: 'physician', label: 'Physician (MD/DO) — Allopathic / Osteopathic' },
-  { value: 'np', label: 'Nurse Practitioner (NP)' },
-  { value: 'pa', label: 'Physician Assistant (PA)' },
-  { value: 'rn', label: 'Registered Nurse (RN)' },
-  { value: 'pharmacist', label: 'Pharmacist (PharmD/RPh)' },
-  { value: 'dentist', label: 'Dentist (DDS/DMD)' },
-  { value: 'psychologist', label: 'Psychologist (PhD/PsyD)' },
-  { value: 'social-worker', label: 'Licensed Clinical Social Worker (LCSW)' },
-  { value: 'dietitian', label: 'Registered Dietitian (RD)' },
+  { value: '1', label: 'Physician/Osteopath (MD/DO)' },
+  { value: '2', label: 'Optometrist' },
+  { value: '3', label: 'Podiatrist' },
+  { value: '4', label: 'Dentist (DDS/DMD)' },
+  { value: '5', label: 'Clinical Pharmacist (PharmD/RPh)' },
+  { value: '6', label: 'Nurse Practitioner (NP)' },
+  { value: '7', label: 'Physician Assistant (PA)' },
+  { value: '8', label: 'Psychologist (PhD/PsyD)' },
+  { value: '9', label: 'Social Worker (LCSW)' },
+  { value: '10', label: 'Dietitian (RD)' },
+  { value: '11', label: 'Registered Nurse (RN)' },
 ];
 
 // Curated "starter kit" permissions grouped by function. Every key below
@@ -142,6 +149,7 @@ export default function StaffForm() {
   const [livePermissions, setLivePermissions] = useState([]);
   const [livePermissionMap, setLivePermissionMap] = useState(new Map());
   const [liveDepartments, setLiveDepartments] = useState([]);
+  const [liveTitles, setLiveTitles] = useState([]); // S3.13: Titles from File 3.1
   const [dataLoading, setDataLoading] = useState(true);
   const [refDataError, setRefDataError] = useState(null);
   const [esigStatus, setEsigStatus] = useState({ hasCode: false, sigBlockName: '' });
@@ -161,8 +169,9 @@ export default function StaffForm() {
       try {
         const res = await checkAccessCode(code);
         setAcStatus(res.available ? 'available' : 'taken');
-      } catch {
-        setAcStatus(null); // network error — don't block the form
+      } catch (err) {
+        console.error('Access code check failed:', err);
+        setAcStatus(null);
       }
     }, 500);
   };
@@ -172,7 +181,11 @@ export default function StaffForm() {
       setDataLoading(true);
       setRefDataError(null);
       try {
-        const [sitesRes, permsRes, deptRes, mailGroupsRes] = await Promise.all([getSites(), getPermissions(), getDepartments(), getMailGroups().catch(() => ({ data: [] }))]);
+        const [sitesRes, permsRes, deptRes, mailGroupsRes, titlesRes] = await Promise.all([
+          getSites(), getPermissions(), getDepartments(),
+          getMailGroups().catch(() => ({ data: [] })),
+          getTitles().catch(() => ({ data: [] })),
+        ]);
 
         // Sites come from MEDICAL CENTER DIVISION #40.8 via the /divisions route
         const sites = (sitesRes?.data || []).map(d => ({
@@ -204,6 +217,10 @@ export default function StaffForm() {
         // Mail groups for B6 — mail group assignment during user creation
         const groups = (mailGroupsRes?.data || []).map(g => ({ ien: g.ien, name: g.name, description: g.description || '' })).filter(g => g.ien && g.name);
         setLiveMailGroups(groups);
+
+        // S3.13: TITLE #3.1 entries — pointer field requires valid IEN
+        const titles = (titlesRes?.data || []).map(t => ({ ien: t.ien, name: t.name || t['.01'] || '' })).filter(t => t.ien && t.name).sort((a, b) => a.name.localeCompare(b.name));
+        setLiveTitles(titles);
 
         if (sites.length === 0) {
           setRefDataError('No sites returned. The system may be unreachable.');
@@ -280,9 +297,11 @@ export default function StaffForm() {
     if (stepId === 'person') {
       if (!form.lastName.trim()) errors.lastName = 'Last name is required';
       else if (form.lastName.length < 2) errors.lastName = 'Last name must be at least 2 characters';
-      else if (!/^[A-Z'-]+$/i.test(form.lastName.trim())) errors.lastName = 'Last name contains invalid characters';
+      // S3.1/S15: VistA input transform only allows A-Z, hyphen, space. No apostrophes.
+      else if (!/^[A-Z -]+$/i.test(form.lastName.trim())) errors.lastName = 'Last name: only letters, hyphens, and spaces allowed (no apostrophes)';
       if (!form.firstName.trim()) errors.firstName = 'First name is required';
       else if (form.firstName.length < 1) errors.firstName = 'First name is required';
+      else if (!/^[A-Z -]+$/i.test(form.firstName.trim())) errors.firstName = 'First name: only letters, hyphens, and spaces allowed';
       // Compose fullName for length check
       const composedName = `${form.lastName.trim()},${form.firstName.trim()}${form.middleInitial ? ' ' + form.middleInitial.trim() : ''}`.toUpperCase();
       if (composedName.length > 35) errors.lastName = 'Combined name must be 35 characters or fewer';
@@ -308,6 +327,8 @@ export default function StaffForm() {
         else if (acStatus === 'taken') errors.accessCode = 'This username is already in use';
         if (!form.verifyCode) errors.verifyCode = 'Password (Verify Code) is required';
         else if (form.verifyCode.length < 8) errors.verifyCode = 'Password must be at least 8 characters';
+        // S3.4: VistA Kernel blocks identical access code and verify code
+        else if (form.accessCode && form.verifyCode.toUpperCase() === form.accessCode.toUpperCase()) errors.verifyCode = 'Password cannot be the same as the username';
         if (form.verifyCode && form.verifyCode !== form.verifyCodeConfirm) errors.verifyCodeConfirm = 'Passwords do not match';
       }
     }
@@ -335,8 +356,21 @@ export default function StaffForm() {
           if (sum % 10 !== 0) errors.npi = 'NPI check digit is invalid';
         }
       }
-      // F013: DEA format validation — 2 letters + 7 digits
-      if (form.dea && !/^[A-Za-z]{2}\d{7}$/.test(form.dea)) errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
+      // F013: DEA format validation — 2 letters + 7 digits + check digit
+      if (form.dea) {
+        if (!/^[A-Za-z]{2}\d{7}$/.test(form.dea)) {
+          errors.dea = 'DEA must be 2 letters followed by 7 digits (e.g., AB1234567)';
+        } else {
+          // S15: DEA check digit algorithm — sum of digits at positions 1,3,5 +
+          // 2*(sum of digits at positions 2,4,6). Last digit (position 7) must equal
+          // the ones digit of the total.
+          const digits = form.dea.slice(2).split('').map(Number);
+          const oddSum = digits[0] + digits[2] + digits[4];
+          const evenSum = digits[1] + digits[3] + digits[5];
+          const total = oddSum + 2 * evenSum;
+          if (total % 10 !== digits[6]) errors.dea = 'DEA check digit is invalid';
+        }
+      }
     }
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -382,7 +416,7 @@ export default function StaffForm() {
       if (Date.now() - draft.ts > 2 * 60 * 60 * 1000) { sessionStorage.removeItem(WIZARD_SAVE_KEY); return; }
       setForm(f => ({ ...f, ...draft.form }));
       setCurrentStep(draft.step || 0);
-    } catch { /* ignore corrupt draft */ }
+    } catch (err) { console.error('Failed to restore wizard draft:', err); }
   }, [isEdit]);
 
   const [liveMailGroups, setLiveMailGroups] = useState([]);
@@ -391,6 +425,13 @@ export default function StaffForm() {
   const [submitError, setSubmitError] = useState('');
   const [createSuccess, setCreateSuccess] = useState(null);
   const submitErrorRef = useRef(null);
+  /** S23.5: VistA health while wizard is open */
+  const [vistaUnreachable, setVistaUnreachable] = useState(false);
+
+  const clearCredentialState = () => {
+    setCreateSuccess(prev => (prev ? { ...prev, accessCode: '', verifyCode: '' } : prev));
+    setForm(prev => ({ ...prev, accessCode: '', verifyCode: '', verifyCodeConfirm: '' }));
+  };
 
   // F009: Warn on unsaved changes (beforeunload)
   const isDirty = form.lastName || form.firstName || form.accessCode || form.verifyCode;
@@ -407,6 +448,23 @@ export default function StaffForm() {
       submitErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [submitError]);
+
+  // S23.5: Periodic VistA health check while the wizard is open (not on success screen)
+  useEffect(() => {
+    if (createSuccess) return;
+    const ping = async () => {
+      try {
+        const res = await getVistaStatus();
+        const up = res?.vista?.ok === true;
+        setVistaUnreachable(!up);
+      } catch (_pingErr) {
+        setVistaUnreachable(true);
+      }
+    };
+    ping();
+    const id = setInterval(ping, 30000);
+    return () => clearInterval(id);
+  }, [createSuccess]);
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
   const step = STEPS[currentStep];
@@ -598,7 +656,6 @@ export default function StaffForm() {
         const extraFields = createRes?.data?.extraFields || createRes?.extraFields || [];
         const permEntry = extraFields.find(f => f.field === 'permissions');
         const keyResults = permEntry?.keys || [];
-        const failedKeys = keyResults.filter(k => k.status !== 'ok');
         const successKeyCount = keyResults.filter(k => k.status === 'ok').length;
         const failedMailGroups = mailGroupResults.filter(m => m.status !== 'ok');
         const successMailGroupCount = mailGroupResults.filter(m => m.status === 'ok').length;
@@ -614,8 +671,8 @@ export default function StaffForm() {
           role: SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '',
           permCount: keyResults.length > 0 ? successKeyCount : mergedPermissions.length,
           permTotal: mergedPermissions.length,
-          failedKeys,
-          assignedKeys: keyResults.filter(k => k.status === 'ok').map(k => k.key),
+          keyResults: keyResults.length > 0 ? keyResults : mergedPermissions.map((k) => ({ key: k, status: 'ok', detail: '' })),
+          assignedKeys: keyResults.length > 0 ? keyResults.filter(k => k.status === 'ok').map(k => k.key) : [...mergedPermissions],
           mailGroupCount: successMailGroupCount,
           failedMailGroups,
           duz: newDuz,
@@ -649,7 +706,8 @@ export default function StaffForm() {
           isDuplicate: false,
         });
       }
-    } catch {
+    } catch (err) {
+      console.error('Duplicate check failed:', err);
       setDuplicateWarning(null);
     }
   };
@@ -689,6 +747,15 @@ export default function StaffForm() {
         {/* Create Another success screen */}
         {createSuccess ? (
           <div className="text-center py-10">
+            <div className="flex justify-center mb-4">
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-alt border border-border text-xs text-text-secondary"
+                title={`Inactivity logout after ${Math.round(SESSION_TIMEOUT_MS / 60000)} minutes (same as system session timer)`}
+              >
+                <span className="material-symbols-outlined text-[16px] text-text-secondary">schedule</span>
+                <SessionTimerDisplay variant="inline" />
+              </div>
+            </div>
             <div className="w-16 h-16 rounded-full bg-[#E8F5E9] flex items-center justify-center mx-auto mb-4">
               <span className="material-symbols-outlined text-[32px] text-[#2E7D32]">check_circle</span>
             </div>
@@ -701,15 +768,28 @@ export default function StaffForm() {
               {createSuccess.permCount}{createSuccess.permTotal && createSuccess.permTotal !== createSuccess.permCount ? ` of ${createSuccess.permTotal}` : ''} permissions assigned
               {createSuccess.mailGroupCount > 0 && ` | Added to ${createSuccess.mailGroupCount} mail group(s)`}
             </div>
-            {createSuccess.failedKeys && createSuccess.failedKeys.length > 0 && (
-              <div className="mb-4 mx-auto max-w-md p-3 bg-[#FFF3E0] border border-[#FFB74D] rounded-lg text-left">
-                <p className="text-sm font-medium text-[#E65100] mb-1">
-                  {createSuccess.failedKeys.length} permission(s) failed to assign:
-                </p>
-                <ul className="text-xs text-[#BF360C] list-disc list-inside">
-                  {createSuccess.failedKeys.map((k, i) => (
-                    <li key={i}>{k.key}{k.detail ? ` — ${k.detail}` : ''}</li>
-                  ))}
+            {createSuccess.keyResults && createSuccess.keyResults.length > 0 && (
+              <div className="mb-4 mx-auto max-w-lg p-3 bg-white border border-border rounded-lg text-left">
+                <p className="text-sm font-medium text-text mb-2">Security keys</p>
+                <ul className="text-xs space-y-1.5">
+                  {createSuccess.keyResults.map((k, i) => {
+                    const ok = k.status === 'ok';
+                    return (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className={`material-symbols-outlined text-[16px] shrink-0 mt-0.5 ${ok ? 'text-green-600' : 'text-amber-800'}`}>
+                          {ok ? 'check_circle' : 'error'}
+                        </span>
+                        <span>
+                          <span className="font-mono text-[11px]">{k.key}</span>
+                          {ok ? (
+                            <span className="text-text-secondary"> — assigned</span>
+                          ) : (
+                            <span className="text-amber-900"> — {k.detail || 'Failed to assign'}</span>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -829,6 +909,25 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
   </ol>
 </div>
 
+<div class="section">
+  <h2>Acknowledgment</h2>
+  <p style="font-size:13px;margin-bottom:20px">I acknowledge receipt of my VistA system credentials. I understand that:</p>
+  <ul style="font-size:13px;margin-bottom:20px;padding-left:20px">
+    <li style="margin:4px 0">I must change my password on first sign-in</li>
+    <li style="margin:4px 0">I will not share my credentials with anyone</li>
+    <li style="margin:4px 0">I am responsible for all actions taken under my account</li>
+    <li style="margin:4px 0">I will destroy this document after first login</li>
+  </ul>
+  <div style="display:flex;gap:40px;margin-top:30px">
+    <div style="flex:1;border-bottom:1px solid #666;padding-bottom:4px">&nbsp;</div>
+    <div style="width:160px;border-bottom:1px solid #666;padding-bottom:4px">&nbsp;</div>
+  </div>
+  <div style="display:flex;gap:40px;margin-top:4px;font-size:11px;color:#666">
+    <div style="flex:1">Signature</div>
+    <div style="width:160px">Date</div>
+  </div>
+</div>
+
 <p style="font-size:13px;color:#666;margin-top:24px">For help, contact your local IT support or IRM office.</p>
 <p style="font-size:12px;color:#999">Date Issued: ${new Date().toLocaleDateString()} | Issued By: System Administrator</p>
 
@@ -843,7 +942,10 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 Print Welcome Letter
               </button>
               <button
-                onClick={() => navigate(`/admin/staff/${createSuccess.duz}/edit`)}
+                onClick={() => {
+                  clearCredentialState();
+                  navigate(`/admin/staff/${createSuccess.duz}/edit`);
+                }}
                 className="px-5 py-2 text-sm border border-border rounded-md hover:bg-surface-alt transition-colors"
               >
                 View Profile
@@ -880,7 +982,10 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 Create Another Staff Member
               </button>
               <button
-                onClick={() => navigate('/admin/staff')}
+                onClick={() => {
+                  clearCredentialState();
+                  navigate('/admin/staff');
+                }}
                 className="px-5 py-2 text-sm border border-border rounded-md hover:bg-surface-alt transition-colors"
               >
                 Return to Directory
@@ -889,47 +994,74 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
           </div>
         ) : (
         <>
-        <h1 className="text-[22px] font-bold text-text mb-2">
-          {isEdit ? 'Edit Staff Member' : 'Create New Staff Member'}
-        </h1>
-        <p className="text-sm text-text-secondary mb-6">
-          {isEdit
-            ? 'Update staff member profile, roles, locations, and permissions.'
-            : 'Complete each step to register a new staff member in the system.'}
-        </p>
+        {vistaUnreachable && (
+          <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-300 rounded-md flex items-start gap-2" role="alert">
+            <span className="material-symbols-outlined text-[20px] text-amber-700 shrink-0">cloud_off</span>
+            <span className="text-sm text-amber-900">
+              VistA connection lost. Your draft is auto-saved. Please wait for reconnection.
+            </span>
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-[22px] font-bold text-text mb-2">
+              {isEdit ? 'Edit Staff Member' : 'Create New Staff Member'}
+            </h1>
+            <p className="text-sm text-text-secondary">
+              {isEdit
+                ? 'Update staff member profile, roles, locations, and permissions.'
+                : 'Complete each step to register a new staff member in the system.'}
+            </p>
+          </div>
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-alt border border-border text-xs text-text-secondary shrink-0 self-start"
+            title={`Session ends after ${Math.round(SESSION_TIMEOUT_MS / 60000)} minutes of inactivity`}
+          >
+            <span className="material-symbols-outlined text-[16px]">schedule</span>
+            <SessionTimerDisplay variant="inline" />
+          </div>
+        </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-1 mb-8 overflow-x-auto">
+        <nav aria-label="Wizard steps" className="flex items-center gap-1 mb-8 overflow-x-auto">
           {visibleSteps.map((s, i) => {
             const stepIndex = STEPS.indexOf(s);
+            const isCurrent = currentStep === stepIndex;
+            const isCompleted = currentStep > stepIndex;
             return (
               <button
+                type="button"
                 key={s.id}
+                aria-current={isCurrent ? 'step' : undefined}
+                aria-label={`Step ${i + 1}: ${s.label}${isCompleted ? ' (completed)' : isCurrent ? ' (current)' : ''}`}
                 onClick={() => {
-                  if (stepIndex > currentStep) {
-                    for (let si = 0; si < stepIndex; si++) {
-                      const vs = STEPS[si];
-                      if (visibleSteps.includes(vs) && !validateStep(vs.id)) return;
-                    }
+                  if (stepIndex < currentStep) {
+                    setCurrentStep(stepIndex);
+                    return;
+                  }
+                  if (stepIndex === currentStep) return;
+                  for (let si = 0; si < stepIndex; si++) {
+                    const vs = STEPS[si];
+                    if (visibleSteps.includes(vs) && !validateStep(vs.id)) return;
                   }
                   setCurrentStep(stepIndex);
                 }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                  currentStep === stepIndex
-                    ? 'bg-navy text-white'
-                    : currentStep > stepIndex
-                      ? 'bg-success-bg text-success'
-                      : 'bg-surface-alt text-text-secondary'
+                  isCurrent
+                    ? 'bg-navy text-white cursor-default'
+                    : isCompleted
+                      ? 'bg-success-bg text-success cursor-pointer hover:opacity-90'
+                      : 'bg-surface-alt text-text-secondary cursor-pointer hover:opacity-90'
                 }`}
               >
                 <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border border-current">
-                  {currentStep > stepIndex ? '✓' : i + 1}
+                  {isCompleted ? '✓' : i + 1}
                 </span>
                 {s.label}
               </button>
             );
           })}
-        </div>
+        </nav>
 
         {dataLoading && (
           <div className="flex items-center gap-2 p-3 bg-info-bg rounded-md text-sm text-info mb-4">
@@ -990,9 +1122,11 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                   <input type="text" value={form.displayName} onChange={e => updateField('displayName', e.target.value)}
                     placeholder="Jane Smith" className="form-input" maxLength={50} />
                 </FormField>
-                <FormField label="Job Title" hint="Position title (e.g. Staff Physician, RN, Pharmacist). Stored in VistA File #200 field 8.">
-                  <input type="text" value={form.title} onChange={e => updateField('title', e.target.value)}
-                    placeholder="Staff Physician" className="form-input" maxLength={60} />
+                <FormField label="Job Title" hint="Position title from VistA File #3.1. Pointer field — must match an existing entry.">
+                  <select value={form.title || ''} onChange={e => updateField('title', e.target.value)} className="form-input">
+                    <option value="">Select title...</option>
+                    {liveTitles.map(t => <option key={t.ien} value={t.ien}>{t.name}</option>)}
+                  </select>
                 </FormField>
                 <FormField label="Sex" required error={validationErrors.sex}
                   hint="Required for VistA File #200. Used for clinical decision support.">
@@ -1608,7 +1742,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 <ReviewSection title="Identity" items={[
                   ['Name', (form.lastName && form.firstName) ? `${form.lastName},${form.firstName}${form.middleInitial ? ' ' + form.middleInitial : ''}` : '—'],
                   ['Display Name', form.displayName || '(auto from name)'],
-                  ['Job Title', form.title || '—'],
+                  ['Job Title', liveTitles.find(t => t.ien === form.title)?.name || form.title || '—'],
                   ['Sex', form.sex === 'M' ? 'Male' : form.sex === 'F' ? 'Female' : form.sex === 'U' ? 'Unknown' : form.sex || '—'],
                   ['Date of Birth', form.dob || '—'],
                   ['Email', form.email || '—'],
@@ -1754,7 +1888,7 @@ function CosignerSearch({ value, onSelect }) {
         const res = await getStaff({ search: text.toUpperCase() });
         const providers = (res?.data || []).filter(u => u.isProvider || u.title?.match(/physician|doctor|md|do|np|pa|attending|surgeon/i));
         setResults(providers.slice(0, 15));
-      } catch { setResults([]); }
+      } catch (err) { console.error('Cosigner search failed:', err); setResults([]); }
       finally { setSearching(false); }
     }, 300);
   };

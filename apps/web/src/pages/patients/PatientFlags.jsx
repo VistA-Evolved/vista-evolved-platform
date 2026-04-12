@@ -19,6 +19,7 @@ const CATEGORY_STYLES = {
 };
 
 export default function PatientFlags() {
+  useEffect(() => { document.title = 'Patient Flags — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const { patient, setPatient, hasPatient } = usePatient();
   const [flags, setFlags] = useState([]);

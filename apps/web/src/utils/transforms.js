@@ -17,6 +17,22 @@
 
 import { KEY_TRANSLATIONS } from './vocabulary';
 
+// ── Phone / SSN / number formatting ───────────────────
+export function formatPhone(raw) {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits[0] === '1') return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return raw;
+}
+
+export function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 // ── FileMan date → JS Date ────────────────────────────
 export function fmDateToDate(fmDate) {
   // Coerce to string; for numeric FM dates, use toFixed to preserve trailing zeros

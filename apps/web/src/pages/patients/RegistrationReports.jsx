@@ -15,6 +15,7 @@ const REPORT_TYPES = [
 const PAGE_SIZE = 10;
 
 export default function RegistrationReports() {
+  useEffect(() => { document.title = 'Registration Reports — VistA Evolved'; }, []);
   const [selectedReport, setSelectedReport] = useState('registrations');
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30);

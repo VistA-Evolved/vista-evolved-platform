@@ -18,6 +18,7 @@ import { ConfirmDialog } from '../../components/shared/SharedComponents';
 const ALL_WORKSPACES = ['Dashboard', 'Patients', 'Scheduling', 'Clinical', 'Pharmacy', 'Lab', 'Imaging', 'Billing', 'Supply', 'Admin', 'Analytics'];
 
 export default function SiteManagement() {
+  useEffect(() => { document.title = 'Site Management — VistA Evolved'; }, []);
   const navigate = useNavigate();
   const [selectedSite, setSelectedSite] = useState(null);
   const [searchText, setSearchText] = useState('');

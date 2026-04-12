@@ -18,6 +18,7 @@ const TRANSFER_REASONS = [
 ];
 
 export default function Transfer() {
+  useEffect(() => { document.title = 'Transfer — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { patient, setPatient, hasPatient } = usePatient();

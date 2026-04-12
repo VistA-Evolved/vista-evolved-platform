@@ -27,6 +27,7 @@ const DISCHARGE_CONDITIONS = [
 ];
 
 export default function Discharge() {
+  useEffect(() => { document.title = 'Discharge — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { patient, setPatient, hasPatient } = usePatient();

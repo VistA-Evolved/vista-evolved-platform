@@ -1,6 +1,15 @@
 import { useState } from 'react';
 
-export default function DataTable({ columns, data, onRowClick, selectedId, idField = 'id', rowClassName }) {
+export default function DataTable({
+  columns,
+  data,
+  onRowClick,
+  onRowMouseEnter,
+  onRowMouseLeave,
+  selectedId,
+  idField = 'id',
+  rowClassName,
+}) {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
@@ -22,8 +31,14 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
       })
     : safeData;
 
+  const ariaSortForCol = (col) => {
+    if (col.sortable === false) return undefined;
+    if (sortCol === col.key) return sortDir === 'asc' ? 'ascending' : 'descending';
+    return 'none';
+  };
+
   return (
-    <div className="border border-border rounded-md overflow-hidden">
+    <div className="admin-table border border-border rounded-md overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-navy">
@@ -33,19 +48,26 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
                 scope="col"
                 title={col.headerTitle}
                 onClick={() => col.sortable !== false && handleSort(col.key)}
-                onKeyDown={(e) => { if (col.sortable !== false && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleSort(col.key); } }}
+                onKeyDown={(e) => {
+                  if (col.sortable !== false && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    handleSort(col.key);
+                  }
+                }}
                 tabIndex={col.sortable !== false ? 0 : undefined}
-                aria-sort={sortCol === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+                aria-sort={ariaSortForCol(col)}
                 className={`
                   text-left px-3 py-2.5 text-white font-semibold text-xs uppercase tracking-wider
-                  ${col.sortable !== false ? 'cursor-pointer hover:bg-[#2E3A5E] select-none' : ''}
+                  ${col.sortable !== false
+                    ? 'cursor-pointer hover:bg-[#2E3A5E] select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-inset'
+                    : ''}
                   ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}
                 `}
               >
                 <span className="flex items-center gap-1">
                   {col.label}
                   {sortCol === col.key && (
-                    <span className="material-symbols-outlined text-[14px]">
+                    <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
                       {sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
                     </span>
                   )}
@@ -61,13 +83,19 @@ export default function DataTable({ columns, data, onRowClick, selectedId, idFie
               <tr
                 key={row[idField] ?? i}
                 onClick={() => onRowClick?.(row)}
-                onKeyDown={(e) => { if (onRowClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRowClick(row); } }}
+                onMouseEnter={() => onRowMouseEnter?.(row)}
+                onMouseLeave={() => onRowMouseLeave?.(row)}
+                onKeyDown={(e) => {
+                  if (onRowClick && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    onRowClick(row);
+                  }
+                }}
                 tabIndex={onRowClick ? 0 : undefined}
-                role={onRowClick ? 'button' : undefined}
-                aria-selected={isSelected || undefined}
+                aria-selected={onRowClick ? isSelected : undefined}
                 className={`
                   border-t border-border transition-colors
-                  ${onRowClick ? 'cursor-pointer' : ''}
+                  ${onRowClick ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-steel focus-visible:ring-inset' : ''}
                   ${isSelected
                     ? 'bg-[#E8EEF5] border-l-[3px] border-l-steel'
                     : i % 2 === 0 ? 'bg-white' : 'bg-surface-alt'}

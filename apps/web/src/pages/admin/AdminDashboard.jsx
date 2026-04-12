@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { getDashboard, getVistaStatus } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
@@ -10,14 +10,14 @@ import ErrorState from '../../components/shared/ErrorState';
  */
 
 const METRIC_CARDS = [
-  { key: 'activeUserCount', label: 'Active Staff', icon: 'group', path: '/admin/staff', color: 'bg-[#E8EEF5] text-[#2E5984]' },
+  { key: 'activeUserCount', label: 'Active Staff', icon: 'group', path: '/admin/staff?status=Active', color: 'bg-[#E8EEF5] text-[#2E5984]' },
   { key: 'clinicCount', label: 'Clinics', icon: 'medical_services', path: '/admin/clinics', color: 'bg-[#E8F5E9] text-[#2D6A4F]' },
   { key: 'wardCount', label: 'Wards', icon: 'bed', path: '/admin/wards', color: 'bg-[#FFF3E0] text-[#E65100]' },
   { key: 'bedCount', label: 'Beds', icon: 'king_bed', path: '/admin/wards', color: 'bg-[#FCE4EC] text-[#AD1457]' },
   { key: 'deviceCount', label: 'Devices', icon: 'print', path: '/admin/devices', color: 'bg-[#F3E5F5] text-[#7B1FA2]' },
   { key: 'hl7InterfaceCount', label: 'HL7 Interfaces', icon: 'cable', path: '/admin/health', color: 'bg-[#E3F2FD] text-[#1565C0]' },
   { key: 'roleCount', label: 'Security Keys', icon: 'vpn_key', path: '/admin/permissions', color: 'bg-[#FFFDE7] text-[#F57F17]' },
-  { key: 'esigActiveCount', label: 'E-Sig Active', icon: 'draw', path: '/admin/staff', color: 'bg-[#E0F7FA] text-[#00695C]' },
+  { key: 'esigActiveCount', label: 'E-Sig Active', icon: 'draw', path: '/admin/staff?esig=Ready', color: 'bg-[#E0F7FA] text-[#00695C]' },
 ];
 
 const QUICK_ACTIONS = [
@@ -28,6 +28,7 @@ const QUICK_ACTIONS = [
 ];
 
 export default function AdminDashboard() {
+  useEffect(() => { document.title = 'Admin Dashboard — VistA Evolved'; }, []);
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -97,18 +98,17 @@ export default function AdminDashboard() {
             {METRIC_CARDS.map(card => {
               const value = data?.[card.key] ?? '—';
               return (
-                <button key={card.key} onClick={() => navigate(card.path)}
-                  title={`View ${card.label}`}
-                  className="bg-white border border-[#E2E4E8] rounded-lg p-5 text-left hover:shadow-md transition-shadow group">
+                <Link key={card.key} to={card.path} title={`View ${card.label}`}
+                  className="block bg-white border border-[#E2E4E8] rounded-lg p-5 text-left no-underline text-inherit hover:shadow-md transition-shadow group focus:outline-none focus:ring-2 focus:ring-[#2E5984] focus:ring-offset-2">
                   <div className="flex items-center justify-between mb-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.color}`}>
                       <span className="material-symbols-outlined text-[22px]">{card.icon}</span>
                     </div>
-                    <span className="material-symbols-outlined text-[16px] text-[#999] group-hover:text-[#2E5984] transition-colors">arrow_forward</span>
+                    <span className="material-symbols-outlined text-[16px] text-[#999] group-hover:text-[#2E5984] transition-colors" aria-hidden>arrow_forward</span>
                   </div>
                   <div className="text-2xl font-bold text-text">{typeof value === 'number' ? value.toLocaleString() : value}</div>
                   <div className="text-xs text-[#999] mt-0.5">{card.label}</div>
-                </button>
+                </Link>
               );
             })}
           </div>

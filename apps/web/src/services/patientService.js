@@ -351,6 +351,32 @@ export async function deleteBed(bedIen) {
 }
 
 /**
+ * Assign a patient to a bed: admits/transfers via ADT when patientDfn is set;
+ * otherwise verifies the room-bed record exists (GET File 405.4) before patient selection.
+ *
+ * @param {{ patientDfn?: string, bedIen?: string, wardIen?: string, roomBed?: string, unit?: string }} payload
+ */
+export async function assignBed(payload = {}) {
+  const { patientDfn, bedIen, wardIen, roomBed } = payload;
+  if (patientDfn) {
+    try {
+      return await admitPatient(patientDfn, { wardIen: wardIen || '', roomBed: roomBed || '' });
+    } catch (e) {
+      return { ok: false, error: e?.message || 'Admission failed' };
+    }
+  }
+  if (!bedIen) {
+    return { ok: false, error: 'Bed identifier required' };
+  }
+  try {
+    const res = await tenantApi.get(`/room-beds/${bedIen}`, { tenantId: 'local-dev' });
+    return { ok: true, ...res };
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not verify bed' };
+  }
+}
+
+/**
  * Get ward census — live inpatient data from ZVE ADT CENSUS.
  * Returns { data: [{ dfn, name, roomBed, admissionDate, lengthOfStay, attending, diagnosis, diet }] }
  */

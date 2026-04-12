@@ -18,7 +18,20 @@ const PRIORITY_STYLES = {
   low:    { cls: 'bg-[#F5F5F5] text-text-muted', icon: 'expand_more' },
 };
 
+/** Match MailMan "From" display text to a NEW PERSON (#200) row for reply addressing. */
+function matchStaffFromMailFromLine(fromStr, list) {
+  if (!fromStr || !list?.length) return { duz: '', name: '' };
+  const n = fromStr.trim().toLowerCase();
+  const first = fromStr.split(',')[0]?.trim().toLowerCase() || n;
+  const exact = list.find(s => String(s.name).toLowerCase() === n);
+  if (exact) return { duz: String(exact.duz), name: exact.name };
+  const partial = list.find(s => n.includes(String(s.name).toLowerCase()) || String(s.name).toLowerCase().includes(first));
+  if (partial) return { duz: String(partial.duz), name: partial.name };
+  return { duz: '', name: '' };
+}
+
 export default function AlertsNotifications() {
+  useEffect(() => { document.title = 'Alerts & Notifications — VistA Evolved'; }, []);
   const [tab, setTab] = useState('alerts');
   const [selectedAlert, setSelectedAlert] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -500,6 +513,8 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
   messageBody, setMessageBody, messageBodyLoading, setMessageBodyLoading, composeModal, setComposeModal,
   mailFolder, setMailFolder, staffList, setStaffList, staffLoading, setStaffLoading }) {
 
+  const [composeDraft, setComposeDraft] = useState(null);
+
   const loadMessages = useCallback(async (folder) => {
     setMessagesLoading(true);
     try {
@@ -551,7 +566,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
             </button>
           ))}
         </div>
-        <button onClick={() => setComposeModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-navy text-white rounded-md hover:bg-steel">
+        <button onClick={() => { setComposeDraft(null); setComposeModal(true); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-navy text-white rounded-md hover:bg-steel">
           <span className="material-symbols-outlined text-[14px]">edit</span> Compose
         </button>
       </div>
@@ -610,7 +625,34 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
                 <div className="p-3 bg-white rounded-md border border-border text-xs text-text whitespace-pre-wrap font-mono leading-relaxed min-h-[100px]">
                   {messageBody.body || '(empty)'}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const subj = messageBody?.subject || selectedMessage?.subject || '';
+                      const from = messageBody?.from || selectedMessage?.from || '';
+                      let list = staffList;
+                      if (list.length === 0) {
+                        setStaffLoading(true);
+                        try {
+                          const res = await getStaff();
+                          list = (res?.data || []).map(u => ({ duz: u.ien, name: u.name }));
+                          setStaffList(list);
+                        } catch (_staffErr) {
+                          list = [];
+                        } finally {
+                          setStaffLoading(false);
+                        }
+                      }
+                      const { duz, name } = matchStaffFromMailFromLine(from, list);
+                      const subjectLine = subj.startsWith('Re:') ? subj : `Re: ${subj}`;
+                      setComposeDraft({ to: duz, toName: name, subject: subjectLine, body: '' });
+                      setComposeModal(true);
+                    }}
+                    className="px-3 py-1.5 text-xs border border-border rounded-md hover:bg-white bg-[#E8EEF5] text-steel font-medium"
+                  >
+                    Reply
+                  </button>
                   <button onClick={() => handleDelete(selectedMessage.ien)}
                     className="px-3 py-1.5 text-xs border border-[#CC3333] text-[#CC3333] rounded-md hover:bg-[#FDE8E8]">Delete</button>
                 </div>
@@ -624,7 +666,8 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
 
       {composeModal && (
         <ComposeMailModal
-          onClose={() => setComposeModal(false)}
+          initialDraft={composeDraft}
+          onClose={() => { setComposeModal(false); setComposeDraft(null); }}
           onSent={() => loadMessages(mailFolder)}
           staffList={staffList}
           setStaffList={setStaffList}
@@ -640,7 +683,7 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
  *  Compose Mail Modal
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoading, setStaffLoading }) {
+function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoading, setStaffLoading, initialDraft }) {
   const [to, setTo] = useState('');
   const [toName, setToName] = useState('');
   const [subject, setSubject] = useState('');
@@ -656,6 +699,23 @@ function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoadi
       getStaff().then(res => setStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })))).catch(() => {}).finally(() => setStaffLoading(false));
     }
   }, [staffList.length, setStaffList, setStaffLoading]);
+
+  useEffect(() => {
+    if (initialDraft) {
+      setTo(initialDraft.to || '');
+      setToName(initialDraft.toName || '');
+      setSubject(initialDraft.subject || '');
+      setBody(initialDraft.body || '');
+    } else {
+      setTo('');
+      setToName('');
+      setSubject('');
+      setBody('');
+    }
+    setErr('');
+    setSearch('');
+    setShowPicker(false);
+  }, [initialDraft]);
 
   const handleSend = async () => {
     if (!to || !subject) { setErr('Recipient and subject required'); return; }
@@ -677,19 +737,24 @@ function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoadi
         </div>
         <div className="px-5 py-4 space-y-3">
           <div>
-            <label className="block text-xs font-medium text-text mb-1">To</label>
+            <label className="block text-xs font-medium text-text mb-1">Recipient</label>
+            <p className="text-[10px] text-text-secondary mb-1">Search the staff directory by name and select a user.</p>
             <div className="relative">
-              <input type="text" value={toName || search} onChange={e => { setSearch(e.target.value); setShowPicker(true); setTo(''); setToName(''); }}
-                placeholder="Search staff..." className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel" />
+              <input type="text" value={toName ? toName : search} onChange={e => { setSearch(e.target.value); setShowPicker(true); setTo(''); setToName(''); }}
+                placeholder="Type to search staff…" autoComplete="off"
+                className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel" />
               {showPicker && search && (
                 <div className="absolute top-full left-0 right-0 z-10 bg-white border border-border rounded-md shadow-lg max-h-40 overflow-auto">
                   {staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).slice(0, 15).map(s => (
-                    <button key={s.duz} onClick={() => { setTo(s.duz); setToName(s.name); setSearch(''); setShowPicker(false); }}
+                    <button type="button" key={s.duz} onClick={() => { setTo(String(s.duz)); setToName(s.name); setSearch(''); setShowPicker(false); }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-surface-alt">{s.name}</button>
                   ))}
                 </div>
               )}
             </div>
+            {toName && to && (
+              <p className="text-[10px] text-text-secondary mt-1">Sending to <span className="font-medium text-text">{toName}</span></p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-text mb-1">Subject</label>

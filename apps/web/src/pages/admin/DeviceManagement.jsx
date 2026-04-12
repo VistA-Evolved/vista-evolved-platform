@@ -37,6 +37,7 @@ const EDIT_FIELDS = [
 ];
 
 export default function DeviceManagement() {
+  useEffect(() => { document.title = 'Device Management — VistA Evolved'; }, []);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -47,7 +48,9 @@ export default function DeviceManagement() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', dollarI: '', type: '' });
+  const [createForm, setCreateForm] = useState({
+    name: '', dollarI: '', rightMargin: 80, pageLength: 60, terminalType: '', hostPath: '',
+  });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
 
@@ -141,9 +144,16 @@ export default function DeviceManagement() {
     setCreating(true);
     setCreateError(null);
     try {
-      await createDevice({ name: createForm.name.trim(), dollarI: createForm.dollarI.trim(), type: createForm.type.trim() });
+      await createDevice({
+        name: createForm.name.trim(),
+        dollarI: createForm.dollarI.trim(),
+        rightMargin: createForm.rightMargin === '' || createForm.rightMargin == null ? 80 : Number(createForm.rightMargin),
+        pageLength: createForm.pageLength === '' || createForm.pageLength == null ? 60 : Number(createForm.pageLength),
+        terminalType: createForm.terminalType.trim(),
+        hostPath: createForm.hostPath.trim(),
+      });
       setShowCreateModal(false);
-      setCreateForm({ name: '', dollarI: '', type: '' });
+      setCreateForm({ name: '', dollarI: '', rightMargin: 80, pageLength: 60, terminalType: '', hostPath: '' });
       await loadData();
     } catch (err) {
       setCreateError(err.message || 'Failed to create device');
@@ -212,7 +222,7 @@ export default function DeviceManagement() {
                   {!loading && <span className="ml-2 text-[13px] text-[#999]">({devices.length} devices)</span>}
                 </p>
               </div>
-              <button onClick={() => { setShowCreateModal(true); setCreateError(null); setCreateForm({ name: '', dollarI: '', type: '' }); }}
+              <button onClick={() => { setShowCreateModal(true); setCreateError(null); setCreateForm({ name: '', dollarI: '', rightMargin: 80, pageLength: 60, terminalType: '', hostPath: '' }); }}
                 title="Create a new device entry in VistA File #3.5"
                 className="flex items-center gap-1.5 px-4 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] transition-colors">
                 <span className="material-symbols-outlined text-[16px]">add</span>
@@ -390,10 +400,29 @@ export default function DeviceManagement() {
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#333] mb-1">Type</label>
-                <input type="text" value={createForm.type} onChange={e => setCreateForm(f => ({ ...f, type: e.target.value }))}
-                  placeholder="e.g. PRINTER, TERMINAL, VIRTUAL"
-                  title="Device class — determines how VistA opens the device"
+                <label className="block text-xs font-medium text-[#333] mb-1">Margin Width</label>
+                <input type="number" min={1} value={createForm.rightMargin} onChange={e => setCreateForm(f => ({ ...f, rightMargin: e.target.value === '' ? '' : Number(e.target.value) }))}
+                  title="Right margin (columns), File #3.5 field 6"
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Page Length</label>
+                <input type="number" min={1} value={createForm.pageLength} onChange={e => setCreateForm(f => ({ ...f, pageLength: e.target.value === '' ? '' : Number(e.target.value) }))}
+                  title="Lines per page, File #3.5 field 8"
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Terminal Type</label>
+                <input type="text" value={createForm.terminalType} onChange={e => setCreateForm(f => ({ ...f, terminalType: e.target.value }))}
+                  placeholder="e.g. TERMINAL, PRINTER, VIRTUAL"
+                  title="Device class — File #3.5 field 3"
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#333] mb-1">Host File Server Path</label>
+                <input type="text" value={createForm.hostPath} onChange={e => setCreateForm(f => ({ ...f, hostPath: e.target.value }))}
+                  placeholder="e.g. \\server\share\path or |HFS|..."
+                  title="Open parameters / host file path — File #3.5 field 10"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
             </div>

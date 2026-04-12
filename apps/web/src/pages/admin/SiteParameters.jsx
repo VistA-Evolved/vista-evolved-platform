@@ -167,6 +167,7 @@ const FIELD_GROUPS = {
 };
 
 export default function SiteParameters() {
+  useEffect(() => { document.title = 'Site Parameters — VistA Evolved'; }, []);
   const [selectedGroup, setSelectedGroup] = useState('kernel');
   const [editedValues, setEditedValues] = useState({});
   const [changeReason, setChangeReason] = useState('');
