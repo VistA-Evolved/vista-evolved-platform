@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
@@ -1406,18 +1406,21 @@ function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermis
 /* P3.12: CPRS Tab Access with toggle */
 function CprsTabList({ cprsTabData, setCprsTabData, duz }) {
   const [saving, setSaving] = useState(null);
+  const [tabError, setTabError] = useState(null);
   const handleToggle = async (tab) => {
     const newAccess = tab.access === 'Disabled' ? '' : 'Disabled';
     setSaving(tab.name);
+    setTabError(null);
     try {
       await updateCprsTabAccess(duz, tab.name, newAccess);
       setCprsTabData(prev => prev.map(t => t.name === tab.name ? { ...t, access: newAccess } : t));
-    } catch { /* ignore */ }
+    } catch (err) { setTabError(err.message || 'Failed to update tab'); }
     finally { setSaving(null); }
   };
   return (
     <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
       <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">CPRS Tab Access</h3>
+      {tabError && <p className="text-[10px] text-[#CC3333] mb-1">{tabError}</p>}
       <div className="space-y-1">
         {cprsTabData.map((tab, idx) => (
           <div key={tab.name || idx} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">

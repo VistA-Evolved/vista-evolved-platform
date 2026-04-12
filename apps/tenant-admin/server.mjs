@@ -910,7 +910,7 @@ async function main() {
         rpcUsed: z.rpcUsed,
       });
     }
-    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG^PMENU^DEGREE^TDATE^TREASON^PCLASS2^TAXID^AUTHMEDS^COSIGNER
+    // Line 1: IEN^NAME^DOB^SEX^SSN^STATUS^TITLE^SERVICE^EMAIL^PHONE^LASTLOGIN^NPI^DEA^TAXONOMY^PROVIDERCLASS^ESIG^PMENU^DEGREE^TDATE^TREASON^PCLASS2^TAXID^AUTHMEDS^COSIGNER^RESTRICT^VCNOEXP^LANG^FMAC^OERR^PROXY^VCCHGDT^PWDEXPDAYS^PWDREMAIN^SOCNT^FIRSTSO
     const detail = (z.lines[1] || '').split('^');
     if (!detail[0]) {
       return reply.code(404).send({ ok: false, source: 'zve', error: `User ${userId} not found in File 200`, rpcUsed: z.rpcUsed });
@@ -1978,21 +1978,24 @@ async function main() {
     // File 200.03 = OE/RR LIST sub-file under File 200 (CPRS tab parameters)
     // DDR LISTER columns: .01 (name), 1 (access)
     const duz = req.params.duz;
-    const iens = `${duz},`;
     try {
-      const z = await callZveRpc('ZVE DDR LISTER', [
-        '200.03', iens, '.01;1', '', '', '', '', '', '1000',
-      ]);
-      const o = zveOutcome(z);
-      if (o.kind !== 'ok') {
-        return reply.code(502).send({ ok: false, error: `DDR LISTER 200.03 failed: ${o.msg || o.kind}`, rpcUsed: z.rpcUsed });
+      const rawLines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '200.03', IENS: `${duz},`, FIELDS: '.01;1', FLAGS: 'PB', MAX: '1000' } },
+        ]);
+      });
+      const parsed = parseDdrListerResponse(rawLines);
+      if (!parsed.ok) {
+        return reply.code(502).send({ ok: false, error: `DDR LISTER 200.03 failed: ${parsed.errorText || 'unknown'}`, rpcUsed: 'DDR LISTER' });
       }
       const tabs = [];
-      for (const line of z.lines.slice(1)) {
+      for (const line of parsed.data) {
         const parts = line.split('^');
-        if (parts[0]) tabs.push({ name: parts[0], access: parts[1] || '' });
+        // DDR LISTER with PB flag returns: field1^field2^IEN
+        if (parts[0]) tabs.push({ name: parts[0], access: parts[1] || '', ien: parts[2] || '' });
       }
-      return { ok: true, tenantId, duz, tabs, rpcUsed: z.rpcUsed };
+      return { ok: true, tenantId, duz, tabs, rpcUsed: 'DDR LISTER' };
     } catch (err) {
       return reply.code(502).send({ ok: false, error: err.message });
     }
@@ -2008,14 +2011,17 @@ async function main() {
     if (!p.ok) return reply.code(503).send({ ok: false, error: 'VistA unavailable', detail: p.error });
     const duz = req.params.duz;
     try {
-      // Find the sub-file IEN for this tab name
-      const listZ = await callZveRpc('ZVE DDR LISTER', [
-        '200.03', `${duz},`, '.01;1', '', '', '', '', '', '1000',
-      ]);
-      const listO = zveOutcome(listZ);
-      if (listO.kind !== 'ok') return reply.code(502).send({ ok: false, error: 'Failed to list CPRS tabs' });
+      // Find the sub-file IEN for this tab name via DDR LISTER
+      const rawLines = await lockedRpc(async () => {
+        const broker = await getBroker();
+        return broker.callRpcWithList('DDR LISTER', [
+          { type: 'list', value: { FILE: '200.03', IENS: `${duz},`, FIELDS: '.01;1', FLAGS: 'PB', MAX: '1000' } },
+        ]);
+      });
+      const parsed = parseDdrListerResponse(rawLines);
+      if (!parsed.ok) return reply.code(502).send({ ok: false, error: 'Failed to list CPRS tabs' });
       let tabIen = null;
-      for (const line of listZ.lines.slice(1)) {
+      for (const line of parsed.data) {
         const parts = line.split('^');
         if (parts[0] === tabName) { tabIen = parts[2] || null; break; }
       }
