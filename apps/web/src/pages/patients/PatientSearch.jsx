@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { Pagination } from '../../components/shared/SharedComponents';
-import { searchPatients, getPatientDashboardStats, getDivisions, assignBed } from '../../services/patientService';
+import { searchPatients, getPatientDashboardStats, getDivisions, assignBed, logBreakTheGlass } from '../../services/patientService';
 
 const PAGE_SIZE = 10;
 
@@ -14,7 +14,7 @@ function StatusBadge({ status }) {
   };
   return (
     <span className={`text-[11px] font-medium px-2 py-0.5 rounded ${styles[status] || styles.inactive}`}>
-      {status?.charAt(0).toUpperCase() + status?.slice(1)}
+      {status ? status.charAt(0).toUpperCase() + status.slice(1) : '—'}
     </span>
   );
 }
@@ -50,7 +50,9 @@ function SkeletonRow() {
 
 function formatDob(dob) {
   if (!dob) return '';
-  const d = new Date(dob + 'T00:00:00');
+  // ISO date (YYYY-MM-DD): append time to avoid UTC vs local day shifts
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(dob) ? new Date(dob + 'T00:00:00') : new Date(dob);
+  if (isNaN(d.getTime())) return dob;
   const age = Math.floor((Date.now() - d.getTime()) / 31557600000);
   return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (${age}y)`;
 }
@@ -72,7 +74,7 @@ export default function PatientSearch() {
   const [query, setQuery] = useState('');
   const [idMode, setIdMode] = useState(false);
   const [dobFilter, setDobFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('');
 
   const [patients, setPatients] = useState([]);
@@ -158,7 +160,7 @@ export default function PatientSearch() {
     let result = patients;
 
     if (statusFilter && statusFilter !== 'all') {
-      result = result.filter(p => p.status === statusFilter);
+      result = result.filter(p => !p.status || p.status === statusFilter);
     }
 
     if (locationFilter) {
@@ -212,11 +214,13 @@ export default function PatientSearch() {
 
   const handleSensitiveAcknowledge = () => {
     if (!sensitiveModal) return;
-    acknowledgedDfns.add(sensitiveModal.dfn);
-    const action = pendingAction;
     const patient = sensitiveModal;
+    const action = pendingAction;
+    acknowledgedDfns.add(patient.dfn);
     setSensitiveModal(null);
     setPendingAction(null);
+    // Fire-and-forget: write break-the-glass audit entry to VistA File 38.11
+    logBreakTheGlass(patient.dfn, { reason: 'Clinical necessity' }).catch(() => {});
     if (action === 'navigate') {
       navigate(`/patients/${patient.dfn}`);
     } else if (action === 'edit') {
@@ -239,8 +243,8 @@ export default function PatientSearch() {
       completeBedAssignment(patient);
       return;
     }
-    if (guardRestricted(patient, 'preview')) return;
-    setSelectedPatient(patient);
+    if (guardRestricted(patient, 'navigate')) return;
+    navigate(`/patients/${patient.dfn}`);
   };
 
   const handleNameClick = (e, patient) => {
@@ -284,7 +288,7 @@ export default function PatientSearch() {
           return;
         }
       } catch (_dupErr) {
-        /* proceed to registration if duplicate search fails */
+        console.warn('Duplicate search failed before registration; continuing to registration:', _dupErr);
       } finally {
         setRegisterDupLoading(false);
       }

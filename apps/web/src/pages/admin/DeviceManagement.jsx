@@ -23,17 +23,16 @@ const PAGE_SIZE = 25;
 const EDIT_FIELDS = [
   { key: 'name', label: 'Device Name', field: '.01', help: 'Logical name of this device (File #3.5 field .01). Referenced by print queues, HL7 interfaces, and user preferences.' },
   { key: 'dollarI', label: '$I (Port)', field: '1', help: 'M $I value — the port or channel identifier used by VistA to communicate with this device.' },
-  { key: 'askDevice', label: 'Ask Device', field: '2', help: 'Prompt text shown when a user selects this device for output. Leave blank for no prompt.' },
-  { key: 'type', label: 'Type', field: '3', help: 'Device class (e.g., TERMINAL, PRINTER, VIRTUAL, HFS). Determines how VistA opens the device.' },
-  { key: 'subtype', label: 'Subtype', field: '4', help: 'Device subtype defining escape sequences and formatting (e.g., P-OTHER, C-VT100).' },
-  { key: 'location', label: 'Location', field: '5', help: 'Physical location of this device within the facility.' },
-  { key: 'rightMargin', label: 'Right Margin', field: '6', help: 'Right margin (number of columns). Standard is 80 for terminals, 132 for wide printers.' },
-  { key: 'formFeed', label: 'Form Feed', field: '7', help: 'Form feed character or sequence sent between pages. Leave blank for default behavior.' },
-  { key: 'pageLength', label: 'Page Length', field: '8', help: 'Number of lines per page. Standard is 24 for terminals, 60 for printers.' },
-  { key: 'closeExecute', label: 'Close Execute', field: '9', help: 'M code executed when the device is closed. Use for cleanup or post-processing.' },
-  { key: 'openParameters', label: 'Open Parameters', field: '10', help: 'Parameters passed to the M OPEN command when opening this device.' },
-  { key: 'closeParameters', label: 'Close Parameters', field: '11', help: 'Parameters passed to the M CLOSE command when closing this device.' },
-  { key: 'outOfService', label: 'Out of Service', field: '50', help: 'When set, this device cannot be selected for printing or output. Existing queued jobs may still attempt to use it.' },
+  { key: 'type', label: 'Type', field: '2', help: 'Device type from File #3.5 field 2 (for example TERMINAL, VIRTUAL TERMINAL, HOST FILE SERVER).' },
+  { key: 'subtype', label: 'Subtype', field: '3', help: 'Device subtype from File #3.5 field 3 (for example P-OTHER or C-VT220).' },
+  { key: 'askDevice', label: 'Ask Device', field: '4', help: 'Prompt for device selection at use time (File #3.5 field 4).' },
+  { key: 'askParameters', label: 'Ask Parameters', field: '5', help: 'Prompt for device parameters at use time (File #3.5 field 5).' },
+  { key: 'outOfServiceDate', label: 'Out-of-Service Date', field: '6', help: 'Date the device went out of service (File #3.5 field 6).' },
+  { key: 'nearestPhone', label: 'Nearest Phone', field: '7', help: 'Nearby phone reference stored on the device record (File #3.5 field 7).' },
+  { key: 'keyOperator', label: 'Key Operator', field: '8', help: 'Key operator reference for the device (File #3.5 field 8).' },
+  { key: 'rightMargin', label: 'Margin Width', field: '9', help: 'Right margin (columns), File #3.5 field 9.' },
+  { key: 'pageLength', label: 'Page Length', field: '11', help: 'Lines per page, File #3.5 field 11.' },
+  { key: 'openParameters', label: 'Open Parameters', field: '19', help: 'Parameters passed to the M OPEN command when opening this device (File #3.5 field 19).' },
 ];
 
 export default function DeviceManagement() {
@@ -416,27 +415,27 @@ export default function DeviceManagement() {
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Margin Width</label>
                 <input type="number" min={1} value={createForm.rightMargin} onChange={e => setCreateForm(f => ({ ...f, rightMargin: e.target.value === '' ? '' : Number(e.target.value) }))}
-                  title="Right margin (columns), File #3.5 field 6"
+                  title="Right margin (columns), File #3.5 field 9"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Page Length</label>
                 <input type="number" min={1} value={createForm.pageLength} onChange={e => setCreateForm(f => ({ ...f, pageLength: e.target.value === '' ? '' : Number(e.target.value) }))}
-                  title="Lines per page, File #3.5 field 8"
+                  title="Lines per page, File #3.5 field 11"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#333] mb-1">Terminal Type</label>
+                <label className="block text-xs font-medium text-[#333] mb-1">Device Type</label>
                 <input type="text" value={createForm.terminalType} onChange={e => setCreateForm(f => ({ ...f, terminalType: e.target.value }))}
-                  placeholder="e.g. TERMINAL, PRINTER, VIRTUAL"
-                  title="Device class — File #3.5 field 3"
+                  placeholder="e.g. HOST FILE SERVER, VIRTUAL TERMINAL"
+                  title="Device type — File #3.5 field 2"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-[#333] mb-1">Host File Server Path</label>
+                <label className="block text-xs font-medium text-[#333] mb-1">Open Parameters / Host Path</label>
                 <input type="text" value={createForm.hostPath} onChange={e => setCreateForm(f => ({ ...f, hostPath: e.target.value }))}
                   placeholder="e.g. \\server\share\path or |HFS|..."
-                  title="Open parameters / host file path — File #3.5 field 10"
+                  title="Open parameters — File #3.5 field 19"
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
               </div>
             </div>

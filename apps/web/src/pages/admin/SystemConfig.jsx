@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
+import LoginIntroPreview from '../../components/shared/LoginIntroPreview';
 import { getSiteParameters, updateSiteParameters, getVistaStatus } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -135,6 +136,9 @@ export default function SystemConfig() {
                 Organization Identity
               </h2>
               <p className="text-[11px] text-[#999] mb-4">Core system identification.</p>
+              <div className="mb-4 rounded-lg border border-[#D6E4F0] bg-[#F8FAFC] px-3 py-2 text-[11px] text-[#52606D]">
+                These values are read-only here because they are established during VistA installation or derived from live Kernel site configuration.
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
@@ -192,28 +196,37 @@ export default function SystemConfig() {
               </h2>
               <p className="text-[11px] text-[#999] mb-4">Controls what users see when signing in.</p>
 
-              <div className="space-y-4">
-                <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
-                  <label className="block text-xs font-medium text-text mb-1">Welcome Message</label>
-                  <p className="text-[10px] text-[#999] mb-2">Text displayed on the login screen. Supports multiple lines.</p>
-                  <textarea
-                    value={introMessage}
-                    onChange={e => updateField('INTRO MESSAGE', e.target.value)}
-                    className="w-full h-32 px-3 py-2 text-sm border border-[#E2E4E8] rounded-md resize-none focus:outline-none focus:border-[#2E5984] font-mono"
-                    placeholder="Enter a welcome message for the login screen..."
-                  />
-                </div>
-                <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
-                  <label className="block text-xs font-medium text-text mb-1">Server Response Timeout</label>
-                  <p className="text-[10px] text-[#999] mb-2">Maximum time (seconds) to wait for the server to respond to a request.</p>
-                  <div className="flex items-center gap-2">
-                    <input type="number"
-                      value={editedValues['BROKER TIMEOUT'] ?? brokerTimeout}
-                      onChange={e => updateField('BROKER TIMEOUT', e.target.value)}
-                      className="w-28 h-8 px-3 text-sm font-mono border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
-                    <span className="text-xs text-[#999]">seconds</span>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                <div className="space-y-4">
+                  <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
+                    <label className="block text-xs font-medium text-text mb-1">Welcome Message</label>
+                    <p className="text-[10px] text-[#999] mb-2">Text displayed on the login screen. Supports multiple lines.</p>
+                    <textarea
+                      value={introMessage}
+                      onChange={e => updateField('INTRO MESSAGE', e.target.value)}
+                      className="w-full h-32 px-3 py-2 text-sm border border-[#E2E4E8] rounded-md resize-none focus:outline-none focus:border-[#2E5984] font-mono"
+                      placeholder="Enter a welcome message for the login screen..."
+                    />
+                  </div>
+                  <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg">
+                    <label className="block text-xs font-medium text-text mb-1">Server Response Timeout</label>
+                    <p className="text-[10px] text-[#999] mb-2">Maximum time (seconds) to wait for the server to respond to a request.</p>
+                    <div className="flex items-center gap-2">
+                      <input type="number"
+                        value={editedValues['BROKER TIMEOUT'] ?? brokerTimeout}
+                        onChange={e => updateField('BROKER TIMEOUT', e.target.value)}
+                        className="w-28 h-8 px-3 text-sm font-mono border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+                      <span className="text-xs text-[#999]">seconds</span>
+                    </div>
                   </div>
                 </div>
+
+                <LoginIntroPreview
+                  siteName={siteName}
+                  domain={domain}
+                  production={production}
+                  message={introMessage}
+                />
               </div>
             </section>
 
@@ -224,6 +237,9 @@ export default function SystemConfig() {
                 System Information
               </h2>
               <p className="text-[11px] text-[#999] mb-4">Read-only technical details about this system.</p>
+              <div className="mb-4 rounded-lg border border-[#D6E4F0] bg-[#F8FAFC] px-3 py-2 text-[11px] text-[#52606D]">
+                These values are status-only. They are populated from the live VistA connection and cannot be edited from this screen.
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {[

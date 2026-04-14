@@ -6,6 +6,7 @@ ZVESITEV ; VE — Site Workspace Visibility & Custom Roles RPCs ; Jun 2026
  ;   ZVE SITE WS SET    - Set workspace visibility for a division
  ;   ZVE ROLE CUSTOM LIST - List custom roles
  ;   ZVE ROLE CUSTOM CRT  - Create a custom role
+ ;   ZVE ROLE CUSTOM UPD  - Update a custom role
  ;   ZVE ROLE CUSTOM DEL  - Delete a custom role
  ;
  ; Storage:
@@ -21,6 +22,7 @@ INSTALL ;
  D REGONE^ZVEADMIN("ZVE SITE WS SET","WSSET","ZVESITEV","Set workspace visibility")
  D REGONE^ZVEADMIN("ZVE ROLE CUSTOM LIST","CRLIST","ZVESITEV","List custom roles")
  D REGONE^ZVEADMIN("ZVE ROLE CUSTOM CRT","CRCRT","ZVESITEV","Create custom role")
+ D REGONE^ZVEADMIN("ZVE ROLE CUSTOM UPD","CRUPD","ZVESITEV","Update custom role")
  D REGONE^ZVEADMIN("ZVE ROLE CUSTOM DEL","CRDEL","ZVESITEV","Delete custom role")
  ; Set XTMP expiration far in future (stored config, not temp data)
  I '$D(^XTMP("ZVEWS",0)) S ^XTMP("ZVEWS",0)=$$FMADD^XLFDT($$NOW^XLFDT,3650)_U_$$NOW^XLFDT_U_"VE Workspace Visibility"
@@ -79,14 +81,17 @@ WSSET(R,DIVIEN,WORKSPACE,ENABLED) ;
  ;   Per-role: "id^name^description^keyCount"
  ; ============================================================
 CRLIST(R) ;
- N CNT,ID,NM,DESC,KCNT
+ N CNT,ID,NM,DESC,KCNT,KNAMES
  S CNT=0
  S ID="" F  S ID=$O(^XTMP("ZVECR",ID)) Q:ID=""  D
  . I ID=0 Q
  . S NM=$P($G(^XTMP("ZVECR",ID,0)),U,1)
  . S DESC=$P($G(^XTMP("ZVECR",ID,0)),U,2)
- . S KCNT=0 N K S K="" F  S K=$O(^XTMP("ZVECR",ID,"KEYS",K)) Q:K=""  S KCNT=KCNT+1
- . S CNT=CNT+1,R(CNT)=ID_U_NM_U_DESC_U_KCNT
+ . S KCNT=0,KNAMES="" N K S K="" F  S K=$O(^XTMP("ZVECR",ID,"KEYS",K)) Q:K=""  D
+ . . S KCNT=KCNT+1
+ . . N KN S KN=$G(^XTMP("ZVECR",ID,"KEYS",K))
+ . . I KN]"" S KNAMES=KNAMES_$S(KNAMES="":"",1:";")_KN
+ . S CNT=CNT+1,R(CNT)=ID_U_NM_U_DESC_U_KCNT_U_KNAMES
  ;
  S R(0)="1^"_CNT_"^OK"
  Q
@@ -112,6 +117,33 @@ CRCRT(R,NAME,DESCRIPTION,KEYS) ;
  ;
  D AUDITLOG^ZVEADMIN("ROLE-CRT",DUZ,"Created custom role: "_NAME)
  S R(0)="1^CREATED^"_ID_"^"_NAME
+ Q
+ ;
+ ; ============================================================
+ ; ZVE ROLE CUSTOM UPD — Update an existing custom role
+ ; ============================================================
+ ; Params: ROLEID, NAME, DESCRIPTION, KEYS (^-delimited key list)
+ ; Output: "1^UPDATED^roleId^name"
+ ; ============================================================
+CRUPD(R,ROLEID,NAME,DESCRIPTION,KEYS) ;
+ S ROLEID=$G(ROLEID)
+ I ROLEID="" S R(0)="0^Role ID required" Q
+ I '$D(^XTMP("ZVECR",ROLEID)) S R(0)="0^Role not found: "_ROLEID Q
+ S NAME=$G(NAME)
+ I NAME="" S R(0)="0^Role name required" Q
+ ;
+ ; Preserve original created date, update name/description
+ N ORIGDATE S ORIGDATE=$P($G(^XTMP("ZVECR",ROLEID,0)),U,3)
+ S ^XTMP("ZVECR",ROLEID,0)=NAME_U_$G(DESCRIPTION)_U_ORIGDATE
+ ;
+ ; Replace keys: kill existing, re-store new list
+ K ^XTMP("ZVECR",ROLEID,"KEYS")
+ I $G(KEYS)]"" D
+ . N I,K
+ . F I=1:1:$L(KEYS,U) S K=$P(KEYS,U,I) I K]"" S ^XTMP("ZVECR",ROLEID,"KEYS",I)=K
+ ;
+ D AUDITLOG^ZVEADMIN("ROLE-UPD",DUZ,"Updated custom role: "_NAME)
+ S R(0)="1^UPDATED^"_ROLEID_"^"_NAME
  Q
  ;
  ; ============================================================

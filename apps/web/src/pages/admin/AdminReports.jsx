@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
-import { getAdminReport } from '../../services/adminService';
+import {
+  createAdminReportSchedule,
+  deleteAdminReportSchedule,
+  getAdminReport,
+  getAdminReportSchedules,
+  getTaskManScheduled,
+  runAdminReportScheduleNow,
+} from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
 /**
@@ -37,14 +44,45 @@ function humanizeColumnHeader(raw) {
   return raw.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
 }
 
+function formatScheduleTimestamp(value) {
+  if (!value) return 'Not yet run';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed);
+}
+
+function humanizeCadence(value) {
+  return {
+    hourly: 'Hourly',
+    daily: 'Daily',
+    weekly: 'Weekly',
+    monthly: 'Monthly',
+  }[value] || value;
+}
+
 export default function AdminReports() {
   useEffect(() => { document.title = 'Reports — VistA Evolved'; }, []);
   const [selectedReport, setSelectedReport] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [scheduleError, setScheduleError] = useState(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [reportSchedules, setReportSchedules] = useState([]);
+  const [taskManScheduled, setTaskManScheduled] = useState([]);
   /** Default 90 — used for stale-accounts report (audit 8.14) */
   const [staleAccountsDays, setStaleAccountsDays] = useState(90);
+  const [scheduleForm, setScheduleForm] = useState({
+    reportType: 'staff-access',
+    cadence: 'daily',
+    label: '',
+    staleDays: 90,
+  });
 
   const handleRunReport = useCallback(async (report, staleDaysOverride) => {
     setSelectedReport(report);
@@ -64,6 +102,78 @@ export default function AdminReports() {
       setReportLoading(false);
     }
   }, [staleAccountsDays]);
+
+  const loadScheduleData = useCallback(async () => {
+    const [scheduleRes, taskManRes] = await Promise.allSettled([
+      getAdminReportSchedules(),
+      getTaskManScheduled(),
+    ]);
+
+    if (scheduleRes.status === 'fulfilled') {
+      setReportSchedules(scheduleRes.value?.data || []);
+    } else {
+      setScheduleError(scheduleRes.reason?.message || 'Failed to load recurring report schedules');
+    }
+
+    if (taskManRes.status === 'fulfilled') {
+      setTaskManScheduled(taskManRes.value?.data || []);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScheduleData();
+  }, [loadScheduleData]);
+
+  useEffect(() => {
+    const interval = setInterval(loadScheduleData, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadScheduleData]);
+
+  const handleCreateSchedule = useCallback(async () => {
+    setScheduleSaving(true);
+    setScheduleError(null);
+    try {
+      const selected = REPORT_TYPES.find((report) => report.id === scheduleForm.reportType);
+      await createAdminReportSchedule({
+        reportType: scheduleForm.reportType,
+        cadence: scheduleForm.cadence,
+        label: scheduleForm.label.trim() || `${selected?.name || scheduleForm.reportType} (${humanizeCadence(scheduleForm.cadence)})`,
+        params: scheduleForm.reportType === 'stale-accounts' ? { days: scheduleForm.staleDays } : {},
+        runImmediately: true,
+      });
+      await loadScheduleData();
+    } catch (err) {
+      setScheduleError(err.message || 'Failed to save recurring report');
+    } finally {
+      setScheduleSaving(false);
+    }
+  }, [loadScheduleData, scheduleForm]);
+
+  const handleRunScheduleNow = useCallback(async (scheduleId) => {
+    setScheduleSaving(true);
+    setScheduleError(null);
+    try {
+      await runAdminReportScheduleNow(scheduleId);
+      await loadScheduleData();
+    } catch (err) {
+      setScheduleError(err.message || 'Failed to run recurring report');
+    } finally {
+      setScheduleSaving(false);
+    }
+  }, [loadScheduleData]);
+
+  const handleDeleteSchedule = useCallback(async (scheduleId) => {
+    setScheduleSaving(true);
+    setScheduleError(null);
+    try {
+      await deleteAdminReportSchedule(scheduleId);
+      await loadScheduleData();
+    } catch (err) {
+      setScheduleError(err.message || 'Failed to delete recurring report');
+    } finally {
+      setScheduleSaving(false);
+    }
+  }, [loadScheduleData]);
 
   const handlePrintReport = () => {
     window.print();
@@ -118,6 +228,173 @@ export default function AdminReports() {
               <p className="text-[11px] text-[#666]">{r.description}</p>
             </button>
           ))}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] mb-6">
+          <div className="bg-white border border-[#E2E4E8] rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-symbols-outlined text-[18px] text-[#2E5984]">schedule</span>
+              <h2 className="text-sm font-semibold text-text">Recurring Report Runs</h2>
+            </div>
+            <p className="text-xs text-[#666] mb-4">
+              Save a recurring report definition on tenant-admin. The background worker runs it automatically and keeps the last run status visible here.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-[#555] mb-1">Report</label>
+                <select
+                  value={scheduleForm.reportType}
+                  onChange={(e) => setScheduleForm((current) => ({ ...current, reportType: e.target.value }))}
+                  className="w-full h-9 px-2 border border-[#E2E4E8] rounded-md text-sm bg-white"
+                >
+                  {REPORT_TYPES.map((report) => (
+                    <option key={report.id} value={report.id}>{report.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-[#555] mb-1">Cadence</label>
+                <select
+                  value={scheduleForm.cadence}
+                  onChange={(e) => setScheduleForm((current) => ({ ...current, cadence: e.target.value }))}
+                  className="w-full h-9 px-2 border border-[#E2E4E8] rounded-md text-sm bg-white"
+                >
+                  <option value="hourly">Hourly</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-[#555] mb-1">Label</label>
+                <input
+                  type="text"
+                  value={scheduleForm.label}
+                  onChange={(e) => setScheduleForm((current) => ({ ...current, label: e.target.value }))}
+                  placeholder="Optional label for this recurring run"
+                  className="w-full h-9 px-2 border border-[#E2E4E8] rounded-md text-sm"
+                />
+              </div>
+
+              {scheduleForm.reportType === 'stale-accounts' && (
+                <div>
+                  <label className="block text-[11px] font-medium text-[#555] mb-1">Days since last login</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={scheduleForm.staleDays}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      setScheduleForm((current) => ({
+                        ...current,
+                        staleDays: Number.isFinite(value) ? Math.min(3650, Math.max(1, value)) : 90,
+                      }));
+                    }}
+                    className="w-full h-9 px-2 border border-[#E2E4E8] rounded-md text-sm"
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCreateSchedule}
+                disabled={scheduleSaving}
+                className="w-full h-10 bg-[#2E5984] text-white text-sm font-medium rounded-md hover:bg-[#1A1A2E] disabled:opacity-50"
+              >
+                Save recurring run and execute now
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-[#F8FAFC] border border-[#E2E4E8] p-3 text-[11px] text-[#666]">
+              <div className="font-medium text-[#374151] mb-1">TaskMan context</div>
+              <div>{taskManScheduled.length} VistA TaskMan task{taskManScheduled.length === 1 ? '' : 's'} currently listed.</div>
+              <div className="mt-1">These recurring report runs are stored in tenant-admin and complement, rather than replace, native TaskMan scheduling.</div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-[#E2E4E8] rounded-lg p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className="text-sm font-semibold text-text">Saved recurring runs</h2>
+              <button
+                type="button"
+                onClick={loadScheduleData}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]"
+              >
+                <span className="material-symbols-outlined text-[14px]">refresh</span>
+                Refresh schedules
+              </button>
+            </div>
+
+            {scheduleError && (
+              <div className="mb-3 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-xs text-[#B91C1C]">
+                {scheduleError}
+              </div>
+            )}
+
+            {reportSchedules.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-[#D1D5DB] p-6 text-center text-sm text-[#6B7280]">
+                No recurring report runs saved yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reportSchedules.map((schedule) => (
+                  <div key={schedule.id} className="rounded-lg border border-[#E2E4E8] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-text">{schedule.label}</div>
+                        <div className="text-[11px] text-[#6B7280]">{REPORT_TYPES.find((report) => report.id === schedule.reportType)?.name || schedule.reportType}</div>
+                      </div>
+                      <span className="inline-flex items-center rounded-full bg-[#E8EEF5] px-2.5 py-1 text-[11px] font-medium text-[#2E5984]">
+                        {humanizeCadence(schedule.cadence)}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 text-[11px] text-[#4B5563]">
+                      <div>Next run: {formatScheduleTimestamp(schedule.nextRunAt)}</div>
+                      <div>Last run: {formatScheduleTimestamp(schedule.lastRunAt)}</div>
+                      <div>Status: {schedule.lastRunStatus || 'Pending'}</div>
+                      <div>Rows returned: {typeof schedule.lastRunRows === 'number' ? schedule.lastRunRows.toLocaleString() : '—'}</div>
+                    </div>
+
+                    {schedule.lastRunError && (
+                      <div className="mt-2 rounded-md bg-[#FEF2F2] px-2.5 py-2 text-[11px] text-[#B91C1C]">
+                        {schedule.lastRunError}
+                      </div>
+                    )}
+
+                    {schedule.reportType === 'stale-accounts' && schedule.params?.days != null && (
+                      <div className="mt-2 text-[11px] text-[#6B7280]">Stale-account threshold: {schedule.params.days} day{Number(schedule.params.days) === 1 ? '' : 's'}</div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRunScheduleNow(schedule.id)}
+                        disabled={scheduleSaving}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">play_arrow</span>
+                        Run now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSchedule(schedule.id)}
+                        disabled={scheduleSaving}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border border-[#F5C2C7] text-[#B42318] rounded-md hover:bg-[#FFF5F5] disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">delete</span>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {selectedReport?.id === 'stale-accounts' && (

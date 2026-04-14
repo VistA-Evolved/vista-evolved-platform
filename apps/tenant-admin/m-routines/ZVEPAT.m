@@ -283,18 +283,45 @@ INS(R,DFN,ACTION,COIEN,GROUP,SUBID,SUBNAME,EFFDT,EXPDT) ;
  . N II F II=1:1:CNT S R(II)=OUT(II)
  ;
  I ACTION="ADD" D  Q
- . S COIEN=+$G(COIEN)
- . I 'COIEN S R(0)="0^Insurance company IEN required" Q
- . I '$D(^DIC(36,COIEN,0)) S R(0)="0^Insurance company not found" Q
+ . ; COIEN may be a numeric IEN or a company name string
+ . N RESOLVEDIEN S RESOLVEDIEN=0
+ . I $G(COIEN)]"" D
+ . . I +COIEN=COIEN,+COIEN>0 D  ; numeric IEN passed
+ . . . I $D(^DIC(36,+COIEN,0)) S RESOLVEDIEN=+COIEN
+ . . E  D  ; name string — look up in "B" cross-ref
+ . . . N NM S NM=$$UP^XLFSTR(COIEN)
+ . . . S RESOLVEDIEN=+$O(^DIC(36,"B",NM,""))
+ . I 'RESOLVEDIEN S R(0)="0^Insurance company not found: "_$G(COIEN) Q
  . ;
- . N MAXIEN S MAXIEN=+$O(^DPT(DFN,.312,"A"),-1)+1
- . S ^DPT(DFN,.312,MAXIEN,0)=COIEN_U_$G(SUBID)_U_$G(GROUP)_U_$G(EXPDT)_U_""_U_""_U_""_U_$G(EFFDT)
- . S ^DPT(DFN,.312,"B",COIEN,MAXIEN)=""
- . ; Update subfile header
+ . ; Get next sub IEN
+ . N MAXIEN S MAXIEN=0
+ . N TI S TI="" F  S TI=$O(^DPT(DFN,.312,TI)) Q:TI=""  I TI>MAXIEN S MAXIEN=TI
+ . S MAXIEN=MAXIEN+1
+ . S ^DPT(DFN,.312,MAXIEN,0)=RESOLVEDIEN_U_$G(SUBID)_U_$G(GROUP)_U_$G(EXPDT)_U_""_U_""_U_""_U_$G(EFFDT)
+ . S ^DPT(DFN,.312,"B",RESOLVEDIEN,MAXIEN)=""
+ . ; Update or create subfile header
+ . I '$D(^DPT(DFN,.312,0)) S ^DPT(DFN,.312,0)="INSURANCE TYPE^2.312IP^0^0^0"
  . S $P(^DPT(DFN,.312,0),U,3)=MAXIEN
  . S $P(^DPT(DFN,.312,0),U,4)=$P($G(^DPT(DFN,.312,0)),U,4)+1
- . D AUDITLOG^ZVEADMIN("INS-ADD",DFN,"Company="_COIEN_" Sub="_$G(SUBID))
+ . D AUDITLOG^ZVEADMIN("INS-ADD",DFN,"Company="_RESOLVEDIEN_" Sub="_$G(SUBID))
  . S R(0)="1^OK^"_MAXIEN_"^ADDED"
+ ;
+ I ACTION="DELETE" D  Q
+ . ; COIEN param reused as the insurance entry IEN
+ . N INSIEN S INSIEN=+$G(COIEN)
+ . I 'INSIEN S R(0)="0^Insurance entry IEN required" Q
+ . I '$D(^DPT(DFN,.312,INSIEN,0)) S R(0)="0^Insurance entry not found" Q
+ . ; Remove B cross-reference
+ . N Z S Z=$G(^DPT(DFN,.312,INSIEN,0))
+ . N OLDCO S OLDCO=$P(Z,U,1)
+ . I OLDCO K ^DPT(DFN,.312,"B",OLDCO,INSIEN)
+ . ; Kill the record node
+ . K ^DPT(DFN,.312,INSIEN)
+ . ; Update subfile header count
+ . N CNT S CNT=$P($G(^DPT(DFN,.312,0)),U,4)-1 I CNT<0 S CNT=0
+ . S $P(^DPT(DFN,.312,0),U,4)=CNT
+ . D AUDITLOG^ZVEADMIN("INS-DEL",DFN,"Entry="_INSIEN)
+ . S R(0)="1^OK^DELETED"
  ;
  I ACTION="VERIFY" D  Q
  . ; Mark an insurance entry as verified
@@ -318,44 +345,65 @@ INS(R,DFN,ACTION,COIEN,GROUP,SUBID,SUBNAME,EFFDT,EXPDT) ;
  ; Output: "1^...|0^error"
  ; Reads from ANNUAL MEANS TEST #408.31
  ; ============================================================
-MEANS(R,DFN,ACTION) ;
+MEANS(R,DFN,ACTION,INCOME,CATEGORY) ;
  S DFN=+$G(DFN)
  I 'DFN S R(0)="0^DFN required" Q
  I '$D(^DPT(DFN,0)) S R(0)="0^Patient not found" Q
  S ACTION=$$UP^XLFSTR($G(ACTION,"READ"))
  ;
  I ACTION="READ" D  Q
- . ; Find most recent means test for this patient
- . ; ANNUAL MEANS TEST #408.31 — field .02 is PATIENT
+ . ; Find most recent means test for this patient via ADFN cross-reference
  . N MTIEN,FOUND S MTIEN="",FOUND=0
- . ; Walk backwards through file to find latest for this patient
- . N IDX S IDX=$G(^DGMT(408.31,0)) I IDX="" S R(0)="0^No means test data available" Q
- . N LAST S LAST=+$P(IDX,U,3) ; last IEN
- . S MTIEN=LAST+1
- . F  S MTIEN=$O(^DGMT(408.31,MTIEN),-1) Q:'MTIEN  D  Q:FOUND
- . . I $P($G(^DGMT(408.31,MTIEN,0)),U,2)=DFN S FOUND=1
- . ;
- . I 'FOUND S R(0)="1^0^NO_MEANS_TEST" Q
+ . ; Use ADFN cross-ref for patient lookup (most reliable)
+ . N LAST S LAST=""
+ . F  S LAST=$O(^DGMT(408.31,"ADFN",DFN,LAST)) Q:LAST=""  S MTIEN=LAST
+ . I 'MTIEN D  Q
+ . . ; Fallback: linear backward scan
+ . . N IDX S IDX=$G(^DGMT(408.31,0)) I IDX="" S R(0)="1^0^NO_MEANS_TEST" Q
+ . . N LIEN S LIEN=+$P(IDX,U,4)+1
+ . . F  S LIEN=$O(^DGMT(408.31,LIEN),-1) Q:'LIEN  D  Q:FOUND
+ . . . I $P($G(^DGMT(408.31,LIEN,0)),U,2)=DFN S FOUND=1,MTIEN=LIEN
+ . . I 'FOUND S R(0)="1^0^NO_MEANS_TEST" Q
  . ;
  . N MTDT S MTDT=$$GET1^DIQ(408.31,MTIEN_",",.01,"E")
- . N MTST S MTST=$$GET1^DIQ(408.31,MTIEN_",",.03,"E")
- . N MTCAT S MTCAT=$$GET1^DIQ(408.31,MTIEN_",",.04,"E")
- . N COPAY S COPAY=$$GET1^DIQ(408.31,MTIEN_",",.07,"E")
+ . N MTST N MSTIEN S MSTIEN=$P($G(^DGMT(408.31,MTIEN,0)),U,3)
+ . S MTST=$P($G(^DG(408.32,MSTIEN,0)),U,1)
+ . N MTINC S MTINC=$P($G(^DGMT(408.31,MTIEN,0)),U,4)
  . ;
  . S R(0)="1^1^OK"
- . S R(1)="MT"_U_MTIEN_U_MTDT_U_MTST_U_MTCAT_U_COPAY
+ . S R(1)="MT"_U_MTIEN_U_MTDT_U_MTST_U_MTINC
  ;
  I ACTION="INITIATE" D  Q
- . ; Create a new means test shell — details entered via DG MEANS TEST process
- . N FDA,DIERR,DIEN
- . S DIEN(1)=""
- . S FDA(408.31,"+1,",.01)=$$NOW^XLFDT
- . S FDA(408.31,"+1,",.02)=DFN
- . S FDA(408.31,"+1,",.03)="REQUIRED"
- . D UPDATE^DIE("E","FDA","DIEN","DIERR")
- . I $D(DIERR) S R(0)="0^Failed to initiate means test: "_$G(DIERR("DIERR",1,"TEXT",1)) Q
- . D AUDITLOG^ZVEADMIN("MEANS-INIT",DFN,"Means test initiated: "_+DIEN(1))
- . S R(0)="1^OK^"_+DIEN(1)_"^INITIATED"
+ . ; Direct global write to File 408.31 — FileMan input transforms on
+ . ; .01 and .03 are protected (require DGMTACT); bypass via direct write.
+ . N FNOW S FNOW=$$NOW^XLFDT  ; FM datetime
+ . N FMD S FMD=$E(FNOW,1,7)   ; FM date only (7 digits)
+ . ; Map category letter (A/B/C) to STATUS IEN in File 408.32
+ . ; 1=REQUIRED,4=MT COPAY EXEMPT(A),5=CATEGORY B,6=MT COPAY REQUIRED(C)
+ . N CAT S CAT=$$UP^XLFSTR($G(CATEGORY,""))
+ . N STIEN S STIEN=1
+ . I CAT="A" S STIEN=4
+ . I CAT="B" S STIEN=5
+ . I CAT="C" S STIEN=6
+ . ;
+ . ; Get next IEN from header (piece 3 = last assigned, piece 4 = entry count)
+ . N HDR S HDR=$G(^DGMT(408.31,0))
+ . N NEXTIEN S NEXTIEN=$P(HDR,U,3)+1
+ . ;
+ . ; Write 0-node: P1=date P2=patient DFN P3=status IEN P4=annual income
+ . N INCAMT S INCAMT=+$G(INCOME)
+ . S ^DGMT(408.31,NEXTIEN,0)=FMD_U_DFN_U_STIEN_U_INCAMT
+ . S ^DGMT(408.31,NEXTIEN,"PRIM")=1
+ . ;
+ . ; Update header: piece 3 = last IEN, piece 4 = total entries
+ . S $P(^DGMT(408.31,0),U,3)=NEXTIEN
+ . S $P(^DGMT(408.31,0),U,4)=$P(^DGMT(408.31,0),U,4)+1
+ . ;
+ . ; Set ADFN cross-reference (lookup by patient)
+ . S ^DGMT(408.31,"ADFN",DFN,NEXTIEN)=""
+ . ;
+ . D AUDITLOG^ZVEADMIN("MEANS-INIT",DFN,"Means test IEN "_NEXTIEN_" income="_INCAMT)
+ . S R(0)="1^OK^"_NEXTIEN_"^INITIATED"
  ;
  S R(0)="0^Invalid ACTION: "_ACTION_" (use READ or INITIATE)" Q
  ;

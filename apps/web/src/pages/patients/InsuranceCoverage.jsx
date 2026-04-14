@@ -227,7 +227,7 @@ export default function InsuranceCoverage() {
   const handleAdd = async () => {
     setSaving(true);
     try {
-      const res = await addInsurance(patientId, addForm);
+      const res = await addInsurance(patientId, { ...addForm, insuranceType: addForm.planName || addForm.companyIen });
       if (res.ok) {
         setInsurance(prev => [...prev, { ...addForm, ...res.data }]);
         setShowAdd(false);

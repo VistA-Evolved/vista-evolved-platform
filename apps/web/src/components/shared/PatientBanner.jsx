@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePatient } from './PatientContext';
 import { getSession } from '../../services/adminService';
+import { formatPhone } from '../../utils/transforms';
 
 function formatDob(dob) {
   if (!dob) return '';
@@ -26,7 +27,9 @@ export default function PatientBanner() {
       try {
         const sess = await getSession();
         if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
-      } catch (err) { /* non-fatal */ }
+      } catch (err) {
+        console.warn('Failed to load patient banner session context:', err);
+      }
     })();
   }, []);
 
@@ -170,7 +173,7 @@ export default function PatientBanner() {
           {patient.phone && (
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px]">phone</span>
-              {patient.phone}
+              {formatPhone(patient.phone)}
             </span>
           )}
         </div>

@@ -17,7 +17,7 @@ function SandboxBanner() {
   }, []);
   if (isProduction) return null;
   return (
-    <div className="bg-[#FFF3E0] border-b border-[#FFB74D] px-4 py-1.5 text-center text-[11px] font-semibold text-[#E65100] flex items-center justify-center gap-1.5">
+    <div data-sandbox-banner className="bg-[#FFF3E0] border-b border-[#FFB74D] px-4 py-1.5 text-center text-[11px] font-semibold text-[#E65100] flex items-center justify-center gap-1.5">
       <span className="material-symbols-outlined text-[14px]">science</span>
       SANDBOX / TEST ENVIRONMENT — Changes here do not affect production systems
     </div>

@@ -47,6 +47,7 @@ export default function PermissionsCatalog() {
   const [searchText, setSearchText] = useState('');
   const [page, setPage] = useState(1);
   const [selectedPerm, setSelectedPerm] = useState(null);
+  const selectedPermKey = selectedPerm?.vistaKey || selectedPerm?.name || '';
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [viewMode, setViewMode] = useState('standard'); // standard: ~150 important keys, advanced: all 689
   const [allKeys, setAllKeys] = useState([]);
@@ -82,7 +83,7 @@ export default function PermissionsCatalog() {
     setHoldersLoading(true);
     try {
       const res = await getPermissionHolders(row.vistaKey || row.name);
-      setHoldersData(res?.data || []);
+      setHoldersData(res?.holders || res?.data || []);
     } catch (err) { setHoldersData([]); }
     finally { setHoldersLoading(false); }
   };
@@ -149,7 +150,9 @@ export default function PermissionsCatalog() {
           setAssignError(`Cannot assign "${keyLabel}": this staff member already holds "${conflictLabel}". These permissions are mutually exclusive.`);
           return;
         }
-      } catch (err) { /* proceed — backend will also validate */ }
+      } catch (err) {
+        console.warn('Failed to pre-check mutual exclusion before permission assign; proceeding with backend validation:', err);
+      }
     }
     setAssigning(true);
     try {
@@ -187,7 +190,9 @@ export default function PermissionsCatalog() {
             skipped.push(staff?.name || duz);
             continue;
           }
-        } catch (err) { /* proceed and let backend handle it */ }
+        } catch (err) {
+          console.warn('Failed to pre-check mutual exclusion before batch permission assign; proceeding with backend validation:', err);
+        }
       }
       try {
         await assignPermission(duz, { keyName: assignModal.vistaKey || assignModal.name });
@@ -208,6 +213,16 @@ export default function PermissionsCatalog() {
       setSelectedStaff(new Set());
       loadData();
     }
+  };
+
+  const handleCloseSelectedPerm = () => {
+    setSelectedPerm(null);
+    if (!searchParams.get('key')) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('key');
+    nextParams.delete('assign');
+    nextParams.delete('view');
+    setSearchParams(nextParams, { replace: true });
   };
 
   const columns = [
@@ -292,9 +307,27 @@ export default function PermissionsCatalog() {
     } else if (viewKey) {
       handleViewStaff(row);
     }
-    setSearchParams({}, { replace: true });
+    if (assignKey || viewKey) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('assign');
+      nextParams.delete('view');
+      nextParams.set('key', row.vistaKey || row.name);
+      setSearchParams(nextParams, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allKeys]);
+  }, [allKeys, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const currentKey = searchParams.get('key') || '';
+    if (selectedPermKey) {
+      if (currentKey === selectedPermKey && !searchParams.get('assign') && !searchParams.get('view')) return;
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('assign');
+      nextParams.delete('view');
+      nextParams.set('key', selectedPermKey);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, selectedPermKey, setSearchParams]);
 
   const filtered = allKeys.filter(k => {
     // Standard/Advanced filter
@@ -422,7 +455,7 @@ export default function PermissionsCatalog() {
           <div className="hidden xl:block w-[40%] border-l border-border bg-surface-alt p-6 overflow-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-text">{selectedPerm.displayName}</h2>
-              <button onClick={() => setSelectedPerm(null)} className="text-text-muted hover:text-text" aria-label="Close">
+              <button onClick={handleCloseSelectedPerm} className="text-text-muted hover:text-text" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>

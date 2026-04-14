@@ -7,6 +7,9 @@ ZVEPAT1 ; VE — Patient Flags, Search, Duplicate, Recent, Deceased RPCs ; Apr 2
  ;   ZVE PATIENT SEARCH EXTENDED - Multi-mode patient search
  ;   ZVE RECENT PATIENTS   - Recently accessed patients per user
  ;   ZVE PATIENT DECEASED  - Record/verify date of death
+ ;   ZVE PAT BRGLSS        - Break-the-glass audit log write (DG SECURITY LOG File 38.11)
+ ;   ZVE PAT BGREAD        - Read break-the-glass audit log for a patient
+ ;   ZVE PAT RESTRICT      - Set/clear patient record sensitivity (File 38.1 field 2)
  ;
  Q  ; No direct entry
  ;
@@ -17,6 +20,9 @@ INSTALL ;
  D REGONE^ZVEADMIN("ZVE PATIENT SEARCH EXTENDED","SRCH","ZVEPAT1","Extended patient search")
  D REGONE^ZVEADMIN("ZVE RECENT PATIENTS","RECENT","ZVEPAT1","Recently accessed patients")
  D REGONE^ZVEADMIN("ZVE PATIENT DECEASED","DEAD","ZVEPAT1","Record date of death")
+ D REGONE^ZVEADMIN("ZVE PAT BRGLSS","BRGLSS","ZVEPAT1","Break-the-glass audit log")
+ D REGONE^ZVEADMIN("ZVE PAT BGREAD","BGREAD","ZVEPAT1","Read break-the-glass audit log")
+ D REGONE^ZVEADMIN("ZVE PAT RESTRICT","RESTRICT","ZVEPAT1","Set patient record sensitivity")
  W !,"=== ZVEPAT1 install complete ==="
  Q
  ;
@@ -29,10 +35,20 @@ INSTALL ;
  ; Reads/writes: PRF files #26.13, #26.14, #26.15
  ; ============================================================
 FLAGS(R,DFN,ACTION,FLAGTYPE,FLAGNAME,NARRATIVE,REVIEWDT) ;
+ S ACTION=$$UP^XLFSTR($G(ACTION,"LIST"))
+ ; DEFS does not require a patient DFN
+ I ACTION="DEFS" D  Q
+ . N CNT,NM S CNT=0
+ . I '$D(^DGPF(26.15,0)) S R(0)="1^0^NO_DEFS" Q
+ . N I S I=0 F  S I=$O(^DGPF(26.15,I)) Q:I=""!(+I=0)  D
+ . . N Z S Z=$G(^DGPF(26.15,I,0)) Q:Z=""
+ . . S NM=$P(Z,U,1) Q:NM=""
+ . . S CNT=CNT+1,R(CNT)=I_U_NM
+ . S R(0)="1^"_CNT_"^OK"
+ ;
  S DFN=+$G(DFN)
  I 'DFN S R(0)="0^DFN required" Q
  I '$D(^DPT(DFN,0)) S R(0)="0^Patient not found" Q
- S ACTION=$$UP^XLFSTR($G(ACTION,"LIST"))
  ;
  I ACTION="LIST" D  Q
  . ; List active flags for this patient
@@ -43,14 +59,15 @@ FLAGS(R,DFN,ACTION,FLAGTYPE,FLAGNAME,NARRATIVE,REVIEWDT) ;
  . N IEN S IEN=0
  . F  S IEN=$O(^DGPF(26.13,IEN)) Q:'IEN  Q:IEN="B"  D
  . . N Z S Z=$G(^DGPF(26.13,IEN,0)) Q:Z=""
- . . N FDFN S FDFN=$P(Z,U,2) Q:FDFN'=DFN
- . . N FIEN S FIEN=$P(Z,U,1)
- . . N STATUS S STATUS=$P(Z,U,4) Q:STATUS="INACTIVE"
+ . . N FDFN S FDFN=$P(Z,U,1) Q:FDFN'=DFN            ; .01=PATIENT (piece 1)
+ . . N FREF S FREF=$P(Z,U,2)                       ; .02=FLAG ref (var ptr)
+ . . N FIEN S FIEN=$P(FREF,";",1)
+ . . N STATUS S STATUS=$P(Z,U,3) Q:STATUS="0"!($E(STATUS,1)="0") ; .03=STATUS (0=inactive)
  . . N FNAME S FNAME=$S(FIEN:$$GET1^DIQ(26.15,FIEN_",",.01,"E"),1:"UNKNOWN")
- . . N FTYPE S FTYPE=$P(Z,U,3)
- . . N ASSDT S ASSDT=$P(Z,U,5)
- . . N ASSBY S ASSBY=$P(Z,U,6)
- . . N REVDT S REVDT=$P(Z,U,7)
+ . . N FTYPE S FTYPE=""                             ; type not stored in 26.13
+ . . N REVDT S REVDT=$P(Z,U,6)                     ; .06=REVIEW DATE (piece 6)
+ . . N ASSDT S ASSDT=$G(^DGPF(26.13,IEN,.07))      ; assignment date if present
+ . . N ASSBY S ASSBY=$G(^VA(200,DUZ,0)) S ASSBY=$P(ASSBY,U,1)
  . . S CNT=CNT+1,OUT(CNT)=IEN_U_FNAME_U_FTYPE_U_STATUS_U_ASSDT_U_ASSBY_U_REVDT
  . S R(0)="1^"_CNT_"^OK"
  . N I F I=1:1:CNT S R(I)=OUT(I)
@@ -61,36 +78,36 @@ FLAGS(R,DFN,ACTION,FLAGTYPE,FLAGNAME,NARRATIVE,REVIEWDT) ;
  . S FLAGNAME=$G(FLAGNAME)
  . I FLAGNAME="" S R(0)="0^FLAGNAME required" Q
  . S NARRATIVE=$G(NARRATIVE)
- . I NARRATIVE="" S R(0)="0^NARRATIVE required for flag assignment" Q
  . ;
- . ; Find or validate flag definition in PRF LOCAL FLAG #26.15
+ . ; Find flag definition IEN in File 26.15 via B cross-ref
  . N FLAGIEN S FLAGIEN=$O(^DGPF(26.15,"B",FLAGNAME,0))
  . I 'FLAGIEN S R(0)="0^Flag not found in PRF: "_FLAGNAME Q
  . ;
- . ; Create assignment in #26.13
- . N FDA,DIERR,DIEN S DIEN(1)=""
- . S FDA(26.13,"+1,",.01)=FLAGIEN
- . S FDA(26.13,"+1,",.02)=DFN
- . S FDA(26.13,"+1,",.03)=FLAGTYPE
- . S FDA(26.13,"+1,",.04)="ACTIVE"
- . S FDA(26.13,"+1,",.05)=$$NOW^XLFDT
- . S FDA(26.13,"+1,",.06)=DUZ
- . I $G(REVIEWDT)]"" S FDA(26.13,"+1,",.07)=REVIEWDT
+ . ; Assign next IEN and write 26.13 record directly
+ . ; 0 node: PATIENT^FLAGREF^STATUS^^^REVIEWDATE
+ . N ASSIEN S ASSIEN=+$P($G(^DGPF(26.13,0)),U,3)+1
+ . N Z0 S Z0=DFN_U_FLAGIEN_";DGPF(26.15,"_U_1_U_U_U
+ . I $G(REVIEWDT)]"" S $P(Z0,U,6)=REVIEWDT
+ . S ^DGPF(26.13,ASSIEN,0)=Z0
+ . S ^DGPF(26.13,"B",DFN,ASSIEN)=""
+ . S $P(^DGPF(26.13,0),U,3)=ASSIEN
+ . S $P(^DGPF(26.13,0),U,4)=+$P($G(^DGPF(26.13,0)),U,4)+1
  . ;
- . D UPDATE^DIE("E","FDA","DIEN","DIERR")
- . I $D(DIERR) S R(0)="0^Flag assign failed: "_$G(DIERR("DIERR",1,"TEXT",1)) Q
+ . ; Store narrative in WP field 1 (direct global)
+ . I NARRATIVE]"" D
+ . . N NOWDT S NOWDT=$$DT^XLFDT
+ . . S ^DGPF(26.13,ASSIEN,1,0)="^^1^1^"_NOWDT
+ . . S ^DGPF(26.13,ASSIEN,1,1,0)=NARRATIVE
  . ;
- . ; Log to history #26.14
- . N HFDA,HDIEN S HDIEN(1)=""
- . S HFDA(26.14,"+1,",.01)=+DIEN(1)
- . S HFDA(26.14,"+1,",.02)="ASSIGNED"
- . S HFDA(26.14,"+1,",.03)=$$NOW^XLFDT
- . S HFDA(26.14,"+1,",.04)=DUZ
- . S HFDA(26.14,"+1,",.05)=NARRATIVE
- . D UPDATE^DIE("E","HFDA","HDIEN")
+ . ; Log to PRF HISTORY #26.14
+ . N HIEN S HIEN=+$P($G(^DGPF(26.14,0)),U,3)+1
+ . N ZH S ZH=ASSIEN_U_$$NOW^XLFDT_U_"ASSIGNED"_U_DUZ
+ . S ^DGPF(26.14,HIEN,0)=ZH
+ . S $P(^DGPF(26.14,0),U,3)=HIEN
+ . S $P(^DGPF(26.14,0),U,4)=+$P($G(^DGPF(26.14,0)),U,4)+1
  . ;
  . D AUDITLOG^ZVEADMIN("FLAG-ASSIGN",DFN,"Flag="_FLAGNAME_" Type="_FLAGTYPE)
- . S R(0)="1^OK^"_+DIEN(1)_"^ASSIGNED"
+ . S R(0)="1^OK^"_ASSIEN_"^ASSIGNED"
  ;
  I ACTION="INACTIVATE" D  Q
  . ; Inactivate a specific flag assignment
@@ -98,19 +115,16 @@ FLAGS(R,DFN,ACTION,FLAGTYPE,FLAGNAME,NARRATIVE,REVIEWDT) ;
  . I 'ASSIEN S R(0)="0^Flag assignment IEN required" Q
  . I '$D(^DGPF(26.13,ASSIEN,0)) S R(0)="0^Flag assignment not found" Q
  . ;
- . ; Set status to INACTIVE
+ . ; Set STATUS (piece 3) to 0 (INACTIVE)
  . N Z S Z=$G(^DGPF(26.13,ASSIEN,0))
- . S $P(Z,U,4)="INACTIVE"
+ . S $P(Z,U,3)=0
  . S ^DGPF(26.13,ASSIEN,0)=Z
  . ;
- . ; Log to history
- . N HFDA,HDIEN S HDIEN(1)=""
- . S HFDA(26.14,"+1,",.01)=ASSIEN
- . S HFDA(26.14,"+1,",.02)="INACTIVATED"
- . S HFDA(26.14,"+1,",.03)=$$NOW^XLFDT
- . S HFDA(26.14,"+1,",.04)=DUZ
- . S HFDA(26.14,"+1,",.05)=$G(NARRATIVE,"Inactivated by admin")
- . D UPDATE^DIE("E","HFDA","HDIEN")
+ . ; Log to PRF HISTORY #26.14
+ . N HIEN S HIEN=+$P($G(^DGPF(26.14,0)),U,3)+1
+ . S ^DGPF(26.14,HIEN,0)=ASSIEN_U_$$NOW^XLFDT_U_"INACTIVATED"_U_DUZ
+ . S $P(^DGPF(26.14,0),U,3)=HIEN
+ . S $P(^DGPF(26.14,0),U,4)=+$P($G(^DGPF(26.14,0)),U,4)+1
  . ;
  . D AUDITLOG^ZVEADMIN("FLAG-INACT",DFN,"Assignment "_ASSIEN_" inactivated")
  . S R(0)="1^OK^INACTIVATED"
@@ -350,3 +364,92 @@ DEAD(R,DFN,DEATHDT,SOURCE,ACTION) ;
  . S R(0)="1^OK^VERIFIED"
  ;
  S R(0)="0^Invalid ACTION: "_ACTION_" (use RECORD or VERIFY)" Q
+ ;
+ ; ============================================================
+ ; ZVE PAT BRGLSS — Break-the-glass audit (DG SECURITY LOG)
+ ; ============================================================
+ ; Params: DFN=patient IEN, DUZ=accessing user, REASON=free text
+ ; Writes: ^DGSL(38.1,DFN,0) (parent) + ^DGSL(38.1,DFN,"D",AIEN,0)
+ ; Returns: 1^OK^<AIEN> or 0^<error>
+ ; ============================================================
+BRGLSS(R,DFN,DUZ,REASON) ;
+ S DFN=+$G(DFN)
+ I 'DFN S R(0)="0^DFN required" Q
+ S DUZ=+$G(DUZ)
+ S REASON=$E($G(REASON),1,65)
+ ;
+ N U,FNOW,AIEN S U="^"
+ S FNOW=$$NOW^XLFDT
+ ;
+ ; Ensure File 38.1 parent record exists (IEN = DFN per DINUM)
+ I '$D(^DGSL(38.1,DFN,0)) D
+ . S ^DGSL(38.1,DFN,0)=DFN_U_"1"_U_DUZ_U_FNOW
+ . S ^DGSL(38.1,"B",DFN,DFN)=""
+ . ; Update file header: increment count
+ . S $P(^DGSL(38.1,0),U,4)=$P($G(^DGSL(38.1,0)),U,4)+1
+ ;
+ ; Add access log entry to subfile 38.11 ("D" subscript, DINUM IEN)
+ ; DINUM formula: IEN = 9999999.9999 - FM_datetime
+ S AIEN=9999999.9999-FNOW
+ S ^DGSL(38.1,DFN,"D",AIEN,0)=FNOW_U_DUZ_U_$E("ZVE:"_REASON,1,65)_U_"n"
+ ;
+ S R(0)="1^OK^"_DFN_"^"_FNOW_"^"_AIEN
+ Q
+ ;
+ ; ============================================================
+ ; ZVE PAT BGREAD — Read break-the-glass audit log for a patient
+ ; ============================================================
+ ; Params: DFN=patient IEN, MAX=max rows (default 100)
+ ; Returns: R(0)="1^count^OK" then R(1..n)="AIEN^FNOW^DUZ^REASON^INPAT"
+ ; Reads:  ^DGSL(38.1,DFN,"D",AIEN,0)
+ ; ============================================================
+BGREAD(R,DFN,MAX) ;
+ S DFN=+$G(DFN)
+ I 'DFN S R(0)="0^DFN required" Q
+ S MAX=+$G(MAX,100)
+ I 'MAX S MAX=100
+ ;
+ N U S U="^"
+ N n,cnt,AIEN S n=0,cnt=0
+ ; Walk "D" subfile forward (smallest IEN = most recent access due to DINUM)
+ S AIEN=0
+ F  S AIEN=$O(^DGSL(38.1,DFN,"D",AIEN)) Q:AIEN=""!(cnt>=MAX)  D
+ . N ROW S ROW=$G(^DGSL(38.1,DFN,"D",AIEN,0))
+ . S cnt=cnt+1
+ . S R(cnt)=AIEN_U_$P(ROW,U,1)_U_$P(ROW,U,2)_U_$P(ROW,U,3)_U_$P(ROW,U,4)
+ ;
+ S R(0)="1^"_cnt_"^OK"
+ Q
+ ;
+ ; ============================================================
+ ; ZVE PAT RESTRICT — Set/clear patient record sensitivity
+ ; ============================================================
+ ; Params: DFN=patient IEN, LEVEL=none|level1|level2, DUZ=user IEN
+ ; Writes: ^DGSL(38.1,DFN,0) — updates or creates parent record
+ ;         Security level: 0=NON-SENSITIVE, 1=SENSITIVE
+ ; Returns: 1^OK^DFN^SEC or 0^error
+ ; ============================================================
+RESTRICT(R,DFN,LEVEL,DUZ) ;
+ S DFN=+$G(DFN)
+ I 'DFN S R(0)="0^DFN required" Q
+ S DUZ=+$G(DUZ)
+ S LEVEL=$G(LEVEL,"none")
+ ;
+ N U,SEC,FNOW S U="^"
+ S FNOW=$$NOW^XLFDT
+ ; Map UI level to VistA security code: none->0, level1/level2->1
+ S SEC=$S(LEVEL="none":0,1:1)
+ ;
+ I $D(^DGSL(38.1,DFN,0)) D
+ . ; Update existing record pieces 2 (level), 3 (DUZ), 4 (date)
+ . S $P(^DGSL(38.1,DFN,0),U,2)=SEC
+ . S $P(^DGSL(38.1,DFN,0),U,3)=DUZ
+ . S $P(^DGSL(38.1,DFN,0),U,4)=FNOW
+ E  D
+ . ; Create new record (DINUM: IEN = DFN)
+ . S ^DGSL(38.1,DFN,0)=DFN_U_SEC_U_DUZ_U_FNOW
+ . S ^DGSL(38.1,"B",DFN,DFN)=""
+ . S $P(^DGSL(38.1,0),U,4)=$P($G(^DGSL(38.1,0)),U,4)+1
+ ;
+ S R(0)="1^OK^"_DFN_"^"_SEC
+ Q

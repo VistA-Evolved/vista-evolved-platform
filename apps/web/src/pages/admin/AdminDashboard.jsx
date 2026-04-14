@@ -27,6 +27,61 @@ const QUICK_ACTIONS = [
   { label: 'Audit Trail', icon: 'history', path: '/admin/audit' },
 ];
 
+function formatDelta(value) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+  if (value === 0) return 'No change';
+  return `${value > 0 ? '+' : ''}${value.toLocaleString()}`;
+}
+
+function formatTrendTimestamp(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed);
+}
+
+function getTrendDescriptor(trendSummary, key) {
+  const metricTrend = trendSummary?.metrics?.[key] || null;
+  if (!metricTrend) {
+    return {
+      badge: 'Trend unavailable',
+      detail: 'No persisted history for this metric yet.',
+      tone: 'text-[#6B7280] bg-[#F3F4F6]',
+      icon: 'timeline',
+    };
+  }
+
+  if ((trendSummary?.sampleCount || 0) < 2) {
+    return {
+      badge: `Building baseline (${trendSummary?.sampleCount || 0}/2)` ,
+      detail: 'Need another snapshot before changes can be compared.',
+      tone: 'text-[#92400E] bg-[#FEF3C7]',
+      icon: 'hourglass_top',
+    };
+  }
+
+  if (metricTrend.has7dBaseline && typeof metricTrend.delta7d === 'number') {
+    return {
+      badge: `${formatDelta(metricTrend.delta7d)} vs 7d`,
+      detail: `7-day baseline ${metricTrend.weekBaselineValue?.toLocaleString?.() ?? metricTrend.weekBaselineValue}`,
+      tone: 'text-[#1D4ED8] bg-[#DBEAFE]',
+      icon: metricTrend.delta7d > 0 ? 'trending_up' : metricTrend.delta7d < 0 ? 'trending_down' : 'trending_flat',
+    };
+  }
+
+  return {
+    badge: `${formatDelta(metricTrend.deltaFromPrevious)} since last`,
+    detail: `Previous sample ${metricTrend.previousValue?.toLocaleString?.() ?? metricTrend.previousValue}`,
+    tone: 'text-[#0F766E] bg-[#CCFBF1]',
+    icon: metricTrend.deltaFromPrevious > 0 ? 'trending_up' : metricTrend.deltaFromPrevious < 0 ? 'trending_down' : 'trending_flat',
+  };
+}
+
 export default function AdminDashboard() {
   useEffect(() => { document.title = 'Admin Dashboard — VistA Evolved'; }, []);
   const navigate = useNavigate();
@@ -67,6 +122,9 @@ export default function AdminDashboard() {
   }
 
   const vistaOk = vistaStatus?.vistaReachable === true;
+  const trendSummary = data?.trendSummary || null;
+  const trendCoverage = trendSummary?.coverageDays || 0;
+  const trendLastSample = formatTrendTimestamp(trendSummary?.lastSampledAt);
 
   return (
     <AppShell breadcrumb="Admin > Dashboard">
@@ -88,6 +146,20 @@ export default function AdminDashboard() {
           {vistaOk ? 'VistA backend connected and responding.' : 'VistA backend is unreachable. Data may be stale.'}
         </div>
 
+        {trendSummary && (
+          <div className="mb-6 rounded-lg border border-[#D6E4F0] bg-[#F7FAFC] p-4 text-sm text-[#355070]">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 font-medium text-[#1D4ED8] border border-[#BFDBFE]">
+                <span className="material-symbols-outlined text-[16px]">timeline</span>
+                {trendSummary.sampleCount || 0} snapshot{trendSummary.sampleCount === 1 ? '' : 's'} retained
+              </span>
+              <span>Coverage: {trendCoverage > 0 ? `${trendCoverage} day${trendCoverage === 1 ? '' : 's'}` : 'less than 1 day'}</span>
+              <span>Sampling cadence: 6 hours</span>
+              {trendLastSample && <span>Last sampled: {trendLastSample}</span>}
+            </div>
+          </div>
+        )}
+
         {/* Metric cards */}
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -97,6 +169,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {METRIC_CARDS.map(card => {
               const value = data?.[card.key] ?? '—';
+              const trend = getTrendDescriptor(trendSummary, card.key);
               return (
                 <Link key={card.key} to={card.path} title={`View ${card.label}`}
                   className="block bg-white border border-[#E2E4E8] rounded-lg p-5 text-left no-underline text-inherit hover:shadow-md transition-shadow group focus:outline-none focus:ring-2 focus:ring-[#2E5984] focus:ring-offset-2">
@@ -108,6 +181,13 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-2xl font-bold text-text">{typeof value === 'number' ? value.toLocaleString() : value}</div>
                   <div className="text-xs text-[#999] mt-0.5">{card.label}</div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${trend.tone}`}>
+                      <span className="material-symbols-outlined text-[14px]">{trend.icon}</span>
+                      {trend.badge}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[11px] text-[#6B7280]">{trend.detail}</div>
                 </Link>
               );
             })}

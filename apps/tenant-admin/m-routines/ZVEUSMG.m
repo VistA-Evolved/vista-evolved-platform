@@ -18,6 +18,7 @@ INSTALL ; Register RPCs in File #8994 (idempotent)
  D REGONE("ZVE USMG UNLOCK","UNLOCK","ZVEUSMG","Release a locked-out account")
  D REGONE("ZVE USMG RENAME","RENAME","ZVEUSMG","Rename user (.01)")
  D REGONE("ZVE USMG CHKAC","CHKAC","ZVEUSMG","Check access code availability")
+ D REGONE("ZVE USMG FINDAC","FINDAC","ZVEUSMG","Resolve access code to DUZ")
  W !,"=== ZVE USMG install complete ==="
  Q
  ;
@@ -100,17 +101,26 @@ ESIG(R,TDUZ,CODE) ; RPC ZVE USMG ESIG
  D AUDITLOG^ZVEADMIN("ESIG-SET",+TDUZ,"E-sig set via USMG")
  S R(0)="1^OK" Q
  ;
-CRED(R,TDUZ,AC,VC) ; RPC ZVE USMG CRED
+CRED(R,TDUZ,AC,VC,MODE) ; RPC ZVE USMG CRED
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
- I $G(AC)=""!($G(VC)="") S R(0)="0^ACCESS and VERIFY required" Q
+ S AC=$$UP^XLFSTR($G(AC)),VC=$$UP^XLFSTR($G(VC)),MODE=$$UP^XLFSTR($G(MODE))
+ I AC=""!(VC="") S R(0)="0^ACCESS and VERIFY required" Q
+ N ACHASH,VCHASH,CURVHASH,ERRMSG
+ S ACHASH=$$EN^XUSHSH(AC),VCHASH=$$EN^XUSHSH(VC)
+ I ACHASH=VCHASH S R(0)="0^Verify code cannot be the same as access code." Q
+ D CHKVHIST(+TDUZ,VCHASH,.ERRMSG)
+ I ERRMSG]"" S R(0)="0^"_ERRMSG Q
+ S CURVHASH=$$GET1^DIQ(200,TDUZ_",",11,"I")
  N FDA,DIERR
- S FDA(200,TDUZ_",",2)=$$EN^XUSHSH(AC)
- S FDA(200,TDUZ_",",11)=$$EN^XUSHSH(VC)
- ; Force password change on first login — set verify code change date to yesterday
- S FDA(200,TDUZ_",",11.2)=$$FMADD^XLFDT(DT,-1)
+ S FDA(200,TDUZ_",",2)=ACHASH
+ S FDA(200,TDUZ_",",11)=VCHASH
+ ; ACTIVE marks the password as changed now; default behavior leaves the
+ ; sign-on state in the Kernel-required "must change verify code" mode.
+ I MODE="ACTIVE" S FDA(200,TDUZ_",",11.2)=DT
  D FILE^DIE("","FDA","DIERR")
  I $D(DIERR) S R(0)="0^FILE^DIE error" Q
+ D PUSHVHIST(+TDUZ,CURVHASH,VCHASH)
  D AUDITLOG^ZVEADMIN("CRED-SET",+TDUZ,"Credentials updated via admin")
  S R(0)="1^OK" Q
  ;
@@ -127,6 +137,11 @@ ADD(R,NM,AC,VC) ; RPC ZVE USMG ADD — minimal user creation
  I +DUPDUZ>0 S R(0)="0^User already exists: "_NM_" (DUZ "_DUPDUZ_")" Q
  ; S9.23: Refuse if access code already in use (check "A" xref)
  I $G(AC)]"" N ACHASH S ACHASH=$$EN^XUSHSH(AC) I $O(^VA(200,"A",ACHASH,0))>0 S R(0)="0^Access code already in use" Q
+ ; Credential policy: verify code must not match access code.
+ I $G(AC)]"",$G(VC)]"" N ACHASH,VCHASH D  Q:$G(R(0))]""
+ . S ACHASH=$$EN^XUSHSH($$UP^XLFSTR(AC))
+ . S VCHASH=$$EN^XUSHSH($$UP^XLFSTR(VC))
+ . I ACHASH=VCHASH S R(0)="0^Verify code cannot be the same as access code."
  S DIC="^VA(200,"
  S DIC(0)="LX"
  S DIC("DR")=""
@@ -136,14 +151,13 @@ ADD(R,NM,AC,VC) ; RPC ZVE USMG ADD — minimal user creation
  I +Y<0 S R(0)="0^FILE^DICN failed for name "_NM Q
  N NEWDUZ S NEWDUZ=+Y
  ; Set hashed credentials via FILE^DIE. XUSHSH is the Kernel hash routine
- ; that produces the same format XUS uses at sign-on, so the user can log
- ; in immediately with these access/verify codes.
+ ; that produces the same format XUS uses at sign-on. New accounts leave
+ ; field 11.2 unset so Kernel forces a verify-code change on first login.
  I $G(AC)]""!($G(VC)]"") D
  . N CFDA,CERR
+ . S AC=$$UP^XLFSTR($G(AC)),VC=$$UP^XLFSTR($G(VC))
  . I $G(AC)]"" S CFDA(200,NEWDUZ_",",2)=$$EN^XUSHSH(AC)
  . I $G(VC)]"" S CFDA(200,NEWDUZ_",",11)=$$EN^XUSHSH(VC)
- . ; Force password change on first login — set verify code change date to yesterday
- . S CFDA(200,NEWDUZ_",",11.2)=$$FMADD^XLFDT(DT,-1)
  . D FILE^DIE("","CFDA","CERR")
  D AUDITLOG^ZVEADMIN("USER-ADD",NEWDUZ,"Created user "_NM)
  S R(0)="1^"_NEWDUZ Q
@@ -152,8 +166,8 @@ DEACT(R,TDUZ,REASON) ; RPC ZVE USMG DEACT — soft deactivation
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
  N FDA,DIERR
- ; Set DISUSER flag (node 7, piece 1) — blocks sign-on
- S $P(^VA(200,+TDUZ,7),U,1)=1
+ ; Set DISUSER through FileMan so the live DD mapping for field 7 is honored.
+ S FDA(200,TDUZ_",",7)=1
  ; Set termination date (field 9.2) to today
  S FDA(200,TDUZ_",",9.2)=DT
  ; C006: Write termination reason (field 9.4) if provided
@@ -167,8 +181,8 @@ REACT(R,TDUZ) ; RPC ZVE USMG REACT — reactivation
  I '+$G(TDUZ) S R(0)="0^DUZ required" Q
  I '$D(^VA(200,+TDUZ,0)) S R(0)="0^User not found" Q
  N FDA,DIERR
- ; Clear DISUSER flag — restores sign-on
- S $P(^VA(200,+TDUZ,7),U,1)=""
+ ; Clear DISUSER through FileMan so field 7 returns to the active state.
+ S FDA(200,TDUZ_",",7)="@"
  ; Clear termination date (field 9.2)
  S FDA(200,TDUZ_",",9.2)="@"
  D FILE^DIE("","FDA","DIERR")
@@ -195,8 +209,8 @@ TERM(R,TDUZ) ; RPC ZVE USMG TERM — full account termination
  ; Remove all keys from #200 field 51 and from ^XUSEC. Walk in reverse so
  ; deletes don't disturb the iteration.
  N KIEN,KNM
- S KIEN=$O(^VA(200,+TDUZ,51,""),-1)
- F  Q:'KIEN  D  S KIEN=$O(^VA(200,+TDUZ,51,KIEN),-1)
+ S KIEN=999999999
+ F  S KIEN=$O(^VA(200,+TDUZ,51,KIEN),-1) Q:KIEN'>0  D
  . S KNM=$P($G(^VA(200,+TDUZ,51,KIEN,0)),U,1)
  . I KNM]"" K ^XUSEC(KNM,+TDUZ),^VA(200,+TDUZ,51,"B",KNM,KIEN)
  . K ^VA(200,+TDUZ,51,KIEN)
@@ -288,6 +302,41 @@ AUDLOG(R,TDUZ,MAX) ; RPC ZVE USMG AUDLOG — ZVE administrative audit log
  S R(0)="1^"_CNT_"^OK"
  N I F I=1:1:CNT S R(I)=OUT(I)
  Q
+
+CHKVHIST(TDUZ,VCHASH,ERRMSG) ; Reject verify-code reuse (current + recent history)
+ S ERRMSG=""
+ I '+$G(TDUZ) S ERRMSG="DUZ required" Q
+ I $G(VCHASH)="" S ERRMSG="VERIFY required" Q
+ N CURHASH S CURHASH=$$GET1^DIQ(200,TDUZ_",",11,"I")
+ I CURHASH]"",CURHASH=VCHASH S ERRMSG="Verify code was used recently. Choose a new code." Q
+ N ROOT,MAXH,I,HASH
+ S ROOT="ZVEUSMG",MAXH=5
+ F I=1:1:MAXH D  Q:ERRMSG]""
+ . S HASH=$P($G(^XTMP(ROOT,"VCHIST",+TDUZ,I)),U,1)
+ . I HASH]"",HASH=VCHASH S ERRMSG="Verify code was used recently. Choose a new code."
+ Q
+
+PUSHVHIST(TDUZ,OLDHASH,NEWHASH) ; Store prior verify hash for reuse checks
+ I '+$G(TDUZ) Q
+ I $G(OLDHASH)="" Q
+ I $G(NEWHASH)]"",OLDHASH=NEWHASH Q
+ N ROOT,MAXH,I,J,ENTRY,HASH,STAMP
+ S ROOT="ZVEUSMG",MAXH=5
+ S ^XTMP(ROOT,0)=$$FMADD^XLFDT(DT,3650)_U_DT_U_"VE verify code history"
+ K ^TMP($J,"ZVEVCH")
+ S ^TMP($J,"ZVEVCH",1)=OLDHASH_U_$H
+ S J=1
+ F I=1:1:MAXH D  Q:J'<MAXH
+ . S ENTRY=$G(^XTMP(ROOT,"VCHIST",+TDUZ,I))
+ . S HASH=$P(ENTRY,U,1),STAMP=$P(ENTRY,U,2)
+ . I HASH="" Q
+ . I HASH=OLDHASH Q
+ . I $G(NEWHASH)]"",HASH=NEWHASH Q
+ . S J=J+1,^TMP($J,"ZVEVCH",J)=HASH_U_$S(STAMP]"":STAMP,1:$H)
+ K ^XTMP(ROOT,"VCHIST",+TDUZ)
+ F I=1:1:MAXH I $D(^TMP($J,"ZVEVCH",I)) S ^XTMP(ROOT,"VCHIST",+TDUZ,I)=^TMP($J,"ZVEVCH",I)
+ K ^TMP($J,"ZVEVCH")
+ Q
  ;
 CHKAC(R,AC) ; RPC ZVE USMG CHKAC — check access code availability
  ; S9.23: Checks ^VA(200,"A") xref for hashed access code collisions.
@@ -298,4 +347,13 @@ CHKAC(R,AC) ; RPC ZVE USMG CHKAC — check access code availability
  S DUP=$O(^VA(200,"A",HASH,0))
  I +DUP>0 S R(0)="0^Access code already in use" Q
  S R(0)="1^Available"
+ Q
+ ;
+FINDAC(R,AC) ; RPC ZVE USMG FINDAC — resolve access code to DUZ
+ I $G(AC)="" S R(0)="0^Access code required" Q
+ N HASH,DUP
+ S HASH=$$EN^XUSHSH($$UP^XLFSTR(AC))
+ S DUP=$O(^VA(200,"A",HASH,0))
+ I '+DUP S R(0)="0^Access code not found" Q
+ S R(0)="1^"_DUP
  Q

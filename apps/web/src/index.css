@@ -36,6 +36,27 @@ body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  .staff-directory-print--detail-open .staff-directory-print-list {
+    display: none !important;
+  }
+  .staff-directory-print--detail-open .staff-directory-print-detail {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    border: 0 !important;
+    background: #fff !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .staff-directory-print--detail-open .staff-directory-print-detail .sticky {
+    position: static !important;
+    top: auto !important;
+    border: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
 }
 
 /* S14/S20: Responsive overrides for tablet and mobile */

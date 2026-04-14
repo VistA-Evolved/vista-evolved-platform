@@ -71,7 +71,9 @@ function RequireAuth({ children }) {
           setEsigUser(res.user);
           setShowEsig(true);
         }
-      } catch (err) { /* non-fatal */ }
+      } catch (err) {
+        console.warn('Failed to load session for e-signature prompt:', err);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -168,7 +170,7 @@ export default function App() {
           <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
 
           {/* Admin/Security workspace — wrapped in ErrorBoundary to catch render crashes */}
-          <Route path="/admin" element={<RequireAdmin><Navigate to="/admin/staff" replace /></RequireAdmin>} />
+          <Route path="/admin" element={<RequireAdmin><Navigate to="/admin/dashboard" replace /></RequireAdmin>} />
           {/* People */}
           <Route path="/admin/staff" element={<RequireAdmin><ErrorBoundary><StaffDirectory /></ErrorBoundary></RequireAdmin>} />
           <Route path="/admin/staff/new" element={<RequireAdmin><ErrorBoundary><StaffForm /></ErrorBoundary></RequireAdmin>} />

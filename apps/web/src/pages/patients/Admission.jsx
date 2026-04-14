@@ -31,6 +31,7 @@ export default function Admission() {
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [showInsuranceWarning, setShowInsuranceWarning] = useState(false);
   const [checklistPrompt, setChecklistPrompt] = useState(false);
+  const [overCapacityPrompt, setOverCapacityPrompt] = useState(false);
   const [form, setForm] = useState({
     admittingDiagnosis: '', admittingProvider: '', treatingSpecialty: '',
     wardIen: '', roomBed: '', expectedLos: '',
@@ -98,7 +99,14 @@ export default function Admission() {
 
   const selectedWard = form.wardIen;
   const selectedWardName = units.find(u => u.ien === selectedWard)?.name || selectedWard;
-  const bedsInWard = beds.filter(b => {
+  const allBedsInWard = beds.filter(b => {
+    if (!selectedWard) return false;
+    if (wards.length > 0) {
+      return b.unit === selectedWardName || b.wardIen === selectedWard;
+    }
+    return b.unit === selectedWard;
+  });
+  const bedsInWard = allBedsInWard.filter(b => {
     if (!selectedWard) return false;
     if (b.status !== 'available') return false;
     if (wards.length > 0) {
@@ -109,23 +117,36 @@ export default function Admission() {
 
   const allAvailable = beds.filter(b => b.status === 'available');
   const bedsToShow = selectedWard ? bedsInWard : allAvailable;
+  const selectedWardBedCount = allBedsInWard.length;
+  const selectedWardAvailableBeds = bedsInWard.length;
+  const selectedWardHasZeroAvailableBeds = Boolean(selectedWard) && selectedWardAvailableBeds === 0;
+  const needsBedSelection = !selectedWardHasZeroAvailableBeds;
 
   const checklistComplete = form.consentSigned && form.valuablesInventory && form.allergyVerified && form.medReconciliation;
 
+  const queueOverCapacityPromptOrSubmit = async () => {
+    if (selectedWardHasZeroAvailableBeds) {
+      setOverCapacityPrompt(true);
+      return;
+    }
+    await doSubmit();
+  };
+
   const handleSubmit = async () => {
-    if (!form.admittingDiagnosis || !form.wardIen || !form.roomBed || !form.admittingProvider) {
-      setSaveError('Please fill all required fields: Diagnosis, Provider, Care Setting, and Room/Bed.');
+    if (!form.admittingDiagnosis || !form.wardIen || !form.admittingProvider || (needsBedSelection && !form.roomBed)) {
+      setSaveError(`Please fill all required fields: Diagnosis, Provider, Nursing Unit, and ${needsBedSelection ? 'Room/Bed' : 'over-capacity confirmation'}.`);
       return;
     }
     if (!checklistComplete) {
       setChecklistPrompt(true);
       return;
     }
-    await doSubmit();
+    await queueOverCapacityPromptOrSubmit();
   };
 
   const doSubmit = async () => {
     setChecklistPrompt(false);
+    setOverCapacityPrompt(false);
     setSaving(true);
     setSaveError(null);
     try {
@@ -168,10 +189,10 @@ export default function Admission() {
             </div>
             <h1 className="text-[24px] font-bold text-[#1A1A2E] mb-2">Patient Admitted Successfully</h1>
             <p className="text-[14px] text-[#666] mb-2">
-              Admitted to <strong>{form.wardIen ? (units.find(u => u.ien === form.wardIen)?.name || form.wardIen) : ''}</strong> — Bed <strong>{form.roomBed}</strong>
+              Admitted to <strong>{form.wardIen ? (units.find(u => u.ien === form.wardIen)?.name || form.wardIen) : ''}</strong> — Bed <strong>{form.roomBed || 'Pending assignment'}</strong>
             </p>
             <p className="text-[13px] text-[#888] mb-6">
-              Movement ID: <span className="font-mono">{successData.movementId || '—'}</span>
+              Movement ID: <span className="font-mono">{successData.movementId || successData.movementIen || '—'}</span>
             </p>
             <div className="flex items-center justify-center gap-3">
               <Link to={`/patients/${patientId}`}
@@ -266,7 +287,7 @@ export default function Admission() {
                     )}
                   </div>
                   <div>
-                    <label className="text-[12px] font-medium text-[#555]">Room / Bed <span className="text-red-500">*</span></label>
+                    <label className="text-[12px] font-medium text-[#555]">Room / Bed {needsBedSelection && <span className="text-red-500">*</span>}</label>
                     {loadingBeds ? (
                       <div className="h-10 flex items-center gap-2 text-[#999] text-sm"><span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>Loading beds...</div>
                     ) : (
@@ -274,6 +295,12 @@ export default function Admission() {
                         <option value="">{selectedWard ? (bedsToShow.length === 0 ? 'No available beds in this unit' : 'Select bed...') : 'Select nursing unit first'}</option>
                         {bedsToShow.map(b => <option key={b.id} value={b.bed}>{b.bed}</option>)}
                       </select>
+                    )}
+                    {selectedWardHasZeroAvailableBeds && (
+                      <p className="mt-2 text-[11px] text-[#A65A00] flex items-start gap-1.5">
+                        <span className="material-symbols-outlined text-[14px] mt-0.5">warning</span>
+                        {selectedWardName || 'This ward'} has 0 available beds. You can proceed with an over-capacity admission and assign the bed later.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -333,10 +360,10 @@ export default function Admission() {
               <button onClick={() => navigate(`/patients/${patientId}`)}
                 className="px-4 py-2 border border-[#E2E4E8] text-sm rounded-md hover:bg-[#F0F4F8]">Cancel</button>
               <button onClick={handleSubmit}
-                disabled={saving || !form.admittingDiagnosis || !form.wardIen || !form.roomBed || !form.admittingProvider}
+                disabled={saving || !form.admittingDiagnosis || !form.wardIen || !form.admittingProvider || (needsBedSelection && !form.roomBed)}
                 className="flex items-center gap-2 px-5 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] disabled:opacity-50 transition-colors">
                 {saving && <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>}
-                Admit Patient
+                {selectedWardHasZeroAvailableBeds ? 'Admit Without Bed' : 'Admit Patient'}
               </button>
               {!checklistComplete && (
                 <span className="text-[12px] text-amber-600 flex items-center gap-1">
@@ -353,6 +380,11 @@ export default function Admission() {
                 <span className="material-symbols-outlined text-[18px] text-[#2E5984]">bed</span>
                 Bed Availability
               </h3>
+              {selectedWardHasZeroAvailableBeds && (
+                <div className="mb-3 rounded-md border border-[#F5D7A1] bg-[#FFF8E1] px-3 py-2 text-[11px] text-[#8A6D1D]">
+                  {selectedWardName || 'Selected ward'} currently has 0 available beds. Proceeding will create an over-capacity admission without a room-bed assignment.
+                </div>
+              )}
               {units.length === 0 ? (
                 <p className="text-[12px] text-[#999]">No nursing unit data available</p>
               ) : units.map(unit => {
@@ -368,6 +400,9 @@ export default function Admission() {
                       </div>
                       <span className="text-[11px] text-[#888]">{avail}/{total} open</span>
                     </div>
+                    {selectedWard === unit.ien && avail === 0 && (
+                      <p className="mt-1 text-[11px] text-[#A65A00]">Select this unit to admit without a bed assignment.</p>
+                    )}
                   </div>
                 );
               })}
@@ -399,8 +434,18 @@ export default function Admission() {
           message="The admission checklist is incomplete (consent, valuables inventory, allergy verification, or medication reconciliation still pending). Do you want to proceed with this admission anyway?"
           confirmLabel="Proceed with admission"
           cancelLabel="Go back"
-          onConfirm={doSubmit}
+          onConfirm={queueOverCapacityPromptOrSubmit}
           onCancel={() => setChecklistPrompt(false)}
+        />
+      )}
+      {overCapacityPrompt && (
+        <ConfirmDialog
+          title="No Beds Available"
+          message={`${selectedWardName || 'This ward'} has 0 available beds. Proceed with an over-capacity admission anyway? The patient will be admitted without a room-bed assignment until a bed opens.`}
+          confirmLabel="Proceed anyway"
+          cancelLabel="Go back"
+          onConfirm={doSubmit}
+          onCancel={() => setOverCapacityPrompt(false)}
         />
       )}
     </AppShell>

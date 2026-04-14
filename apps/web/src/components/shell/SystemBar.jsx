@@ -35,7 +35,11 @@ export default function SystemBar({ breadcrumb = '' }) {
   }, []);
 
   const handleLogout = async () => {
-    try { await logout(); } catch (err) { /* best-effort */ }
+    try {
+      await logout();
+    } catch (err) {
+      console.error('Logout request failed during sign-out:', err);
+    }
     setSessionToken(null);
     navigate('/login');
   };
@@ -43,7 +47,7 @@ export default function SystemBar({ breadcrumb = '' }) {
   const isSandbox = vistaConnected && userName?.includes('PRO');
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-10 bg-navy flex items-center px-4 z-50">
+    <header data-systembar className="fixed top-0 left-0 right-0 h-10 bg-navy flex items-center px-4 z-50">
       <span className="text-white font-semibold text-sm tracking-wide mr-4">
         VistA Evolved
       </span>

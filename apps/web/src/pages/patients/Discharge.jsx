@@ -4,7 +4,7 @@ import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getPatient, dischargePatient, getProviders } from '../../services/patientService';
+import { getPatient, getPatientMedications, dischargePatient, getProviders } from '../../services/patientService';
 
 const inputCls = 'h-10 px-3 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984] focus:ring-1 focus:ring-[#2E5984]';
 const selectCls = `${inputCls} bg-white`;
@@ -37,6 +37,11 @@ export default function Discharge() {
   const [saveError, setSaveError] = useState(null);
   const [successData, setSuccessData] = useState(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [loadingMedicationOrders, setLoadingMedicationOrders] = useState(false);
+  const [medicationOrdersError, setMedicationOrdersError] = useState(null);
+  const [activeMedicationOrders, setActiveMedicationOrders] = useState([]);
+  const [medicationReviewConfirmed, setMedicationReviewConfirmed] = useState(false);
+  const [medicationPrompt, setMedicationPrompt] = useState(false);
   const [amaPrompt, setAmaPrompt] = useState(false);
   const [checklistPrompt, setChecklistPrompt] = useState(false);
   const [form, setForm] = useState({
@@ -54,26 +59,41 @@ export default function Discharge() {
     (async () => {
       setLoading(true);
       setLoadingProviders(true);
+      setLoadingMedicationOrders(true);
+      setMedicationOrdersError(null);
       try {
-        const [patRes, provRes] = await Promise.allSettled([
+        const [patRes, provRes, medRes] = await Promise.allSettled([
           !hasPatient ? getPatient(patientId) : Promise.resolve(null),
           getProviders(),
+          getPatientMedications(patientId),
         ]);
         if (patRes.status === 'fulfilled' && patRes.value?.ok) setPatient(patRes.value.data);
         if (provRes.status === 'fulfilled') {
           setProviders((provRes.value.data || []).filter(u => u.name));
         }
+        if (medRes.status === 'fulfilled' && medRes.value?.ok) {
+          setActiveMedicationOrders(medRes.value.data || []);
+        } else {
+          const err = medRes.status === 'rejected' ? medRes.reason : new Error('Unable to load active medication orders.');
+          setMedicationOrdersError(err?.message || 'Unable to load active medication orders.');
+        }
         setLoadingProviders(false);
+        setLoadingMedicationOrders(false);
       } finally {
         setLoading(false);
       }
     })();
   }, [patientId, hasPatient, setPatient]);
 
+  useEffect(() => {
+    setMedicationReviewConfirmed(activeMedicationOrders.length === 0);
+  }, [activeMedicationOrders]);
+
   const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
   const checklistComplete = form.rxSent && form.followUpScheduled && form.instructionsGiven && form.valuablesReturned;
   const isAMA = form.dischargeDisposition === 'AMA';
+  const hasActiveMedicationOrders = activeMedicationOrders.length > 0;
 
   const handleSubmit = async () => {
     if (!form.dischargeDateTime) {
@@ -86,6 +106,18 @@ export default function Discharge() {
     }
     if (!form.dischargeProvider) {
       setSaveError('Discharging provider is required.');
+      return;
+    }
+    if (medicationOrdersError) {
+      setSaveError('Active medication orders could not be verified. Resolve that issue before discharging the patient.');
+      return;
+    }
+    if (loadingMedicationOrders) {
+      setSaveError('Active medication orders are still loading. Please wait before discharging the patient.');
+      return;
+    }
+    if (hasActiveMedicationOrders && !medicationReviewConfirmed) {
+      setMedicationPrompt(true);
       return;
     }
     if (isAMA) {
@@ -120,6 +152,20 @@ export default function Discharge() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const continueAfterMedicationReview = () => {
+    setMedicationPrompt(false);
+    setMedicationReviewConfirmed(true);
+    if (isAMA) {
+      setAmaPrompt(true);
+      return;
+    }
+    if (!checklistComplete) {
+      setChecklistPrompt(true);
+      return;
+    }
+    doSubmit();
   };
 
   // When the AMA dialog is accepted, we still need to check the checklist
@@ -218,6 +264,18 @@ export default function Discharge() {
           <div className="mb-4 px-4 py-3 bg-red-50 border-l-4 border-red-500 rounded-r-md text-sm text-red-800">{saveError}</div>
         )}
 
+        {medicationOrdersError && (
+          <div className="mb-4 px-4 py-3 bg-red-50 border-l-4 border-red-500 rounded-r-md">
+            <div className="flex items-center gap-2 text-red-800">
+              <span className="material-symbols-outlined text-[18px]">medication_liquid</span>
+              <span className="text-sm font-medium">Active medication orders could not be loaded.</span>
+            </div>
+            <p className="text-xs text-red-700 mt-1 ml-7">
+              {medicationOrdersError}
+            </p>
+          </div>
+        )}
+
         {isAMA && (
           <div className="mb-4 px-4 py-3 bg-red-50 border-l-4 border-red-600 rounded-r-md text-sm text-red-800 flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px]">error</span>
@@ -226,6 +284,60 @@ export default function Discharge() {
         )}
 
         <div className="max-w-3xl space-y-5">
+          <div className="border border-[#E2E4E8] rounded-md p-5 space-y-4">
+            <h2 className="text-[16px] font-semibold text-[#1A1A2E] flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-[#2E5984]">medication_liquid</span>
+              Active Medication Orders
+            </h2>
+
+            {loadingMedicationOrders ? (
+              <div className="h-10 flex items-center gap-2 text-[#999] text-sm">
+                <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
+                Loading active medication orders...
+              </div>
+            ) : hasActiveMedicationOrders ? (
+              <>
+                <div className={`px-4 py-3 rounded-md border ${medicationReviewConfirmed ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <span className="material-symbols-outlined text-[18px]">warning</span>
+                    {activeMedicationOrders.length} active medication order{activeMedicationOrders.length === 1 ? '' : 's'} require review before discharge.
+                  </div>
+                  <p className="text-xs mt-1 ml-7">
+                    {medicationReviewConfirmed
+                      ? 'Medication-order review has been acknowledged for this discharge.'
+                      : 'Review and discontinue or otherwise reconcile these orders before continuing. Submitting discharge will require an explicit acknowledgment.'}
+                  </p>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto border border-[#E2E4E8] rounded-md divide-y divide-[#E2E4E8]">
+                  {activeMedicationOrders.map((med) => (
+                    <div key={med.id || med.orderIen} className="px-4 py-3 bg-white">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-[#1A1A2E]">{med.name || `Medication order ${med.orderIen}`}</div>
+                          <div className="text-xs text-[#666] mt-1">
+                            Order {med.orderIen || '—'}{med.type ? ` • ${med.type}` : ''}{med.quantity ? ` • Qty ${med.quantity}` : ''}
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 rounded-full bg-[#F0F4F8] text-[11px] font-medium text-[#2E5984]">
+                          {med.status || 'ACTIVE'}
+                        </span>
+                      </div>
+                      {med.sig && (
+                        <p className="text-xs text-[#555] mt-2">{med.sig}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="px-4 py-3 rounded-md border border-green-200 bg-green-50 text-green-800 text-sm flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                No active medication orders were returned for this patient.
+              </div>
+            )}
+          </div>
+
           <div className="border border-[#E2E4E8] rounded-md p-5 space-y-4">
             <h2 className="text-[16px] font-semibold text-[#1A1A2E] flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px] text-[#2E5984]">logout</span>
@@ -317,7 +429,7 @@ export default function Discharge() {
             <button onClick={() => navigate(`/patients/${patientId}`)}
               className="px-4 py-2 border border-[#E2E4E8] text-sm rounded-md hover:bg-[#F0F4F8]">Cancel</button>
             <button onClick={handleSubmit}
-              disabled={saving || !form.dischargeDisposition || !form.dischargeDateTime || !form.dischargeProvider}
+              disabled={saving || !form.dischargeDisposition || !form.dischargeDateTime || !form.dischargeProvider || loadingMedicationOrders || !!medicationOrdersError}
               className="flex items-center gap-2 px-5 py-2 bg-[#1A1A2E] text-white text-sm font-medium rounded-md hover:bg-[#2E5984] disabled:opacity-50 transition-colors">
               {saving && <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>}
               Discharge Patient
@@ -340,6 +452,18 @@ export default function Discharge() {
           cancelLabel="Go back"
           onConfirm={confirmAma}
           onCancel={() => setAmaPrompt(false)}
+          destructive
+        />
+      )}
+
+      {medicationPrompt && (
+        <ConfirmDialog
+          title="Active Medication Orders Require Review"
+          message={`${activeMedicationOrders.length} active medication order${activeMedicationOrders.length === 1 ? '' : 's'} ${activeMedicationOrders.length === 1 ? 'is' : 'are'} still on the chart. ${activeMedicationOrders.slice(0, 3).map(med => med.name || `Order ${med.orderIen}`).join(', ')}${activeMedicationOrders.length > 3 ? ', and more' : ''}. Confirm that these orders have been reviewed and appropriately discontinued or reconciled before you continue with discharge.`}
+          confirmLabel="Medication orders reviewed"
+          cancelLabel="Go back"
+          onConfirm={continueAfterMedicationReview}
+          onCancel={() => setMedicationPrompt(false)}
           destructive
         />
       )}

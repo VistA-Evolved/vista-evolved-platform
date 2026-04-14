@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { CautionBanner, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission, assignDivision, checkAccessCode, getTitles, getVistaStatus } from '../../services/adminService';
+import { getSites, getPermissions, getStaffMember, getUserPermissions, createStaffMember, updateStaffMember, getESignatureStatus, setESignature, getStaff, getDepartments, updateCredentials, addMailGroupMember, getMailGroups, renameStaffMember, assignPermission, removePermission, assignDivision, updateUserSecondaryMenus, getUserAccessAudit, checkAccessCode, checkEmail, checkEmployeeId, getTitles, getProviderClasses, getVistaStatus, getSession } from '../../services/adminService';
 import SessionTimerDisplay from '../../components/shared/SessionTimerDisplay';
 import { SESSION_TIMEOUT_MS } from '../../services/sessionIdleState';
 import { ROLES as SYSTEM_ROLES, KEY_IMPACTS } from './RoleTemplates';
@@ -33,22 +33,20 @@ const STEPS = [
 // The 24 VistA-key-backed roles are the single source of truth for both
 // the StaffForm wizard and the Roles & Permissions page.
 
-// S3.8: Provider types — IENs from VistA File 7 (PROVIDER CLASS).
-// DDR FILER needs internal values (IENs) since we use 'EI' flag for pointer fields.
-// Standard File 7 entries in Kernel 8.0:
-const PROVIDER_TYPES = [
-  { value: '1', label: 'Physician/Osteopath (MD/DO)' },
-  { value: '2', label: 'Optometrist' },
-  { value: '3', label: 'Podiatrist' },
-  { value: '4', label: 'Dentist (DDS/DMD)' },
-  { value: '5', label: 'Clinical Pharmacist (PharmD/RPh)' },
-  { value: '6', label: 'Nurse Practitioner (NP)' },
-  { value: '7', label: 'Physician Assistant (PA)' },
-  { value: '8', label: 'Psychologist (PhD/PsyD)' },
-  { value: '9', label: 'Social Worker (LCSW)' },
-  { value: '10', label: 'Dietitian (RD)' },
-  { value: '11', label: 'Registered Nurse (RN)' },
+const PRIMARY_MENU_OPTIONS = [
+  { value: 'OR CPRS GUI CHART', label: 'OR CPRS GUI CHART', hint: 'Clinical users and CPRS access' },
+  { value: 'XUCORE', label: 'XUCORE', hint: 'Standard user menu' },
+  { value: 'EVE', label: 'EVE', hint: 'System manager menu' },
+  { value: 'XUPROG', label: 'XUPROG', hint: 'Programmer menu' },
 ];
+
+function defaultPrimaryMenuForRoleKeys(roleKeys) {
+  const keys = new Set((roleKeys || []).map(key => String(key || '').toUpperCase().trim()));
+  if (keys.has('XUMGR')) return 'EVE';
+  if (keys.has('XUPROG') || keys.has('XUPROGMODE')) return 'XUPROG';
+  if (keys.has('OR CPRS GUI CHART') || keys.has('PROVIDER') || keys.has('ORES') || keys.has('ORELSE')) return 'OR CPRS GUI CHART';
+  return 'XUCORE';
+}
 
 // Curated "starter kit" permissions grouped by function. Every key below
 // is a REAL VistA security key present in standard Kernel + CPRS + package
@@ -69,7 +67,7 @@ const PERMISSION_STARTERS = [
       { key: 'OREMAS',         label: 'MAS order entry (unit clerks / ward clerks)',         roleDefault: [] },
       { key: 'ORCL-SIGN-NOTES', label: 'Sign clinical notes (progress notes, consults)',    roleDefault: ['provider'] },
       { key: 'ORCL-PAT-RECS',  label: 'View patient records and chart data',                roleDefault: ['provider', 'nurse', 'front-desk'] },
-      { key: 'GMRA ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
+      { key: 'GMRA-ALLERGY VERIFY', label: 'Verify patient allergies',                      roleDefault: ['provider'] },
     ],
   },
   {
@@ -137,8 +135,8 @@ const PERMISSION_STARTERS = [
 ];
 
 export default function StaffForm() {
-  const { userId } = useParams();
   const navigate = useNavigate();
+  const { userId } = useParams();
   const isEdit = Boolean(userId);
   useEffect(() => { document.title = isEdit ? 'Edit Staff — VistA Evolved' : 'New Staff — VistA Evolved'; }, [isEdit]);
   const [currentStep, setCurrentStep] = useState(0);
@@ -150,17 +148,26 @@ export default function StaffForm() {
   const [livePermissionMap, setLivePermissionMap] = useState(new Map());
   const [liveDepartments, setLiveDepartments] = useState([]);
   const [liveTitles, setLiveTitles] = useState([]); // S3.13: Titles from File 3.1
+  const [liveProviderTypes, setLiveProviderTypes] = useState([]); // S3.8: Provider classes from File 7
   const [dataLoading, setDataLoading] = useState(true);
   const [refDataError, setRefDataError] = useState(null);
   const [esigStatus, setEsigStatus] = useState({ hasCode: false, sigBlockName: '' });
   const [originalForm, setOriginalForm] = useState(null);
   const [clearingEsig, setClearingEsig] = useState(false);
   const [showClearEsigDialog, setShowClearEsigDialog] = useState(false);
+  const [employeeIdStatus, setEmployeeIdStatus] = useState(null);
+  const [emailStatus, setEmailStatus] = useState(null);
 
   // S9.23: Debounced access code uniqueness check
   const [acStatus, setAcStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
   const acTimerRef = useRef(null);
-  useEffect(() => () => { if (acTimerRef.current) clearTimeout(acTimerRef.current); }, []);
+  const emailTimerRef = useRef(null);
+  const employeeIdTimerRef = useRef(null);
+  useEffect(() => () => {
+    if (acTimerRef.current) clearTimeout(acTimerRef.current);
+    if (emailTimerRef.current) clearTimeout(emailTimerRef.current);
+    if (employeeIdTimerRef.current) clearTimeout(employeeIdTimerRef.current);
+  }, []);
   const checkAccessCodeAvailability = (code) => {
     if (acTimerRef.current) clearTimeout(acTimerRef.current);
     if (!code || code.length < 3) { setAcStatus(null); return; }
@@ -176,15 +183,68 @@ export default function StaffForm() {
     }, 500);
   };
 
+  const checkEmployeeIdAvailability = (employeeId) => {
+    if (employeeIdTimerRef.current) clearTimeout(employeeIdTimerRef.current);
+    const normalized = String(employeeId || '').trim();
+    if (!normalized) {
+      setEmployeeIdStatus(null);
+      return;
+    }
+    setEmployeeIdStatus({ state: 'checking', message: 'Checking Employee ID...' });
+    employeeIdTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await checkEmployeeId(normalized, isEdit ? userId : undefined);
+        if (res.duplicate) {
+          const matchNames = (res.matches || []).map(m => `${m.name} (DUZ ${m.ien})`).join(', ');
+          setEmployeeIdStatus({ state: 'duplicate', message: `Employee ID already in use: ${matchNames}` });
+        } else {
+          setEmployeeIdStatus({ state: 'available', message: 'Employee ID is available.' });
+        }
+      } catch (err) {
+        console.error('Employee ID check failed:', err);
+        setEmployeeIdStatus(null);
+      }
+    }, 500);
+  };
+
+  const checkEmailAvailability = (email) => {
+    if (emailTimerRef.current) clearTimeout(emailTimerRef.current);
+    const normalized = String(email || '').trim();
+    if (!normalized) {
+      setEmailStatus(null);
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      setEmailStatus(null);
+      return;
+    }
+    setEmailStatus({ state: 'checking', message: 'Checking email...' });
+    emailTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await checkEmail(normalized, isEdit ? userId : undefined);
+        if (res.duplicate) {
+          const matchNames = (res.matches || []).map(m => `${m.name} (DUZ ${m.ien})`).join(', ');
+          setEmailStatus({ state: 'duplicate', message: `Email already in use: ${matchNames}` });
+        } else {
+          setEmailStatus({ state: 'available', message: 'Email is available.' });
+        }
+      } catch (err) {
+        console.error('Email check failed:', err);
+        setEmailStatus(null);
+      }
+    }, 500);
+  };
+
   useEffect(() => {
     const loadRefData = async () => {
       setDataLoading(true);
       setRefDataError(null);
       try {
-        const [sitesRes, permsRes, deptRes, mailGroupsRes, titlesRes] = await Promise.all([
+        const [sitesRes, permsRes, deptRes, mailGroupsRes, titlesRes, providerTypesRes] = await Promise.all([
           getSites(), getPermissions(), getDepartments(),
           getMailGroups().catch(() => ({ data: [] })),
           getTitles().catch(() => ({ data: [] })),
+          getProviderClasses().catch(() => ({ data: [] })),
         ]);
 
         // Sites come from MEDICAL CENTER DIVISION #40.8 via the /divisions route
@@ -222,6 +282,13 @@ export default function StaffForm() {
         const titles = (titlesRes?.data || []).map(t => ({ ien: t.ien, name: t.name || t['.01'] || '' })).filter(t => t.ien && t.name).sort((a, b) => a.name.localeCompare(b.name));
         setLiveTitles(titles);
 
+        // S3.8: live PROVIDER CLASS #7 entries — use canonical VistA names
+        const providerTypes = (providerTypesRes?.data || [])
+          .map((entry) => ({ value: entry.name || '', label: entry.name || '', ien: entry.ien || '' }))
+          .filter((entry) => entry.value)
+          .sort((a, b) => a.label.localeCompare(b.label));
+        setLiveProviderTypes(providerTypes);
+
         if (sites.length === 0) {
           setRefDataError('No sites returned. The system may be unreachable.');
         } else if (deptNames.length === 0) {
@@ -238,10 +305,11 @@ export default function StaffForm() {
     loadRefData();
 
     if (isEdit && userId) {
-      Promise.all([getStaffMember(userId), getUserPermissions(userId), getESignatureStatus({ duz: userId })]).then(([userRes, keysRes, esigRes]) => {
+      Promise.all([getStaffMember(userId), getUserPermissions(userId), getESignatureStatus({ duz: userId }), getUserAccessAudit(userId).catch(() => ({ secondaryMenus: null }))]).then(([userRes, keysRes, esigRes, accessAuditRes]) => {
         const vg = userRes?.data?.vistaGrounding || {};
         const keys = (keysRes?.data || []).map(k => k.name);
         const esigData = (esigRes?.data || []).find(e => String(e.duz) === String(userId) || String(e.id) === String(userId));
+        const secondaryMenus = accessAuditRes?.secondaryMenus || accessAuditRes?.data?.secondaryMenus || [];
         if (esigData) setEsigStatus({ hasCode: esigData.hasCode || false, sigBlockName: esigData.sigBlockName || '' });
         // Parse VistA LAST,FIRST MIDDLE format into separate fields
         const rawName = userRes?.data?.name || '';
@@ -277,6 +345,8 @@ export default function StaffForm() {
           providerType: vg.providerType || '',
           cosigner: vg.cosigner || '',
           authMeds: vg.authMeds || false,
+          primaryMenu: userRes?.data?.primaryMenu || vg.primaryMenu || '',
+          secondaryFeatures: Array.isArray(secondaryMenus) ? secondaryMenus : ['OR CPRS GUI CHART'],
         };
         setForm(f => ({ ...f, ...editVals }));
         setOriginalForm(editVals);
@@ -327,10 +397,12 @@ export default function StaffForm() {
       }
       // G008: Email validation
       if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Invalid email format';
+      if (emailStatus?.state === 'duplicate') errors.email = emailStatus.message;
       // G009: Phone validation — at least 10 digits
       if (form.phone && !/^\d{10,}$/.test(form.phone.replace(/[\s\-().]/g, ''))) errors.phone = 'Phone must contain at least 10 digits';
       // G010: SSN last4 validation
       if (form.govIdLast4 && !/^\d{4}$/.test(form.govIdLast4)) errors.govIdLast4 = 'Must be exactly 4 digits';
+      if (employeeIdStatus?.state === 'duplicate') errors.employeeId = employeeIdStatus.message;
       // Credentials are required for new users
       if (!isEdit) {
         if (!form.accessCode || !form.accessCode.trim()) errors.accessCode = 'Username (Access Code) is required';
@@ -346,6 +418,7 @@ export default function StaffForm() {
     if (stepId === 'role-location') {
       if (!form.primaryRole) errors.primaryRole = 'Role selection is required';
       if (!form.department.trim()) errors.department = 'Department is required';
+      if (!form.primaryMenu.trim()) errors.primaryMenu = 'Primary menu is required';
       if (!form.primaryLocation) errors.primaryLocation = 'At least one site must be selected';
     }
     if (stepId === 'provider' && showProviderStep) {
@@ -392,9 +465,10 @@ export default function StaffForm() {
     displayName: '', title: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
     employeeId: '',
     primaryRole: '', department: '', isProvider: false, sigBlockName: '',
+    primaryMenu: '',
     primaryLocation: '', additionalLocations: [],
     providerType: '', npi: '', dea: '', deaExpiration: '',
-    authorizedToWriteMeds: false, controlledSchedules: [],
+    authorizedToWriteMeds: false,
     assignedPermissions: [],
     secondaryFeatures: ['OR CPRS GUI CHART'],
     removedDefaults: [],
@@ -403,6 +477,16 @@ export default function StaffForm() {
     accessCode: '', verifyCode: '', verifyCodeConfirm: '',
     requiresCosign: false, cosigner: '',
   });
+
+  const [liveMailGroups, setLiveMailGroups] = useState([]);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [createSuccess, setCreateSuccess] = useState(null);
+  const [adminDisplayName, setAdminDisplayName] = useState('System Administrator');
+  const submitErrorRef = useRef(null);
+  /** S23.5: VistA health while wizard is open */
+  const [vistaUnreachable, setVistaUnreachable] = useState(false);
 
   // S13: Auto-save wizard state to sessionStorage for crash/disconnect recovery (create mode only)
   const WIZARD_SAVE_KEY = 've-wizard-draft';
@@ -430,14 +514,17 @@ export default function StaffForm() {
     } catch (err) { console.error('Failed to restore wizard draft:', err); }
   }, [isEdit]);
 
-  const [liveMailGroups, setLiveMailGroups] = useState([]);
-
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [createSuccess, setCreateSuccess] = useState(null);
-  const submitErrorRef = useRef(null);
-  /** S23.5: VistA health while wizard is open */
-  const [vistaUnreachable, setVistaUnreachable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getSession()
+      .then((session) => {
+        if (cancelled) return;
+        const name = session?.user?.name || session?.user?.displayName || '';
+        if (name) setAdminDisplayName(String(name));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const clearCredentialState = () => {
     setCreateSuccess(prev => (prev ? { ...prev, accessCode: '', verifyCode: '' } : prev));
@@ -476,6 +563,7 @@ export default function StaffForm() {
         const up = res?.vista?.ok === true;
         setVistaUnreachable(!up);
       } catch (_pingErr) {
+        console.warn('Periodic VistA health check failed while staff form was open:', _pingErr);
         setVistaUnreachable(true);
       }
     };
@@ -543,7 +631,7 @@ export default function StaffForm() {
         dea: form.dea,
         deaExpiration: form.deaExpiration,
         authorizedToWriteMeds: form.authorizedToWriteMeds,
-        controlledSchedules: form.controlledSchedules,
+        primaryMenu: form.primaryMenu || '',
         permissions: mergedPermissions,
         secondaryFeatures: form.secondaryFeatures,
         sigBlockName: form.sigBlockName,
@@ -563,12 +651,12 @@ export default function StaffForm() {
         const FIELD_MAP = {
           email: '.151', phone: '.132', title: '8', sex: '4', npi: '41.99',
           dea: '53.2', department: '29', sigBlockName: '20.3', language: '200.07',
-          filemanAccess: '3', restrictPatient: '101.01', providerType: '53.5',
-          cosigner: '53.42', deaExpiration: '53.21', degree: '10.6',
+          filemanAccess: '3', restrictPatient: '101.01', providerType: '53.5', primaryMenu: '201',
+          cosigner: '53.8', deaExpiration: '53.21', degree: '10.6',
         };
         const BOOL_FIELDS = {
           verifyCodeNeverExpires: '9.5', authorizedToWriteMeds: '53.11',
-          requiresCosign: '53.08',
+          requiresCosign: '53.7',
         };
         const orig = originalForm || {};
         const errors = [];
@@ -635,6 +723,14 @@ export default function StaffForm() {
             try { await assignDivision(userId, loc, 'REMOVE'); }
             catch (e) { errors.push(`-division ${loc}: ${e.message}`); }
           }
+        }
+
+        // S3.16: Secondary menus (File 200.03) — sync add/remove set
+        const origSecondary = Array.isArray(orig.secondaryFeatures) ? orig.secondaryFeatures : [];
+        const nextSecondary = Array.isArray(form.secondaryFeatures) ? form.secondaryFeatures : [];
+        if (JSON.stringify([...origSecondary].sort()) !== JSON.stringify([...nextSecondary].sort())) {
+          try { await updateUserSecondaryMenus(userId, nextSecondary); }
+          catch (e) { errors.push(`secondary menus: ${e.message}`); }
         }
 
         // Update credentials if provided during edit
@@ -759,6 +855,98 @@ export default function StaffForm() {
     }
   };
 
+  const handlePrintAcknowledgmentForm = () => {
+    if (!createSuccess) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const safeText = (value) => String(value || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const generatedAt = new Date();
+    const organizationName = 'VistA Evolved';
+    const divisionName = createSuccess.site || 'Division not specified';
+    const generatedBy = adminDisplayName || 'System Administrator';
+
+    printWindow.document.write(`<html><head><title>Acknowledgment Form - ${safeText(createSuccess.name)}</title>
+<style>
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:700px;margin:50px auto;color:#222;line-height:1.6}
+.header{border-top:4px solid #1A1A2E;border-bottom:2px solid #E2E4E8;padding:16px 0;margin-bottom:24px}
+.header h1{font-size:20px;margin:0 0 4px 0;color:#1A1A2E}
+.header p{margin:0;font-size:13px;color:#666}
+.section{margin:22px 0}
+.section h2{font-size:15px;color:#1A1A2E;border-bottom:1px solid #E2E4E8;padding-bottom:4px;margin-bottom:10px}
+.policy-list{padding-left:20px;font-size:14px}
+.policy-list li{margin:8px 0}
+.signature-grid{display:grid;grid-template-columns:1fr 220px;gap:36px;margin-top:36px}
+.signature-box{border-bottom:1px solid #666;padding-bottom:6px;min-height:30px}
+.signature-label{margin-top:6px;font-size:11px;color:#666}
+.note{margin-top:28px;padding:14px;border:1px solid #E2E4E8;border-radius:8px;background:#F8FAFC;font-size:13px;color:#334155}
+.footer{margin-top:30px;border-top:2px solid #CC3333;padding-top:12px;font-size:12px;color:#CC3333;font-weight:bold}
+.footer-meta{margin-top:8px;color:#666;font-weight:normal}
+@media print{body{margin:30px}}
+</style></head>
+<body>
+<div class="header">
+  <h1>${safeText(organizationName)}</h1>
+  <p>Division: ${safeText(divisionName)}</p>
+  <p>Date: ${safeText(generatedAt.toLocaleDateString())}</p>
+</div>
+
+<div class="section">
+  <h2>Account Acknowledgment</h2>
+  <p>I acknowledge receipt of access to the ${safeText(organizationName)} system for the staff member listed below.</p>
+  <table style="width:100%;font-size:14px">
+    <tr><td style="padding:4px 0;color:#666;width:180px">Staff Member</td><td style="padding:4px 0"><strong>${safeText(createSuccess.firstName)} ${safeText(createSuccess.lastName)}</strong></td></tr>
+    <tr><td style="padding:4px 0;color:#666">Role</td><td style="padding:4px 0">${safeText(createSuccess.role)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Department</td><td style="padding:4px 0">${safeText(createSuccess.department)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Division</td><td style="padding:4px 0">${safeText(createSuccess.site)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Account ID</td><td style="padding:4px 0">${safeText(createSuccess.staffId)}</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>User Responsibilities</h2>
+  <ol class="policy-list">
+    <li>I will complete first sign-in setup, including changing the temporary verify code and setting my electronic signature.</li>
+    <li>I will not share my credentials, badges, or access with any other person.</li>
+    <li>I understand that all actions taken under this account are attributable to me.</li>
+    <li>I will follow local privacy, security, and acceptable-use policies when accessing patient or operational data.</li>
+    <li>I will report suspected misuse, loss of credentials, or unauthorized access immediately to IRM or local support staff.</li>
+  </ol>
+</div>
+
+<div class="note">
+  This form is intended for signature and retention according to local onboarding policy. The credential letter should be handled separately and destroyed after first sign-in.
+</div>
+
+<div class="signature-grid">
+  <div>
+    <div class="signature-box">&nbsp;</div>
+    <div class="signature-label">Staff Member Signature</div>
+  </div>
+  <div>
+    <div class="signature-box">&nbsp;</div>
+    <div class="signature-label">Date</div>
+  </div>
+  <div>
+    <div class="signature-box">&nbsp;</div>
+    <div class="signature-label">Supervisor / Witness</div>
+  </div>
+  <div>
+    <div class="signature-box">&nbsp;</div>
+    <div class="signature-label">IRM / Admin Initials</div>
+  </div>
+</div>
+
+<div class="footer">
+  ONBOARDING RECORD - Retain per local policy.
+  <div class="footer-meta">Generated by ${safeText(generatedBy)} on ${safeText(generatedAt.toLocaleString())}.</div>
+</div>
+</body></html>`);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   return (
     <AppShell breadcrumb={`Admin > ${isEdit ? 'Edit Staff Member' : 'Create Staff Member'}`}>
       <div className="p-6 max-w-5xl">
@@ -825,10 +1013,15 @@ export default function StaffForm() {
             )}
             <div className="flex items-center justify-center gap-3 flex-wrap">
               <button
+                type="button"
                 onClick={() => {
                   const printWindow = window.open('', '_blank');
                   if (!printWindow) return;
                   const safeText = (s) => String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  const generatedAt = new Date();
+                  const organizationName = 'VistA Evolved';
+                  const divisionName = createSuccess.site || 'Division not specified';
+                  const generatedBy = adminDisplayName || 'System Administrator';
                   // Build human-readable capabilities from assigned keys
                   const KEY_TO_CAPABILITY = {
                     'PROVIDER': 'Access clinical patient records',
@@ -838,7 +1031,7 @@ export default function StaffForm() {
                     'ORCL-PAT-RECS': 'View patient records',
                     'ORELSE': 'Enter verbal and telephone orders',
                     'PSB NURSE': 'Administer medications via barcode scanning',
-                    'GMRA ALLERGY VERIFY': 'Verify and review patient allergies',
+                    'GMRA-ALLERGY VERIFY': 'Verify and review patient allergies',
                     'OREMAS': 'Enter orders for physicians',
                     'PSORPH': 'Dispense outpatient prescriptions',
                     'PSJ PHARMACIST': 'Verify inpatient medication orders',
@@ -870,10 +1063,12 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
 .header{border-top:4px solid #1A1A2E;border-bottom:2px solid #E2E4E8;padding:16px 0;margin-bottom:24px}
 .header h1{font-size:20px;margin:0 0 4px 0;color:#1A1A2E}
 .header p{margin:0;font-size:13px;color:#666}
-.creds{background:#F0F4F8;border:2px solid #2E5984;border-radius:8px;padding:20px;margin:20px 0;font-family:monospace}
-.creds .label{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:2px}
-.creds .value{font-size:18px;color:#1A1A2E;margin-bottom:12px}
-.warning{color:#CC3333;font-size:13px;margin:4px 0}
+.credentials{background:#F0F4F8;border:2px solid #2E5984;border-radius:8px;padding:20px;margin:20px 0}
+.credentials h2{margin-top:0}
+.credential-row{display:flex;gap:16px;align-items:flex-start;margin:12px 0}
+.credential-label{width:180px;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#666}
+.credential-value{font-family:'JetBrains Mono','Consolas','Courier New',monospace;font-size:18px;color:#1A1A2E}
+.credential-note{font-size:13px;color:#B42318;margin-top:12px}
 .section{margin:20px 0}
 .section h2{font-size:15px;color:#1A1A2E;border-bottom:1px solid #E2E4E8;padding-bottom:4px}
 .steps{counter-reset:step;list-style:none;padding:0}
@@ -882,34 +1077,44 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
 .caps{list-style:none;padding:0}
 .caps li{padding:4px 0 4px 20px;position:relative;font-size:14px}
 .caps li::before{content:"✓";position:absolute;left:0;color:#2E7D32;font-weight:bold}
-.footer{margin-top:30px;border-top:2px solid #CC3333;padding-top:12px;text-align:center;font-size:12px;color:#CC3333;font-weight:bold}
+.signature-line{display:flex;gap:40px;margin-top:30px}
+.signature-line div{border-bottom:1px solid #666;padding-bottom:4px}
+.footer{margin-top:30px;border-top:2px solid #CC3333;padding-top:12px;font-size:12px;color:#CC3333;font-weight:bold}
+.footer-meta{margin-top:8px;color:#666;font-weight:normal}
 @media print{body{margin:30px}}
 </style></head>
 <body>
 <div class="header">
-  <h1>VistA Evolved</h1>
-  <p>${safeText(createSuccess.site || 'Medical Center')}</p>
+  <h1>${safeText(organizationName)}</h1>
+  <p>Division: ${safeText(divisionName)}</p>
+  <p>Date: ${safeText(generatedAt.toLocaleDateString())}</p>
 </div>
 
 <p>Dear <strong>${safeText(createSuccess.firstName)} ${safeText(createSuccess.lastName)}</strong>,</p>
-<p>Your account has been created. Please use the following credentials to sign in for the first time:</p>
-
-<div class="creds">
-  <div class="label">Username</div>
-  <div class="value">${safeText(createSuccess.accessCode)}</div>
-  <div class="label">Temporary Password</div>
-  <div class="value">${safeText(createSuccess.verifyCode)}</div>
-  <p class="warning">⚠ You MUST change your password on first sign-in.</p>
-  <p class="warning">⚠ Do not share these credentials with anyone.</p>
-</div>
+<p>Your account has been created. This welcome letter includes the sign-in credentials required for your first login.</p>
 
 <div class="section">
-  <h2>Your Account Details</h2>
+  <h2>Account Details</h2>
   <table style="width:100%;font-size:14px">
-    <tr><td style="padding:4px 0;color:#666;width:140px">Role</td><td style="padding:4px 0"><strong>${safeText(createSuccess.role)}</strong></td></tr>
+    <tr><td style="padding:4px 0;color:#666;width:180px">Staff Member</td><td style="padding:4px 0"><strong>${safeText(createSuccess.firstName)} ${safeText(createSuccess.lastName)}</strong></td></tr>
+    <tr><td style="padding:4px 0;color:#666">Role</td><td style="padding:4px 0"><strong>${safeText(createSuccess.role)}</strong></td></tr>
     <tr><td style="padding:4px 0;color:#666">Department</td><td style="padding:4px 0">${safeText(createSuccess.department)}</td></tr>
-    <tr><td style="padding:4px 0;color:#666">Primary Location</td><td style="padding:4px 0">${safeText(createSuccess.site)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Division</td><td style="padding:4px 0">${safeText(createSuccess.site)}</td></tr>
+    <tr><td style="padding:4px 0;color:#666">Account ID</td><td style="padding:4px 0">${safeText(createSuccess.staffId)}</td></tr>
   </table>
+</div>
+
+<div class="credentials">
+  <h2>Login Credentials</h2>
+  <div class="credential-row">
+    <div class="credential-label">Access Code (username)</div>
+    <div class="credential-value">${safeText(createSuccess.accessCode)}</div>
+  </div>
+  <div class="credential-row">
+    <div class="credential-label">Temporary Verify Code (password)</div>
+    <div class="credential-value">${safeText(createSuccess.verifyCode)}</div>
+  </div>
+  <div class="credential-note">Important: Change the temporary verify code during your first sign-in and destroy this letter after completing setup.</div>
 </div>
 
 <div class="section">
@@ -921,24 +1126,25 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
   <h2>Getting Started</h2>
   <ol class="steps">
     <li>Go to <strong>${safeText(loginUrl)}</strong></li>
-    <li>Enter your username and temporary password above</li>
-    <li>You will be prompted to create a new password (8+ characters, mixed case)</li>
-    <li>Set up your electronic signature when prompted</li>
+    <li>Enter the access code and temporary verify code shown above</li>
+    <li>Create a new verify code when prompted</li>
+    <li>Complete your electronic signature setup</li>
+    <li>Store no copies of these credentials after first login</li>
   </ol>
 </div>
 
 <div class="section">
   <h2>Acknowledgment</h2>
-  <p style="font-size:13px;margin-bottom:20px">I acknowledge receipt of my VistA system credentials. I understand that:</p>
+  <p style="font-size:13px;margin-bottom:20px">I acknowledge receipt of my account credentials and understand that I am responsible for all activity performed under this account.</p>
   <ul style="font-size:13px;margin-bottom:20px;padding-left:20px">
     <li style="margin:4px 0">I must change my password on first sign-in</li>
     <li style="margin:4px 0">I will not share my credentials with anyone</li>
     <li style="margin:4px 0">I am responsible for all actions taken under my account</li>
     <li style="margin:4px 0">I will destroy this document after first login</li>
   </ul>
-  <div style="display:flex;gap:40px;margin-top:30px">
-    <div style="flex:1;border-bottom:1px solid #666;padding-bottom:4px">&nbsp;</div>
-    <div style="width:160px;border-bottom:1px solid #666;padding-bottom:4px">&nbsp;</div>
+  <div class="signature-line">
+    <div style="flex:1">&nbsp;</div>
+    <div style="width:160px">&nbsp;</div>
   </div>
   <div style="display:flex;gap:40px;margin-top:4px;font-size:11px;color:#666">
     <div style="flex:1">Signature</div>
@@ -946,10 +1152,11 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
   </div>
 </div>
 
-<p style="font-size:13px;color:#666;margin-top:24px">For help, contact your local IT support or IRM office.</p>
-<p style="font-size:12px;color:#999">Date Issued: ${new Date().toLocaleDateString()} | Issued By: System Administrator</p>
-
-<div class="footer">CONFIDENTIAL — Destroy after first login</div>
+<div class="footer">
+  CONFIDENTIAL - Destroy after first login.
+  <div class="footer-meta">Generated by ${safeText(generatedBy)} on ${safeText(generatedAt.toLocaleString())}.</div>
+  <div class="footer-meta">If you need help completing first sign-in, contact your local IT support or IRM office.</div>
+</div>
 </body></html>`);
                   printWindow.document.close();
                   printWindow.print();
@@ -960,6 +1167,15 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 Print Welcome Letter
               </button>
               <button
+                type="button"
+                onClick={handlePrintAcknowledgmentForm}
+                className="px-5 py-2 text-sm font-medium bg-white text-[#1A1A2E] border border-[#D0D7E2] rounded-md hover:bg-[#F5F8FB] transition-colors flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">fact_check</span>
+                Print Acknowledgment Form
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   clearCredentialState();
                   navigate(`/admin/staff/${createSuccess.duz}/edit`);
@@ -969,6 +1185,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 View Profile
               </button>
               <button
+                type="button"
                 onClick={() => {
                   const preserveDepartment = form.department;
                   const preserveLocation = form.primaryLocation;
@@ -978,9 +1195,10 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                     displayName: '', title: '', sex: '', dob: '', govIdLast4: '', email: '', phone: '',
                     employeeId: '',
                     primaryRole: '', department: preserveDepartment, isProvider: false, sigBlockName: '',
+                    primaryMenu: '',
                     primaryLocation: preserveLocation, additionalLocations: [],
                     providerType: '', npi: '', dea: '', deaExpiration: '',
-                    authorizedToWriteMeds: false, controlledSchedules: [],
+                    authorizedToWriteMeds: false,
                     assignedPermissions: [],
                     secondaryFeatures: ['OR CPRS GUI CHART'],
                     removedDefaults: [],
@@ -994,12 +1212,15 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                   setSubmitError('');
                   setValidationErrors({});
                   setDuplicateWarning(null);
+                  setEmailStatus(null);
+                  setEmployeeIdStatus(null);
                 }}
                 className="px-5 py-2 text-sm font-medium bg-navy text-white rounded-md hover:bg-steel transition-colors"
               >
                 Create Another Staff Member
               </button>
               <button
+                type="button"
                 onClick={() => {
                   clearCredentialState();
                   navigate('/admin/staff');
@@ -1173,8 +1394,14 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                     placeholder="••••" maxLength={4} className="form-input" autoComplete="off" />
                 </FormField>
                 <FormField label="Email" hint="Used for system notifications and password resets">
-                  <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)}
+                  <input type="email" value={form.email} onChange={e => { updateField('email', e.target.value); checkEmailAvailability(e.target.value); }}
                     placeholder="jane.smith@facility.org" className="form-input" />
+                  {emailStatus && !validationErrors.email && (
+                    <div className={`mt-2 text-xs flex items-center gap-1 ${emailStatus.state === 'duplicate' ? 'text-warning' : emailStatus.state === 'available' ? 'text-success' : 'text-[#666]'}`}>
+                      <span className="material-symbols-outlined text-[14px]">{emailStatus.state === 'duplicate' ? 'warning' : emailStatus.state === 'available' ? 'check_circle' : 'hourglass_top'}</span>
+                      <span>{emailStatus.message}</span>
+                    </div>
+                  )}
                 </FormField>
                 <FormField label="Phone"
                   hint="Office phone number for this staff member.">
@@ -1182,10 +1409,20 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                     placeholder="(503) 555-0100" className="form-input" />
                 </FormField>
                 <FormField label="Employee ID / Badge Number"
+                  error={validationErrors.employeeId}
                   hint="Your organization's employee identifier. Leave blank to use system-generated Staff ID only.">
                   <input type="text" value={form.employeeId || ''}
-                    onChange={e => updateField('employeeId', e.target.value)}
+                    onChange={e => {
+                      updateField('employeeId', e.target.value);
+                      checkEmployeeIdAvailability(e.target.value);
+                    }}
                     placeholder="e.g., EMP-1234" maxLength={30} className="form-input" />
+                  {employeeIdStatus && !validationErrors.employeeId && (
+                    <div className={`mt-2 text-xs flex items-center gap-1 ${employeeIdStatus.state === 'duplicate' ? 'text-warning' : employeeIdStatus.state === 'available' ? 'text-success' : 'text-[#666]'}`}>
+                      <span className="material-symbols-outlined text-[14px]">{employeeIdStatus.state === 'duplicate' ? 'warning' : employeeIdStatus.state === 'available' ? 'check_circle' : 'hourglass_top'}</span>
+                      <span>{employeeIdStatus.message}</span>
+                    </div>
+                  )}
                 </FormField>
                 <FormField label="Degree / Suffix" hint="Professional degree or credential suffix (e.g., MD, DO, PhD, RN). Stored in VistA File #200 field 10.6.">
                   <input type="text" value={form.degree || ''}
@@ -1361,6 +1598,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                         // Pre-populate permissions from the role's key bundle
                         const roleKeys = role.permissions.map(p => p.key);
                         updateField('assignedPermissions', roleKeys);
+                        updateField('primaryMenu', defaultPrimaryMenuForRoleKeys(roleKeys));
                         updateField('removedDefaults', []);
                         // Set provider flag if role has PROVIDER key
                         if (roleKeys.includes('PROVIDER')) {
@@ -1381,6 +1619,17 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                     </button>
                   ))}
                 </div>
+              </FormField>
+              <FormField label="Primary Menu" required error={validationErrors.primaryMenu}
+                hint="This controls the user's default VistA option menu at sign-in.">
+                <select value={form.primaryMenu} onChange={e => updateField('primaryMenu', e.target.value)} className="form-input">
+                  <option value="">Select primary menu...</option>
+                  {PRIMARY_MENU_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} - {option.hint}
+                    </option>
+                  ))}
+                </select>
               </FormField>
               <FormField label="Department" required error={validationErrors.department} hint="Type to search or enter a custom department.">
                 <input type="text" list="department-list" value={form.department} onChange={e => updateField('department', e.target.value)}
@@ -1477,7 +1726,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                   hint="Professional classification. Determines scope of practice and permissible actions.">
                   <select value={form.providerType} onChange={e => updateField('providerType', e.target.value)} className="form-input">
                     <option value="">Select provider type...</option>
-                    {PROVIDER_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+                    {liveProviderTypes.map(pt => <option key={pt.ien || pt.value} value={pt.value}>{pt.label}</option>)}
                   </select>
                 </FormField>
                 <FormField label="NPI" error={validationErrors.npi} hint="10-digit National Provider Identifier. Required for billing.">
@@ -1527,24 +1776,9 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 )}
               </div>
               {form.dea && (
-                <FormField label="Controlled Substance Schedules" hint="Which DEA schedules can this provider prescribe?">
-                  <div className="flex gap-3 flex-wrap">
-                    {['II', 'IIN', 'III', 'IIIN', 'IV', 'V'].map(sched => (
-                      <label key={sched} className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border rounded-md hover:bg-surface-alt cursor-pointer">
-                        <input type="checkbox"
-                          checked={form.controlledSchedules.includes(sched)}
-                          onChange={e => {
-                            const next = e.target.checked
-                              ? [...form.controlledSchedules, sched]
-                              : form.controlledSchedules.filter(s => s !== sched);
-                            updateField('controlledSchedules', next);
-                          }}
-                          className="w-4 h-4 rounded border-border" />
-                        Schedule {sched}
-                      </label>
-                    ))}
-                  </div>
-                </FormField>
+                <div className="rounded-md border border-border bg-surface-alt px-4 py-3 text-sm text-text-secondary">
+                  Controlled substance schedule assignment is not available in this VistA build because NEW PERSON field 55 is not present in the live data dictionary.
+                </div>
               )}
             </div>
           )}
@@ -1768,6 +2002,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 ]} />
                 <ReviewSection title="Role & Department" items={[
                   ['Role', SYSTEM_ROLES.find(r => r.id === form.primaryRole)?.name || '—'],
+                  ['Primary Menu', form.primaryMenu || '—'],
                   ['Department', form.department || '—'],
                   ['Provider', form.isProvider ? 'Yes' : 'No'],
                 ]} />
@@ -1785,11 +2020,10 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 ]} />
                 {(form.isProvider || showProviderStep) && (
                   <ReviewSection title="Provider Configuration" items={[
-                    ['Provider Type', PROVIDER_TYPES.find(p => p.value === form.providerType)?.label || '—'],
+                    ['Provider Type', liveProviderTypes.find(p => p.value === form.providerType)?.label || form.providerType || '—'],
                     ['NPI', form.npi || '—'],
                     ['DEA', form.dea || '—'],
                     ['Medication Authority', form.authorizedToWriteMeds ? 'Yes' : 'No'],
-                    ['Controlled Schedules', form.controlledSchedules.join(', ') || 'None'],
                     ...(form.restrictPatient ? [['Patient Selection', 'Restricted']] : []),
                   ]} />
                 )}
@@ -1812,7 +2046,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
                 {form.accessCode && ' Login credentials have been set — communicate them securely to the staff member.'}
               </div>
 
-              {(!form.lastName || !form.firstName || !form.sex || !form.dob || !form.primaryRole || !form.primaryLocation) && (
+              {(!form.lastName || !form.firstName || !form.sex || !form.dob || !form.primaryRole || !form.primaryMenu || !form.primaryLocation) && (
                 <div className="p-3 bg-warning-bg rounded-md text-sm text-warning flex items-center gap-2">
                   <span className="material-symbols-outlined text-[18px]">warning</span>
                   Missing required fields. Go back and complete all required steps before creating.

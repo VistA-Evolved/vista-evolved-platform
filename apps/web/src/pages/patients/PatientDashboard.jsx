@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
 import { getPatient, getPatientVitals, recordVitals } from '../../services/patientService';
+import { formatPhone } from '../../utils/transforms';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  CWAD (Crisis / Warnings / Allergies / Advance Directives) helpers
@@ -208,7 +209,7 @@ function DemographicsPanel({ patient, onEdit }) {
   const address = p.fullAddress || [p.streetAddress1, p.streetAddress2, p.city, p.state, p.zip].filter(Boolean).join(', ') || p.address || '—';
   const ssnDisplay = p.ssnMasked || (p.ssn ? `***-**-${p.ssn.slice(-4)}` : (p.govId ? `••••${p.govId.slice(-4)}` : '—'));
   const ec = p.emergencyContact;
-  const ecDisplay = ec?.name ? `${ec.name} (${ec.relationship})${ec.phone ? ' — ' + ec.phone : ''}` : '—';
+  const ecDisplay = ec?.name ? `${ec.name} (${ec.relationship})${ec.phone ? ' \u2014 ' + formatPhone(ec.phone) : ''}` : '\u2014';
 
   return (
     <Panel
@@ -221,7 +222,7 @@ function DemographicsPanel({ patient, onEdit }) {
       <InfoRow label="Sex" value={gender} />
       <InfoRow label="SSN" value={ssnDisplay} mono />
       <InfoRow label="Address" value={address} />
-      <InfoRow label="Phone" value={p.phone} />
+      <InfoRow label="Phone" value={formatPhone(p.phone)} />
       <InfoRow label="Email" value={p.email} />
       <InfoRow label="Emergency Contact" value={ecDisplay} />
     </Panel>
@@ -669,10 +670,16 @@ export default function PatientDashboard() {
   useEffect(() => { document.title = 'Patient Dashboard — VistA Evolved'; }, []);
   const { patientId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { setPatient } = usePatient();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [redirectNotice, setRedirectNotice] = useState(() => location.state?.redirectNotice || null);
+
+  useEffect(() => {
+    setRedirectNotice(location.state?.redirectNotice || null);
+  }, [location.state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -682,20 +689,35 @@ export default function PatientDashboard() {
       try {
         const res = await getPatient(patientId);
         if (cancelled) return;
-        if (!res.ok) {
-          setError(res.error || 'Patient not found');
+        if (res.redirect?.reason === 'merged' && res.redirect.toDfn) {
+          navigate(`/patients/${res.redirect.toDfn}`, {
+            replace: true,
+            state: { redirectNotice: res.redirect },
+          });
           return;
         }
         setData(res.data);
         setPatient(res.data);
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          if (err.code === 'PATIENT_RECORD_NOT_FOUND') {
+            setError({
+              title: 'Record not found',
+              message: err.message || 'Patient record may have been removed or merged.',
+            });
+          } else {
+            setError({
+              title: 'Unable to load patient chart',
+              message: err.message || 'Patient chart could not be loaded.',
+            });
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [patientId, setPatient]);
+  }, [navigate, patientId, setPatient]);
 
   /* ── Loading ── */
   if (loading) {
@@ -712,7 +734,10 @@ export default function PatientDashboard() {
       <AppShell breadcrumb="Patients › Error">
         <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
           <span className="material-symbols-outlined text-[48px] text-red-400">error</span>
-          <p className="text-[15px] text-[#666]">{error || 'Patient not found'}</p>
+          <div className="text-center space-y-1">
+            <p className="text-[18px] font-semibold text-[#1A1A2E]">{error?.title || 'Record not found'}</p>
+            <p className="text-[15px] text-[#666]">{error?.message || 'Patient record may have been removed or merged.'}</p>
+          </div>
           <button
             onClick={() => navigate('/patients')}
             className="text-sm text-[#2E5984] hover:underline flex items-center gap-1"
@@ -777,6 +802,16 @@ export default function PatientDashboard() {
       )}
 
       <div className="px-6 py-5">
+        {redirectNotice?.reason === 'merged' && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900 flex items-start gap-3">
+            <span className="material-symbols-outlined text-[20px] text-amber-700">sync_alt</span>
+            <div>
+              <p className="font-semibold">Merged record redirected</p>
+              <p>{redirectNotice.message || 'The requested patient record was merged into this surviving chart.'}</p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div>

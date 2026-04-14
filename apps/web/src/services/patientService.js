@@ -23,6 +23,17 @@
 
 import { tenantApi } from './api';
 
+let activePatientTenantIdPromise = null;
+
+async function getActivePatientTenantId() {
+  if (!activePatientTenantIdPromise) {
+    activePatientTenantIdPromise = tenantApi.get('/auth/session')
+      .then((result) => result?.tenantId || 'default')
+      .catch(() => 'default');
+  }
+  return activePatientTenantIdPromise;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  *  REFERENCE DATA — Ward, Bed, Specialty, Insurance, Clinic, etc.
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -31,7 +42,7 @@ import { tenantApi } from './api';
  * GET /wards — Ward data from VistA WARD LOCATION file #42.
  */
 export async function getWards(params = {}) {
-  return tenantApi.get('/wards', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/wards', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
@@ -39,14 +50,14 @@ export async function getWards(params = {}) {
  * Returns { ien, roomBed, description, outOfService }.
  */
 export async function getRoomBeds(params = {}) {
-  return tenantApi.get('/room-beds', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/room-beds', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
  * GET /treating-specialties — Data from VistA file #45.7.
  */
 export async function getTreatingSpecialties(params = {}) {
-  return tenantApi.get('/treating-specialties', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/treating-specialties', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
@@ -54,42 +65,42 @@ export async function getTreatingSpecialties(params = {}) {
  * Returns { ien, name, streetAddr, city, state, zip }.
  */
 export async function getInsuranceCompanies(params = {}) {
-  return tenantApi.get('/insurance-companies', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/insurance-companies', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
  * GET /clinics — Clinic data from VistA HOSPITAL LOCATION file #44.
  */
 export async function getClinics(params = {}) {
-  return tenantApi.get('/clinics', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/clinics', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
  * GET /divisions — Division data from VistA MCD file #40.8.
  */
 export async function getDivisions(params = {}) {
-  return tenantApi.get('/divisions', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/divisions', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
  * GET /facilities — Facility data from VistA INSTITUTION file #4.
  */
 export async function getFacilities(params = {}) {
-  return tenantApi.get('/facilities', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/facilities', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
  * GET /nursing-locations — Nursing location data.
  */
 export async function getNursingLocations(params = {}) {
-  return tenantApi.get('/nursing-locations', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/nursing-locations', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /**
  * GET /users — Staff/provider data from VistA NEW PERSON file #200.
  */
 export async function getProviders(params = {}) {
-  return tenantApi.get('/users', { tenantId: 'local-dev', ...params });
+  return tenantApi.get('/users', { tenantId: await getActivePatientTenantId(), ...params });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -101,7 +112,7 @@ export async function getProviders(params = {}) {
  * Backend: ZVE PATIENT SEARCH EXTENDED → DDR LISTER File #2
  */
 export async function searchPatients(query = '') {
-  return tenantApi.get('/patients', { search: query, tenantId: 'local-dev' });
+  return tenantApi.get('/patients', { search: query, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -109,7 +120,15 @@ export async function searchPatients(query = '') {
  * Backend: ZVE PATIENT DEMOGRAPHICS → ddrGetsEntry File #2
  */
 export async function getPatient(dfn) {
-  return tenantApi.get(`/patients/${dfn}`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}`, { tenantId: await getActivePatientTenantId() });
+}
+
+/**
+ * Get active medication orders for a patient.
+ * Backend: ORWPS ACTIVE with ORWORR GETTXT enrichment.
+ */
+export async function getPatientMedications(dfn) {
+  return tenantApi.get(`/patients/${dfn}/medications`, { tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -117,7 +136,7 @@ export async function getPatient(dfn) {
  * Backend: ZVE PATIENT REGISTER → ddrFilerAddMulti File #2
  */
 export async function registerPatient(data) {
-  return tenantApi.post('/patients', { ...data, tenantId: 'local-dev' });
+  return tenantApi.post('/patients', { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -125,7 +144,7 @@ export async function registerPatient(data) {
  * Backend: ZVE PATIENT EDIT → ddrFilerEditMulti File #2
  */
 export async function updatePatient(dfn, data) {
-  return tenantApi.put(`/patients/${dfn}`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.put(`/patients/${dfn}`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -137,7 +156,7 @@ export async function updatePatient(dfn, data) {
  * Backend: ZVE ADT ADMIT → ddrFilerAddMulti File #405
  */
 export async function admitPatient(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/admit`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/admit`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -145,7 +164,7 @@ export async function admitPatient(dfn, data) {
  * Backend: ZVE ADT TRANSFER → ddrFilerAddMulti File #405
  */
 export async function transferPatient(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/transfer`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/transfer`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -153,7 +172,7 @@ export async function transferPatient(dfn, data) {
  * Backend: ZVE ADT DISCHARGE → ddrFilerAddMulti File #405
  */
 export async function dischargePatient(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/discharge`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/discharge`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -165,7 +184,7 @@ export async function dischargePatient(dfn, data) {
  * Backend: DDR LISTER File #2.312
  */
 export async function getPatientInsurance(dfn) {
-  return tenantApi.get(`/patients/${dfn}/insurance`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}/insurance`, { tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -173,7 +192,7 @@ export async function getPatientInsurance(dfn) {
  * Backend: ddrFilerAddMulti File #2.312
  */
 export async function addInsurance(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/insurance`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/insurance`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -181,7 +200,7 @@ export async function addInsurance(dfn, data) {
  * Backend: ddrFilerEditMulti File #2.312
  */
 export async function updateInsurance(dfn, insuranceId, data) {
-  return tenantApi.put(`/patients/${dfn}/insurance/${insuranceId}`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.put(`/patients/${dfn}/insurance/${insuranceId}`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -189,7 +208,7 @@ export async function updateInsurance(dfn, insuranceId, data) {
  * Backend: ddrFilerEdit File #2.312
  */
 export async function deleteInsurance(dfn, insuranceId) {
-  return tenantApi.delete(`/patients/${dfn}/insurance/${insuranceId}?tenantId=local-dev`);
+  return tenantApi.delete(`/patients/${dfn}/insurance/${insuranceId}?tenantId=${await getActivePatientTenantId()}`);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -201,7 +220,7 @@ export async function deleteInsurance(dfn, insuranceId) {
  * Backend: DDR LISTER File #408.31
  */
 export async function getFinancialAssessment(dfn) {
-  return tenantApi.get(`/patients/${dfn}/assessment`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}/assessment`, { tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -209,7 +228,7 @@ export async function getFinancialAssessment(dfn) {
  * Backend: ddrFilerAddMulti File #408.31
  */
 export async function submitFinancialAssessment(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/assessment`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/assessment`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -222,15 +241,22 @@ export async function submitFinancialAssessment(dfn, data) {
  * Backend: ZVE PATIENT FLAGS → DDR LISTER File #26.13
  */
 export async function getPatientFlags(dfn) {
-  return tenantApi.get(`/patients/${dfn}/flags`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}/flags`, { tenantId: await getActivePatientTenantId() });
+}
+
+/**
+ * Get available patient flag definitions from File #26.15 (PRF LOCAL FLAG).
+ */
+export async function getPatientFlagDefinitions() {
+  return tenantApi.get('/patients/flag-definitions', { tenantId: await getActivePatientTenantId() });
 }
 
 /**
  * Add a flag to a patient record.
- * Backend: ddrFilerAddMulti File #26.13
+ * Backend: ZVE PATIENT FLAGS ASSIGN
  */
 export async function addPatientFlag(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/flags`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/flags`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -238,7 +264,7 @@ export async function addPatientFlag(dfn, data) {
  * Backend: ddrFilerEditMulti File #26.13
  */
 export async function inactivatePatientFlag(dfn, flagId) {
-  return tenantApi.put(`/patients/${dfn}/flags/${flagId}`, { status: 'inactive', tenantId: 'local-dev' });
+  return tenantApi.put(`/patients/${dfn}/flags/${flagId}`, { status: 'inactive', tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -246,7 +272,7 @@ export async function inactivatePatientFlag(dfn, flagId) {
  * Backend: ddrFilerEditMulti File #26.13
  */
 export async function updatePatientFlag(dfn, flagId, data) {
-  return tenantApi.put(`/patients/${dfn}/flags/${flagId}`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.put(`/patients/${dfn}/flags/${flagId}`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -258,7 +284,7 @@ export async function updatePatientFlag(dfn, flagId, data) {
  * Backend: ddrFilerEditMulti File #2, field 38.1
  */
 export async function updateRecordRestriction(dfn, data) {
-  return tenantApi.put(`/patients/${dfn}/restrictions`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.put(`/patients/${dfn}/restrictions`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -266,7 +292,7 @@ export async function updateRecordRestriction(dfn, data) {
  * Backend: POST /patients/:dfn/break-glass (audit logging)
  */
 export async function logBreakTheGlass(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/break-glass`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/break-glass`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -278,7 +304,7 @@ export async function logBreakTheGlass(dfn, data) {
  * Backend: DDR LISTER across multiple files
  */
 export async function getRegistrationReport(params = {}) {
-  return tenantApi.get('/reports/registration', { ...params, tenantId: 'local-dev' });
+  return tenantApi.get('/reports/registration', { ...params, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -286,7 +312,7 @@ export async function getRegistrationReport(params = {}) {
  * Backend: DDR LISTER File #44, #42, etc.
  */
 export async function getPatientDashboardStats() {
-  return tenantApi.get('/patients/dashboard', { tenantId: 'local-dev' });
+  return tenantApi.get('/patients/dashboard', { tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -303,9 +329,11 @@ export function transformRoomBeds(vistaRows) {
   return vistaRows.map(row => {
     const oos = String(row.outOfService || '').toUpperCase();
     const isBlocked = oos === '1' || oos === 'YES' || oos === 'TRUE';
+    const wardIen = row.wardIen || row.description || row.ward || '';
     return {
       id: `B-${row.ien}`,
       ien: row.ien,
+      wardIen,
       unit: row.description || 'General Ward',
       bed: row.roomBed || row.ien,
       status: isBlocked ? 'blocked' : 'available',
@@ -319,7 +347,7 @@ export function transformRoomBeds(vistaRows) {
  * Get beds in UI shape. Calls real /room-beds and transforms.
  */
 export async function getBeds() {
-  const res = await tenantApi.get('/room-beds', { tenantId: 'local-dev' });
+  const res = await tenantApi.get('/room-beds', { tenantId: await getActivePatientTenantId() });
   if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
     return { ok: true, source: 'vista', data: transformRoomBeds(res.data) };
   }
@@ -331,7 +359,7 @@ export async function getBeds() {
  * PUT /room-beds/:ien with { outOfService: '' } to unblock.
  */
 export async function updateBed(bedIen, data) {
-  return tenantApi.put(`/room-beds/${bedIen}`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.put(`/room-beds/${bedIen}`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -339,7 +367,7 @@ export async function updateBed(bedIen, data) {
  * POST /room-beds with { wardIen, room, bed, bedType }.
  */
 export async function addBed(data) {
-  return tenantApi.post('/room-beds', { ...data, tenantId: 'local-dev' });
+  return tenantApi.post('/room-beds', { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -347,7 +375,7 @@ export async function addBed(data) {
  * DELETE /room-beds/:ien
  */
 export async function deleteBed(bedIen) {
-  return tenantApi.delete(`/room-beds/${bedIen}?tenantId=local-dev`);
+  return tenantApi.delete(`/room-beds/${bedIen}?tenantId=${await getActivePatientTenantId()}`);
 }
 
 /**
@@ -369,7 +397,7 @@ export async function assignBed(payload = {}) {
     return { ok: false, error: 'Bed identifier required' };
   }
   try {
-    const res = await tenantApi.get(`/room-beds/${bedIen}`, { tenantId: 'local-dev' });
+    const res = await tenantApi.get(`/room-beds/${bedIen}`, { tenantId: await getActivePatientTenantId() });
     return { ok: true, ...res };
   } catch (e) {
     return { ok: false, error: e?.message || 'Could not verify bed' };
@@ -381,7 +409,7 @@ export async function assignBed(payload = {}) {
  * Returns { data: [{ dfn, name, roomBed, admissionDate, lengthOfStay, attending, diagnosis, diet }] }
  */
 export async function getCensus(wardIen = '') {
-  const params = { tenantId: 'local-dev' };
+  const params = { tenantId: await getActivePatientTenantId() };
   if (wardIen) params.wardIen = wardIen;
   return tenantApi.get('/census', params);
 }
@@ -394,7 +422,7 @@ export async function getCensus(wardIen = '') {
  * Get audit events (break-the-glass access log) for a patient.
  */
 export async function getPatientAuditEvents(dfn) {
-  return tenantApi.get(`/patients/${dfn}/audit-events`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}/audit-events`, { tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -402,7 +430,7 @@ export async function getPatientAuditEvents(dfn) {
  * Backend: DDR LISTER File #38.13
  */
 export async function getAuthorizedStaff(dfn) {
-  return tenantApi.get(`/patients/${dfn}/authorized-staff`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}/authorized-staff`, { tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -410,7 +438,7 @@ export async function getAuthorizedStaff(dfn) {
  * Backend: ddrFilerAddMulti File #38.13
  */
 export async function addAuthorizedStaff(dfn, data) {
-  return tenantApi.post(`/patients/${dfn}/authorized-staff`, { ...data, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/authorized-staff`, { ...data, tenantId: await getActivePatientTenantId() });
 }
 
 /**
@@ -418,7 +446,7 @@ export async function addAuthorizedStaff(dfn, data) {
  * Backend: ddrFilerEdit File #38.13
  */
 export async function removeAuthorizedStaff(dfn, staffIen) {
-  return tenantApi.delete(`/patients/${dfn}/authorized-staff/${staffIen}?tenantId=local-dev`);
+  return tenantApi.delete(`/patients/${dfn}/authorized-staff/${staffIen}?tenantId=${await getActivePatientTenantId()}`);
 }
 
 /**
@@ -426,7 +454,7 @@ export async function removeAuthorizedStaff(dfn, staffIen) {
  * Backend: DDR LISTER File #2.312
  */
 export async function verifyInsuranceEligibility(dfn) {
-  return tenantApi.post(`/patients/${dfn}/verify-eligibility`, { tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/verify-eligibility`, { tenantId: await getActivePatientTenantId() });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -434,9 +462,9 @@ export async function verifyInsuranceEligibility(dfn) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export async function getPatientVitals(dfn) {
-  return tenantApi.get(`/patients/${dfn}/vitals`, { tenantId: 'local-dev' });
+  return tenantApi.get(`/patients/${dfn}/vitals`, { tenantId: await getActivePatientTenantId() });
 }
 
 export async function recordVitals(dfn, vitals) {
-  return tenantApi.post(`/patients/${dfn}/vitals`, { vitals, tenantId: 'local-dev' });
+  return tenantApi.post(`/patients/${dfn}/vitals`, { vitals, tenantId: await getActivePatientTenantId() });
 }

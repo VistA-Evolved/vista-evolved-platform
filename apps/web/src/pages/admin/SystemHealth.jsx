@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import {
   getTaskManStatus, getTaskManTasks, getTaskManScheduled,
+  startTaskMan,
   getErrorTrap, getVistaStatus, getHL7FilerStatus, getAdminReport,
   getHL7Interfaces, shutdownHL7Interface, enableHL7Interface,
-  purgeOldErrors, getCapacity,
+  purgeOldErrors, getCapacity, getHealthHistory, getMyHealthThresholds, updateMyHealthThresholds,
 } from '../../services/adminService';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import ErrorState from '../../components/shared/ErrorState';
@@ -135,6 +136,13 @@ export default function SystemHealth() {
   const [errorTraps, setErrorTraps] = useState([]);
   const [vistaStatus, setVistaStatus] = useState(null);
   const [hl7Status, setHl7Status] = useState(null);
+  const [healthHistoryData, setHealthHistoryData] = useState(null);
+  const [healthThresholds, setHealthThresholds] = useState({ enabled: false, vistaDown: false, taskmanStopped: false, hl7Stopped: false, cooldownMinutes: 60 });
+  const [thresholdSaving, setThresholdSaving] = useState(false);
+  const [thresholdResult, setThresholdResult] = useState(null);
+  const [taskmanActionSaving, setTaskmanActionSaving] = useState(false);
+  const [taskmanActionResult, setTaskmanActionResult] = useState(null);
+  const [showStartTaskManConfirm, setShowStartTaskManConfirm] = useState(false);
   const [showTaskDetails, setShowTaskDetails] = useState(false);
   const [expandedErrors, setExpandedErrors] = useState(new Set());
 
@@ -160,13 +168,15 @@ export default function SystemHealth() {
     setLoading(true);
     setError(null);
     try {
-      const [taskRes, tasksRes, schedRes, errorRes, vistaRes, hl7Res] = await Promise.allSettled([
+      const [taskRes, tasksRes, schedRes, errorRes, vistaRes, hl7Res, historyRes, thresholdsRes] = await Promise.allSettled([
         getTaskManStatus(),
         getTaskManTasks(),
         getTaskManScheduled(),
         getErrorTrap(),
         getVistaStatus(),
         getHL7FilerStatus(),
+        getHealthHistory(),
+        getMyHealthThresholds(),
       ]);
       if (taskRes.status === 'fulfilled') setTaskStatus(taskRes.value?.data || null);
       if (tasksRes.status === 'fulfilled') setActiveTasks(tasksRes.value?.data || []);
@@ -177,11 +187,15 @@ export default function SystemHealth() {
       }
       if (vistaRes.status === 'fulfilled') setVistaStatus(vistaRes.value || null);
       if (hl7Res.status === 'fulfilled') setHl7Status(hl7Res.value?.data || null);
+      if (historyRes.status === 'fulfilled') setHealthHistoryData(historyRes.value?.data || null);
+      if (thresholdsRes.status === 'fulfilled' && thresholdsRes.value?.data) setHealthThresholds(thresholdsRes.value.data);
       // Capacity metrics (non-fatal)
       try {
         const capRes = await getCapacity();
         setCapacityData(capRes?.data || null);
-      } catch (err) { /* non-fatal */ }
+      } catch (err) {
+        console.warn('Failed to load capacity metrics:', err);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load system status');
     } finally {
@@ -234,6 +248,9 @@ export default function SystemHealth() {
   const errorCount = errorTraps.length;
   const allTasks = [...activeTasks, ...scheduledTasks];
   const taskCount = allTasks.length;
+  const uptimeWindows = healthHistoryData?.windows || [];
+  const recentHealthSamples = healthHistoryData?.recentSamples || [];
+  const latestHealthSample = healthHistoryData?.latest || null;
 
   const toggleErrorExpand = (id) => {
     setExpandedErrors(prev => {
@@ -241,6 +258,45 @@ export default function SystemHealth() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  };
+
+  const saveThresholds = async () => {
+    setThresholdSaving(true);
+    setThresholdResult(null);
+    try {
+      const res = await updateMyHealthThresholds(healthThresholds);
+      if (res?.data) setHealthThresholds(res.data);
+      setThresholdResult({
+        type: 'success',
+        msg: res?.alertsTriggered > 0
+          ? `Saved. ${res.alertsTriggered} alert${res.alertsTriggered > 1 ? 's were' : ' was'} triggered immediately from the current sampled state.`
+          : 'Saved. Future outages will alert your VistA notifications based on this policy.',
+      });
+    } catch (err) {
+      setThresholdResult({ type: 'error', msg: err.message || 'Failed to save alert thresholds.' });
+    } finally {
+      setThresholdSaving(false);
+    }
+  };
+
+  const handleStartTaskMan = async () => {
+    setTaskmanActionSaving(true);
+    setTaskmanActionResult(null);
+    try {
+      const res = await startTaskMan();
+      const status = res?.data?.status || 'UNKNOWN';
+      setTaskmanActionResult({
+        type: 'success',
+        msg: status === 'RUNNING' || status === 'ALREADY RUNNING'
+          ? `TaskMan is ${status.toLowerCase()}.`
+          : `TaskMan start requested. Current status: ${status}.`,
+      });
+      await loadData();
+    } catch (err) {
+      setTaskmanActionResult({ type: 'error', msg: err.message || 'Failed to start TaskMan.' });
+    } finally {
+      setTaskmanActionSaving(false);
+    }
   };
 
   if (error) {
@@ -295,6 +351,128 @@ export default function SystemHealth() {
           </div>
         )}
 
+        {!loading && uptimeWindows.length > 0 && (
+          <div className="mb-6 rounded-lg border border-[#E2E4E8] bg-white p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text">Historical Uptime</h2>
+                <p className="mt-1 text-[12px] text-[#666]">
+                  Captured by tenant-admin every {Math.max(1, Math.round((healthHistoryData?.sampleIntervalSeconds || 300) / 60))} minutes and retained for {healthHistoryData?.retentionDays || 30} days.
+                  Coverage grows automatically as the server keeps sampling health in the background.
+                </p>
+              </div>
+              <div className="rounded-lg bg-[#F5F8FB] px-3 py-2 text-[11px] text-[#2E5984]">
+                Latest sample: {latestHealthSample?.timestamp ? formatDateTime(latestHealthSample.timestamp) : 'Collecting'}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {uptimeWindows.map(window => (
+                <UptimeWindowCard key={window.label} window={window} />
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#666]">Recent samples</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {recentHealthSamples.length > 0 ? recentHealthSamples.map(sample => (
+                    <span key={sample.timestamp}
+                      title={`${formatDateTime(sample.timestamp)} — ${sample.overallUp ? 'Up' : 'Down'}`}
+                      className={`h-2.5 w-2.5 rounded-full ${sample.overallUp ? 'bg-[#2D6A4F]' : 'bg-[#CC3333]'}`} />
+                  )) : (
+                    <span className="text-[12px] text-[#999]">Waiting for the first background sample.</span>
+                  )}
+                </div>
+              </div>
+              <div className="text-[11px] text-[#666]">
+                Overall uptime reflects server-to-VistA reachability. TaskMan and HL7 percentages show degraded-service history separately.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <div className="mb-6 rounded-lg border border-[#E2E4E8] bg-white p-5">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text">Alert Thresholds</h2>
+                <p className="mt-1 text-[12px] text-[#666]">
+                  Send a high-priority VistA alert to your own notification list when sampled health falls below these thresholds.
+                </p>
+              </div>
+              {thresholdResult && (
+                <div className={`rounded-md px-3 py-2 text-[11px] ${thresholdResult.type === 'success' ? 'bg-[#E8F5E9] text-[#2D6A4F]' : 'bg-[#FDE8E8] text-[#CC3333]'}`}>
+                  {thresholdResult.msg}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="flex items-center gap-2 rounded-lg border border-[#E2E4E8] p-3 text-sm text-text">
+                <input
+                  type="checkbox"
+                  checked={healthThresholds.enabled}
+                  onChange={e => setHealthThresholds(prev => ({ ...prev, enabled: e.target.checked }))}
+                />
+                Enable health alerts for my account
+              </label>
+
+              <div className="rounded-lg border border-[#E2E4E8] p-3">
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#666] mb-2">Reminder cooldown</label>
+                <select
+                  value={healthThresholds.cooldownMinutes}
+                  onChange={e => setHealthThresholds(prev => ({ ...prev, cooldownMinutes: Number(e.target.value) }))}
+                  className="h-9 w-full rounded-md border border-[#E2E4E8] px-3 text-sm focus:outline-none focus:border-[#2E5984]"
+                >
+                  {[5, 15, 30, 60, 120].map(minutes => (
+                    <option key={minutes} value={minutes}>{minutes} minutes</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              {[
+                { key: 'vistaDown', label: 'VistA disconnected', detail: 'Alert when the backend can no longer reach VistA.' },
+                { key: 'taskmanStopped', label: 'TaskMan stopped', detail: 'Alert when background jobs are no longer running.' },
+                { key: 'hl7Stopped', label: 'HL7 filer stopped', detail: 'Alert when HL7 filer status is sampled as stopped.' },
+              ].map(item => (
+                <label key={item.key} className={`rounded-lg border p-3 ${healthThresholds.enabled ? 'border-[#E2E4E8] bg-[#FAFAFA]' : 'border-[#F0F0F0] bg-[#FCFCFC] text-[#999]'}`}>
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(healthThresholds[item.key])}
+                      disabled={!healthThresholds.enabled}
+                      onChange={e => setHealthThresholds(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                    />
+                    <div>
+                      <div className="text-sm font-medium">{item.label}</div>
+                      <div className="mt-1 text-[11px]">{item.detail}</div>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setThresholdResult(null)}
+                className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F5F5F5]"
+              >
+                Clear Status
+              </button>
+              <button
+                onClick={saveThresholds}
+                disabled={thresholdSaving}
+                className="px-4 py-2 text-sm bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] disabled:opacity-40"
+              >
+                {thresholdSaving ? 'Saving...' : 'Save Alert Thresholds'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Tabs ── */}
         <div className="flex items-center gap-1 border-b border-[#E2E4E8] mb-6" role="tablist">
           {[
@@ -337,14 +515,31 @@ export default function SystemHealth() {
                     <p className="text-sm text-[#333] mb-4">
                       Background processing must be started for the system to function properly. Contact your system administrator.
                     </p>
+                    {taskmanActionResult && (
+                      <div className={`mb-4 rounded-md px-3 py-2 text-xs ${taskmanActionResult.type === 'success' ? 'bg-[#E8F5E9] text-[#2D6A4F]' : 'bg-[#FDE8E8] text-[#CC3333]'}`}>
+                        {taskmanActionResult.msg}
+                      </div>
+                    )}
                     <p className="text-xs text-[#666] mb-3">{taskCount} tasks are configured but not running.</p>
-                    <button onClick={() => setShowTaskDetails(!showTaskDetails)}
-                      className="flex items-center gap-1 text-sm font-medium text-[#E65100] hover:underline">
-                      <span className="material-symbols-outlined text-[16px]">
-                        {showTaskDetails ? 'expand_less' : 'expand_more'}
-                      </span>
-                      {showTaskDetails ? 'Hide Task Details' : 'Show Task Details'}
-                    </button>
+                    <div className="mb-3 flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={() => setShowStartTaskManConfirm(true)}
+                        disabled={taskmanActionSaving}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-[#E65100] px-3 py-2 text-sm font-medium text-white hover:bg-[#C54A00] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          {taskmanActionSaving ? 'progress_activity' : 'play_arrow'}
+                        </span>
+                        {taskmanActionSaving ? 'Starting...' : 'Start TaskMan'}
+                      </button>
+                      <button onClick={() => setShowTaskDetails(!showTaskDetails)}
+                        className="flex items-center gap-1 text-sm font-medium text-[#E65100] hover:underline">
+                        <span className="material-symbols-outlined text-[16px]">
+                          {showTaskDetails ? 'expand_less' : 'expand_more'}
+                        </span>
+                        {showTaskDetails ? 'Hide Task Details' : 'Show Task Details'}
+                      </button>
+                    </div>
                     {showTaskDetails && taskCount > 0 && (
                       <div className="mt-3 border border-[#E2E4E8] rounded-md overflow-hidden max-h-60 overflow-y-auto bg-white">
                         <table className="w-full text-xs">
@@ -706,6 +901,18 @@ export default function SystemHealth() {
             destructive
           />
         )}
+        {showStartTaskManConfirm && (
+          <ConfirmDialog
+            title="Start TaskMan"
+            message="This will start VistA background processing for the current environment. Queued jobs may begin running immediately."
+            confirmLabel="Start TaskMan"
+            onConfirm={async () => {
+              setShowStartTaskManConfirm(false);
+              await handleStartTaskMan();
+            }}
+            onCancel={() => setShowStartTaskManConfirm(false)}
+          />
+        )}
         {/* Terminal Reference */}
         <details className="mt-8 mb-4 text-sm text-[#6B7280] border border-[#E2E4E8] rounded-md p-4 bg-[#FAFAFA]">
           <summary className="cursor-pointer font-medium text-[#374151]">📖 Terminal Reference</summary>
@@ -860,6 +1067,47 @@ function MetricCard({ label, value, color }) {
     <div className="bg-[#F4F5F7] rounded-lg p-3">
       <div className={`text-sm font-bold ${color || 'text-text'}`}>{value}</div>
       <div className="text-[10px] text-[#999] mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) return 'n/a';
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+}
+
+function UptimeWindowCard({ window }) {
+  return (
+    <div className="rounded-lg border border-[#E2E4E8] bg-[#FAFAFA] p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-text">{window.label}</div>
+          <div className="text-[11px] text-[#999]">Coverage: {window.coverageHours}h ({window.coveragePct}%)</div>
+        </div>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${window.hasFullCoverage ? 'bg-[#E8F5E9] text-[#2D6A4F]' : 'bg-[#FFF3E0] text-[#E65100]'}`}>
+          {window.hasFullCoverage ? 'Full window' : 'Partial window'}
+        </span>
+      </div>
+
+      <div className="mt-4 text-[28px] font-bold leading-none text-text">{formatPercent(window.overallPct)}</div>
+      <div className="mt-1 text-[11px] text-[#666]">Overall uptime</div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 text-[11px]">
+        <div className="rounded-md bg-white p-2">
+          <div className="font-semibold text-[#2E5984]">{formatPercent(window.vistaPct)}</div>
+          <div className="text-[#999] mt-0.5">VistA</div>
+        </div>
+        <div className="rounded-md bg-white p-2">
+          <div className="font-semibold text-[#2E5984]">{formatPercent(window.taskmanPct)}</div>
+          <div className="text-[#999] mt-0.5">TaskMan</div>
+        </div>
+        <div className="rounded-md bg-white p-2">
+          <div className="font-semibold text-[#2E5984]">{formatPercent(window.hl7Pct)}</div>
+          <div className="text-[#999] mt-0.5">HL7</div>
+        </div>
+      </div>
+
+      <div className="mt-3 text-[10px] text-[#999]">{window.sampleCount} samples captured in this window.</div>
     </div>
   );
 }

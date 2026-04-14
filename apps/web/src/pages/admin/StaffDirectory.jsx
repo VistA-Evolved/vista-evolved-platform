@@ -4,12 +4,12 @@ import DataTable from '../../components/shared/DataTable';
 import { StatusBadge, KeyCountBadge } from '../../components/shared/StatusBadge';
 import { SearchBar, Pagination, FilterChips, ConfirmDialog } from '../../components/shared/SharedComponents';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, getPermissionHolders, unlockUser, setProviderFields, getCprsTabAccess, cloneStaffMember, updateStaffMember, terminateStaffMember, getSites, getSession } from '../../services/adminService';
+import { getStaff, getStaffMember, getESignatureStatus, getUserPermissions, getUserMenuStructure, deactivateStaffMember, reactivateStaffMember, setESignature, assignPermission, removePermission, getPermissions, getPermissionHolders, unlockUser, setProviderFields, cloneStaffMember, updateStaffMember, terminateStaffMember, getSites, getSession, getCustomRoles } from '../../services/adminService';
 import { TableSkeleton, KpiCardSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
-import { humanizeKeyName, fmDateToDate } from '../../utils/transforms';
+import { humanizeKeyName, fmDateToDate, formatPhone } from '../../utils/transforms';
 import { useFacility } from '../../contexts/FacilityContext';
-import { KEY_IMPACTS } from './RoleTemplates';
+import { KEY_IMPACTS, ROLES } from './RoleTemplates';
 
 /**
  * AD-01 / ADM-01: Staff Directory
@@ -21,8 +21,17 @@ import { KEY_IMPACTS } from './RoleTemplates';
  *   GET /esig-status    → { data: [{ id, name, duz, status, esigStatus, hasCode, sigBlockName }] }
  *   GET /divisions      → { data: [{ ien, name, stationNumber, status }] }
  *   GET /users/:duz     → { data: { id, ien, name, title, status, vistaGrounding: { ... } } }
- *   GET /users/:duz/keys → { data: [{ ien, name }] }
+ *   GET /users/:duz/keys → { data: [{ ien, name, assignedDate }] }
  */
+
+function formatAssignedDate(value) {
+  if (!value) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  const parsed = /^\d{7}(\.\d+)?$/.test(raw) ? fmDateToDate(raw) : new Date(raw);
+  if (!(parsed instanceof Date) || Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 function deriveTitleFromKeys(keys) {
   if (!keys || keys.length === 0) return '';
@@ -48,10 +57,36 @@ function deriveTitleFromKeys(keys) {
   if (keySet.has('MAG SYSTEM')) return 'Imaging Technician';
   if (keySet.has('IBFIN') || keySet.has('IB BILLING')) return 'Billing Specialist';
   if (keySet.has('TIU SIGN DOCUMENT')) return 'Health Information';
-  if (keySet.has('GMRA ALLERGY VERIFY')) return 'Allergy Verifier';
+  if (keySet.has('GMRA-ALLERGY VERIFY')) return 'Allergy Verifier';
   if (keySet.has('PROVIDER')) return 'Clinical Staff';
   if (keySet.has('OR CPRS GUI CHART')) return 'Clinical User';
   return '';
+}
+
+function normalizeRoleKeyName(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function normalizeRoleIdentifier(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getRolePermissionSet(assignedRole, customRoles = []) {
+  const roleIdentifier = normalizeRoleIdentifier(assignedRole);
+  if (!roleIdentifier) return new Set();
+  const allRoles = [...ROLES, ...customRoles];
+  const matchedRole = allRoles.find((role) => {
+    const candidates = [role?.id, role?.slug, role?.roleId, role?.name];
+    return candidates.some((candidate) => normalizeRoleIdentifier(candidate) === roleIdentifier);
+  });
+  if (!matchedRole) return new Set();
+
+  const roleKeys = [
+    ...((matchedRole.permissions || []).map((permission) => permission?.key || permission?.name || permission)),
+    ...((matchedRole.keys || []).map((key) => key?.key || key?.name || key)),
+  ];
+
+  return new Set(roleKeys.map(normalizeRoleKeyName).filter(Boolean));
 }
 
 const SIG_STYLES = {
@@ -83,7 +118,9 @@ const baseColumns = [
     ? <span className="font-mono text-[11px]">{row.employeeId}</span>
     : <span className="font-mono text-[11px] text-text-secondary">{row.id}</span> },
   { key: 'title', label: 'Title' },
-  { key: 'department', label: 'Department' },
+  { key: 'department', label: 'Department', render: (val) => (
+    <span className="block max-w-[18rem] truncate" title={val || ''}>{val || '—'}</span>
+  ) },
   { key: 'site', label: 'Site' },
   { key: 'status', label: 'Status', align: 'center', render: (val) => <StatusBadge status={val} /> },
   { key: 'esigStatus', label: 'E-Signature', align: 'center', render: (val) => <SigReadinessBadge value={val} /> },
@@ -109,12 +146,11 @@ function escapePrintHtml(s) {
 }
 
 /**
- * Opens a print dialog with a full staff profile (S22.14): fields, keys, divisions, CPRS tabs, sign-on info.
+ * Opens a print dialog with a full staff profile (S22.14): fields, keys, divisions, secondary menus, sign-on info.
  */
 function openPrintFullProfile({
   detailData,
   detailKeys,
-  cprsTabData,
   selectedStaff,
   adminDisplayName,
 }) {
@@ -123,7 +159,7 @@ function openPrintFullProfile({
   if (!w) return;
 
   const dd = detailData;
-  const skipKeys = new Set(['_loadError']);
+  const skipKeys = new Set(['_loadError', 'menuStructure', 'menuStructureSummary', 'menuStructureUnresolved']);
   const profileRows = [];
   const fmtProfileVal = (v) => {
     if (v === undefined || v === null || v === '') return null;
@@ -151,18 +187,25 @@ function openPrintFullProfile({
     const disp = k.displayName || humanizeKeyName(nm);
     const pkg = k.packageName || k.department || '';
     const ien = k.ien != null ? String(k.ien) : '';
-    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8;font-family:monospace;font-size:11px">${escapePrintHtml(nm)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(disp)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(pkg)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(ien)}</td></tr>`;
+    const assigned = formatAssignedDate(k.assignedDate) || '—';
+    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8;font-family:monospace;font-size:11px">${escapePrintHtml(nm)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(disp)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(pkg)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(ien)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(assigned)}</td></tr>`;
   }).join('');
 
-  const tabRows = (cprsTabData || []).map((tab, idx) => {
-    const name = tab.name || tab.tabName || `Tab ${idx + 1}`;
-    const access = tab.access || tab.status || '—';
-    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(name)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(access)}</td></tr>`;
+  const secondaryMenuRows = (dd.secondaryMenus || []).map((menu, idx) => {
+    const name = typeof menu === 'string' ? menu : (menu?.name || menu?.menuOption || `Menu ${idx + 1}`);
+    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(name)}</td></tr>`;
   }).join('');
 
   const divList = Array.isArray(dd.divisions) && dd.divisions.length
     ? dd.divisions.map((d) => `<li style="margin:4px 0">${escapePrintHtml(d)}</li>`).join('')
     : '<li>—</li>';
+  const menuRootRows = (dd.menuStructure || []).map((root) => {
+    const source = Array.isArray(root.rootSources) && root.rootSources.length
+      ? root.rootSources.map((item) => item === 'primary' ? 'Primary' : 'Secondary').join(', ')
+      : 'Assigned';
+    const childCount = root.childCount != null ? String(root.childCount) : String(root.children?.length || 0);
+    return `<tr><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(source)}</td><td style="padding:6px 8px;border:1px solid #E2E4E8">${escapePrintHtml(root.menuText || root.name || '—')}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-family:monospace;font-size:11px">${escapePrintHtml(root.name || '—')}</td><td style="padding:6px 8px;border:1px solid #E2E4E8;font-size:11px">${escapePrintHtml(childCount)}</td></tr>`;
+  }).join('');
 
   const lastLogin = dd.lastLogin || selectedStaff?.lastLogin || '—';
   const genDate = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
@@ -187,13 +230,16 @@ th{background:#F0F4F8;text-align:left;padding:8px;font-size:11px;text-transform:
 <tr><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.npi || '—')}</td><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.dea || '—')}</td><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.taxId || '—')}</td><td style="padding:8px;border:1px solid #E2E4E8">${escapePrintHtml(dd.providerType || '—')}</td></tr></table>
 
 <h2>Security keys (${detailKeys?.length || 0})</h2>
-<table><thead><tr><th>Key name</th><th>Display name</th><th>Package / dept</th><th>IEN</th></tr></thead><tbody>${keyRows || '<tr><td colspan="4" style="padding:12px">No keys loaded</td></tr>'}</tbody></table>
+<table><thead><tr><th>Key name</th><th>Display name</th><th>Package / dept</th><th>IEN</th><th>Assigned</th></tr></thead><tbody>${keyRows || '<tr><td colspan="5" style="padding:12px">No keys loaded</td></tr>'}</tbody></table>
 
-<h2>CPRS tab access</h2>
-<table><thead><tr><th>Tab</th><th>Access</th></tr></thead><tbody>${tabRows || '<tr><td colspan="2" style="padding:12px">No CPRS tab data</td></tr>'}</tbody></table>
+<h2>Secondary menu options</h2>
+<table><thead><tr><th>Menu option</th></tr></thead><tbody>${secondaryMenuRows || '<tr><td style="padding:12px">No secondary menu options</td></tr>'}</tbody></table>
 
 <h2>Division assignments</h2>
 <ul style="margin:8px 0;padding-left:20px">${divList}</ul>
+
+<h2>Menu structure roots</h2>
+<table><thead><tr><th>Source</th><th>Display</th><th>Option name</th><th>Direct children</th></tr></thead><tbody>${menuRootRows || '<tr><td colspan="4" style="padding:12px">No menu tree loaded</td></tr>'}</tbody></table>
 
 <h2>Sign-on</h2>
 <p><strong>Last sign-in:</strong> ${escapePrintHtml(lastLogin)}</p>
@@ -215,6 +261,115 @@ ${profileRows.map(([k, v]) => `<tr><td style="padding:6px 8px;border:1px solid #
 function parsePageFromParams(sp) {
   const p = parseInt(sp.get('page') || '1', 10);
   return Number.isFinite(p) && p >= 1 ? p : 1;
+}
+
+function getMenuSourceLabels(rootSources = []) {
+  if (!Array.isArray(rootSources) || rootSources.length === 0) return ['Assigned'];
+  return rootSources.map((source) => {
+    if (source === 'primary') return 'Primary Menu';
+    if (source === 'secondary') return 'Secondary Menu';
+    return 'Assigned';
+  });
+}
+
+function MenuTreeNode({ node, level = 0 }) {
+  const children = Array.isArray(node?.children) ? node.children : [];
+  const visibleChildCount = node?.childCount || children.length;
+  const hasChildren = visibleChildCount > 0;
+  const summaryBody = (
+    <div className="min-w-0 flex-1">
+      <div className="text-[12px] font-medium text-[#222] leading-tight">{node?.menuText || node?.name || 'Unnamed option'}</div>
+      <div className="text-[10px] font-mono text-[#666] mt-0.5 break-all">{node?.name || '—'}{node?.type ? ` • ${node.type}` : ''}{node?.ien ? ` • IEN ${node.ien}` : ''}</div>
+      {node?.description && <div className="text-[10px] text-[#666] mt-0.5">{node.description}</div>}
+      {node?.truncated && <div className="text-[10px] text-[#A16207] mt-1">More descendants exist, but the live tree was capped for display.</div>}
+      {node?.cycleDetected && <div className="text-[10px] text-[#CC3333] mt-1">Cycle detected in the option hierarchy.</div>}
+    </div>
+  );
+
+  if (!hasChildren) {
+    return (
+      <div className="rounded-md border border-[#E2E4E8] bg-[#FAFBFC] px-3 py-2">
+        {summaryBody}
+      </div>
+    );
+  }
+
+  return (
+    <details className="rounded-md border border-[#E2E4E8] bg-[#FAFBFC] px-3 py-2" open={level < 1}>
+      <summary className="flex cursor-pointer list-none items-start gap-2">
+        <span className="material-symbols-outlined text-[16px] text-[#2E5984] mt-0.5">account_tree</span>
+        {summaryBody}
+        <span className="ml-2 rounded-full bg-[#E8EEF5] px-2 py-0.5 text-[10px] font-semibold text-[#2E5984]">{visibleChildCount} child{visibleChildCount === 1 ? '' : 'ren'}</span>
+      </summary>
+      {children.length > 0 && (
+        <div className="mt-2 ml-3 border-l border-[#D8E2EC] pl-3 space-y-2">
+          {children.map((child) => (
+            <MenuTreeNode key={`${child.ien || child.name}-${child.depth || 0}`} node={child} level={level + 1} />
+          ))}
+        </div>
+      )}
+    </details>
+  );
+}
+
+function MenuStructureSection({ detailData }) {
+  const roots = Array.isArray(detailData?.menuStructure) ? detailData.menuStructure : [];
+  const unresolvedRoots = Array.isArray(detailData?.menuStructureUnresolved) ? detailData.menuStructureUnresolved : [];
+  const summary = detailData?.menuStructureSummary || null;
+
+  if (!roots.length && !unresolvedRoots.length && !detailData?.menuStructureError) {
+    return null;
+  }
+
+  return (
+    <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div>
+          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider">Menu Structure</h3>
+          <p className="text-[12px] text-[#666] mt-1">Live File 19 option tree for the staff member&apos;s assigned primary and secondary menus.</p>
+        </div>
+        {summary && (
+          <div className="text-[10px] text-[#666] text-right">
+            <div>{summary.nodeCount || 0} options loaded</div>
+            <div>Depth {summary.deepestDepth || 0} of max {summary.maxDepth || 0}</div>
+          </div>
+        )}
+      </div>
+
+      {roots.length > 0 && (
+        <div className="space-y-3">
+          {roots.map((root) => (
+            <div key={`${root.ien || root.name}-${(root.rootSources || []).join('-')}`} className="rounded-lg border border-[#E2E4E8] p-3 bg-[#FCFDFE]">
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                {getMenuSourceLabels(root.rootSources).map((label) => (
+                  <span key={label} className="inline-flex items-center rounded-full bg-[#E8EEF5] px-2 py-0.5 text-[10px] font-semibold text-[#2E5984]">{label}</span>
+                ))}
+              </div>
+              <MenuTreeNode node={root} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {unresolvedRoots.length > 0 && (
+        <div className="mt-3 rounded-lg border border-[#F2D28B] bg-[#FFF8E1] px-3 py-2 text-[11px] text-[#8A6D1D]">
+          Could not resolve {unresolvedRoots.length} assigned menu root{unresolvedRoots.length === 1 ? '' : 's'} into File 19 tree nodes: {unresolvedRoots.map((root) => root.name || 'Unnamed').join(', ')}.
+        </div>
+      )}
+
+      {detailData?.menuStructureError && (
+        <div className="mt-3 rounded-lg border border-[#F5C2C7] bg-[#FDE8E8] px-3 py-2 text-[11px] text-[#B42318]">
+          {detailData.menuStructureError}
+        </div>
+      )}
+
+      {summary?.truncated && (
+        <div className="mt-3 rounded-lg border border-[#F2D28B] bg-[#FFF8E1] px-3 py-2 text-[11px] text-[#8A6D1D]">
+          The visible tree was capped at {summary.maxNodes} options and depth {summary.maxDepth} to keep the live detail view responsive.
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function StaffDirectory() {
@@ -265,6 +420,9 @@ export default function StaffDirectory() {
   /** S6.3: Hover prefetch — 300ms delay, cancel on mouseleave */
   const detailPrefetchTimerRef = useRef(null);
   const detailPrefetchCacheRef = useRef(new Map());
+  const detailScrollPositionsRef = useRef(new Map());
+  const desktopDetailPanelRef = useRef(null);
+  const mobileDetailPanelRef = useRef(null);
 
   // Assign permissions modal state
   const [showAssignPermsModal, setShowAssignPermsModal] = useState(false);
@@ -272,9 +430,7 @@ export default function StaffDirectory() {
   const [permSearchText, setPermSearchText] = useState('');
   const [assigningPerm, setAssigningPerm] = useState(false);
   const [siteOptions, setSiteOptions] = useState([]);
-
-  // CPRS Tab Access data (B8)
-  const [cprsTabData, setCprsTabData] = useState([]);
+  const [customRoles, setCustomRoles] = useState([]);
 
   const columns = [
     ...baseColumns,
@@ -367,17 +523,36 @@ export default function StaffDirectory() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getCustomRoles()
+      .then((res) => {
+        if (!cancelled) setCustomRoles(res?.data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomRoles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => () => clearTimeout(detailPrefetchTimerRef.current), []);
 
-  const applyDetailResponses = useCallback((row, userRes, keysRes, cprsRes) => {
+  const applyDetailResponses = useCallback((row, userRes, keysRes, menuRes) => {
     const vg = userRes?.data?.vistaGrounding || {};
     const esig = vg.electronicSignature || {};
     const keys = (keysRes?.data || []).map(k => k.name);
     const derivedTitle = deriveTitleFromKeys(keys);
     const divs = userRes?.data?.divisions || [];
+    const assignedRole = vg.assignedRole || userRes?.data?.assignedRole || row.role || '';
+    const menuRoots = Array.isArray(menuRes?.roots) ? menuRes.roots : [];
+    const menuSummary = menuRes?.summary || null;
+    const menuStructureUnresolved = Array.isArray(menuRes?.unresolvedRoots) ? menuRes.unresolvedRoots : [];
     setDetailData({
       ...row,
       title: userRes?.data?.title || vg.sigBlockTitle || derivedTitle,
+      assignedRole,
       department: vg.serviceSection || '',
       phone: vg.officePhone || '',
       email: vg.email || '',
@@ -410,11 +585,15 @@ export default function StaffDirectory() {
       vcChangeDate: vg.vcChangeDate || '',
       pwdExpirationDays: vg.pwdExpirationDays,
       pwdDaysRemaining: vg.pwdDaysRemaining,
+      menuStructure: menuRoots,
+      menuStructureSummary: menuSummary,
+      menuStructureUnresolved,
+      menuStructureError: menuRes?.error || '',
+      secondaryMenus: menuRes?.secondaryMenus || [],
       lastModified: userRes?.data?.lastModified || null,
       lastLogin: userRes?.data?.lastLogin || row.lastLogin || vg.lastLogin || '',
     });
     setDetailKeys(keysRes?.data || []);
-    setCprsTabData(cprsRes?.tabs || cprsRes?.data || []);
   }, []);
 
   const handleRowMouseEnter = useCallback((row) => {
@@ -425,10 +604,10 @@ export default function StaffDirectory() {
       Promise.all([
         getStaffMember(row.duz),
         getUserPermissions(row.duz),
-        getCprsTabAccess(row.duz).catch(() => ({ tabs: [], data: [] })),
+        getUserMenuStructure(row.duz).catch((err) => ({ roots: [], unresolvedRoots: [], summary: null, secondaryMenus: [], error: err.message || 'Failed to load menu structure' })),
       ])
-        .then(([userRes, keysRes, cprsRes]) => {
-          detailPrefetchCacheRef.current.set(row.duz, { userRes, keysRes, cprsRes });
+        .then(([userRes, keysRes, menuRes]) => {
+          detailPrefetchCacheRef.current.set(row.duz, { userRes, keysRes, menuRes });
         })
         .catch(() => {});
     }, 300);
@@ -439,18 +618,41 @@ export default function StaffDirectory() {
     detailPrefetchTimerRef.current = null;
   }, []);
 
+  const persistDetailScrollPosition = useCallback((duz) => {
+    const detailDuz = String(duz || '').trim();
+    if (!detailDuz) return;
+
+    const desktopScrollTop = desktopDetailPanelRef.current?.scrollTop;
+    if (Number.isFinite(desktopScrollTop)) {
+      detailScrollPositionsRef.current.set(detailDuz, desktopScrollTop);
+      return;
+    }
+
+    const mobileScrollTop = mobileDetailPanelRef.current?.scrollTop;
+    if (Number.isFinite(mobileScrollTop)) {
+      detailScrollPositionsRef.current.set(detailDuz, mobileScrollTop);
+    }
+  }, []);
+
+  const handleDetailPanelScroll = useCallback(() => {
+    if (detailLoading) return;
+    persistDetailScrollPosition(selectedStaff?.duz);
+  }, [detailLoading, persistDetailScrollPosition, selectedStaff?.duz]);
+
   // Load detail on row click (uses hover prefetch when available — S6.3)
   const handleRowClick = async (row) => {
+    if (selectedStaff?.duz != null && String(selectedStaff.duz) !== String(row.duz)) {
+      persistDetailScrollPosition(selectedStaff.duz);
+    }
     setSelectedStaff(row);
     setDetailData(null);
     setDetailKeys([]);
     setDetailLoading(true);
-    setCprsTabData([]);
     const pref = detailPrefetchCacheRef.current.get(row.duz);
     if (pref) {
       detailPrefetchCacheRef.current.delete(row.duz);
       try {
-        applyDetailResponses(row, pref.userRes, pref.keysRes, pref.cprsRes);
+        applyDetailResponses(row, pref.userRes, pref.keysRes, pref.menuRes);
       } catch (err) {
         setDetailData({ ...row, _loadError: err.message || 'Failed to load details' });
       } finally {
@@ -459,12 +661,12 @@ export default function StaffDirectory() {
       return;
     }
     try {
-      const [userRes, keysRes, cprsRes] = await Promise.all([
+      const [userRes, keysRes, menuRes] = await Promise.all([
         getStaffMember(row.duz),
         getUserPermissions(row.duz),
-        getCprsTabAccess(row.duz).catch(() => ({ tabs: [], data: [] })),
+        getUserMenuStructure(row.duz).catch((err) => ({ roots: [], unresolvedRoots: [], summary: null, secondaryMenus: [], error: err.message || 'Failed to load menu structure' })),
       ]);
-      applyDetailResponses(row, userRes, keysRes, cprsRes);
+      applyDetailResponses(row, userRes, keysRes, menuRes);
     } catch (err) {
       setDetailData(prev => prev || { ...row, _loadError: err.message || 'Failed to load details' });
     } finally {
@@ -472,8 +674,26 @@ export default function StaffDirectory() {
     }
   };
 
+  useEffect(() => {
+    if (!selectedStaff?.duz) return;
+
+    const restoreScroll = () => {
+      const savedScrollTop = detailScrollPositionsRef.current.get(String(selectedStaff.duz)) || 0;
+      if (desktopDetailPanelRef.current) {
+        desktopDetailPanelRef.current.scrollTop = savedScrollTop;
+      }
+      if (mobileDetailPanelRef.current) {
+        mobileDetailPanelRef.current.scrollTop = savedScrollTop;
+      }
+    };
+
+    const frameId = window.requestAnimationFrame(restoreScroll);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [selectedStaff?.duz, detailLoading, detailData, detailKeys.length]);
+
   // S3.8 / S17: Sync filters, pagination, and selected user (DUZ) to URL for shareable links
   const userParamInUrl = searchParams.get('user');
+  const selectedStaffDuz = selectedStaff?.duz != null ? String(selectedStaff.duz) : '';
   useEffect(() => {
     if (loading) return;
     const params = new URLSearchParams();
@@ -481,25 +701,27 @@ export default function StaffDirectory() {
     if (statusFilter !== 'Active') params.set('status', statusFilter);
     if (esigFilter !== 'All') params.set('esig', esigFilter);
     if (page > 1) params.set('page', String(page));
-    if (selectedStaff?.duz != null) {
-      params.set('user', String(selectedStaff.duz));
+    if (selectedStaffDuz) {
+      params.set('user', selectedStaffDuz);
     } else if (
       userParamInUrl &&
       staffList.some((s) => String(s.duz) === String(userParamInUrl))
     ) {
       params.set('user', userParamInUrl);
     }
-    setSearchParams(params, { replace: true });
-  }, [loading, searchText, statusFilter, esigFilter, page, selectedStaff, staffList, userParamInUrl, setSearchParams]);
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [loading, searchText, statusFilter, esigFilter, page, selectedStaffDuz, staffList, userParamInUrl, searchParams, setSearchParams]);
 
   // Deep link: open detail panel when ?user=<DUZ> matches a loaded staff row
   useEffect(() => {
     if (loading || staffList.length === 0 || !userParamInUrl) return;
-    if (selectedStaff && String(selectedStaff.duz) === String(userParamInUrl)) return;
+    if (selectedStaffDuz) return;
     const row = staffList.find((u) => String(u.duz) === String(userParamInUrl));
     if (row) handleRowClick(row);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRowClick is intentionally omitted to avoid re-firing on every render
-  }, [loading, staffList, userParamInUrl, selectedStaff]);
+  }, [loading, staffList, userParamInUrl, selectedStaffDuz]);
 
   // Filters (client-side since list endpoint only returns ien+name)
   const SYSTEM_ACCOUNT_PATTERNS = /^(POSTMASTER|TASKMAN|HL7|RPC BROKER|PATCH|AUTOP|XOBV|XWB|APPLICATION|PROXY|APITEST)/i;
@@ -526,11 +748,13 @@ export default function StaffDirectory() {
     searchText !== '' ||
     statusFilter !== 'Active' ||
     esigFilter !== 'All' ||
+    activeSite !== null ||
     page !== 1;
 
   const clearDirectoryFilters = () => {
     setSearchText('');
     setDebouncedSearch('');
+    setActiveSite(null);
     setStatusFilter('Active');
     setEsigFilter('All');
     setPage(1);
@@ -543,7 +767,7 @@ export default function StaffDirectory() {
   const lockedCount = staffList.filter(u => u.status === 'locked').length;
 
   const activeFilters = [
-    ...(activeSite ? [{ key: 'division', label: `Division: ${activeSite.name}` }] : []),
+    ...(activeSite ? [{ key: 'division', label: `Staff directory division: ${activeSite.name}` }] : []),
     ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}` }] : []),
     ...(esigFilter !== 'All' ? [{ key: 'esig', label: `E-Signature: ${esigFilter}` }] : []),
   ];
@@ -641,7 +865,7 @@ export default function StaffDirectory() {
     try {
       await cloneStaffMember({
         sourceDuz: cloneSource.duz,
-        name: cloneForm.name,
+        newName: cloneForm.name,
         accessCode: cloneForm.accessCode || undefined,
         verifyCode: cloneForm.verifyCode || undefined,
       });
@@ -695,7 +919,9 @@ export default function StaffDirectory() {
         if (fresh?.data?.lastModified) {
           setDetailData(prev => (prev ? { ...prev, lastModified: fresh.data.lastModified } : prev));
         }
-      } catch (_refreshErr) { /* non-fatal */ }
+      } catch (_refreshErr) {
+        console.warn('Failed to refresh staff detail version after permission removal:', _refreshErr);
+      }
       setActionSuccess(`Removed ${key.displayName || humanizeKeyName(key.name)} from ${detailData.name}.`);
     } catch (err) { setError(err.message || 'Failed to remove permission'); }
     finally { setRemovePermTarget(null); }
@@ -734,7 +960,9 @@ export default function StaffDirectory() {
         if (fresh?.data?.lastModified) {
           setDetailData(prev => (prev ? { ...prev, lastModified: fresh.data.lastModified } : prev));
         }
-      } catch (_refreshErr) { /* non-fatal */ }
+      } catch (_refreshErr) {
+        console.warn('Failed to refresh staff detail version after permission assignment:', _refreshErr);
+      }
     } catch (err) { setError(err.message || 'Failed to assign permission'); }
     finally { setAssigningPerm(false); }
   };
@@ -742,7 +970,7 @@ export default function StaffDirectory() {
   /** Export current filtered list as CSV (audit: handleExportCsv) */
   const handleExportCsv = () => {
     const header = 'Name,Staff ID,Title,Department,Site,Status,E-Signature,Permissions,Role,NPI,Email,Phone,Last Login\n';
-    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${r.phone || ''}","${r.lastLogin || ''}"`).join('\n');
+    const csv = (filtered || []).map(r => `"${(r.name || '').replace(/"/g, '""')}","${r.duz}","${(r.title || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${(r.site || '').replace(/"/g, '""')}","${r.status}","${r.hasEsig ? 'Ready' : 'Incomplete'}","${r.permissionCount || 0}","${(r.role || '').replace(/"/g, '""')}","${r.npi || ''}","${(r.email || '').replace(/"/g, '""')}","${formatPhone(r.phone)}","${r.lastLogin || ''}"`).join('\n');
     const blob = new Blob([header + csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -791,8 +1019,8 @@ export default function StaffDirectory() {
 
   return (
     <AppShell breadcrumb="Admin > Staff Directory">
-      <div className="flex h-[calc(100vh-40px)]">
-        <div className={`p-6 overflow-auto ${selectedStaff ? 'w-full xl:w-[55%]' : 'w-full'}`}>
+      <div className={`flex h-[calc(100vh-40px)] staff-directory-print-root ${selectedStaff ? 'staff-directory-print--detail-open' : ''}`}>
+        <div className={`staff-directory-print-list p-6 overflow-auto ${selectedStaff ? 'w-full xl:w-[55%]' : 'w-full'}`}>
           <div className="max-w-[1400px]">
             {error && !isLoadError && (
               <div role="alert" className="mb-4 p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-sm text-[#CC3333] flex items-center justify-between">
@@ -853,28 +1081,31 @@ export default function StaffDirectory() {
               </div>
             </div>
             <div className="flex items-center gap-3 mb-4 flex-wrap">
-              <select
-                value={activeSite?.id || 'all'}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  if (next === 'all') {
-                    setActiveSite(null);
-                  } else {
-                    const picked = siteOptions.find((s) => s.id === next);
-                    setActiveSite(picked ? { id: picked.id, name: picked.name, code: picked.code } : null);
-                  }
-                  setPage(1);
-                }}
-                className="h-9 pl-3 pr-8 border border-[#E2E4E8] rounded-md text-[11px] text-[#222] bg-white focus:outline-none focus:border-[#2E5984]"
-                aria-label="Division"
-              >
-                <option value="all">Division: All Divisions</option>
-                {siteOptions.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    Division: {site.name}{site.code ? ` (${site.code})` : ''}
-                  </option>
-                ))}
-              </select>
+              <label className="flex items-center gap-2 text-[11px] font-medium text-[#666]">
+                <span>Staff directory division</span>
+                <select
+                  value={activeSite?.id || 'all'}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === 'all') {
+                      setActiveSite(null);
+                    } else {
+                      const picked = siteOptions.find((s) => s.id === next);
+                      setActiveSite(picked ? { id: picked.id, name: picked.name, code: picked.code } : null);
+                    }
+                    setPage(1);
+                  }}
+                  className="h-9 pl-3 pr-8 border border-[#E2E4E8] rounded-md text-[11px] text-[#222] bg-white focus:outline-none focus:border-[#2E5984]"
+                  aria-label="Staff directory division filter"
+                >
+                  <option value="all">All divisions</option>
+                  {siteOptions.map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name}{site.code ? ` (${site.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <FilterSelect label="Status" value={statusFilter} options={STATUS_OPTIONS} onChange={(v) => { setStatusFilter(v); setPage(1); }} />
               <FilterSelect label="E-Signature" value={esigFilter} options={ESIG_OPTIONS} onChange={(v) => { setEsigFilter(v); setPage(1); }} />
               <label className="flex items-center gap-1.5 text-[11px] text-[#666] cursor-pointer ml-2">
@@ -1027,16 +1258,20 @@ export default function StaffDirectory() {
         </div>
 
         {selectedStaff && (
-          <div className="hidden xl:block w-[45%] border-l border-[#E2E4E8] bg-[#F5F8FB] overflow-auto p-6">
+          <div
+            ref={desktopDetailPanelRef}
+            onScroll={handleDetailPanelScroll}
+            className="staff-directory-print-detail detail-panel hidden xl:block w-[45%] border-l border-[#E2E4E8] bg-[#F5F8FB] overflow-auto p-6"
+          >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-[#222]">{selectedStaff.name}</h2>
-              <button onClick={() => { setSelectedStaff(null); setDetailData(null); }} className="text-[#999] hover:text-[#222]" aria-label="Close">
+              <button onClick={() => { persistDetailScrollPosition(selectedStaff?.duz); setSelectedStaff(null); setDetailData(null); }} className="no-print text-[#999] hover:text-[#222]" aria-label="Close">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
             <StaffDetailContent
               detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
-              selectedStaff={selectedStaff} cprsTabData={cprsTabData}
+              selectedStaff={selectedStaff} customRoles={customRoles}
               adminDisplayName={adminDisplayName}
               navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
               handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
@@ -1051,18 +1286,22 @@ export default function StaffDirectory() {
 
         {/* Mobile/tablet full-screen modal (below xl) */}
         {selectedStaff && (
-          <div className="xl:hidden fixed inset-0 bg-white z-40 overflow-auto">
+          <div
+            ref={mobileDetailPanelRef}
+            onScroll={handleDetailPanelScroll}
+            className="staff-directory-print-detail detail-panel xl:hidden fixed inset-0 bg-white z-40 overflow-auto"
+          >
             <div className="sticky top-0 bg-white border-b border-[#E2E4E8] px-4 py-3 flex items-center justify-between z-10">
               <h2 className="text-lg font-bold truncate text-[#222]">{selectedStaff.name}</h2>
-              <button onClick={() => { setSelectedStaff(null); setDetailData(null); }}
-                className="p-1 rounded-md hover:bg-[#F5F5F5]">
+              <button onClick={() => { persistDetailScrollPosition(selectedStaff?.duz); setSelectedStaff(null); setDetailData(null); }}
+                className="no-print p-1 rounded-md hover:bg-[#F5F5F5]">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
             <div className="p-4">
               <StaffDetailContent
                 detailData={detailData} detailKeys={detailKeys} detailLoading={detailLoading}
-                selectedStaff={selectedStaff} cprsTabData={cprsTabData}
+                selectedStaff={selectedStaff} customRoles={customRoles}
                 adminDisplayName={adminDisplayName}
                 navigate={navigate} handleRowClick={handleRowClick} handleOpenAssignPerms={handleOpenAssignPerms}
                 handleClearEsig={handleClearEsig} clearingEsig={clearingEsig}
@@ -1413,10 +1652,7 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn, conc
   const [saveError, setSaveError] = useState(null);
 
   // S6: Format phone numbers for display as (XXX) XXX-XXXX
-  const displayValue = fieldKey === 'phone' && value ? (() => {
-    const digits = value.replace(/\D/g, '');
-    return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value;
-  })() : value;
+  const displayValue = fieldKey === 'phone' && value ? formatPhone(value) : value;
 
   const handleSave = async () => {
     setSaving(true);
@@ -1472,7 +1708,8 @@ function EditableDetailField({ label, value, fieldKey, duz, onSave, saveFn, conc
 
 /* A3: Extracted detail content shared by desktop side panel and mobile modal */
 function StaffDetailContent({
-  detailData, detailKeys, detailLoading, selectedStaff, cprsTabData,
+  detailData, detailKeys, detailLoading, selectedStaff,
+  customRoles,
   adminDisplayName,
   navigate, handleRowClick, handleOpenAssignPerms,
   handleClearEsig, clearingEsig,
@@ -1494,12 +1731,12 @@ function StaffDetailContent({
       setDuzCopied(true);
       window.setTimeout(() => setDuzCopied(false), 2000);
     } catch (_clipErr) {
-      /* clipboard may be denied */
+      console.warn('Clipboard copy failed for staff DUZ:', _clipErr);
     }
   };
 
   // S4.4: Save handler for basic fields (phone, email, dept, title) via PUT /users/:ien
-  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8' };
+  const BASIC_FIELD_MAP = { phone: '.132', email: '.151', department: '29', title: '8', employeeId: 'EMPID' };
   const handleBasicFieldSave = async (duz, fieldKey, newValue) => {
     const vistaField = BASIC_FIELD_MAP[fieldKey];
     if (!vistaField) throw new Error(`Unknown field: ${fieldKey}`);
@@ -1538,7 +1775,7 @@ function StaffDetailContent({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        {detailData.employeeId && <DetailField label="Employee ID" value={detailData.employeeId} mono />}
+        <EditableDetailField label="Employee ID" value={detailData.employeeId} fieldKey="employeeId" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
         <DetailField label="System ID" value={detailData.id} mono />
         <div className="flex items-end justify-between gap-2 min-w-0">
           <div className="min-w-0 flex-1">
@@ -1555,6 +1792,7 @@ function StaffDetailContent({
             <span className="material-symbols-outlined text-[16px]">{duzCopied ? 'check' : 'content_copy'}</span>
           </button>
         </div>
+        <DetailField label="Assigned Role" value={detailData.assignedRole || '—'} />
         <DetailField label="Title" value={detailData.title} />
         <EditableDetailField label="Department" value={detailData.department} fieldKey="department" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
         <EditableDetailField label="Phone" value={detailData.phone} fieldKey="phone" duz={detailData.duz} onSave={handleProviderFieldSave} saveFn={handleBasicFieldSave} concurrencyToken={detailData.lastModified} onConcurrencyTokenUpdate={(t) => setDetailData(prev => (prev ? { ...prev, lastModified: t } : prev))} />
@@ -1641,23 +1879,30 @@ function StaffDetailContent({
         </div>
       )}
 
-      {/* B8: CPRS Tab Access */}
-      {cprsTabData && cprsTabData.length > 0 && (
+      {/* B8: Secondary Menu Options (File 200.03) */}
+      {detailData.secondaryMenus && detailData.secondaryMenus.length > 0 && (
         <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
-          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">CPRS Tab Access</h3>
+          <h3 className="text-[11px] font-bold text-[#999] uppercase tracking-wider mb-2">Secondary Menu Options</h3>
           <div className="space-y-1">
-            {cprsTabData.map((tab, idx) => (
-              <div key={tab.name || idx} className="flex items-center justify-between text-xs py-1 border-b border-[#F0F0F0]">
-                <span className="font-medium">{tab.name || tab.tabName || '—'}</span>
-                <span className="text-[#999]">{tab.access || 'Enabled'}</span>
+            {detailData.secondaryMenus.map((menu, idx) => (
+              <div key={`${menu}-${idx}`} className="text-xs py-1 border-b border-[#F0F0F0]">
+                <span className="font-medium">{menu || '—'}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
+      <MenuStructureSection detailData={detailData} />
+
       {detailKeys.length > 0 && (
-        <PermissionsList detailKeys={detailKeys} handleOpenAssignPerms={handleOpenAssignPerms} handleRemovePermission={handleRemovePermission} />
+        <PermissionsList
+          detailKeys={detailKeys}
+          assignedRole={detailData.assignedRole}
+          customRoles={customRoles}
+          handleOpenAssignPerms={handleOpenAssignPerms}
+          handleRemovePermission={handleRemovePermission}
+        />
       )}
 
       <div className="bg-white rounded-lg p-4 border border-[#E2E4E8]">
@@ -1668,7 +1913,7 @@ function StaffDetailContent({
         </div>
       </div>
 
-      <div className="pt-4 border-t border-[#E2E4E8] space-y-4">
+      <div className="no-print pt-4 border-t border-[#E2E4E8] space-y-4">
         {/* ── Primary Actions ── */}
         <div>
           <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1.5">Primary Actions</div>
@@ -1720,11 +1965,10 @@ function StaffDetailContent({
               onClick={() => openPrintFullProfile({
                 detailData,
                 detailKeys,
-                cprsTabData,
                 selectedStaff,
                 adminDisplayName,
               })}
-              title="Print a comprehensive profile: all fields, keys, divisions, CPRS tabs, and sign-on info"
+              title="Print a comprehensive profile: all fields, keys, divisions, secondary menus, and sign-on info"
               className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors"
             >
               <span className="material-symbols-outlined text-[16px] mr-2 align-middle">description</span>
@@ -1743,7 +1987,7 @@ function StaffDetailContent({
                 'ORCL-PAT-RECS': 'View patient records',
                 'ORELSE': 'Enter verbal and telephone orders',
                 'PSB NURSE': 'Administer medications via barcode scanning',
-                'GMRA ALLERGY VERIFY': 'Verify and review patient allergies',
+                'GMRA-ALLERGY VERIFY': 'Verify and review patient allergies',
                 'PSORPH': 'Dispense outpatient prescriptions',
                 'PSJ PHARMACIST': 'Verify inpatient medication orders',
                 'LRLAB': 'Enter and process lab results',
@@ -1787,7 +2031,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
 <div class="section">
   <h2>Account Details</h2>
   <table style="width:100%;font-size:14px">
-    <tr><td style="padding:4px 0;color:#666;width:140px">Role</td><td style="padding:4px 0"><strong>${safeText(detailData.title || detailData.derivedRole || 'Staff')}</strong></td></tr>
+    <tr><td style="padding:4px 0;color:#666;width:140px">Role</td><td style="padding:4px 0"><strong>${safeText(detailData.assignedRole || detailData.title || detailData.derivedRole || 'Staff')}</strong></td></tr>
     <tr><td style="padding:4px 0;color:#666">Department</td><td style="padding:4px 0">${safeText(detailData.department)}</td></tr>
     <tr><td style="padding:4px 0;color:#666">Location</td><td style="padding:4px 0">${safeText(detailData.division)}</td></tr>
     <tr><td style="padding:4px 0;color:#666">Permissions</td><td style="padding:4px 0">${detailKeys.length} assigned</td></tr>
@@ -1801,11 +2045,11 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
 </div>
 
 <div class="note">
-  If you need a password reset or have questions about your account, contact your local IT support or IRM office.
+  If you have questions about your account information or need help accessing the system, contact your local IT support or IRM office.
   <br/>Login URL: <strong>${safeText(loginUrl)}</strong>
 </div>
 
-<p style="font-size:12px;color:#999">Date: ${new Date().toLocaleDateString()} | Generated by System Administrator</p>
+<p style="font-size:12px;color:#999">Date: ${new Date().toLocaleDateString()} | Generated by ${safeText(adminDisplayName || 'System Administrator')}</p>
 </body></html>`);
               printWindow.document.close();
               printWindow.print();
@@ -1813,7 +2057,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
               title="Generate a printable account information letter for this staff member"
               className="w-full text-left px-3 py-2 text-[13px] text-[#2E5984] hover:bg-white rounded-lg transition-colors">
               <span className="material-symbols-outlined text-[16px] mr-2 align-middle">print</span>
-              Print Access Letter
+              Print Account Letter
             </button>
             {detailData.esigStatus === 'active' ? (
               <button disabled={clearingEsig} onClick={() => handleClearEsig(detailData.duz)}
@@ -1876,9 +2120,10 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:680px;mar
 }
 
 /* L006: Permissions list with collapse for >10 keys */
-function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermission }) {
+function PermissionsList({ detailKeys, assignedRole, customRoles, handleOpenAssignPerms, handleRemovePermission }) {
   const [expanded, setExpanded] = useState(false);
   const COLLAPSE_THRESHOLD = 10;
+  const rolePermissionSet = getRolePermissionSet(assignedRole, customRoles);
   const grouped = Object.entries(
     detailKeys.reduce((groups, k) => {
       const dept = k.department || k.packageName || 'General';
@@ -1898,7 +2143,7 @@ function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermis
           Permissions ({detailKeys.length})
         </h3>
         <button onClick={handleOpenAssignPerms}
-          className="text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
+          className="no-print text-[10px] text-[#2E5984] hover:underline">+ Assign</button>
       </div>
       <div className="space-y-2">
         {grouped.map(([dept, keys]) => {
@@ -1914,11 +2159,20 @@ function PermissionsList({ detailKeys, handleOpenAssignPerms, handleRemovePermis
               <div className="text-[9px] font-bold text-[#999] uppercase tracking-wider mb-1">{dept}</div>
               <div className="flex flex-wrap gap-1">
                 {keysToRender.map(k => (
-                  <span key={k.ien || k.name} title={`System key: ${k.name}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
-                    {k.displayName || humanizeKeyName(k.name)}
+                  <span key={k.ien || k.name} title={`System key: ${k.name}${k.assignedDate ? `\nAssigned: ${formatAssignedDate(k.assignedDate)}` : ''}`}
+                    className="inline-flex items-start gap-1 px-2 py-1 text-[10px] rounded bg-[#E8EEF5] text-[#2E5984]">
+                    <span className="flex flex-col leading-tight">
+                      <span>{k.displayName || humanizeKeyName(k.name)}</span>
+                      {k.assignedDate && <span className="text-[9px] text-[#5B6B7D]">Assigned {formatAssignedDate(k.assignedDate)}</span>}
+                    </span>
+                    <span
+                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${rolePermissionSet.has(normalizeRoleKeyName(k.name)) ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF3E0] text-[#A65A00]'}`}
+                      title={rolePermissionSet.has(normalizeRoleKeyName(k.name)) ? `From: ${assignedRole}` : 'Individually assigned'}
+                    >
+                      {rolePermissionSet.has(normalizeRoleKeyName(k.name)) ? 'From role' : 'Individual'}
+                    </span>
                     <button onClick={(e) => { e.stopPropagation(); handleRemovePermission(k); }}
-                      className="text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
+                      className="no-print text-[#999] hover:text-[#CC3333] ml-0.5" title="Remove">✕</button>
                   </span>
                 ))}
               </div>

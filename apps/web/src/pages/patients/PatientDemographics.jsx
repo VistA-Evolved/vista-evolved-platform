@@ -215,6 +215,7 @@ export default function PatientDemographics() {
   const [saveError, setSaveError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(null);
   const [divisions, setDivisions] = useState([]);
+  const [divisionsLoaded, setDivisionsLoaded] = useState(false);
   const [expandedSections, setExpandedSections] = useState(['identity']);
   const [ssnVisible, setSsnVisible] = useState(false);
   const [identityWarnings, setIdentityWarnings] = useState([]);
@@ -246,7 +247,7 @@ export default function PatientDemographics() {
           JSON.stringify({ form, ts: Date.now(), patientId: patientId || null }),
         );
       } catch (_storageErr) {
-        /* storage full or disabled */
+        console.warn('Failed to auto-save patient demographics draft:', _storageErr);
       }
     }, 1000);
     return () => clearInterval(id);
@@ -267,7 +268,7 @@ export default function PatientDemographics() {
         setForm((f) => ({ ...f, ...d.form }));
       }
     } catch (_restoreErr) {
-      /* corrupt or missing draft */
+      console.warn('Failed to restore patient demographics draft:', _restoreErr);
     }
   }, [isEdit, draftStorageKey]);
 
@@ -291,11 +292,15 @@ export default function PatientDemographics() {
         }
       } catch (err) {
         setDivisions([]);
+      } finally {
+        setDivisionsLoaded(true);
       }
       try {
         const sess = await getSession();
         if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
-      } catch (err) { /* non-fatal */ }
+      } catch (err) {
+        console.warn('Failed to load patient demographics session context:', err);
+      }
     })();
   }, []);
 
@@ -386,7 +391,7 @@ export default function PatientDemographics() {
               }
             }
           } catch (_draftErr) {
-            /* corrupt draft */
+            console.warn('Failed to restore patient edit draft:', _draftErr);
           }
         }
       } finally {
@@ -465,7 +470,9 @@ export default function PatientDemographics() {
         e.ssn = 'SSN must be 9 digits (XXX-XX-XXXX)';
       }
     }
-    if (!form.registrationFacility) {
+    if (!divisionsLoaded) {
+      e.registrationFacility = 'Registration facilities are still loading';
+    } else if (divisions.length > 0 && !form.registrationFacility) {
       e.registrationFacility = 'Registration facility is required';
     }
     // VistA SC%: 0–100 in increments of 10 only (when service-connected)
@@ -567,7 +574,7 @@ export default function PatientDemographics() {
         try {
           sessionStorage.removeItem(draftStorageKey);
         } catch (_clearErr) {
-          /* storage unavailable */
+          console.warn('Failed to clear patient demographics draft after save:', _clearErr);
         }
         setSaveSuccess(isEdit ? 'Demographics updated successfully.' : 'Patient registered successfully.');
         if (isEdit) {
@@ -587,6 +594,8 @@ export default function PatientDemographics() {
   /* ── Section error helpers ── */
   const identityHasError = ['lastName', 'firstName', 'dob', 'sexAtBirth', 'ssn'].some(f => errors[f]);
   const registrationHasError = !!errors.registrationFacility;
+  const registrationFacilityRequired = divisions.length > 0;
+  const registrationFacilityUnavailable = divisionsLoaded && divisions.length === 0;
   const militaryHasError = !!errors.scPercent;
   const scPctStr = String(form.scPercent ?? '').trim();
   const scPctNum = scPctStr === '' ? NaN : Number(scPctStr);
@@ -655,7 +664,7 @@ export default function PatientDemographics() {
                   try {
                     sessionStorage.removeItem(`${DEMO_DRAFT_PREFIX}new`);
                   } catch (_e) {
-                    /* storage unavailable */
+                    console.warn('Failed to clear new-patient draft after reset:', _e);
                   }
                 }}
                 className="px-5 py-2.5 border border-[#E2E4E8] text-[#555] text-sm font-medium rounded-md hover:bg-[#F0F4F8] transition-colors"
@@ -1193,19 +1202,25 @@ export default function PatientDemographics() {
             hasError={registrationHasError}
           >
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Registration Facility" required error={errors.registrationFacility} changed={isChanged('registrationFacility')}>
+              <Field label="Registration Facility" required={registrationFacilityRequired} error={errors.registrationFacility} changed={isChanged('registrationFacility')}>
                 <select
                   value={form.registrationFacility}
                   onChange={e => set('registrationFacility', e.target.value)}
                   className={selectCls + ' w-full'}
+                  disabled={registrationFacilityUnavailable}
                 >
-                  <option value="">Select facility...</option>
+                  <option value="">{registrationFacilityUnavailable ? 'No live facilities available' : 'Select facility...'}</option>
                   {divisions.map(d => (
                     <option key={d.ien || d.id} value={d.ien || d.id}>
                       {d.name || d.description || `Division ${d.ien || d.id}`}
                     </option>
                   ))}
                 </select>
+                {registrationFacilityUnavailable && (
+                  <p className="mt-2 text-xs text-[#666]">
+                    This VistA environment returned no live registration facilities. Registration will continue without a facility selection.
+                  </p>
+                )}
               </Field>
               <Field label="Patient Category" changed={isChanged('patientCategory')}>
                 <select value={form.patientCategory} onChange={e => set('patientCategory', e.target.value)} className={selectCls + ' w-full'}>

@@ -109,13 +109,25 @@ const PARAM_TREE = [
   {
     section: 'Scheduling',
     groups: [
-      { id: 'scheduling', label: 'Scheduling Settings', icon: 'calendar_month', vistaFile: '44.001' },
+      { id: 'scheduling', label: 'Scheduling Settings', icon: 'calendar_month', vistaFile: '44.1' },
     ],
   },
   {
     section: 'Radiology',
     groups: [
       { id: 'radiology', label: 'Radiology Settings', icon: 'radiology', vistaFile: '79.1' },
+    ],
+  },
+  {
+    section: 'Patients & Registration',
+    groups: [
+      { id: 'registration', label: 'Registration Settings', icon: 'badge', vistaFile: '43' },
+    ],
+  },
+  {
+    section: 'Billing',
+    groups: [
+      { id: 'billing', label: 'Billing Settings', icon: 'receipt_long', vistaFile: '350.9' },
     ],
   },
   {
@@ -159,12 +171,178 @@ const FIELD_GROUPS = {
     { label: 'Imaging Defaults', fields: ['1', '2', '3', '4', '5'] },
     { label: 'Report Settings', fields: ['6', '7', '8', '9', '10'] },
   ],
+  'registration': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
+    { label: 'Admissions & ADT', fields: ['1', '2', '3', '4', '5'] },
+  ],
+  'billing': [
+    { label: 'Site Identity', fields: ['.01', '.02', '.03', '.04', '.05', '.06'] },
+    { label: 'Claims & Filing', fields: ['.08', '.09', '.14', '1.01', '1.02', '1.05', '1.06', '1.07', '1.08', '1.09', '1.14', '1.15', '1.17', '1.19', '1.21', '1.25'] },
+    { label: 'Tracking & Automation', fields: ['2.08', '2.09', '2.11', '6.01', '6.02', '6.03', '6.04', '6.05', '6.23', '6.24', '6.25', '7.01', '7.02', '7.03', '7.04', '8.01', '8.03', '8.04', '8.1', '9.1'] },
+  ],
   'surgery': [
     { label: 'Site Identity', fields: ['.01', '.02', '.03'] },
     { label: 'Scheduling', fields: ['1', '2', '3', '4', '5'] },
     { label: 'Documentation', fields: ['6', '7', '8', '9', '10'] },
   ],
 };
+
+function getGuidanceTone(kind) {
+  switch (kind) {
+    case 'range':
+      return {
+        border: 'border-[#BFDBFE] bg-[#EFF6FF]',
+        icon: 'rule_settings',
+        iconColor: 'text-[#1D4ED8]',
+        titleColor: 'text-[#1E3A8A]',
+        detailColor: 'text-[#355070]',
+      };
+    case 'expected':
+      return {
+        border: 'border-[#C7E9D0] bg-[#F0FDF4]',
+        icon: 'task_alt',
+        iconColor: 'text-[#15803D]',
+        titleColor: 'text-[#166534]',
+        detailColor: 'text-[#355070]',
+      };
+    case 'setup':
+      return {
+        border: 'border-[#FDE68A] bg-[#FFFBEB]',
+        icon: 'build',
+        iconColor: 'text-[#B45309]',
+        titleColor: 'text-[#92400E]',
+        detailColor: 'text-[#6B4F1D]',
+      };
+    case 'identity':
+      return {
+        border: 'border-[#D8B4FE] bg-[#FAF5FF]',
+        icon: 'domain_verification',
+        iconColor: 'text-[#7E22CE]',
+        titleColor: 'text-[#6B21A8]',
+        detailColor: 'text-[#5B4B8A]',
+      };
+    case 'workflow':
+      return {
+        border: 'border-[#FCD34D] bg-[#FFFBEB]',
+        icon: 'tune',
+        iconColor: 'text-[#CA8A04]',
+        titleColor: 'text-[#854D0E]',
+        detailColor: 'text-[#6B4F1D]',
+      };
+    case 'system':
+    default:
+      return {
+        border: 'border-[#E5E7EB] bg-[#F9FAFB]',
+        icon: 'info',
+        iconColor: 'text-[#6B7280]',
+        titleColor: 'text-[#374151]',
+        detailColor: 'text-[#4B5563]',
+      };
+  }
+}
+
+function getParameterGuidance(selectedGroup, param) {
+  if (!param) return null;
+
+  if (selectedGroup === 'session') {
+    if (param.key === 'sessionTimeout') {
+      return {
+        kind: 'range',
+        title: 'Recommended range',
+        summary: '300-900 seconds',
+        detail: 'Five to fifteen minutes is the normal operating range. Going above 900 seconds violates the VHA maximum already enforced on save.',
+      };
+    }
+    if (param.key === 'rpcTimeout') {
+      return {
+        kind: 'range',
+        title: 'Recommended range',
+        summary: '30-300 seconds',
+        detail: 'Use the shortest timeout that still lets legitimate long-running RPCs finish. Values far above five minutes usually hide slow or stalled integrations.',
+      };
+    }
+  }
+
+  if (selectedGroup === 'kernel') {
+    if (param.key === 'welcomeMessage') {
+      return {
+        kind: 'workflow',
+        title: 'Recommended baseline',
+        summary: 'Keep it short and operational',
+        detail: 'Use one brief environment or outage notice that operators can scan before signing in. Avoid long policy text that pushes the login form down.',
+      };
+    }
+    if (param.key === 'domainName' || param.key === 'siteNumber') {
+      return {
+        kind: 'identity',
+        title: 'Expected state',
+        summary: 'Match live site identity',
+        detail: 'These values should match the real Kernel site identity for the environment. Treat mismatches as configuration issues, not tuning opportunities.',
+      };
+    }
+  }
+
+  const label = String(param.name || '').trim();
+  const normalizedLabel = label.toLowerCase();
+
+  if (!label) return null;
+
+  if (/how many .* per (visit|exam)/i.test(label)) {
+    return {
+      kind: 'range',
+      title: 'Recommended baseline',
+      summary: 'Start at 1',
+      detail: 'A single printed card or label is the safe default. Raise this only when the physical workflow truly requires duplicates.',
+    };
+  }
+
+  if (/timeout/i.test(label)) {
+    return {
+      kind: 'range',
+      title: 'Recommended baseline',
+      summary: 'Keep the timeout finite',
+      detail: 'Use a short, explicit timeout instead of leaving integrations to hang indefinitely. Increase it only when a known downstream job needs more time.',
+    };
+  }
+
+  if (/site name|default institution|location|name$/i.test(label) && !/printer|format|source/i.test(label)) {
+    return {
+      kind: 'identity',
+      title: 'Expected state',
+      summary: 'Should reflect the real site record',
+      detail: 'This value should align with the local institution, location, or package site record already established in VistA.',
+    };
+  }
+
+  if (/printer|format|source|language/i.test(label)) {
+    return {
+      kind: 'setup',
+      title: 'Configure only after dependency setup',
+      summary: 'Leave blank until the target exists',
+      detail: 'Populate this only after the corresponding printer, print format, source file, or external feed has been installed and tested.',
+    };
+  }
+
+  if (/conversion|converted|inits run|background job|current order #|restart number|marker|date .*converted|conversion status|status$/i.test(normalizedLabel)) {
+    return {
+      kind: 'expected',
+      title: 'System-managed marker',
+      summary: 'Usually not tuned by hand',
+      detail: 'This looks like a migration, initialization, or package status marker. Treat unexpected values as setup history to investigate, not as a routine knob to adjust.',
+    };
+  }
+
+  if (/print labels|ask |treating specialty|completed/i.test(label)) {
+    return {
+      kind: 'workflow',
+      title: 'Workflow-dependent setting',
+      summary: 'Change only with package-owner approval',
+      detail: 'This toggles prompts or package behavior. Keep the current baseline unless the downstream clinical workflow has been reviewed with the responsible ADPAC or service owner.',
+    };
+  }
+
+  return null;
+}
 
 export default function SiteParameters() {
   useEffect(() => { document.title = 'Site Parameters — VistA Evolved'; }, []);
@@ -183,7 +361,9 @@ export default function SiteParameters() {
       try {
         const sess = await getSession();
         if (sess?.facilityType && sess.facilityType !== 'va') setIsVA(false);
-      } catch (err) { /* non-fatal */ }
+      } catch (err) {
+        console.warn('Failed to load site parameter session context:', err);
+      }
     })();
   }, []);
 
@@ -320,6 +500,7 @@ export default function SiteParameters() {
 
   const params = getParamsForGroup();
   const hasChanges = Object.keys(editedValues).length > 0;
+  const guidedParams = params.filter(param => getParameterGuidance(selectedGroup, param));
 
   const hasViolation = Object.entries(editedValues).some(([key, val]) => {
     const rule = VHA_RULES[key];
@@ -449,7 +630,7 @@ export default function SiteParameters() {
           {selectedGroup === 'scheduling' && (
             <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
               <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
-              Scheduling Parameters (VistA File #44.001). Controls appointment booking rules, clinic availability, and scheduling notifications.
+              Scheduling Parameters (VistA File #44.1). Controls appointment booking rules, clinic availability, and scheduling notifications.
             </div>
           )}
           {selectedGroup === 'order-entry' && (
@@ -462,6 +643,18 @@ export default function SiteParameters() {
             <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
               <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
               Radiology Parameters (VistA File #79.1). Controls imaging defaults, report formatting, and procedure tracking.
+            </div>
+          )}
+          {selectedGroup === 'registration' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Registration Parameters (VistA File #43). Controls patient-registration and admission defaults that apply across the site.
+            </div>
+          )}
+          {selectedGroup === 'billing' && (
+            <div className="mb-3 p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2">
+              <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
+              Billing Parameters (VistA File #350.9). Controls site-level claims, tracking, and automated billing behavior.
             </div>
           )}
           {selectedGroup === 'surgery' && (
@@ -487,6 +680,22 @@ export default function SiteParameters() {
             <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-24 animate-pulse bg-[#E2E4E8] rounded-lg" />)}</div>
           ) : (
             <div className="space-y-5">
+              <div className="rounded-lg border border-[#D6E4F0] bg-[#F7FAFC] p-4 text-[12px] text-[#355070]">
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-[#2E5984] mt-0.5">rule_settings</span>
+                  <div>
+                    <div className="font-semibold text-[#1E3A8A]">Recommended parameter guidance</div>
+                    <p className="mt-1">
+                      This page now shows recommended ranges only where a defensible baseline exists. Historical conversion markers, site-identity fields, and setup-only dependencies are labeled separately so administrators know when a value should be left alone instead of tuned.
+                    </p>
+                    <p className="mt-2 text-[11px] text-[#52606D]">
+                      {guidedParams.length > 0
+                        ? `${guidedParams.length} field${guidedParams.length === 1 ? '' : 's'} in this section currently have explicit guidance.`
+                        : 'No universal baseline exists for the currently visible fields, so this section is presented as informational rather than prescriptive.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
               {params.some(p => p.name?.includes('Parameter #') && (p.name?.includes('unlabeled') || p.name?.includes('label unavailable'))) && (
                 <div className="mb-3 p-3 bg-[#FFF3E0] rounded-lg text-[11px] text-[#E65100] flex items-start gap-2">
                   <span className="material-symbols-outlined text-[14px] mt-0.5">warning</span>
@@ -505,6 +714,8 @@ export default function SiteParameters() {
                 const displayValue = isEdited ? editedValues[param.key] : param.value;
                 const rule = VHA_RULES[param.key];
                 const isViolation = rule && isEdited && Number(displayValue) > rule.max;
+                const guidance = getParameterGuidance(selectedGroup, param);
+                const guidanceTone = guidance ? getGuidanceTone(guidance.kind) : null;
 
                 return (
                   <div key={param.key} className={`p-4 rounded-lg border ${isEdited ? (isViolation ? 'border-[#CC3333] bg-[#FDE8E8]' : 'border-warning bg-[#FFFDE7]') : 'border-border bg-white'}`}>
@@ -526,6 +737,19 @@ export default function SiteParameters() {
                       </p>
                     )}
                     {!param.fieldNum && <div className="mb-3" />}
+                    {guidance && guidanceTone && (
+                      <div className={`mb-3 rounded-md border px-3 py-2 ${guidanceTone.border}`}>
+                        <div className="flex items-start gap-2">
+                          <span className={`material-symbols-outlined text-[15px] mt-0.5 ${guidanceTone.iconColor}`}>{guidanceTone.icon}</span>
+                          <div>
+                            <div className={`text-[11px] font-semibold ${guidanceTone.titleColor}`}>
+                              {guidance.title}: {guidance.summary}
+                            </div>
+                            <div className={`mt-1 text-[11px] ${guidanceTone.detailColor}`}>{guidance.detail}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-4">
                       {param.type === 'number' && (
                         <div className="flex items-center gap-2">
@@ -581,6 +805,7 @@ export default function SiteParameters() {
             <div className="space-y-4">
               {Object.entries(editedValues).map(([key, newVal]) => {
                 const param = params.find(p => p.key === key);
+                const guidance = getParameterGuidance(selectedGroup, param);
                 return (
                   <div key={key} className="bg-white border border-border rounded-lg p-3">
                     <div className="font-medium text-xs text-text mb-1">{param?.name || key}</div>
@@ -589,6 +814,11 @@ export default function SiteParameters() {
                       <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                       <span className="font-semibold text-warning">{newVal}</span>
                     </div>
+                    {guidance && (
+                      <div className="mt-2 text-[11px] text-[#52606D]">
+                        <span className="font-semibold text-[#374151]">{guidance.title}:</span> {guidance.summary}
+                      </div>
+                    )}
                   </div>
                 );
               })}

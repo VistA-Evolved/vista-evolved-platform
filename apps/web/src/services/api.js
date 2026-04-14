@@ -8,24 +8,44 @@
  * Vite dev server proxies both. In production, reverse proxy handles routing.
  *
  * Authentication: httpOnly secure cookie set by server on POST /auth/login.
- * CSRF token kept in module-scope memory only. No tokens in sessionStorage.
+ * No JavaScript-readable auth or CSRF secrets are stored in browser storage.
  */
 
 // S5.1: Session token is now in httpOnly cookie — never stored in JS.
-// S5.2: CSRF token kept in module-scope memory only (survives within SPA
-// session but not across full page reloads — re-fetched via getSession).
-let _csrfToken = null;
-let _authenticated = false; // tracks if user has logged in during this SPA session
+// S5.2: State-changing requests rely on SameSite cookie policy and same-site
+// browser request signals instead of a JS-readable CSRF token.
+const AUTH_HINT_KEY = 've-authenticated';
+let _authenticated = (() => {
+  try {
+    return typeof window !== 'undefined' && window.sessionStorage.getItem(AUTH_HINT_KEY) === 'true';
+  } catch (_err) {
+    console.warn('Unable to read auth hint from sessionStorage:', _err);
+    return false;
+  }
+})(); // tracks if user has logged in during this browser tab session
+
+function persistAuthHint(isAuthenticated) {
+  try {
+    if (typeof window === 'undefined') return;
+    if (isAuthenticated) {
+      window.sessionStorage.setItem(AUTH_HINT_KEY, 'true');
+    } else {
+      window.sessionStorage.removeItem(AUTH_HINT_KEY);
+    }
+  } catch (_err) {
+    console.warn('Unable to persist auth hint to sessionStorage:', _err);
+  }
+}
 
 export function setSessionToken(_token) {
   // S5.1: Session token lives in httpOnly cookie set by server.
   // This function now manages the in-memory auth flag only.
   _authenticated = Boolean(_token);
+  persistAuthHint(_authenticated);
 }
 
-export function setCsrfToken(token) {
-  _csrfToken = token || null;
-  if (token) _authenticated = true; // CSRF token implies successful login
+export function setCsrfToken(_token) {
+  // No-op retained for compatibility with existing imports.
 }
 
 export function getSessionToken() {
@@ -35,7 +55,7 @@ export function getSessionToken() {
 }
 
 export function getCsrfToken() {
-  return _csrfToken;
+  return null;
 }
 
 class ApiError extends Error {
@@ -52,12 +72,6 @@ async function request(method, path, body = null) {
 
   // S5.1: Session token travels in httpOnly cookie — no Authorization header needed.
   // Cookie is sent automatically because credentials: 'include' is set below.
-
-  // S7.5: Include CSRF token in mutating requests
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrf = getCsrfToken();
-    if (csrf) headers['X-CSRF-Token'] = csrf;
-  }
 
   // X002: Configurable API timeout — default 30 seconds
   const controller = new AbortController();
@@ -97,7 +111,7 @@ async function request(method, path, body = null) {
     }
     // Failed sign-in returns 401 with ok:false — do not treat as session expiry / redirect loop
     const isLoginFailure =
-      path.includes('/auth/login') && json401 && json401.ok === false;
+      (path.includes('/auth/login') || path.includes('/auth/change-expired-password')) && json401 && json401.ok === false;
     if (isLoginFailure) {
       throw new ApiError(
         json401.code || 'UNKNOWN',
@@ -129,6 +143,10 @@ async function request(method, path, body = null) {
 
   if (json.status === 'error' || json.ok === false) {
     throw new ApiError(json.code || 'UNKNOWN', json.error || json.message || 'An error occurred', res.status);
+  }
+
+  if (path.includes('/auth/login')) {
+    setSessionToken('httponly-cookie');
   }
 
   return json;

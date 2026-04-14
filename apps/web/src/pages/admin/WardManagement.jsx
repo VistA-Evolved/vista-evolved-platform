@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
-import { SearchBar, Pagination, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getWards, getWardDetail, createWard, updateWardField, getWardCensus } from '../../services/adminService';
+import { SearchBar, Pagination } from '../../components/shared/SharedComponents';
+import { getWards, getWardDetail, createWard, updateWardField, getWardCensus, getRoomBeds } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
 
@@ -19,6 +20,12 @@ const columns = [
 
 const PAGE_SIZE = 25;
 
+const BED_STATUS_STYLES = {
+  available: 'bg-[#E8F5E9] text-[#2D6A4F] border border-[#C8E6C9]',
+  occupied: 'bg-[#E3F2FD] text-[#1D4ED8] border border-[#BFDBFE]',
+  blocked: 'bg-[#FDE8E8] text-[#CC3333] border border-[#F5C2C7]',
+};
+
 /** Parse authorized/operating bed capacity from File #42 DDR fields (.105 preferred, then .1). */
 function parseWardBedCapacity(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -28,6 +35,50 @@ function parseWardBedCapacity(raw) {
     return Number.isFinite(x) && x >= 0 ? Math.round(x) : null;
   };
   return n(raw['.105']) ?? n(raw['.1']) ?? null;
+}
+
+function normalizeWardValue(value) {
+  return String(value ?? '').trim();
+}
+
+function isOutOfService(value) {
+  const normalized = normalizeWardValue(value).toUpperCase();
+  return normalized === '1' || normalized === 'Y' || normalized === 'YES' || normalized === 'TRUE';
+}
+
+function normalizeRoomBed(value) {
+  return normalizeWardValue(value).toUpperCase();
+}
+
+function compareRoomBeds(left, right) {
+  return String(left || '').localeCompare(String(right || ''), undefined, { numeric: true, sensitivity: 'base' });
+}
+
+function buildWardBeds(rows, wardIen, censusRows) {
+  const targetWardIen = normalizeWardValue(wardIen);
+  const censusByRoomBed = new Map(
+    (Array.isArray(censusRows) ? censusRows : [])
+      .filter((row) => normalizeRoomBed(row.roomBed))
+      .map((row) => [normalizeRoomBed(row.roomBed), row]),
+  );
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => normalizeWardValue(row.wardIen || row.description || row.ward) === targetWardIen)
+    .map((row) => {
+      const occupant = censusByRoomBed.get(normalizeRoomBed(row.roomBed));
+      const blocked = isOutOfService(row.outOfService);
+      const status = occupant ? 'occupied' : blocked ? 'blocked' : 'available';
+      return {
+        ien: normalizeWardValue(row.ien),
+        roomBed: normalizeWardValue(row.roomBed),
+        wardIen: normalizeWardValue(row.wardIen || row.description || row.ward),
+        status,
+        patientName: occupant?.name || '',
+        patientDfn: occupant?.dfn || '',
+        outOfService: row.outOfService || '',
+      };
+    })
+    .sort((left, right) => compareRoomBeds(left.roomBed, right.roomBed));
 }
 
 const EDIT_FIELDS = [
@@ -40,6 +91,7 @@ const EDIT_FIELDS = [
 
 export default function WardManagement() {
   useEffect(() => { document.title = 'Ward Management — VistA Evolved'; }, []);
+  const navigate = useNavigate();
   const [wards, setWards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -61,6 +113,8 @@ export default function WardManagement() {
   const [actionError, setActionError] = useState(null);
   const [censusOccupied, setCensusOccupied] = useState(null);
   const [censusLoading, setCensusLoading] = useState(false);
+  const [wardBeds, setWardBeds] = useState([]);
+  const [bedsLoading, setBedsLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -83,6 +137,41 @@ export default function WardManagement() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const loadWardOperations = useCallback(async (wardId) => {
+    if (!wardId) {
+      setCensusOccupied(null);
+      setWardBeds([]);
+      return;
+    }
+
+    setCensusLoading(true);
+    setBedsLoading(true);
+    try {
+      const [censusRes, roomBedsRes] = await Promise.allSettled([
+        getWardCensus(wardId),
+        getRoomBeds(),
+      ]);
+
+      const censusRows = censusRes.status === 'fulfilled' ? (censusRes.value?.data || []) : [];
+      const occupiedCount = censusRes.status === 'fulfilled'
+        ? (typeof censusRes.value?.total === 'number' ? censusRes.value.total : censusRows.length)
+        : null;
+
+      setCensusOccupied(Number.isFinite(occupiedCount) ? occupiedCount : null);
+      setWardBeds(
+        roomBedsRes.status === 'fulfilled'
+          ? buildWardBeds(roomBedsRes.value?.data || [], wardId, censusRows)
+          : [],
+      );
+    } catch (_err) {
+      setCensusOccupied(null);
+      setWardBeds([]);
+    } finally {
+      setCensusLoading(false);
+      setBedsLoading(false);
+    }
+  }, []);
+
   const loadDetail = useCallback(async (ward) => {
     setSelectedWard(ward);
     setDetailLoading(true);
@@ -90,6 +179,7 @@ export default function WardManagement() {
     setSaveMsg(null);
     setActionError(null);
     setCensusOccupied(null);
+    setWardBeds([]);
     try {
       const res = await getWardDetail(ward.id);
       const d = res?.data || {};
@@ -106,19 +196,8 @@ export default function WardManagement() {
     } finally {
       setDetailLoading(false);
     }
-    setCensusLoading(true);
-    try {
-      const cRes = await getWardCensus(ward.id);
-      const n = cRes?.total;
-      const arr = cRes?.data;
-      const occ = typeof n === 'number' ? n : (Array.isArray(arr) ? arr.length : null);
-      setCensusOccupied(Number.isFinite(occ) ? occ : null);
-    } catch (_censusErr) {
-      setCensusOccupied(null);
-    } finally {
-      setCensusLoading(false);
-    }
-  }, []);
+    await loadWardOperations(ward.id);
+  }, [loadWardOperations]);
 
   const handleEdit = () => {
     if (!detailData) return;
@@ -187,6 +266,10 @@ export default function WardManagement() {
   }
 
   const display = detailData || selectedWard;
+  const totalWardBeds = wardBeds.length;
+  const blockedBeds = wardBeds.filter((bed) => bed.status === 'blocked').length;
+  const occupiedBeds = wardBeds.filter((bed) => bed.status === 'occupied').length;
+  const availableBeds = wardBeds.filter((bed) => bed.status === 'available').length;
 
   return (
     <AppShell breadcrumb="Admin > Wards">
@@ -254,7 +337,7 @@ export default function WardManagement() {
                     <span className="material-symbols-outlined text-[14px]">edit</span> Edit
                   </button>
                 )}
-                <button onClick={() => { setSelectedWard(null); setDetailData(null); setEditing(false); setCensusOccupied(null); }}
+                <button onClick={() => { setSelectedWard(null); setDetailData(null); setEditing(false); setCensusOccupied(null); setWardBeds([]); }}
                   className="text-[#999] hover:text-[#222]" aria-label="Close detail panel">
                   <span className="material-symbols-outlined text-[20px]">close</span>
                 </button>
@@ -302,6 +385,85 @@ export default function WardManagement() {
                     </div>
                   );
                 })()}
+                {!editing && (
+                  <div className="mb-4 rounded-lg border border-[#E2E4E8] bg-white">
+                    <div className="flex items-center justify-between border-b border-[#E2E4E8] px-4 py-3">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#999]">Bed Inventory</div>
+                        <div className="text-[13px] text-[#222]">Review the ward's live room-bed inventory and current inpatient occupancy.</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/patients/beds')}
+                        className="rounded-md border border-[#E2E4E8] px-3 py-1.5 text-[11px] font-medium text-[#2E5984] hover:bg-[#F5F8FB]"
+                      >
+                        Open Bed Board
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2 border-b border-[#E2E4E8] px-4 py-3">
+                      {[
+                        { label: 'Total Beds', value: totalWardBeds },
+                        { label: 'Available', value: availableBeds },
+                        { label: 'Occupied', value: occupiedBeds },
+                        { label: 'Blocked', value: blockedBeds },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-md bg-[#F8FAFC] px-3 py-2">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-[#999]">{item.label}</div>
+                          <div className="mt-0.5 text-[16px] font-semibold text-[#1A1A2E]">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {bedsLoading ? (
+                      <div className="flex items-center gap-2 px-4 py-4 text-[12px] text-[#666]">
+                        <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
+                        Loading beds for this ward...
+                      </div>
+                    ) : totalWardBeds === 0 ? (
+                      <div className="px-4 py-5 text-[12px] text-[#666]">No room-bed records are currently linked to this ward.</div>
+                    ) : (
+                      <div className="divide-y divide-[#E2E4E8]">
+                        {wardBeds.map((bed) => {
+                          return (
+                            <div key={bed.ien} className="px-4 py-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-[13px] font-semibold text-[#222]">{bed.roomBed || `Bed ${bed.ien}`}</div>
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${BED_STATUS_STYLES[bed.status] || BED_STATUS_STYLES.blocked}`}>
+                                      {bed.status}
+                                    </span>
+                                  </div>
+                                  {bed.patientName ? (
+                                    <div className="mt-1 text-[12px] text-[#555]">Occupied by {bed.patientName}</div>
+                                  ) : (
+                                    <div className="mt-1 text-[12px] text-[#777]">Ward {display.name}</div>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  {bed.patientDfn && (
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/patients/${bed.patientDfn}`)}
+                                      className="rounded-md border border-[#E2E4E8] px-3 py-1.5 text-[11px] font-medium text-[#2E5984] hover:bg-[#F5F8FB]"
+                                    >
+                                      View Patient
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="border-t border-[#E2E4E8] px-4 py-3 text-[11px] text-[#666]">
+                      Use Open Bed Board for room-bed edits and assignment workflows.
+                    </div>
+                  </div>
+                )}
                 {editing ? (
                   <div className="space-y-4">
                     {EDIT_FIELDS.map(ef => (

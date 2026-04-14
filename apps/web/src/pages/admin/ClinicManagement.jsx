@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import DataTable from '../../components/shared/DataTable';
 import { SearchBar, Pagination, ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getClinics, getClinicDetail, createClinic, updateClinicField, inactivateClinic, reactivateClinic, getClinicAvailability } from '../../services/adminService';
+import { getClinics, getClinicDetail, createClinic, updateClinicField, inactivateClinic, reactivateClinic, getClinicAvailability, setClinicAvailability, getStopCodes, getStaff } from '../../services/adminService';
 import { TableSkeleton } from '../../components/shared/LoadingSkeleton';
 import ErrorState from '../../components/shared/ErrorState';
+import { fmDateToIso } from '../../utils/transforms';
 
 /**
  * Clinic Management — Clinical Setup page
@@ -24,6 +25,16 @@ const columns = [
 ];
 
 const PAGE_SIZE = 25;
+const STOP_CODE_LIST_ID = 'clinic-stop-code-list';
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 0, label: 'Sun' },
+];
 
 /* Editable fields via PUT /clinics/:ien/fields */
 const EDIT_FIELDS = [
@@ -39,6 +50,109 @@ const EDIT_FIELDS = [
   { key: 'holidayScheduling', label: 'Holiday Scheduling', field: '1918.5', help: 'Whether this clinic accepts appointments on observed holidays.' },
   { key: 'defaultProvider', label: 'Default Provider', field: '16', help: 'Provider automatically assigned to new appointments in this clinic.' },
 ];
+
+function normalizeStopCode(rawValue) {
+  return String(rawValue || '').replace(/\D/g, '').slice(0, 3);
+}
+
+function normalizeStopCodeRows(rows) {
+  return (rows || [])
+    .map((row) => {
+      const primaryCode = normalizeStopCode(row.code);
+      const fallbackCode = normalizeStopCode(row.name);
+      const code = primaryCode || fallbackCode;
+      const description = primaryCode
+        ? String(row.name || row.description || '').trim()
+        : String(row.code || row.description || '').trim();
+      return {
+        ...row,
+        code,
+        description,
+      };
+    })
+    .filter((row) => row.code);
+}
+
+function findStopCodeMatch(rows, rawCode) {
+  const code = normalizeStopCode(rawCode);
+  return rows.find((row) => row.code === code) || null;
+}
+
+function toLocalIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isoToUsDate(isoDate) {
+  const [year, month, day] = String(isoDate || '').split('-');
+  if (!year || !month || !day) return '';
+  return `${month}/${day}/${year}`;
+}
+
+function formatAvailabilityDate(fmDate) {
+  const iso = fmDateToIso(fmDate);
+  if (!iso) return String(fmDate || 'Unknown date');
+  return new Date(iso).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+
+function groupAvailabilityRows(rows) {
+  const grouped = new Map();
+  (rows || []).forEach((row) => {
+    const fmDate = String(row.date || '').trim();
+    const isoDate = fmDateToIso(fmDate).slice(0, 10);
+    const key = isoDate || fmDate;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        key,
+        fmDate,
+        isoDate,
+        displayDate: formatAvailabilityDate(fmDate),
+        entries: [],
+      });
+    }
+    grouped.get(key).entries.push({
+      subIen: String(row.subIen || ''),
+      data: String(row.data || ''),
+    });
+  });
+  return Array.from(grouped.values()).sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function summarizeAvailability(entries) {
+  const parts = entries.map((entry) => entry.data).filter(Boolean);
+  if (parts.length <= 3) return parts.join(' | ');
+  return `${parts.slice(0, 3).join(' | ')} +${parts.length - 3} more`;
+}
+
+function normalizeProviderRows(rows) {
+  return (rows || [])
+    .filter((row) => row && row.name && row.status === 'ACTIVE' && row.isProvider)
+    .map((row) => ({
+      duz: String(row.ien || row.duz || ''),
+      name: String(row.name || '').trim(),
+      title: String(row.title || '').trim(),
+      service: String(row.service || '').trim(),
+    }))
+    .filter((row) => row.name)
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function findExactClinicNameMatches(clinics, rawName) {
+  const normalizedName = String(rawName || '').trim().toUpperCase();
+  if (!normalizedName) return [];
+  return (clinics || []).filter((clinic) => String(clinic.name || '').trim().toUpperCase() === normalizedName);
+}
+
+function providerOptionLabel(provider) {
+  const parts = [provider.name];
+  if (provider.title) parts.push(provider.title);
+  if (provider.service) parts.push(provider.service);
+  return parts.join(' - ');
+}
 
 export default function ClinicManagement() {
   useEffect(() => { document.title = 'Clinic Management — VistA Evolved'; }, []);
@@ -58,6 +172,13 @@ export default function ClinicManagement() {
   });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
+  const [duplicateCreateWarning, setDuplicateCreateWarning] = useState(null);
+  const [stopCodes, setStopCodes] = useState([]);
+  const [stopCodesLoading, setStopCodesLoading] = useState(false);
+  const [stopCodesError, setStopCodesError] = useState(null);
+  const [providers, setProviders] = useState([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [providersError, setProvidersError] = useState(null);
 
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState({});
@@ -67,6 +188,9 @@ export default function ClinicManagement() {
 
   const [confirmAction, setConfirmAction] = useState(null); // { type: 'inactivate'|'reactivate' }
   const [availability, setAvailability] = useState(null);
+  const [templateForm, setTemplateForm] = useState({ sourceDate: '', startDate: '', endDate: '', weekdays: [] });
+  const [templateError, setTemplateError] = useState(null);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -92,6 +216,38 @@ export default function ClinicManagement() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const loadStopCodeData = useCallback(async () => {
+    setStopCodesLoading(true);
+    setStopCodesError(null);
+    try {
+      const res = await getStopCodes();
+      setStopCodes(normalizeStopCodeRows(res?.data || []));
+    } catch (err) {
+      setStopCodesError(err.message || 'Failed to load stop codes');
+      setStopCodes([]);
+    } finally {
+      setStopCodesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadStopCodeData(); }, [loadStopCodeData]);
+
+  const loadProviderData = useCallback(async () => {
+    setProvidersLoading(true);
+    setProvidersError(null);
+    try {
+      const res = await getStaff({ max: 500 });
+      setProviders(normalizeProviderRows(res?.data || []));
+    } catch (err) {
+      setProvidersError(err.message || 'Failed to load providers');
+      setProviders([]);
+    } finally {
+      setProvidersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadProviderData(); }, [loadProviderData]);
 
   const loadDetail = useCallback(async (clinic) => {
     setSelectedClinic(clinic);
@@ -127,6 +283,19 @@ export default function ClinicManagement() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!availability || availability.length === 0) {
+      setTemplateForm({ sourceDate: '', startDate: '', endDate: '', weekdays: [] });
+      setTemplateError(null);
+      return;
+    }
+    const grouped = groupAvailabilityRows(availability);
+    setTemplateForm((prev) => {
+      if (prev.sourceDate) return prev;
+      return { ...prev, sourceDate: grouped[0]?.isoDate || grouped[0]?.fmDate || '' };
+    });
+  }, [availability]);
+
   const handleEdit = () => {
     if (!detailData) return;
     setEditing(true);
@@ -142,16 +311,25 @@ export default function ClinicManagement() {
     setSaving(true);
     setActionError(null);
     try {
+      const cleanedValues = {
+        ...editValues,
+        stopCode: normalizeStopCode(editValues.stopCode),
+      };
+      const stopCodeChanged = cleanedValues.stopCode !== normalizeStopCode(detailData.stopCode || '');
+      if (stopCodeChanged && !findStopCodeMatch(stopCodes, cleanedValues.stopCode)) {
+        throw new Error('Stop code must match a live File 40.7 entry.');
+      }
       for (const ef of EDIT_FIELDS) {
-        if (editValues[ef.key] !== (detailData[ef.key] || '')) {
-          await updateClinicField(detailData.id, ef.field, editValues[ef.key]);
+        const nextValue = cleanedValues[ef.key] || '';
+        if (nextValue !== (detailData[ef.key] || '')) {
+          await updateClinicField(detailData.id, ef.field, nextValue);
         }
       }
       setEditing(false);
       setSaveMsg('Changes saved successfully.');
       setTimeout(() => setSaveMsg(null), 4000);
       await loadData();
-      await loadDetail({ ...detailData, ...editValues, id: detailData.id });
+      await loadDetail({ ...detailData, ...cleanedValues, id: detailData.id });
     } catch (err) {
       setActionError(err.message || 'Failed to save changes');
     } finally {
@@ -159,15 +337,31 @@ export default function ClinicManagement() {
     }
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (forceDuplicate = false) => {
+    const allowDuplicate = forceDuplicate === true;
     if (!createForm.name.trim()) return;
-    const sc = createForm.stopCode.trim();
-    if (!/^\d{3}$/.test(sc)) {
-      setCreateError('Stop code must be exactly 3 digits (e.g. 323).');
+    const sc = normalizeStopCode(createForm.stopCode);
+    if (!/^\d{1,3}$/.test(sc)) {
+      setCreateError('Stop code must be 1 to 3 digits and match File 40.7.');
       return;
     }
+    if (!findStopCodeMatch(stopCodes, sc)) {
+      setCreateError('Stop code must match a live File 40.7 entry.');
+      return;
+    }
+
+    const duplicateMatches = findExactClinicNameMatches(clinics, createForm.name);
+    if (duplicateMatches.length > 0 && !allowDuplicate) {
+      setDuplicateCreateWarning({
+        name: createForm.name.trim(),
+        matchCount: duplicateMatches.length,
+      });
+      return;
+    }
+
     setCreating(true);
     setCreateError(null);
+    setDuplicateCreateWarning(null);
     try {
       const res = await createClinic({ name: createForm.name.trim(), stopCode: sc });
       const ien = res?.newIen;
@@ -189,6 +383,72 @@ export default function ClinicManagement() {
       setCreateError(err.message || 'Failed to create clinic');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!display?.id) return;
+    const grouped = groupAvailabilityRows(availability || []);
+    const sourceGroup = grouped.find((group) => group.isoDate === templateForm.sourceDate || group.fmDate === templateForm.sourceDate);
+    if (!sourceGroup) {
+      setTemplateError('Select an existing availability date to use as the source pattern.');
+      return;
+    }
+    if (!templateForm.startDate || !templateForm.endDate) {
+      setTemplateError('Select a start and end date for the template range.');
+      return;
+    }
+    if (templateForm.endDate < templateForm.startDate) {
+      setTemplateError('End date must be on or after the start date.');
+      return;
+    }
+    if (!templateForm.weekdays.length) {
+      setTemplateError('Select at least one weekday to receive the template.');
+      return;
+    }
+
+    setApplyingTemplate(true);
+    setTemplateError(null);
+    try {
+      const existingDates = new Set(grouped.map((group) => group.isoDate).filter(Boolean));
+      const selectedWeekdays = new Set(templateForm.weekdays);
+      const cursor = new Date(`${templateForm.startDate}T00:00:00`);
+      const end = new Date(`${templateForm.endDate}T00:00:00`);
+      let appliedDates = 0;
+      let skippedDates = 0;
+      let appliedRows = 0;
+
+      while (cursor <= end) {
+        const isoDate = toLocalIsoDate(cursor);
+        if (selectedWeekdays.has(cursor.getDay())) {
+          if (existingDates.has(isoDate)) {
+            skippedDates += 1;
+          } else {
+            for (const entry of sourceGroup.entries) {
+              await setClinicAvailability(display.id, {
+                date: isoToUsDate(isoDate),
+                slotData: entry.data,
+              });
+              appliedRows += 1;
+            }
+            appliedDates += 1;
+          }
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      if (!appliedDates) {
+        setTemplateError('No dates were updated. All selected dates already had availability.');
+        return;
+      }
+
+      setSaveMsg(`Applied schedule template to ${appliedDates} date(s) using ${appliedRows} availability row(s).${skippedDates ? ` Skipped ${skippedDates} date(s) that already had availability.` : ''}`);
+      setTimeout(() => setSaveMsg(null), 5000);
+      await loadAvailability(display.id);
+    } catch (err) {
+      setTemplateError(err.message || 'Failed to apply schedule template');
+    } finally {
+      setApplyingTemplate(false);
     }
   };
 
@@ -217,6 +477,11 @@ export default function ClinicManagement() {
   const totalFiltered = filtered.length;
   const pageStart = (page - 1) * PAGE_SIZE;
   const pageSlice = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const groupedAvailability = groupAvailabilityRows(availability || []);
+  const createStopCodeMatch = findStopCodeMatch(stopCodes, createForm.stopCode);
+  const editStopCodeMatch = findStopCodeMatch(stopCodes, editValues.stopCode);
+  const createProviderValue = createForm.defaultProvider || '';
+  const editProviderValue = editValues.defaultProvider || '';
 
   if (error) {
     return (
@@ -348,10 +613,43 @@ export default function ClinicManagement() {
                     {EDIT_FIELDS.map(ef => (
                       <div key={ef.key}>
                         <label className="block text-xs font-medium text-[#333] mb-1">{ef.label}</label>
-                        <input type="text" value={editValues[ef.key] || ''}
-                          onChange={e => setEditValues(prev => ({ ...prev, [ef.key]: e.target.value }))}
-                          title={ef.help}
-                          className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+                        {ef.key === 'defaultProvider' ? (
+                          <select
+                            value={editProviderValue}
+                            onChange={e => setEditValues(prev => ({ ...prev, defaultProvider: e.target.value }))}
+                            title={ef.help}
+                            className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] bg-white"
+                          >
+                            <option value="">Select provider...</option>
+                            {!providers.some((provider) => provider.name === editProviderValue) && editProviderValue && (
+                              <option value={editProviderValue}>{editProviderValue} (current)</option>
+                            )}
+                            {providers.map((provider) => (
+                              <option key={provider.duz || provider.name} value={provider.name}>{providerOptionLabel(provider)}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input type="text" value={editValues[ef.key] || ''}
+                            onChange={e => setEditValues(prev => ({
+                              ...prev,
+                              [ef.key]: ef.key === 'stopCode' ? normalizeStopCode(e.target.value) : e.target.value,
+                            }))}
+                            title={ef.help}
+                            list={ef.key === 'stopCode' ? STOP_CODE_LIST_ID : undefined}
+                            maxLength={ef.key === 'stopCode' ? 3 : undefined}
+                            className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+                        )}
+                        {ef.key === 'stopCode' && editValues.stopCode && (
+                          <p className={`text-[10px] mt-0.5 ${editStopCodeMatch ? 'text-[#2D6A4F]' : 'text-[#CC3333]'}`}>
+                            {editStopCodeMatch ? `File 40.7: ${editStopCodeMatch.description}` : 'Stop code not found in File 40.7.'}
+                          </p>
+                        )}
+                        {ef.key === 'defaultProvider' && providersError && (
+                          <p className="text-[10px] text-[#CC3333] mt-0.5">{providersError}</p>
+                        )}
+                        {ef.key === 'defaultProvider' && providersLoading && (
+                          <p className="text-[10px] text-[#999] mt-0.5">Loading active providers...</p>
+                        )}
                         <p className="text-[10px] text-[#999] mt-0.5">{ef.help}</p>
                       </div>
                     ))}
@@ -385,11 +683,10 @@ export default function ClinicManagement() {
                 )}
               </>
             ) : (
-              /* Scheduling tab — read-only display of availability */
               <div>
                 <div className="p-3 bg-[#F5F8FB] rounded-lg text-[11px] text-[#666] flex items-start gap-2 mb-4">
                   <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">info</span>
-                  <span>Scheduling availability shows the configured appointment slots for this clinic. In the terminal: <strong>Scheduling Manager → Set up a clinic → Availability</strong>.</span>
+                  <span>Scheduling availability shows the configured appointment slots for this clinic. Templates copy one existing day&apos;s availability rows onto future empty dates without inventing new slot syntax.</span>
                 </div>
                 {availability === null ? (
                   <div className="h-20 animate-pulse bg-[#E2E4E8] rounded-md" />
@@ -399,13 +696,105 @@ export default function ClinicManagement() {
                     <p className="text-sm">No availability data configured for this clinic.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {availability.map((slot, i) => (
-                      <div key={i} className="p-3 bg-white border border-[#E2E4E8] rounded-lg text-sm">
-                        <div className="font-medium text-text">{slot.date || slot.day || `Slot ${i + 1}`}</div>
-                        {slot.data && <div className="text-xs text-[#666] mt-1 font-mono">{slot.data}</div>}
+                  <div className="space-y-4">
+                    <div className="p-4 bg-white border border-[#E2E4E8] rounded-lg space-y-4">
+                      <div>
+                        <h3 className="text-sm font-semibold text-[#222]">Schedule Template</h3>
+                        <p className="text-[11px] text-[#666] mt-1">Choose a source date with working availability, then copy that pattern to selected weekdays in a date range. Existing dates are skipped because the current API does not support overwrite or delete.</p>
                       </div>
-                    ))}
+                      {templateError && (
+                        <div className="p-3 bg-[#FDE8E8] border border-[#CC3333] rounded-lg text-[12px] text-[#CC3333] flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[14px]">error</span> {templateError}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-medium text-[#333] mb-1">Source Date</label>
+                          <select
+                            value={templateForm.sourceDate}
+                            onChange={(e) => setTemplateForm((prev) => ({ ...prev, sourceDate: e.target.value }))}
+                            className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] bg-white"
+                          >
+                            {groupedAvailability.map((group) => (
+                              <option key={group.key} value={group.isoDate || group.fmDate}>{group.displayDate}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-[#333] mb-1">Start Date</label>
+                          <input
+                            type="date"
+                            value={templateForm.startDate}
+                            onChange={(e) => setTemplateForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                            className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-[#333] mb-1">End Date</label>
+                          <input
+                            type="date"
+                            value={templateForm.endDate}
+                            onChange={(e) => setTemplateForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                            className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-[#333] mb-1">Weekdays</label>
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {WEEKDAY_OPTIONS.map((option) => {
+                              const checked = templateForm.weekdays.includes(option.value);
+                              return (
+                                <label key={option.value} className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] cursor-pointer ${checked ? 'border-[#2E5984] bg-[#EAF1F8] text-[#1A1A2E]' : 'border-[#E2E4E8] bg-white text-[#666]'}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="hidden"
+                                    checked={checked}
+                                    onChange={() => setTemplateForm((prev) => ({
+                                      ...prev,
+                                      weekdays: checked
+                                        ? prev.weekdays.filter((value) => value !== option.value)
+                                        : [...prev.weekdays, option.value].sort((left, right) => left - right),
+                                    }))}
+                                  />
+                                  {option.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] text-[#666]">Template source preview: <span className="font-mono text-[#333]">{summarizeAvailability((groupedAvailability.find((group) => group.isoDate === templateForm.sourceDate || group.fmDate === templateForm.sourceDate) || {}).entries || []) || 'No source selected'}</span></p>
+                        <button
+                          type="button"
+                          disabled={applyingTemplate}
+                          onClick={handleApplyTemplate}
+                          className="px-4 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40"
+                        >
+                          {applyingTemplate ? 'Applying...' : 'Apply Template'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {groupedAvailability.map((group) => (
+                        <div key={group.key} className="p-3 bg-white border border-[#E2E4E8] rounded-lg text-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium text-text">{group.displayDate}</div>
+                              <div className="text-[11px] text-[#666] mt-1">{group.entries.length} availability row{group.entries.length === 1 ? '' : 's'}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setTemplateForm((prev) => ({ ...prev, sourceDate: group.isoDate || group.fmDate }))}
+                              className="px-3 py-1.5 text-[11px] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB]"
+                            >
+                              Use As Template
+                            </button>
+                          </div>
+                          <div className="text-xs text-[#666] mt-2 font-mono break-all">{summarizeAvailability(group.entries)}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -413,6 +802,12 @@ export default function ClinicManagement() {
           </div>
         )}
       </div>
+
+      <datalist id={STOP_CODE_LIST_ID}>
+        {stopCodes.map((row) => (
+          <option key={row.ien || row.code} value={row.code}>{row.description}</option>
+        ))}
+      </datalist>
 
       {confirmAction && (
         <ConfirmDialog
@@ -445,18 +840,25 @@ export default function ClinicManagement() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Clinic Name <span className="text-[#CC3333]">*</span></label>
-                <input type="text" value={createForm.name} onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                <input type="text" value={createForm.name} onChange={e => { setDuplicateCreateWarning(null); setCreateForm(f => ({ ...f, name: e.target.value })); }}
                   placeholder="e.g. Primary Care East"
                   title="Official name for this clinic (File #44 field .01). Appears in appointment scheduling, patient check-in, and workload reports."
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" autoFocus />
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Stop Code <span className="text-[#CC3333]">*</span></label>
-                <input type="text" value={createForm.stopCode} onChange={e => setCreateForm(f => ({ ...f, stopCode: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
-                  placeholder="3 digits, e.g. 323"
+                <input type="text" value={createForm.stopCode} onChange={e => setCreateForm(f => ({ ...f, stopCode: normalizeStopCode(e.target.value) }))}
+                  placeholder={stopCodesLoading ? 'Loading File 40.7 stop codes...' : '1-3 digits, e.g. 323'}
                   maxLength={3}
-                  title="DSS workload stop code — exactly 3 digits."
+                  title="DSS workload stop code — validated against live File 40.7 data."
+                  list={STOP_CODE_LIST_ID}
                   className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+                {createForm.stopCode && (
+                  <p className={`text-[10px] mt-1 ${createStopCodeMatch ? 'text-[#2D6A4F]' : 'text-[#CC3333]'}`}>
+                    {createStopCodeMatch ? `File 40.7: ${createStopCodeMatch.description}` : 'Stop code not found in File 40.7.'}
+                  </p>
+                )}
+                {stopCodesError && <p className="text-[10px] text-[#CC3333] mt-1">{stopCodesError}</p>}
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Appointment Length</label>
@@ -475,21 +877,36 @@ export default function ClinicManagement() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#333] mb-1">Default Provider</label>
-                <input type="text" value={createForm.defaultProvider} onChange={e => setCreateForm(f => ({ ...f, defaultProvider: e.target.value }))}
-                  placeholder="Provider name or entry"
+                <select value={createProviderValue} onChange={e => setCreateForm(f => ({ ...f, defaultProvider: e.target.value }))}
                   title="Default provider for this clinic (File #44 field 16)."
-                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984]" />
+                  className="w-full h-9 px-3 text-sm border border-[#E2E4E8] rounded-md focus:outline-none focus:border-[#2E5984] bg-white">
+                  <option value="">Select provider...</option>
+                  {providers.map((provider) => <option key={provider.duz || provider.name} value={provider.name}>{providerOptionLabel(provider)}</option>)}
+                </select>
+                {providersLoading && <p className="text-[10px] text-[#999] mt-1">Loading active providers...</p>}
+                {providersError && <p className="text-[10px] text-[#CC3333] mt-1">{providersError}</p>}
               </div>
             </div>
             <div className="flex gap-3 mt-6 justify-end">
               <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm border border-[#E2E4E8] rounded-md hover:bg-[#F4F5F7]">Cancel</button>
-              <button disabled={creating || !createForm.name.trim() || createForm.stopCode.length !== 3} onClick={handleCreate}
+              <button disabled={creating || stopCodesLoading || !createForm.name.trim() || !createForm.stopCode.length || !createStopCodeMatch} onClick={() => handleCreate()}
                 className="px-5 py-2 text-sm font-medium bg-[#1A1A2E] text-white rounded-md hover:bg-[#2E5984] transition-colors disabled:opacity-40">
                 {creating ? 'Creating...' : 'Create Clinic'}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {duplicateCreateWarning && (
+        <ConfirmDialog
+          open
+          title="Duplicate Clinic Name"
+          message={`A clinic named "${duplicateCreateWarning.name}" already exists in File 44. Create anyway?`}
+          confirmLabel="Create Anyway"
+          onConfirm={() => handleCreate(true)}
+          onCancel={() => setDuplicateCreateWarning(null)}
+        />
       )}
     </AppShell>
   );

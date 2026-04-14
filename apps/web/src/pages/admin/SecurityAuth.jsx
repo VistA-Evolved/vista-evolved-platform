@@ -207,6 +207,163 @@ function buildFields(params, sectionId, mailGroupOptions = []) {
   return [];
 }
 
+function normalizeToggleValue(value) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (['YES', 'Y', '1', 'ENABLED'].includes(normalized)) return true;
+  if (['NO', 'N', '0', 'DISABLED'].includes(normalized)) return false;
+  return null;
+}
+
+function normalizeAuditMode(value) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (['A', 'ALL OPTIONS AUDITED', 'AUDIT ALL ACTIVITY'].includes(normalized)) return 'a';
+  if (['S', 'SPECIFIC OPTIONS AUDITED', 'AUDIT SPECIFIC OPTIONS'].includes(normalized)) return 's';
+  if (['N', 'NO AUDIT', 'NO AUDITING'].includes(normalized)) return 'n';
+  return '';
+}
+
+function normalizeFailedAccessMode(value) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (['AR', 'LOG ALL + RECORD', 'LOG ALL + DETAILS'].includes(normalized)) return 'ar';
+  if (['DR', 'LOG DEVICE + RECORD', 'LOG DEVICES + DETAILS'].includes(normalized)) return 'dr';
+  if (['A', 'LOG ALL FAILED ACCESS', 'LOG ALL FAILED ATTEMPTS'].includes(normalized)) return 'a';
+  if (['D', 'LOG BY DEVICE'].includes(normalized)) return 'd';
+  if (['N', 'NO LOGGING'].includes(normalized)) return 'n';
+  return '';
+}
+
+function hasConfiguredValue(value) {
+  return String(value ?? '').trim() !== '';
+}
+
+function complianceGrade(score) {
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
+}
+
+function complianceTone(score) {
+  if (score >= 90) return { label: 'Strong baseline', card: 'border-[#B7E4C7] bg-[#F3FBF5]', badge: 'bg-[#E8F5E9] text-[#2D6A4F]' };
+  if (score >= 80) return { label: 'Good baseline', card: 'border-[#CFE0F3] bg-[#F5F8FB]', badge: 'bg-[#E8EEF5] text-[#2E5984]' };
+  if (score >= 70) return { label: 'Moderate baseline', card: 'border-[#F5D7A1] bg-[#FFF9EC]', badge: 'bg-[#FFF3E0] text-[#E65100]' };
+  if (score >= 60) return { label: 'Weak baseline', card: 'border-[#F3C8A8] bg-[#FFF5ED]', badge: 'bg-[#FDE8E8] text-[#CC3333]' };
+  return { label: 'High-risk baseline', card: 'border-[#E8B4B8] bg-[#FFF5F5]', badge: 'bg-[#FDE8E8] text-[#CC3333]' };
+}
+
+function buildComplianceControl(label, weight, ratio, summary, detail) {
+  return {
+    label,
+    weight,
+    ratio,
+    summary,
+    detail,
+    state: ratio >= 1 ? 'meets' : ratio > 0 ? 'attention' : 'missing',
+  };
+}
+
+function buildSecurityComplianceSummary(params) {
+  if (!params) return null;
+
+  const sessionTimeout = Number(params['AUTOLOGOFF']?.value ?? 0);
+  const lockoutAttempts = Number(params['LOCKOUT ATTEMPTS']?.value ?? 0);
+  const lockoutDuration = Number(params['LOCKOUT DURATION']?.value ?? 0);
+  const passwordExpiration = Number(params['PASSWORD EXPIRATION']?.value ?? 0);
+  const multipleSignOn = normalizeToggleValue(params['MULTIPLE SIGN-ON']?.value);
+  const optionAudit = normalizeAuditMode(params['OPTION AUDIT']?.value);
+  const failedAccessAudit = normalizeFailedAccessMode(params['FAILED ACCESS AUDIT']?.value);
+  const irmMailGroup = params['IRM MAIL GROUP']?.value;
+  const afterHoursGroup = params['AFTER HOURS MAIL GROUP']?.value;
+
+  const controls = [
+    buildComplianceControl(
+      'Session timeout',
+      18,
+      sessionTimeout >= 60 && sessionTimeout <= 900 ? 1 : 0,
+      sessionTimeout >= 60 && sessionTimeout <= 900 ? `${sessionTimeout} seconds` : 'Not within 60-900 seconds',
+      'VHA Directive 6500 requires an automatic sign-off within 15 minutes.'
+    ),
+    buildComplianceControl(
+      'Failed-login lockout threshold',
+      14,
+      lockoutAttempts >= 1 && lockoutAttempts <= 3 ? 1 : lockoutAttempts >= 4 && lockoutAttempts <= 5 ? 0.7 : 0,
+      lockoutAttempts >= 1 && lockoutAttempts <= 3 ? `${lockoutAttempts} attempts` : lockoutAttempts >= 4 && lockoutAttempts <= 5 ? `${lockoutAttempts} attempts (allowed, but above recommended 3)` : 'No effective lockout threshold',
+      'Lower thresholds reduce brute-force exposure; this screen already documents 3 as the recommended setting.'
+    ),
+    buildComplianceControl(
+      'Lockout duration',
+      10,
+      lockoutDuration >= 1800 && lockoutDuration <= 86400 ? 1 : lockoutDuration >= 30 && lockoutDuration < 1800 ? 0.7 : 0,
+      lockoutDuration >= 1800 && lockoutDuration <= 86400 ? `${lockoutDuration} seconds` : lockoutDuration >= 30 && lockoutDuration < 1800 ? `${lockoutDuration} seconds (shorter than the 30-minute baseline)` : 'No effective lockout duration',
+      'Short lockouts are better than none, but a 30-minute baseline keeps repeated sign-in attacks from cycling immediately.'
+    ),
+    buildComplianceControl(
+      'Password expiration',
+      14,
+      passwordExpiration >= 1 && passwordExpiration <= 90 ? 1 : 0,
+      passwordExpiration >= 1 && passwordExpiration <= 90 ? `${passwordExpiration} days` : 'Passwords do not expire',
+      'The page already flags non-expiring passwords as a security risk.'
+    ),
+    buildComplianceControl(
+      'Concurrent sessions',
+      8,
+      multipleSignOn === false ? 1 : multipleSignOn === true ? 0.6 : 0,
+      multipleSignOn === false ? 'Multiple sign-on disabled' : multipleSignOn === true ? 'Multiple sign-on allowed' : 'Multiple sign-on not configured',
+      'Disabling concurrent sessions reduces shared-credential abuse and unattended session exposure.'
+    ),
+    buildComplianceControl(
+      'Activity auditing',
+      18,
+      optionAudit === 'a' ? 1 : optionAudit === 's' ? 0.85 : 0,
+      optionAudit === 'a' ? 'Audit all activity' : optionAudit === 's' ? 'Specific options audited' : 'No auditing',
+      'A full activity trail is the strongest posture; disabling auditing removes the evidence trail entirely.'
+    ),
+    buildComplianceControl(
+      'Failed access logging',
+      10,
+      ['ar', 'dr'].includes(failedAccessAudit) ? 1 : ['a', 'd'].includes(failedAccessAudit) ? 0.85 : 0,
+      ['ar', 'dr'].includes(failedAccessAudit) ? 'Detailed failed-access logging enabled' : ['a', 'd'].includes(failedAccessAudit) ? 'Failed-access logging enabled' : 'No failed-access logging',
+      'Failed access events should be captured so repeated login failures can be investigated.'
+    ),
+    buildComplianceControl(
+      'IRM notification routing',
+      4,
+      hasConfiguredValue(irmMailGroup) ? 1 : 0,
+      hasConfiguredValue(irmMailGroup) ? String(irmMailGroup) : 'IRM Mail Group not configured',
+      'Security notifications need a configured MailMan destination so support staff actually receive them.'
+    ),
+    buildComplianceControl(
+      'After-hours notification routing',
+      4,
+      hasConfiguredValue(afterHoursGroup) ? 1 : 0,
+      hasConfiguredValue(afterHoursGroup) ? String(afterHoursGroup) : 'After-hours Mail Group not configured',
+      'After-hours escalation routing matters when incidents happen outside normal support coverage.'
+    ),
+  ];
+
+  const score = Math.round(controls.reduce((sum, control) => sum + (control.weight * control.ratio), 0));
+  const grade = complianceGrade(score);
+  const tone = complianceTone(score);
+  const controlsMeetingBaseline = controls.filter(control => control.state === 'meets').length;
+  const attentionControls = controls
+    .filter(control => control.state !== 'meets')
+    .sort((left, right) => left.ratio - right.ratio || right.weight - left.weight);
+  const strongestControls = controls
+    .filter(control => control.state === 'meets')
+    .sort((left, right) => right.weight - left.weight);
+
+  return {
+    score,
+    grade,
+    tone,
+    controlsMeetingBaseline,
+    totalControls: controls.length,
+    attentionControls,
+    strongestControls,
+  };
+}
+
 export default function SecurityAuth() {
   const [selectedSection, setSelectedSection] = useState('login');
   useEffect(() => { document.title = 'Security & Auth — VistA Evolved'; }, []);
@@ -232,7 +389,9 @@ export default function SecurityAuth() {
       try {
         const sess = await getSession();
         if (sess?.user?.duz) setCurrentDuz(String(sess.user.duz));
-      } catch (err) { /* non-fatal */ }
+      } catch (err) {
+        console.warn('Failed to load current user context for security settings:', err);
+      }
       // S7.3: Load mail groups for IRM dropdown
       try {
         const mgRes = await getMailGroups();
@@ -241,7 +400,9 @@ export default function SecurityAuth() {
           label: g.name || g.groupName || `Group ${g.ien}`,
         })).filter(g => g.value);
         setMailGroupOptions(groups);
-      } catch (err) { /* non-fatal — falls back to text input */ }
+      } catch (err) {
+        console.warn('Failed to load mail group options for security settings; falling back to text input:', err);
+      }
     })();
   }, []);
 
@@ -280,6 +441,7 @@ export default function SecurityAuth() {
 
   const sectionMeta = SECTION_CONFIG.find(s => s.id === selectedSection);
   const fields = buildFields(kernelParams, selectedSection, mailGroupOptions);
+  const complianceSummary = buildSecurityComplianceSummary(kernelParams);
   const hasChanges = Object.keys(editedValues).length > 0;
 
   const hasViolation = Object.entries(editedValues).some(([name, val]) => {
@@ -425,6 +587,75 @@ export default function SecurityAuth() {
                 <strong>Two-person integrity required.</strong> Changes to {sectionMeta.label.toLowerCase()} settings
                 create a pending request that must be approved by a different administrator. This prevents a single compromised account from weakening system security.
               </CautionBanner>
+            )}
+
+            {!loading && complianceSummary && (
+              <div className={`mb-5 rounded-xl border p-4 ${complianceSummary.tone.card}`}>
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2E5984]">Compliance Snapshot</div>
+                    <h2 className="mt-1 text-lg font-bold text-text">Security baseline score</h2>
+                    <p className="mt-1 max-w-xl text-[12px] text-[#666]">
+                      Calculated from the live VistA site parameters shown on this page. This is a quick posture indicator for administrators, not a formal certification.
+                    </p>
+                  </div>
+                  <div className="min-w-[180px] rounded-lg bg-white/75 px-4 py-3 text-right shadow-sm">
+                    <div className="text-[32px] font-bold leading-none text-text">{complianceSummary.score}<span className="text-sm font-medium text-[#666]">/100</span></div>
+                    <div className="mt-1 flex items-center justify-end gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${complianceSummary.tone.badge}`}>Grade {complianceSummary.grade}</span>
+                      <span className="text-[11px] text-[#666]">{complianceSummary.tone.label}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
+                  <span className="rounded-full bg-white px-3 py-1 font-medium text-[#2E5984]">
+                    {complianceSummary.controlsMeetingBaseline} of {complianceSummary.totalControls} controls meet baseline
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 font-medium text-[#666]">
+                    {complianceSummary.attentionControls.length} controls need attention
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg bg-white/80 p-3">
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#666]">Needs attention</div>
+                    {complianceSummary.attentionControls.length > 0 ? (
+                      <div className="space-y-2">
+                        {complianceSummary.attentionControls.slice(0, 3).map(control => (
+                          <div key={control.label} className="rounded-md border border-[#E2E4E8] bg-white p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[12px] font-medium text-text">{control.label}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${control.state === 'missing' ? 'bg-[#FDE8E8] text-[#CC3333]' : 'bg-[#FFF3E0] text-[#E65100]'}`}>
+                                {control.state === 'missing' ? 'Missing' : 'Partial'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11px] text-[#444]">{control.summary}</p>
+                            <p className="mt-1 text-[10px] text-[#888]">{control.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[12px] text-[#2D6A4F]">All scored controls currently meet the baseline on this system.</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg bg-white/80 p-3">
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#666]">Strongest controls</div>
+                    <div className="space-y-2">
+                      {complianceSummary.strongestControls.slice(0, 3).map(control => (
+                        <div key={control.label} className="rounded-md border border-[#D9E7DC] bg-white p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[12px] font-medium text-text">{control.label}</span>
+                            <span className="rounded-full bg-[#E8F5E9] px-2 py-0.5 text-[10px] font-semibold text-[#2D6A4F]">Meets baseline</span>
+                          </div>
+                          <p className="mt-1 text-[11px] text-[#444]">{control.summary}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {saveResult?.type === 'success' && (

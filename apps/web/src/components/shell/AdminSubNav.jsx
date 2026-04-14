@@ -76,7 +76,7 @@ export default function AdminSubNav() {
   )?.group;
 
   return (
-    <aside className="fixed left-16 top-10 bottom-0 w-[180px] lg:w-[220px] bg-[#F8F9FB] border-r border-[#E2E4E8] z-30 overflow-y-auto">
+    <aside data-subnav className="fixed left-16 top-10 bottom-0 w-[180px] lg:w-[220px] bg-[#F8F9FB] border-r border-[#E2E4E8] z-30 overflow-y-auto">
       <div className="px-3 pt-4 pb-2">
         <h2 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider px-2">
           Administration

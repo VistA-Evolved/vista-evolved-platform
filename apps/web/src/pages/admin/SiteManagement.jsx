@@ -6,6 +6,7 @@ import { SearchBar } from '../../components/shared/SharedComponents';
 import { getSites, getSite, getTopology, updateSite, createSite, getSiteWorkspaces, updateSiteWorkspace, getFacilities, deleteSite } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
+import { formatPhone } from '../../utils/transforms';
 
 /**
  * Site Management (Division Management)
@@ -335,7 +336,7 @@ export default function SiteManagement() {
                   {siteDetail && editMode && (
                     <>
                       {siteDetail.address && <Field label="Address" value={siteDetail.address} />}
-                      {siteDetail.phone && <Field label="Phone" value={siteDetail.phone} />}
+                      {siteDetail.phone && <Field label="Phone" value={formatPhone(siteDetail.phone)} />}
                       {siteDetail.director && <Field label="Director" value={siteDetail.director} />}
                     </>
                   )}
@@ -352,7 +353,7 @@ export default function SiteManagement() {
                     {facilityData.city && <Field label="City" value={facilityData.city} />}
                     {facilityData.state && <Field label="State" value={facilityData.state} />}
                     {facilityData.zip && <Field label="ZIP" value={facilityData.zip} mono />}
-                    {facilityData.phone && <Field label="Phone" value={facilityData.phone} mono />}
+                    {facilityData.phone && <Field label="Phone" value={formatPhone(facilityData.phone)} mono />}
                     {facilityData.director && <Field label="Director" value={facilityData.director} />}
                     {facilityData.timezone && <Field label="Timezone" value={facilityData.timezone} />}
                   </div>

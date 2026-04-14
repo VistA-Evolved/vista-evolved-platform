@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
 import { usePatient } from '../../components/shared/PatientContext';
-import { getPatient, getPatientFlags, addPatientFlag, inactivatePatientFlag, updatePatientFlag } from '../../services/patientService';
+import { getPatient, getPatientFlags, getPatientFlagDefinitions, addPatientFlag, inactivatePatientFlag, updatePatientFlag } from '../../services/patientService';
 
 const inputCls = 'h-10 px-3 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984] focus:ring-1 focus:ring-[#2E5984]';
 
@@ -32,6 +32,7 @@ export default function PatientFlags() {
   const [addForm, setAddForm] = useState({ name: '', category: '', categoryLevel: '', narrative: '', reviewDate: '' });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  const [flagDefs, setFlagDefs] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -41,8 +42,12 @@ export default function PatientFlags() {
           const pRes = await getPatient(patientId);
           if (pRes.ok) setPatient(pRes.data);
         }
-        const res = await getPatientFlags(patientId);
-        setFlags(res.data || []);
+        const [flagRes, defsRes] = await Promise.all([
+          getPatientFlags(patientId),
+          getPatientFlagDefinitions(),
+        ]);
+        setFlags(flagRes.data || []);
+        setFlagDefs(defsRes.data || []);
       } finally {
         setLoading(false);
       }
@@ -62,6 +67,7 @@ export default function PatientFlags() {
     try {
       const res = await addPatientFlag(patientId, {
         ...addForm,
+        flagName: addForm.name,
         assignedDate: new Date().toISOString().slice(0, 10),
         status: 'active',
       });
@@ -374,7 +380,14 @@ export default function PatientFlags() {
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-[#555]">Flag Name <span className="text-red-500">*</span></label>
-                  <input value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} className={`${inputCls} w-full`} placeholder="e.g., Fall Risk, Suicide Precaution" />
+                  {flagDefs.length > 0 ? (
+                    <select value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} className={`${inputCls} w-full bg-white`}>
+                      <option value="">Select a flag...</option>
+                      {flagDefs.map(d => <option key={d.ien} value={d.name}>{d.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} className={`${inputCls} w-full`} placeholder="e.g., HIGH RISK FOR SUICIDE" />
+                  )}
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-[#555]">Category</label>

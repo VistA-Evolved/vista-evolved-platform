@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
@@ -35,7 +35,7 @@ export const ROLES = [
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
-      { label: 'Verify allergies', key: 'GMRA ALLERGY VERIFY' },
+        { label: 'Verify allergies', key: 'GMRA-ALLERGY VERIFY' },
     ],
     mutualExclusions: ['A physician with order-signing authority cannot also hold verbal-order entry (that role is reserved for nursing staff).'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'rw', Scheduling: 'rw', Clinical: 'rw', Pharmacy: 'ro', Lab: 'ro', Imaging: 'ro', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'ro' },
@@ -78,7 +78,7 @@ export const ROLES = [
       { label: 'CPRS GUI chart access', key: 'OR CPRS GUI CHART' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
-      { label: 'Verify allergies', key: 'GMRA ALLERGY VERIFY' },
+        { label: 'Verify allergies', key: 'GMRA-ALLERGY VERIFY' },
       { label: 'Sensitive patient access', key: 'DG SENSITIVITY' },
     ],
     mutualExclusions: [],
@@ -108,7 +108,7 @@ export const ROLES = [
       { label: 'View patient records', key: 'ORCL-PAT-RECS' },
       { label: 'Sign clinical notes', key: 'ORCL-SIGN-NOTES' },
       { label: 'Bar-code medication administration', key: 'PSB NURSE' },
-      { label: 'Allergy verification', key: 'GMRA ALLERGY VERIFY' },
+        { label: 'Allergy verification', key: 'GMRA-ALLERGY VERIFY' },
     ],
     mutualExclusions: ['A nurse with verbal-order authority cannot also hold physician order-signing authority.'],
     workspaceAccess: { Dashboard: 'rw', Patients: 'ro', Scheduling: 'ro', Clinical: 'rw', Pharmacy: 'none', Lab: 'none', Imaging: 'none', Billing: 'none', Supply: 'none', Admin: 'none', Analytics: 'none' },
@@ -412,7 +412,7 @@ export const KEY_IMPACTS = {
   'DG SUPERVISOR': 'ADT supervisor authority. Without this: cannot override ADT restrictions or access sensitive records.',
   'DG SENSITIVITY': 'Sensitive patient access. Without this: cannot view records flagged as sensitive.',
   'DGMEANS TEST': 'Means test entry. Without this: cannot enter or update patient means test information.',
-  'GMRA ALLERGY VERIFY': 'Allergy verification authority. Without this: cannot verify or mark allergies as reviewed.',
+  'GMRA-ALLERGY VERIFY': 'Allergy verification authority. Without this: cannot verify or mark allergies as reviewed.',
   'RA TECHNOLOGIST': 'Radiology technologist access. Without this: cannot perform or manage imaging exams.',
   'MAG SYSTEM': 'Imaging system access. Without this: cannot access the VistA Imaging system.',
   'MAG CAPTURE': 'Image capture authority. Without this: cannot capture or upload medical images.',
@@ -462,13 +462,14 @@ export const TASK_TO_KEY = {
   'manage users': ['XUMGR'],
   'audit security': ['XUAUDITING'],
   'process billing': ['IBFIN'],
-  'verify allergies': ['GMRA ALLERGY VERIFY'],
+  'verify allergies': ['GMRA-ALLERGY VERIFY'],
 };
 
 export default function RoleTemplates() {
   const navigate = useNavigate();
   useEffect(() => { document.title = 'Role Templates — VistA Evolved'; }, []);
   const [selectedRole, setSelectedRole] = useState(ROLES[0]);
+  const [compareRoleId, setCompareRoleId] = useState('');
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('permissions');
   const [vistaKeySet, setVistaKeySet] = useState(new Set());
@@ -501,6 +502,7 @@ export default function RoleTemplates() {
   const [customKeySearch, setCustomKeySearch] = useState('');
   // Workspace access editing for custom roles
   const [editedWorkspaceAccess, setEditedWorkspaceAccess] = useState(null);
+  const importRoleInputRef = useRef(null);
 
   useEffect(() => {
     getSession().then(res => {
@@ -600,6 +602,85 @@ export default function RoleTemplates() {
 
   const handleDeleteCustom = async (roleId) => {
     setDeleteTarget(roleId);
+  };
+
+  const buildUniqueRoleName = (desiredName) => {
+    const baseName = String(desiredName || 'Imported Role').trim() || 'Imported Role';
+    const existingNames = new Set([...ROLES, ...customRoles].map((role) => String(role.name || '').trim().toUpperCase()));
+    if (!existingNames.has(baseName.toUpperCase())) return baseName;
+    let suffix = 2;
+    while (existingNames.has(`${baseName} (${suffix})`.toUpperCase())) {
+      suffix += 1;
+    }
+    return `${baseName} (${suffix})`;
+  };
+
+  const handleExportRole = (role) => {
+    const payload = {
+      name: role.name,
+      description: role.description,
+      keys: role.permissions.map((permission) => permission.key),
+      workspaceAccess: role.workspaceAccess || {},
+      clonedFrom: role.clonedFrom || null,
+      exportedAt: new Date().toISOString(),
+      source: 'vista-evolved-role-template',
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${role.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'role'}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportRoleFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const importedKeys = Array.isArray(parsed.keys)
+        ? parsed.keys
+        : Array.isArray(parsed.permissions)
+          ? parsed.permissions.map((permission) => permission?.key || permission?.name || permission).filter(Boolean)
+          : [];
+      if (importedKeys.length === 0) {
+        throw new Error('Imported role JSON must include a non-empty keys array.');
+      }
+      const uniqueName = buildUniqueRoleName(parsed.name || file.name.replace(/\.json$/i, ''));
+      const workspaceAccess = parsed.workspaceAccess && typeof parsed.workspaceAccess === 'object' ? parsed.workspaceAccess : {};
+      const response = await createCustomRole({
+        name: uniqueName,
+        description: parsed.description || 'Imported custom role',
+        keys: importedKeys,
+        workspaceAccess,
+        clonedFrom: parsed.clonedFrom || null,
+      });
+      const importedRole = {
+        id: response?.id || `custom-${Date.now()}`,
+        name: uniqueName,
+        description: parsed.description || 'Imported custom role',
+        isSystem: false,
+        clonedFrom: parsed.clonedFrom || null,
+        userCount: 0,
+        permissions: importedKeys.map((key) => ({
+          label: keyEnrichMap[key]?.displayName || key,
+          key,
+        })),
+        mutualExclusions: [],
+        workspaceAccess,
+      };
+      setCustomRoles((prev) => [...prev, importedRole]);
+      setSelectedRole(importedRole);
+      setCompareRoleId('');
+      setActiveTab('permissions');
+      setEditedWorkspaceAccess(null);
+      setError(null);
+    } catch (err) {
+      setError(err.message || 'Failed to import role');
+    }
   };
 
   const confirmDeleteCustom = async () => {
@@ -727,9 +808,46 @@ export default function RoleTemplates() {
   };
 
   const allRoles = [...ROLES, ...customRoles];
+  const compareRole = allRoles.find((role) => role.id === compareRoleId) || null;
   const filteredRoles = allRoles.filter(r =>
     !search || r.name.toLowerCase().includes(search.toLowerCase()) || r.description.toLowerCase().includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    if (compareRoleId && compareRoleId === selectedRole.id) {
+      setCompareRoleId('');
+    }
+  }, [compareRoleId, selectedRole.id]);
+
+  const getRolePermissionLabel = (role, key) => {
+    const matchingPermission = role.permissions.find((permission) => permission.key === key);
+    return keyEnrichMap[key]?.displayName || matchingPermission?.label || key;
+  };
+
+  const selectedRoleKeySet = new Set(selectedRole.permissions.map((permission) => permission.key));
+  const compareRoleKeySet = new Set(compareRole?.permissions.map((permission) => permission.key) || []);
+  const selectedOnlyPermissions = compareRole
+    ? [...selectedRoleKeySet]
+      .filter((key) => !compareRoleKeySet.has(key))
+      .map((key) => ({ key, label: getRolePermissionLabel(selectedRole, key) }))
+      .sort((left, right) => left.label.localeCompare(right.label))
+    : [];
+  const compareOnlyPermissions = compareRole
+    ? [...compareRoleKeySet]
+      .filter((key) => !selectedRoleKeySet.has(key))
+      .map((key) => ({ key, label: getRolePermissionLabel(compareRole, key) }))
+      .sort((left, right) => left.label.localeCompare(right.label))
+    : [];
+  const workspaceDifferences = compareRole
+    ? ALL_WORKSPACES
+      .map((workspace) => {
+        const selectedAccess = selectedRole.workspaceAccess?.[workspace] || 'none';
+        const compareAccess = compareRole.workspaceAccess?.[workspace] || 'none';
+        if (selectedAccess === compareAccess) return null;
+        return { workspace, selectedAccess, compareAccess };
+      })
+      .filter(Boolean)
+    : [];
 
   return (
     <AppShell breadcrumb="Admin > Role Templates">
@@ -758,12 +876,12 @@ export default function RoleTemplates() {
           </div>
           <div className="px-2 mt-2 pt-3 border-t border-[#E2E4E8]">
             <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider mb-2">Role usage report</h3>
-            <p className="text-[10px] text-[#999] mb-2">Users assigned per role (userCount on each role).</p>
+            <p className="text-[10px] text-[#999] mb-2">Estimated users holding all keys required by each role, based on live VistA key-holder counts.</p>
             <div className="max-h-[200px] overflow-y-auto space-y-1">
               {allRoles.map(role => (
                 <div key={role.id} className="flex justify-between items-center px-2 py-1.5 rounded-md bg-[#FAFAFA] text-[12px] gap-2">
                   <span className="text-[#222] truncate" title={role.name}>{role.name}</span>
-                  <span className="text-[11px] font-mono text-[#666] shrink-0">{role.userCount ?? 0} users</span>
+                  <span className="text-[11px] font-mono text-[#666] shrink-0">~{getRoleHolderCount(role)} users</span>
                 </div>
               ))}
             </div>
@@ -795,6 +913,21 @@ export default function RoleTemplates() {
               <span className="material-symbols-outlined text-[16px] mr-1.5 align-middle">add</span>
               Create Custom Role
             </button>
+            <button
+              type="button"
+              onClick={() => importRoleInputRef.current?.click()}
+              className="w-full mt-2 py-2.5 text-[13px] font-medium text-[#1A1A2E] border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px] mr-1.5 align-middle">upload</span>
+              Import Role JSON
+            </button>
+            <input
+              ref={importRoleInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportRoleFile}
+              className="hidden"
+            />
           </div>
         </div>
 
@@ -811,10 +944,99 @@ export default function RoleTemplates() {
                 </div>
                 <p className="text-[13px] text-[#666] mt-1">{selectedRole.description}</p>
               </div>
-              <span className="px-3 py-1 bg-[#F5F8FB] rounded-full text-[12px] font-mono text-[#666]" title="Estimated based on intersection of key holders">
-                ~{getRoleHolderCount(selectedRole)} staff (estimated)
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-[#F5F8FB] rounded-full text-[12px] font-mono text-[#666]" title="Estimated based on intersection of key holders">
+                  ~{getRoleHolderCount(selectedRole)} staff (estimated)
+                </span>
+                <label className="flex items-center gap-2 text-[11px] font-medium text-[#666]">
+                  <span>Compare to</span>
+                  <select
+                    value={compareRoleId}
+                    onChange={(event) => setCompareRoleId(event.target.value)}
+                    className="h-9 min-w-[180px] rounded-md border border-[#E2E4E8] bg-white px-3 text-[12px] text-[#222] focus:outline-none focus:border-[#2E5984]"
+                    aria-label="Compare selected role to another role"
+                  >
+                    <option value="">No comparison</option>
+                    {allRoles
+                      .filter((role) => role.id !== selectedRole.id)
+                      .map((role) => (
+                        <option key={role.id} value={role.id}>{role.name}</option>
+                      ))}
+                  </select>
+                </label>
+              </div>
             </div>
+
+            {compareRole && (
+              <section className="mb-5 rounded-lg border border-[#D6E2F0] bg-[#F5F8FB] p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <h3 className="text-[11px] font-semibold text-[#999] uppercase tracking-wider">Role Comparison</h3>
+                    <p className="text-[12px] text-[#666] mt-1">Comparing {selectedRole.name} against {compareRole.name}.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCompareRoleId('')}
+                    className="text-[11px] font-medium text-[#2E5984] hover:underline"
+                  >
+                    Clear comparison
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-lg bg-white border border-[#E2E4E8] p-3">
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2">Only in {selectedRole.name}</div>
+                    {selectedOnlyPermissions.length === 0 ? (
+                      <p className="text-[12px] text-[#999]">No unique permissions.</p>
+                    ) : (
+                      <ul className="space-y-1 text-[12px] text-[#222]">
+                        {selectedOnlyPermissions.map((permission) => (
+                          <li key={`selected-${permission.key}`} className="flex items-start gap-2">
+                            <span className="material-symbols-outlined text-[14px] text-[#2E5984] mt-0.5">add</span>
+                            <span>{permission.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-[#E2E4E8] p-3">
+                    <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2">Only in {compareRole.name}</div>
+                    {compareOnlyPermissions.length === 0 ? (
+                      <p className="text-[12px] text-[#999]">No unique permissions.</p>
+                    ) : (
+                      <ul className="space-y-1 text-[12px] text-[#222]">
+                        {compareOnlyPermissions.map((permission) => (
+                          <li key={`compare-${permission.key}`} className="flex items-start gap-2">
+                            <span className="material-symbols-outlined text-[14px] text-[#B45309] mt-0.5">remove</span>
+                            <span>{permission.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-lg bg-white border border-[#E2E4E8] p-3">
+                  <div className="text-[10px] font-semibold text-[#999] uppercase tracking-wider mb-2">Workspace Access Differences</div>
+                  {workspaceDifferences.length === 0 ? (
+                    <p className="text-[12px] text-[#999]">Both roles recommend the same workspace access.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {workspaceDifferences.map((difference) => (
+                        <div key={difference.workspace} className="flex items-center justify-between gap-3 text-[12px]">
+                          <span className="font-medium text-[#222]">{difference.workspace}</span>
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className={`px-2 py-1 rounded-full font-semibold uppercase ${ACCESS_COLORS[difference.selectedAccess]}`}>{selectedRole.name}: {ACCESS_LABELS[difference.selectedAccess]}</span>
+                            <span className={`px-2 py-1 rounded-full font-semibold uppercase ${ACCESS_COLORS[difference.compareAccess]}`}>{compareRole.name}: {ACCESS_LABELS[difference.compareAccess]}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
 
             {/* R003: Guidance for built-in roles */}
             {selectedRole.isSystem && (
@@ -1165,6 +1387,12 @@ export default function RoleTemplates() {
                 }}
                 className="px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors">
                 View Staff with This Role
+              </button>
+              <button
+                onClick={() => handleExportRole(selectedRole)}
+                className="px-4 py-2 text-[13px] font-medium border border-[#E2E4E8] rounded-md hover:bg-[#F5F8FB] transition-colors">
+                <span className="material-symbols-outlined text-[14px] mr-1 align-middle">download</span>
+                Export Role JSON
               </button>
               <button
                 onClick={() => handleClone(selectedRole)}

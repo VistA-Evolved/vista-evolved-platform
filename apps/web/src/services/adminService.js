@@ -16,7 +16,7 @@
  *   docs/specs/41.-wf-11_-admin-_-security-workspace.md
  */
 
-import { tenantApi, setSessionToken, setCsrfToken } from './api';
+import { tenantApi, setSessionToken } from './api';
 
 // ────────────────────────────────────────────────
 // S6.5: Reference data cache (5 min TTL) — divisions, keys catalog, services, titles, mail groups
@@ -43,17 +43,24 @@ export function clearRefDataCache() {
 // ────────────────────────────────────────────────
 
 export async function login(username, password, tenantId = 'local-dev') {
-  const result = await tenantApi.post('/auth/login', { accessCode: username, verifyCode: password, tenantId });
-  if (result.ok) {
-    // S5.1: Session token is in httpOnly cookie (set by server Set-Cookie header).
-    // Only store CSRF token in memory for state-changing requests.
-    if (result.csrfToken) setCsrfToken(result.csrfToken);
-  }
-  return result;
+  return tenantApi.post('/auth/login', { accessCode: username, verifyCode: password, tenantId });
+}
+
+export async function changeExpiredPassword(username, currentPassword, newPassword, tenantId = 'local-dev') {
+  return tenantApi.post('/auth/change-expired-password', {
+    accessCode: username,
+    currentVerifyCode: currentPassword,
+    newVerifyCode: newPassword,
+    tenantId,
+  });
 }
 
 export async function getSession() {
   return tenantApi.get('/auth/session');
+}
+
+export async function getPublicLoginConfig() {
+  return tenantApi.get('/public/login-config');
 }
 
 export async function logout() {
@@ -61,7 +68,6 @@ export async function logout() {
     return await tenantApi.post('/auth/logout');
   } finally {
     setSessionToken(null);
-    setCsrfToken(null);
   }
 }
 
@@ -71,6 +77,18 @@ export async function logout() {
 
 export async function getVistaStatus() {
   return tenantApi.get('/vista-status');
+}
+
+export async function getHealthHistory() {
+  return tenantApi.get('/health/history');
+}
+
+export async function getMyHealthThresholds() {
+  return tenantApi.get('/health/thresholds/me');
+}
+
+export async function updateMyHealthThresholds(data) {
+  return tenantApi.put('/health/thresholds/me', data);
 }
 
 // ────────────────────────────────────────────────
@@ -99,7 +117,38 @@ export async function createStaffMember(data) {
 
 /** S9.23: Check if an access code (username) is already taken */
 export async function checkAccessCode(accessCode) {
-  return tenantApi.post('/users/check-access-code', { accessCode });
+  const res = await fetch('/api/ta/v1/users/check-access-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ accessCode }),
+  });
+
+  const text = await res.text();
+  let json;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok && res.status !== 400) {
+    throw new Error(json?.error || json?.message || text || `HTTP ${res.status}`);
+  }
+
+  if (!json || typeof json.available !== 'boolean') {
+    throw new Error(json?.error || json?.message || 'Invalid access-code availability response');
+  }
+
+  return json;
+}
+
+export async function checkEmail(email, excludeDuz) {
+  return tenantApi.post('/users/check-email', { email, excludeDuz });
+}
+
+export async function checkEmployeeId(employeeId, excludeDuz) {
+  return tenantApi.post('/users/check-employee-id', { employeeId, excludeDuz });
 }
 
 /** Backend expects PUT, not PATCH */
@@ -121,6 +170,10 @@ export async function reactivateStaffMember(duz) {
 
 export async function assignDivision(duz, divisionIen, action = 'ADD') {
   return tenantApi.post(`/users/${duz}/division`, { divisionIen, action });
+}
+
+export async function updateUserSecondaryMenus(duz, menus) {
+  return tenantApi.put(`/users/${duz}/secondary-menus`, { menus });
 }
 
 export async function unlockUser(duz) {
@@ -182,6 +235,10 @@ export async function getPermissionHolders(keyName) {
 
 export async function getUserPermissions(duz) {
   return tenantApi.get(`/users/${duz}/keys`);
+}
+
+export async function getUserMenuStructure(duz, params = {}) {
+  return tenantApi.get(`/users/${duz}/menu-structure`, params);
 }
 
 export async function assignPermission(duz, keyData) {
@@ -290,6 +347,15 @@ export function getTitles(params = {}) {
   return cachedGet(key, () => _getTitles(params));
 }
 
+export async function _getProviderClasses(params = {}) {
+  return tenantApi.get('/provider-classes', params);
+}
+
+export function getProviderClasses(params = {}) {
+  const key = `provider-classes:${JSON.stringify(params ?? {})}`;
+  return cachedGet(key, () => _getProviderClasses(params));
+}
+
 // ────────────────────────────────────────────────
 // Site Parameters (backend: KERNEL SYSTEM PARAMETERS #8989.3)
 // Backend only exposes /params/kernel — no per-namespace CRUD
@@ -369,6 +435,10 @@ export async function updateAlert(ien, data) {
 
 export async function getTaskManStatus() {
   return tenantApi.get('/taskman/status');
+}
+
+export async function startTaskMan() {
+  return tenantApi.post('/taskman/start', {});
 }
 
 export async function getTaskManScheduled() {
@@ -573,12 +643,32 @@ export async function getAdminReport(reportType, params = {}) {
   return tenantApi.get(`/reports/admin/${reportType}`, params);
 }
 
+export async function getAdminReportSchedules() {
+  return tenantApi.get('/reports/admin/schedules');
+}
+
+export async function createAdminReportSchedule(data) {
+  return tenantApi.post('/reports/admin/schedules', data);
+}
+
+export async function runAdminReportScheduleNow(scheduleId) {
+  return tenantApi.post(`/reports/admin/schedules/${scheduleId}/run-now`);
+}
+
+export async function deleteAdminReportSchedule(scheduleId) {
+  return tenantApi.delete(`/reports/admin/schedules/${scheduleId}`);
+}
+
 // ────────────────────────────────────────────────
 // MailMan Inbox (backend: ^XMB(3.7) / ^XMB(3.9))
 // ────────────────────────────────────────────────
 
 export async function getMailManInbox(folder = 'IN', max = 50) {
   return tenantApi.get('/mailman/inbox', { folder, max });
+}
+
+export async function getMailManBaskets() {
+  return tenantApi.get('/mailman/baskets');
 }
 
 export async function getMailManMessage(ien) {
@@ -653,6 +743,10 @@ export async function setClinicAvailability(ien, data) {
   return tenantApi.post(`/clinics/${ien}/availability`, data);
 }
 
+export async function getStopCodes() {
+  return tenantApi.get('/stop-codes');
+}
+
 // ────────────────────────────────────────────────
 // Wards (backend: WARD LOCATION #42)
 // ────────────────────────────────────────────────
@@ -667,6 +761,10 @@ export async function createWard(data) {
 
 export async function updateWardField(ien, field, value) {
   return tenantApi.put(`/wards/${ien}/fields`, { [field]: value });
+}
+
+export async function getRoomBeds(params = {}) {
+  return tenantApi.get('/room-beds', params);
 }
 
 // ────────────────────────────────────────────────
@@ -721,7 +819,7 @@ export async function removeMailGroupMember(ien, duz) {
   return tenantApi.delete(`/mail-groups/${ien}/members/${duz}`);
 }
 
-// B8: CPRS Tab Access — read sub-file 200.03 for a user
+// Legacy alias: this route currently reads File 200.03 secondary menu options.
 export async function getCprsTabAccess(duz) {
   return tenantApi.get(`/users/${duz}/cprs-tabs`);
 }

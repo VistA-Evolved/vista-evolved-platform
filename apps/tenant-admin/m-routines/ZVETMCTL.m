@@ -7,15 +7,14 @@ ZVETMCTL ;VE/KM - TaskMan Control;2026-03-22
  ;   D STATUS^ZVETMCTL  - Check if TaskMan is running
  ;   D DETAIL^ZVETMCTL  - Get task detail by IEN
  ;   D TASKS^ZVETMCTL   - List scheduled tasks
+;   D START^ZVETMCTL   - Start TaskMan if it is stopped
  ;
  Q
  ;
 STATUS(RESULT) ;
- ; Check TaskMan status via %ZTLOAD globals
- N RUNNING,LASTRUN,TMNODE
- S RUNNING=0
- S TMNODE=$G(^%ZTSCH("TASK MANAGER"))
- I TMNODE'="" S RUNNING=1
+ ; Check TaskMan status via the scheduler globals used by the local wrapper.
+ N RUNNING,LASTRUN
+ S RUNNING=$$ISRUNNING()
  S LASTRUN=$G(^%ZTSCH("LASTRUN"))
  S RESULT(0)="1^"_$S(RUNNING:"RUNNING",1:"STOPPED")_U_LASTRUN
  Q
@@ -52,10 +51,33 @@ TASKS(RESULT) ;
  S RESULT(0)="1^OK^"_CNT
  Q
  ;
+START(RESULT) ;
+ ; Start TaskMan through the local wrapper, then report current status.
+ N RUNNING,LASTRUN
+ S RUNNING=$$ISRUNNING()
+ I RUNNING D  Q
+ . S LASTRUN=$G(^%ZTSCH("LASTRUN"))
+ . S RESULT(0)="1^ALREADY RUNNING^"_LASTRUN
+ I $T(START^ZVETASK)'="" D START^ZVETASK
+ E  D START^ZTMB
+ S RUNNING=$$ISRUNNING()
+ S LASTRUN=$G(^%ZTSCH("LASTRUN"))
+ S RESULT(0)="1^"_$S(RUNNING:"RUNNING",1:"START REQUESTED")_U_LASTRUN
+ Q
+ ;
+ISRUNNING() ;
+ N TMNODE,RUNNODE
+ S TMNODE=$G(^%ZTSCH("TASK MANAGER"))
+ I TMNODE'="" Q 1
+ S RUNNODE=$G(^%ZTSCH("RUN"))
+ I RUNNODE'="" Q 1
+ Q 0
+ ;
 INSTALL ;
  D REGONE("ZVE TASKMAN STATUS","STATUS","ZVETMCTL","Check if TaskMan is running")
  D REGONE("ZVE TASKMAN DETAIL","DETAIL","ZVETMCTL","Get task detail by IEN")
  D REGONE("ZVE TASKMAN TASKS","TASKS","ZVETMCTL","List scheduled tasks")
+ D REGONE("ZVE TASKMAN START","START","ZVETMCTL","Start TaskMan if it is stopped")
  W !,"ZVETMCTL installed.",!
  Q
  ;

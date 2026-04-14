@@ -663,6 +663,18 @@ export async function ddrFilerAdd(file, field, iens, value, flags = 'E') {
         { type: 'list', value: { '1': row } },
         { type: 'literal', value: flags },
       ]);
+      const hasError = lines.some(l => l.includes('[BEGIN_diERRORS]'));
+      if (hasError) {
+        const errLines = [];
+        let inErr = false;
+        for (const l of lines) {
+          if (l.includes('[BEGIN_diERRORS]')) { inErr = true; continue; }
+          if (l.includes('[END_diERRORS]')) { inErr = false; continue; }
+          if (inErr) errLines.push(l);
+        }
+        const msg = errLines.filter(l => !l.startsWith('FIELD^') && !l.startsWith('FILE^') && !l.startsWith('IENS^') && !l.match(/^\d+\^/)).join('; ') || 'DDR FILER ADD error';
+        return { ok: false, rpcUsed: 'DDR FILER', error: msg, lines };
+      }
       return { ok: true, rpcUsed: 'DDR FILER', lines };
     } catch (err) {
       return { ok: false, error: err.message, rpcUsed: 'DDR FILER' };

@@ -1,12 +1,53 @@
 ZVEDEV ;VE/KM - Device Management;2026-03-22
  ;;1.0;VistA-Evolved Tenant Admin;**1**;Mar 22, 2026;Build 1
  ;
- ; Device test-print and info via RPCs.
+ ; Device create, test-print, and info via RPCs.
  ;
  ; Entry points:
+ ;   D CREATE^ZVEDEV   - Create device entry with common fields
  ;   D TPRINT^ZVEDEV   - Send test string to a device
  ;   D DEVINFO^ZVEDEV  - Get detailed device info
  ;
+ Q
+ ;
+CREATE(RESULT,NM,DOLLARI,TYPE,MARGIN,PAGELEN,OPENPARM) ;
+ ; Create File 3.5 device entry via FileMan APIs.
+ N DIC,X,Y,DA,FDA,ERR,MSG,DUZ0SAVE,DLAYGO,DIK,U
+ S NM=$$TRIM^XLFSTR($G(NM))
+ I NM="" S RESULT(0)="0^NAME required" Q
+ ; File 3.5 requires native FileMan add (FILE^DICN) for entry creation.
+ ; TYPE is field 2, margin width is field 9, page length is field 11,
+ ; and open parameters are field 19.
+ S U="^",DUZ0SAVE=$G(DUZ(0))
+ S DUZ(0)="@",DLAYGO=3.5
+ S DIC="^%ZIS(1,",DIC(0)="L",X=NM
+ D FILE^DICN
+ I Y<1 D  Q
+ . S DUZ(0)=DUZ0SAVE
+ . S RESULT(0)="0^"_$S($P(Y,U,2)'="":$P(Y,U,2),1:"Device create failed")
+ S DA=+Y
+ I $G(DOLLARI)'="" S FDA(3.5,DA_",",1)=DOLLARI
+ I $G(TYPE)'="" S FDA(3.5,DA_",",2)=TYPE
+ I $G(MARGIN)'="" S FDA(3.5,DA_",",9)=MARGIN
+ I $G(PAGELEN)'="" S FDA(3.5,DA_",",11)=PAGELEN
+ I $G(OPENPARM)'="" S FDA(3.5,DA_",",19)=OPENPARM
+ I $D(FDA) D FILE^DIE("E","FDA","ERR")
+ I $D(ERR) D  Q
+ . S MSG=$$ERRTEXT(.ERR)
+ . S DUZ(0)=DUZ0SAVE
+ . S DIK="^%ZIS(1,"
+ . D ^DIK
+ . S MSG=$$ERRTEXT(.ERR)
+ . S RESULT(0)="0^"_$S(MSG'="":MSG,1:"Device create failed")
+ S DUZ(0)=DUZ0SAVE
+ S RESULT(0)="1^"_DA_"^OK"
+ S RESULT(1)="IEN^"_DA
+ S RESULT(2)="NAME^"_NM
+ S RESULT(3)="$I^"_$G(DOLLARI)
+ S RESULT(4)="TYPE^"_$G(TYPE)
+ S RESULT(5)="MARGIN^"_$G(MARGIN)
+ S RESULT(6)="PAGELEN^"_$G(PAGELEN)
+ S RESULT(7)="OPENPARAM^"_$G(OPENPARM)
  Q
  ;
 TPRINT(RESULT,DIEN) ;
@@ -56,10 +97,19 @@ DEVINFO(RESULT,DIEN) ;
  Q
  ;
 INSTALL ;
+ D REGONE("ZVE DEV CREATE","CREATE","ZVEDEV","Create a device")
  D REGONE("ZVE DEV TESTPRINT","TPRINT","ZVEDEV","Test print to a device")
  D REGONE("ZVE DEV INFO","DEVINFO","ZVEDEV","Get device detail info")
  W !,"ZVEDEV installed.",!
  Q
+ ;
+ERRTEXT(ERR) ;
+ N IDX,TXT,MSG
+ S (IDX,MSG)=""
+ F  S IDX=$O(ERR("DIERR",IDX)) Q:IDX=""  D
+ . S TXT=$G(ERR("DIERR",IDX,"TEXT",1))
+ . I TXT'="" S MSG=$S(MSG="":TXT,1:MSG_"; "_TXT)
+ Q MSG
  ;
 REGONE(NAME,TAG,RTN,DESC) ;
  N IEN,FDA,IENS,ERRS

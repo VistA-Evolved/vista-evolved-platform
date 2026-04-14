@@ -1,0 +1,14 @@
+{
+  "watchers": {
+    "1": {
+      "enabled": true,
+      "vistaDown": false,
+      "taskmanStopped": true,
+      "hl7Stopped": true,
+      "cooldownMinutes": 60,
+      "lastSent": {
+        "hl7Stopped": "2026-04-14T00:04:38.212Z"
+      }
+    }
+  }
+}

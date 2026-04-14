@@ -2,6 +2,7 @@ ZVEMAIL ; VE — MailMan, Two-Person Integrity, Alert Creation RPCs ; Apr 2026
  ;;1.0;VISTA EVOLVED;**1**;Apr 2026;Build 1
  ;
  ; RPCs in this routine:
+ ;   ZVE MM BASKETS   - List MailMan baskets for user
  ;   ZVE MM INBOX     - Read MailMan inbox for user
  ;   ZVE MM READ      - Read single MailMan message body
  ;   ZVE MM SEND      - Send MailMan message
@@ -15,6 +16,7 @@ ZVEMAIL ; VE — MailMan, Two-Person Integrity, Alert Creation RPCs ; Apr 2026
  ;
 INSTALL ;
  W !,"=== Installing ZVEMAIL RPCs ==="
+ D REGONE^ZVEADMIN("ZVE MM BASKETS","MMBASK","ZVEMAIL","List MailMan baskets")
  D REGONE^ZVEADMIN("ZVE MM INBOX","MMINBOX","ZVEMAIL","Read MailMan inbox")
  D REGONE^ZVEADMIN("ZVE MM READ","MMREAD","ZVEMAIL","Read MailMan message body")
  D REGONE^ZVEADMIN("ZVE MM SEND","MMSEND","ZVEMAIL","Send MailMan message")
@@ -26,6 +28,27 @@ INSTALL ;
  ; Set XTMP expiration for 2P queue
  I '$D(^XTMP("ZVE2P",0)) S ^XTMP("ZVE2P",0)=$$FMADD^XLFDT($$NOW^XLFDT,365)_U_$$NOW^XLFDT_U_"VE Two-Person Integrity Queue"
  W !,"=== ZVEMAIL install complete ==="
+ Q
+ ;
+ ; ============================================================
+ ; ZVE MM BASKETS — List MailMan baskets for user
+ ; ============================================================
+MMBASK(R,TARGETDUZ) ;
+ S TARGETDUZ=+$G(TARGETDUZ)
+ I 'TARGETDUZ S R(0)="0^User ID required" Q
+ ;
+ N BIEN,CNT S BIEN=0,CNT=0
+ F  S BIEN=$O(^XMB(3.7,TARGETDUZ,2,BIEN)) Q:'BIEN  D
+ . N BNAME S BNAME=$P($G(^XMB(3.7,TARGETDUZ,2,BIEN,0)),U,1)
+ . Q:BNAME=""
+ . N MIEN,MSGCNT,UNREAD S MIEN=0,MSGCNT=0,UNREAD=0
+ . F  S MIEN=$O(^XMB(3.7,TARGETDUZ,2,BIEN,1,MIEN)) Q:'MIEN  D
+ . . S MSGCNT=MSGCNT+1
+ . . I '$D(^XMB(3.7,TARGETDUZ,2,BIEN,1,MIEN,"R")) S UNREAD=UNREAD+1
+ . S CNT=CNT+1
+ . S R(CNT)=BIEN_U_BNAME_U_MSGCNT_U_UNREAD
+ ;
+ S R(0)="1^"_CNT_"^OK"
  Q
  ;
  ; ============================================================
@@ -47,6 +70,7 @@ MMINBOX(R,TARGETDUZ,FOLDER,MAX) ;
  . I FOLDER="IN",BNAME="WASTE" Q
  . I FOLDER="WASTE",BNAME'="WASTE" Q
  . I FOLDER="SENT" Q  ; sent handled separately
+ . I FOLDER'="",FOLDER'="IN",FOLDER'="WASTE",FOLDER'="SENT",BNAME'=FOLDER Q
  . ;
  . N MIEN S MIEN=0
  . F  S MIEN=$O(^XMB(3.7,TARGETDUZ,2,BIEN,1,MIEN)) Q:'MIEN  Q:CNT>=MAX  D

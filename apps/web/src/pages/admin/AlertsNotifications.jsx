@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppShell from '../../components/shell/AppShell';
 import { ConfirmDialog } from '../../components/shared/SharedComponents';
-import { getAlerts, updateAlert, getStaff, createAlert, getMailManInbox, getMailManMessage, sendMailManMessage, deleteMailManMessage } from '../../services/adminService';
+import { getAlerts, updateAlert, getStaff, createAlert, getMailManInbox, getMailManBaskets, getMailManMessage, sendMailManMessage, deleteMailManMessage } from '../../services/adminService';
 import ErrorState from '../../components/shared/ErrorState';
 
 /**
@@ -17,6 +17,22 @@ const PRIORITY_STYLES = {
   normal: { cls: 'bg-info-bg text-info', icon: 'remove' },
   low:    { cls: 'bg-[#F5F5F5] text-text-muted', icon: 'expand_more' },
 };
+
+const MAIL_UNREAD_MAX = 200;
+
+function buildMailFolderTabs(baskets) {
+  const rows = Array.isArray(baskets) ? baskets : [];
+  const wasteBasket = rows.find((basket) => basket.name === 'WASTE');
+  const visibleCustomBaskets = rows.filter((basket) => basket.name && basket.name !== 'IN' && basket.name !== 'WASTE');
+  const incomingCount = rows.filter((basket) => basket.name !== 'WASTE').reduce((sum, basket) => sum + (basket.messageCount || 0), 0);
+
+  return [
+    { key: 'IN', label: 'Inbox', count: incomingCount },
+    ...visibleCustomBaskets.map((basket) => ({ key: basket.name, label: basket.name, count: basket.messageCount || 0 })),
+    { key: 'SENT', label: 'Sent', count: 0 },
+    { key: 'WASTE', label: 'Deleted', count: wasteBasket?.messageCount || 0 },
+  ];
+}
 
 /** Match MailMan "From" display text to a NEW PERSON (#200) row for reply addressing. */
 function matchStaffFromMailFromLine(fromStr, list) {
@@ -50,6 +66,8 @@ export default function AlertsNotifications() {
   const [messageBodyLoading, setMessageBodyLoading] = useState(false);
   const [composeModal, setComposeModal] = useState(false);
   const [mailFolder, setMailFolder] = useState('IN');
+  const [mailUnreadCount, setMailUnreadCount] = useState(0);
+  const [mailBaskets, setMailBaskets] = useState([]);
   const [confirmDeleteAlert, setConfirmDeleteAlert] = useState(false);
   const [actionError, setActionError] = useState(null);
 
@@ -79,6 +97,20 @@ export default function AlertsNotifications() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const loadMailBaskets = useCallback(async () => {
+    try {
+      const res = await getMailManBaskets();
+      const list = res?.data || [];
+      setMailBaskets(list);
+      setMailUnreadCount(list.filter((basket) => basket.name !== 'WASTE').reduce((sum, basket) => sum + (basket.unreadCount || 0), 0));
+    } catch (_err) {
+      setMailBaskets([]);
+      setMailUnreadCount(0);
+    }
+  }, []);
+
+  useEffect(() => { loadMailBaskets(); }, [loadMailBaskets]);
 
   const newCount = alerts.filter(a => a.status === 'new').length;
 
@@ -123,6 +155,7 @@ export default function AlertsNotifications() {
               tab === 'messages' ? 'border-navy text-navy' : 'border-transparent text-text-secondary hover:text-text'
             }`}>
             Messages
+            {mailUnreadCount > 0 && <span className="ml-1.5 text-[10px] bg-[#E8EEF5] text-steel px-1.5 py-0.5 rounded-full font-bold">{mailUnreadCount}</span>}
           </button>
           <button onClick={() => setTab('notifications')} role="tab" aria-selected={tab === 'notifications'}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
@@ -275,6 +308,9 @@ export default function AlertsNotifications() {
             mailFolder={mailFolder} setMailFolder={setMailFolder}
             staffList={staffList} setStaffList={setStaffList}
             staffLoading={staffLoading} setStaffLoading={setStaffLoading}
+            mailUnreadCount={mailUnreadCount} setMailUnreadCount={setMailUnreadCount}
+            mailBaskets={mailBaskets}
+            reloadMailBaskets={loadMailBaskets}
           />
         )}
 
@@ -429,6 +465,8 @@ function NewAlertModal({ open, onClose, staffList, setStaffList, staffLoading, s
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
   const [showPicker, setShowPicker] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     if (open && staffList.length === 0) {
@@ -436,6 +474,19 @@ function NewAlertModal({ open, onClose, staffList, setStaffList, staffLoading, s
       getStaff().then(res => setStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })))).catch(() => {}).finally(() => setStaffLoading(false));
     }
   }, [open, staffList.length, setStaffList, setStaffLoading]);
+
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await getStaff({ search: search.trim() });
+        setSearchResults((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
+      } catch (_) { setSearchResults([]); }
+      finally { setSearchLoading(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   if (!open) return null;
 
@@ -466,10 +517,16 @@ function NewAlertModal({ open, onClose, staffList, setStaffList, staffLoading, s
                 placeholder="Search staff..." className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel" />
               {showPicker && search && (
                 <div className="absolute top-full left-0 right-0 z-10 bg-white border border-border rounded-md shadow-lg max-h-40 overflow-auto">
-                  {staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).slice(0, 15).map(s => (
-                    <button key={s.duz} onClick={() => { setTo(s.duz); setToName(s.name); setSearch(''); setShowPicker(false); }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-surface-alt">{s.name}</button>
-                  ))}
+                  {searchLoading ? (
+                    <div className="px-3 py-2 text-xs text-text-muted">Searching…</div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-text-muted">No matching staff found</div>
+                  ) : (
+                    searchResults.slice(0, 15).map(s => (
+                      <button key={s.duz} onClick={() => { setTo(s.duz); setToName(s.name); setSearch(''); setShowPicker(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-surface-alt">{s.name}</button>
+                    ))
+                  )}
                 </div>
               )}
             </div>
@@ -511,15 +568,18 @@ function NewAlertModal({ open, onClose, staffList, setStaffList, staffLoading, s
 
 function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading, selectedMessage, setSelectedMessage,
   messageBody, setMessageBody, messageBodyLoading, setMessageBodyLoading, composeModal, setComposeModal,
-  mailFolder, setMailFolder, staffList, setStaffList, staffLoading, setStaffLoading }) {
+  mailFolder, setMailFolder, staffList, setStaffList, staffLoading, setStaffLoading, mailUnreadCount, setMailUnreadCount,
+  mailBaskets, reloadMailBaskets }) {
 
   const [composeDraft, setComposeDraft] = useState(null);
+  const folderTabs = buildMailFolderTabs(mailBaskets);
 
   const loadMessages = useCallback(async (folder) => {
     setMessagesLoading(true);
     try {
       const res = await getMailManInbox(folder);
-      setMessages(res?.data || []);
+      const list = res?.data || [];
+      setMessages(list);
     } catch (err) { setMessages([]); }
     finally { setMessagesLoading(false); }
   }, [setMessages, setMessagesLoading]);
@@ -533,6 +593,10 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
       const res = await getMailManMessage(msg.ien);
       setMessageBody(res?.data || null);
       setMessages(prev => prev.map(m => m.ien === msg.ien ? { ...m, read: true } : m));
+      if (mailFolder === 'IN' && !msg.read) {
+        setMailUnreadCount((count) => Math.max(0, count - 1));
+      }
+      if (!msg.read) await reloadMailBaskets();
     } catch (err) { setMessageBody(null); }
     finally { setMessageBodyLoading(false); }
   };
@@ -543,7 +607,12 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
     setDeleteError(null);
     try {
       await deleteMailManMessage(ien);
+      const deletedMessage = messages.find((message) => message.ien === ien);
       setMessages(prev => prev.filter(m => m.ien !== ien));
+      if (mailFolder === 'IN' && deletedMessage && !deletedMessage.read) {
+        setMailUnreadCount((count) => Math.max(0, count - 1));
+      }
+      await reloadMailBaskets();
       if (selectedMessage?.ien === ien) { setSelectedMessage(null); setMessageBody(null); }
     } catch (err) { setDeleteError(err?.message || 'Delete failed'); }
   };
@@ -558,11 +627,17 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
         </div>
       )}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-1">
-          {['IN', 'SENT', 'WASTE'].map(f => (
-            <button key={f} onClick={() => { setMailFolder(f); setSelectedMessage(null); setMessageBody(null); }}
-              className={`px-3 py-1.5 text-xs rounded-md border ${mailFolder === f ? 'bg-[#E8EEF5] border-steel text-steel font-medium' : 'border-border text-text-secondary hover:bg-surface-alt'}`}>
-              {f === 'IN' ? 'Inbox' : f === 'SENT' ? 'Sent' : 'Deleted'}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {folderTabs.map((folder) => (
+            <button key={folder.key} onClick={() => { setMailFolder(folder.key); setSelectedMessage(null); setMessageBody(null); }}
+              className={`px-3 py-1.5 text-xs rounded-md border ${mailFolder === folder.key ? 'bg-[#E8EEF5] border-steel text-steel font-medium' : 'border-border text-text-secondary hover:bg-surface-alt'}`}>
+              {folder.label}
+              {folder.key === 'IN' && mailUnreadCount > 0 && (
+                <span className="ml-1.5 rounded-full bg-steel px-1.5 py-0.5 text-[10px] font-bold text-white">{mailUnreadCount}</span>
+              )}
+              {folder.key !== 'IN' && folder.count > 0 && (
+                <span className="ml-1.5 rounded-full bg-[#F3F4F6] px-1.5 py-0.5 text-[10px] font-bold text-[#4B5563]">{folder.count}</span>
+              )}
             </button>
           ))}
         </div>
@@ -578,8 +653,8 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
           ) : messages.length === 0 ? (
             <div className="text-center py-12 text-text-muted">
               <span className="material-symbols-outlined text-[40px] block mb-3">mail</span>
-              <h3 className="text-lg font-semibold text-text mb-1">{mailFolder === 'WASTE' ? 'No Deleted Messages' : mailFolder === 'SENT' ? 'No Sent Messages' : 'No Messages'}</h3>
-              <p className="text-sm">Your {mailFolder === 'WASTE' ? 'deleted items' : mailFolder === 'SENT' ? 'sent folder' : 'inbox'} is empty.</p>
+              <h3 className="text-lg font-semibold text-text mb-1">{mailFolder === 'WASTE' ? 'No Deleted Messages' : mailFolder === 'SENT' ? 'No Sent Messages' : mailFolder === 'IN' ? 'No Messages' : `No Messages in ${mailFolder}`}</h3>
+              <p className="text-sm">Your {mailFolder === 'WASTE' ? 'deleted items' : mailFolder === 'SENT' ? 'sent folder' : mailFolder === 'IN' ? 'inbox' : `${mailFolder} basket`} is empty.</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -596,7 +671,12 @@ function MailManTab({ messages, setMessages, messagesLoading, setMessagesLoading
                         {msg.priority === 'high' && <span className="text-[9px] bg-danger-bg text-danger px-1.5 py-0.5 rounded font-bold">HIGH</span>}
                       </div>
                       <div className="text-xs text-text truncate">{msg.subject}</div>
-                      <div className="text-[10px] text-text-muted mt-0.5">{msg.date}</div>
+                      <div className="mt-0.5 flex items-center gap-2 text-[10px] text-text-muted">
+                        <span>{msg.date}</span>
+                        {mailFolder === 'IN' && msg.basket && msg.basket !== 'IN' && (
+                          <span className="rounded-full bg-[#F3F4F6] px-1.5 py-0.5 font-medium text-[#4B5563]">{msg.basket}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -692,6 +772,8 @@ function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoadi
   const [err, setErr] = useState('');
   const [search, setSearch] = useState('');
   const [showPicker, setShowPicker] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     if (staffList.length === 0) {
@@ -699,6 +781,19 @@ function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoadi
       getStaff().then(res => setStaffList((res?.data || []).map(u => ({ duz: u.ien, name: u.name })))).catch(() => {}).finally(() => setStaffLoading(false));
     }
   }, [staffList.length, setStaffList, setStaffLoading]);
+
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await getStaff({ search: search.trim() });
+        setSearchResults((res?.data || []).map(u => ({ duz: u.ien, name: u.name })));
+      } catch (_) { setSearchResults([]); }
+      finally { setSearchLoading(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     if (initialDraft) {
@@ -745,10 +840,16 @@ function ComposeMailModal({ onClose, onSent, staffList, setStaffList, staffLoadi
                 className="w-full h-9 px-3 text-sm border border-border rounded-md focus:outline-none focus:border-steel" />
               {showPicker && search && (
                 <div className="absolute top-full left-0 right-0 z-10 bg-white border border-border rounded-md shadow-lg max-h-40 overflow-auto">
-                  {staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).slice(0, 15).map(s => (
-                    <button type="button" key={s.duz} onClick={() => { setTo(String(s.duz)); setToName(s.name); setSearch(''); setShowPicker(false); }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-surface-alt">{s.name}</button>
-                  ))}
+                  {searchLoading ? (
+                    <div className="px-3 py-2 text-xs text-text-muted">Searching…</div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-text-muted">No matching staff found</div>
+                  ) : (
+                    searchResults.slice(0, 15).map(s => (
+                      <button type="button" key={s.duz} onClick={() => { setTo(String(s.duz)); setToName(s.name); setSearch(''); setShowPicker(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-surface-alt">{s.name}</button>
+                    ))
+                  )}
                 </div>
               )}
             </div>

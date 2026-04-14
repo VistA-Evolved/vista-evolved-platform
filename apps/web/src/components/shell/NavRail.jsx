@@ -70,8 +70,12 @@ export default function NavRail() {
             });
             setSiteDisabledIds(disabled);
           }
-        } catch (err) { /* site workspaces not configured yet — show all */ }
-      } catch (err) { /* session load failed — show all workspaces */ }
+        } catch (err) {
+          console.warn('Failed to load site workspace visibility; showing all workspaces:', err);
+        }
+      } catch (err) {
+        console.warn('Failed to load workspace session visibility; showing all workspaces:', err);
+      }
     })();
 
     return () => { cancelled = true; };
@@ -89,7 +93,7 @@ export default function NavRail() {
   });
 
   return (
-    <nav className="fixed left-0 top-[40px] bottom-0 w-16 bg-navy flex flex-col items-center py-3 gap-1 z-40 overflow-y-auto">
+    <nav data-navrail className="fixed left-0 top-[40px] bottom-0 w-16 bg-navy flex flex-col items-center py-3 gap-1 z-40 overflow-y-auto">
       {filteredWorkspaces.map((ws) => {
         const isActive = activeWorkspace.id === ws.id;
         const isBuilt = ws.built;

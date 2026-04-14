@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { login, updateCredentials } from '../services/adminService';
+import LoginIntroPreview from '../components/shared/LoginIntroPreview';
+import { changeExpiredPassword, getPublicLoginConfig, login } from '../services/adminService';
 
 /** Map tenant-admin / VistA broker errors to clear, actionable copy (Section 4 / 7.3). */
 function mapLoginError(err) {
@@ -43,7 +44,7 @@ function mapLoginError(err) {
     };
   }
   if (code === 'INVALID_CREDENTIALS') {
-    return { message: wrongCreds, passwordExpired: false };
+    return { message: err.message || wrongCreds, passwordExpired: false };
   }
 
   if (raw.includes('locked') || raw.includes('lockout')) {
@@ -80,11 +81,26 @@ export default function LoginPage() {
   const [passwordExpired, setPasswordExpired] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [loginConfig, setLoginConfig] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const timedOut = location.state?.reason === 'timeout';
 
   useEffect(() => { document.title = 'Sign In — VistA Evolved'; }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPublicLoginConfig()
+      .then((result) => {
+        if (!cancelled) setLoginConfig(result?.data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setLoginConfig(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -112,6 +128,17 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-navy">VistA Evolved</h1>
           <p className="text-sm text-text-secondary mt-1">Healthcare Information System</p>
+        </div>
+
+        <div className="mb-4">
+          <LoginIntroPreview
+            heading="System notice"
+            helperText="Live intro text configured in VistA Kernel."
+            siteName={loginConfig?.siteName}
+            domain={loginConfig?.domain}
+            production={loginConfig?.production}
+            message={loginConfig?.introMessage}
+          />
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md p-6 space-y-4">
@@ -152,6 +179,11 @@ export default function LoginPage() {
               required
               className="w-full h-10 px-3 border border-border rounded-md text-sm text-text focus:outline-none focus:border-steel focus:ring-1 focus:ring-steel"
             />
+            {Number.isFinite(Number(loginConfig?.lockoutAttempts)) && Number(loginConfig?.lockoutAttempts) > 0 && (
+              <p className="mt-2 text-xs text-text-secondary">
+                Account lockout threshold: {loginConfig.lockoutAttempts} failed attempt{Number(loginConfig.lockoutAttempts) === 1 ? '' : 's'}. Remaining attempts are shown after each failed sign-in.
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end">
@@ -176,7 +208,7 @@ export default function LoginPage() {
             if (newPassword === password) { setError('New password must be different from the current password.'); return; }
             setLoading(true);
             try {
-              await updateCredentials(username, { accessCode: username, verifyCode: newPassword });
+              await changeExpiredPassword(username, password, newPassword);
               setPasswordExpired(false);
               setPassword('');
               setNewPassword('');

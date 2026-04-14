@@ -22,9 +22,36 @@ import { fmDateToDate, formatDateTime } from '../../utils/transforms';
 
 /** Section 4 Audit: action filter options (mapped in `matchesAuditActionFilter`) */
 const ACTION_FILTER_OPTIONS = ['All', 'Sign-on', 'Key Change', 'User Edit', 'Error'];
+const OFF_HOURS_START = 18;
+const OFF_HOURS_END = 6;
+const MASS_KEY_CHANGE_WINDOW_MS = 10 * 60 * 1000;
+const MASS_KEY_CHANGE_THRESHOLD = 3;
+
+const SUSPICION_STYLES = {
+  high: 'bg-[#FDE8E8] text-[#CC3333]',
+  medium: 'bg-[#FFF3E0] text-[#E65100]',
+};
+
+const SUSPICION_SUMMARY_META = {
+  failedAccess: { label: 'Failed logins', severity: 'high' },
+  offHours: { label: 'Off-hours access', severity: 'medium' },
+  massKeyChange: { label: 'Mass key changes', severity: 'high' },
+};
+
+function formatSuspicionSummary(flags) {
+  return flags.map((flag) => flag.label).join(', ');
+}
+
+function isOffHoursTimestamp(sortTime) {
+  if (!sortTime) return false;
+  const hour = new Date(sortTime).getHours();
+  return hour >= OFF_HOURS_START || hour < OFF_HOURS_END;
+}
 
 function isKeyChangeAuditEntry(e) {
   if (e.action !== 'Data Change') return false;
+  const directAction = `${e.raw?.fieldChanged || ''}`;
+  if (/KEY-(ASSIGN|REMOVE)|SECURITY KEY|\bKEYS?\b|XUSEC/i.test(directAction)) return true;
   const d = `${e.detail || ''} ${e.raw?.fileNumber ?? ''} ${e.raw?.fieldChanged ?? ''}`;
   return /(^|\s)200(\.|$)|security\s*key|\bKEY\b|KEYS|XUSEC/i.test(d);
 }
@@ -103,6 +130,19 @@ const columns = [
   { key: 'timestamp', label: 'Timestamp', render: (val) => <span className="font-mono text-[11px]">{val}</span> },
   { key: 'user', label: 'Staff Member' },
   { key: 'action', label: 'Action', align: 'center', render: (val, row) => <ActionBadge type={row.actionColor || 'read'} label={val} /> },
+  {
+    key: 'suspicionSummary',
+    label: 'Risk',
+    render: (_val, row) => row.suspicionFlags?.length ? (
+      <div className="flex flex-wrap gap-1">
+        {row.suspicionFlags.map((flag) => (
+          <span key={`${row.id}-${flag.code}`} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SUSPICION_STYLES[flag.severity] || SUSPICION_STYLES.medium}`}>
+            {flag.label}
+          </span>
+        ))}
+      </div>
+    ) : <span className="text-[11px] text-text-muted">Normal</span>,
+  },
   { key: 'source', label: 'Source' },
   { key: 'detail', label: 'Detail', render: (val) => <span className="text-xs text-text-secondary line-clamp-2">{val}</span> },
 ];
@@ -185,6 +225,56 @@ function normalizeAuditEntry(raw, source) {
   };
 }
 
+function annotateSuspiciousAuditEntries(entries) {
+  const keyBurstCounts = new Map();
+  for (const entry of entries) {
+    if (!isKeyChangeAuditEntry(entry) || !entry._sortTime) continue;
+    const bucket = Math.floor(entry._sortTime / MASS_KEY_CHANGE_WINDOW_MS);
+    const key = `${entry.user || 'unknown'}:${bucket}`;
+    keyBurstCounts.set(key, (keyBurstCounts.get(key) || 0) + 1);
+  }
+
+  return entries.map((entry) => {
+    const suspicionFlags = [];
+
+    if (entry.source === 'Failed Access' || entry.action === 'Failed Access') {
+      suspicionFlags.push({ code: 'failedAccess', label: 'Failed login', severity: 'high' });
+    }
+
+    if ((entry.source === 'Sign-On Log' || entry.source === 'Administrative Access') && isOffHoursTimestamp(entry._sortTime)) {
+      suspicionFlags.push({ code: 'offHours', label: 'Off-hours access', severity: 'medium' });
+    }
+
+    if (isKeyChangeAuditEntry(entry) && entry._sortTime) {
+      const bucket = Math.floor(entry._sortTime / MASS_KEY_CHANGE_WINDOW_MS);
+      const key = `${entry.user || 'unknown'}:${bucket}`;
+      const burstCount = keyBurstCounts.get(key) || 0;
+      if (burstCount >= MASS_KEY_CHANGE_THRESHOLD) {
+        suspicionFlags.push({ code: 'massKeyChange', label: `Mass key change (${burstCount})`, severity: 'high' });
+      }
+    }
+
+    const highestSeverity = suspicionFlags.some((flag) => flag.severity === 'high') ? 'high' : (suspicionFlags.length > 0 ? 'medium' : null);
+
+    return {
+      ...entry,
+      suspicionFlags,
+      suspicionSummary: suspicionFlags.length ? formatSuspicionSummary(suspicionFlags) : '',
+      suspicionSeverity: highestSeverity,
+    };
+  });
+}
+
+function summarizeSuspiciousActivity(entries) {
+  const counts = { failedAccess: 0, offHours: 0, massKeyChange: 0 };
+  for (const entry of entries) {
+    for (const flag of entry.suspicionFlags || []) {
+      if (Object.hasOwn(counts, flag.code)) counts[flag.code] += 1;
+    }
+  }
+  return counts;
+}
+
 export default function AuditLog() {
   useEffect(() => { document.title = 'Audit Log — VistA Evolved'; }, []);
   const [searchParams] = useSearchParams();
@@ -233,7 +323,7 @@ export default function AuditLog() {
       }
 
       combined.sort((a, b) => (b._sortTime || 0) - (a._sortTime || 0));
-      setAllEvents(combined);
+      setAllEvents(annotateSuspiciousAuditEntries(combined));
 
       const allFailed = results.every(r => r.status === 'rejected');
       if (allFailed && combined.length === 0) {
@@ -257,6 +347,7 @@ export default function AuditLog() {
     if (dateTo && e._sortTime && e._sortTime > new Date(dateTo + 'T23:59:59').getTime()) return false;
     return true;
   });
+  const suspiciousSummary = summarizeSuspiciousActivity(filtered);
 
   const totalFiltered = filtered.length;
   const pageStart = (page - 1) * PAGE_SIZE;
@@ -352,6 +443,28 @@ export default function AuditLog() {
           </div>
         </div>
 
+        <div className="bg-white border border-border rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-text uppercase tracking-wider">Suspicious Activity</h2>
+              <p className="text-xs text-text-secondary mt-1">Highlights repeated failed logins, off-hours access, and bursts of security-key changes in the currently filtered results.</p>
+            </div>
+            <div className="text-xs text-text-muted">{filtered.length} events in scope</div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {Object.entries(SUSPICION_SUMMARY_META).map(([key, meta]) => {
+              const count = suspiciousSummary[key] || 0;
+              return (
+                <div key={key} className={`rounded-lg border px-3 py-3 ${count > 0 ? (meta.severity === 'high' ? 'border-[#F3C2C2] bg-[#FFF5F5]' : 'border-[#F5D7A1] bg-[#FFF9EC]') : 'border-[#E2E4E8] bg-[#FAFAFA]'}`}>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#666]">{meta.label}</div>
+                  <div className={`mt-2 text-2xl font-bold ${count > 0 ? (meta.severity === 'high' ? 'text-[#CC3333]' : 'text-[#E65100]') : 'text-text'}`}>{count}</div>
+                  <div className="text-[11px] text-text-muted mt-1">{count === 1 ? 'flagged event' : 'flagged events'}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {loading ? <TableSkeleton rows={10} cols={5} /> : pageSlice.length === 0 ? (
           <div className="text-center py-12 border border-[#E2E4E8] rounded-lg bg-white">
             <span className="material-symbols-outlined text-[32px] text-gray-500 block mb-2">search_off</span>
@@ -366,7 +479,13 @@ export default function AuditLog() {
           <>
             <DataTable columns={columns} data={pageSlice} idField="id"
               selectedId={expandedId} onRowClick={(row) => setExpandedId(expandedId === row.id ? null : row.id)}
-              rowClassName={(row) => row.action === 'Administrative Access' ? '!bg-[#FDE8E8]' : (row.action === 'Failed Access' || row.action === 'Error' ? '!bg-[#FFF8E1]' : '')} />
+              rowClassName={(row) => row.suspicionSeverity === 'high'
+                ? '!bg-[#FFF1F1]'
+                : row.suspicionSeverity === 'medium'
+                  ? '!bg-[#FFF8E8]'
+                  : row.action === 'Administrative Access'
+                    ? '!bg-[#FDE8E8]'
+                    : (row.action === 'Failed Access' || row.action === 'Error' ? '!bg-[#FFF8E1]' : '')} />
 
             {expandedId && (() => {
               const event = allEvents.find(e => e.id === expandedId);
@@ -384,6 +503,18 @@ export default function AuditLog() {
                     <div><span className="text-text-muted">Action:</span> {event.action}</div>
                     <div><span className="text-text-muted">User:</span> {event.user}</div>
                   </div>
+                  {event.suspicionFlags?.length > 0 && (
+                    <div className="mt-3 p-3 rounded-md border border-[#F5D7A1] bg-[#FFF9EC] text-xs">
+                      <div className="text-text-muted uppercase tracking-wider text-[10px] mb-2">Suspicious Activity Flags</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {event.suspicionFlags.map((flag) => (
+                          <span key={`${event.id}-${flag.code}-detail`} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SUSPICION_STYLES[flag.severity] || SUSPICION_STYLES.medium}`}>
+                            {flag.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-3 p-3 bg-white rounded-md border border-border text-xs">
                     <div className="text-text-muted uppercase tracking-wider text-[10px] mb-1">Full Detail</div>
                     <div className="text-text whitespace-pre-wrap">{event.detail}</div>

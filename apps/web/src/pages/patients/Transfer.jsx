@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import AppShell from '../../components/shell/AppShell';
 import PatientBanner from '../../components/shared/PatientBanner';
+import { ConfirmDialog } from '../../components/shared/SharedComponents';
 import { usePatient } from '../../components/shared/PatientContext';
-import { getPatient, transferPatient, getBeds, getWards, getProviders, getTreatingSpecialties } from '../../services/patientService';
+import { getPatient, transferPatient, getBeds, getWards, getProviders, getTreatingSpecialties, getDivisions } from '../../services/patientService';
 
 const inputCls = 'h-10 px-3 border border-[#E2E4E8] rounded-md text-sm text-[#333] focus:outline-none focus:border-[#2E5984] focus:ring-1 focus:ring-[#2E5984]';
 const selectCls = `${inputCls} bg-white`;
@@ -22,17 +23,20 @@ export default function Transfer() {
   const { patientId } = useParams();
   const navigate = useNavigate();
   const { patient, setPatient, hasPatient } = usePatient();
+  const patientRecord = patient?.raw || patient;
   const [loading, setLoading] = useState(true);
   const [beds, setBeds] = useState([]);
   const [wards, setWards] = useState([]);
   const [providers, setProviders] = useState([]);
   const [specialties, setSpecialties] = useState([]);
+  const [divisions, setDivisions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [successData, setSuccessData] = useState(null);
   const [loadingWards, setLoadingWards] = useState(false);
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [loadingSpecialties, setLoadingSpecialties] = useState(false);
+  const [showCrossDivisionConfirm, setShowCrossDivisionConfirm] = useState(false);
   const [form, setForm] = useState({
     transferTo: '', roomBed: '', transferReason: '', attendingProvider: '',
     treatingSpecialty: '', transferDateTime: new Date().toISOString().slice(0, 16),
@@ -50,11 +54,12 @@ export default function Transfer() {
           const pRes = await getPatient(patientId);
           if (pRes.ok) setPatient(pRes.data);
         }
-        const [bedRes, wardRes, provRes, specRes] = await Promise.allSettled([
+        const [bedRes, wardRes, provRes, specRes, divRes] = await Promise.allSettled([
           getBeds(),
           getWards(),
           getProviders(),
           getTreatingSpecialties(),
+          getDivisions(),
         ]);
         if (bedRes.status === 'fulfilled') setBeds(bedRes.value.data || []);
         if (wardRes.status === 'fulfilled') setWards(wardRes.value.data || []);
@@ -63,6 +68,7 @@ export default function Transfer() {
         setLoadingProviders(false);
         if (specRes.status === 'fulfilled') setSpecialties(specRes.value.data || []);
         setLoadingSpecialties(false);
+        if (divRes.status === 'fulfilled') setDivisions(divRes.value.data || []);
       } finally {
         setLoading(false);
       }
@@ -77,11 +83,24 @@ export default function Transfer() {
     });
   };
 
+  const divisionNameByIen = new Map(divisions.map((division) => [String(division.ien), division.name || '']));
+
   const units = wards.length > 0
-    ? wards.map(w => ({ ien: w.ien, name: w.name }))
+    ? wards.map((ward) => {
+      const divisionIen = String(ward.divisionIen || ward.division || '').trim();
+      return {
+        ien: ward.ien,
+        name: ward.name,
+        divisionIen,
+        division: divisionNameByIen.get(divisionIen) || divisionIen,
+      };
+    })
     : [...new Set(beds.map(b => b.unit))].map(u => ({ ien: u, name: u }));
 
-  const selectedWardName = units.find(u => u.ien === form.transferTo)?.name || form.transferTo;
+  const selectedWard = units.find(u => u.ien === form.transferTo);
+  const selectedWardName = selectedWard?.name || form.transferTo;
+  const selectedDivisionIen = selectedWard?.divisionIen || '';
+  const selectedDivision = selectedWard?.division || '';
   const availableInUnit = beds.filter(b => {
     if (!form.transferTo) return false;
     if (b.status !== 'available') return false;
@@ -89,28 +108,37 @@ export default function Transfer() {
     return b.unit === form.transferTo;
   });
 
-  const currentBed = beds.find(b => b.patientDfn === patientId);
-  const currentWardName = currentBed?.unit || patient?.wardIen || '—';
-  const currentBedName = currentBed?.bed || patient?.roomBed || '—';
-  const isAdmitted = !!currentBed || patient?.admissionStatus === 'admitted' || patient?.status === 'inpatient';
+  const currentWard = wards.find((ward) => ward.ien === patientRecord?.wardLocation || ward.ien === patientRecord?.wardIen || ward.name === patientRecord?.wardLocation);
+  const currentWardName = currentWard?.name || patientRecord?.wardLocation || '—';
+  const currentBedName = patientRecord?.roomBed || '—';
+  const currentDivisionIen = String(currentWard?.divisionIen || currentWard?.division || '').trim();
+  const currentDivision = divisionNameByIen.get(currentDivisionIen) || currentDivisionIen;
+  const isAdmitted = Boolean(patientRecord?.wardLocation || patientRecord?.roomBed || patientRecord?.admitDate || patientRecord?.admissionStatus === 'admitted' || patientRecord?.status === 'inpatient');
+  const isCrossDivisionTransfer = Boolean(
+    isAdmitted
+    && form.transferTo
+    && currentDivisionIen
+    && selectedDivisionIen
+    && currentDivisionIen !== selectedDivisionIen,
+  );
 
-  const handleSubmit = async () => {
-    if (!form.transferTo) {
-      setSaveError('Transfer-to nursing unit is required.');
-      return;
-    }
-    if (!form.transferReason) {
-      setSaveError('Transfer reason is required.');
-      return;
-    }
+  const submitTransfer = async () => {
     setSaving(true);
     setSaveError(null);
     try {
       const res = await transferPatient(patientId, {
-        ...form,
+        wardIen: form.transferTo,
+        roomBed: form.roomBed,
+        reason: form.transferReason,
+        attendingDuz: form.attendingProvider,
+        treatingSpecialtyIen: form.treatingSpecialty,
+        transferDateTime: form.transferDateTime,
+        transferNotes: form.transferNotes,
         fromWard: currentWardName,
         fromBed: currentBedName,
         toWardName: selectedWardName,
+        currentDivision,
+        destinationDivision: selectedDivision,
       });
       if (res.ok) {
         setSuccessData(res.data);
@@ -122,6 +150,22 @@ export default function Transfer() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    if (!form.transferTo) {
+      setSaveError('Transfer-to nursing unit is required.');
+      return;
+    }
+    if (!form.transferReason) {
+      setSaveError('Transfer reason is required.');
+      return;
+    }
+    if (isCrossDivisionTransfer) {
+      setShowCrossDivisionConfirm(true);
+      return;
+    }
+    await submitTransfer();
   };
 
   if (loading) {
@@ -148,6 +192,11 @@ export default function Transfer() {
             <p className="text-[14px] text-[#666] mb-2">
               Transferred from <strong>{currentWardName} — {currentBedName}</strong> to <strong>{selectedWardName} — {form.roomBed}</strong>
             </p>
+            {isCrossDivisionTransfer && (
+              <p className="text-[13px] text-[#888] mb-2">
+                Cross-division transfer completed from <strong>{currentDivision}</strong> to <strong>{selectedDivision}</strong>.
+              </p>
+            )}
             <p className="text-[13px] text-[#888] mb-6">
               Movement ID: <span className="font-mono">{successData.movementId || '—'}</span>
             </p>
@@ -195,18 +244,16 @@ export default function Transfer() {
         <div className="max-w-2xl space-y-5">
           <div className="border border-[#E2E4E8] rounded-md p-4 bg-[#FAFBFC]">
             <h3 className="text-[12px] text-[#888] uppercase tracking-wide mb-2">Current Location</h3>
-            {currentBed ? (
+            {patientRecord?.roomBed || patientRecord?.wardLocation ? (
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-[20px] text-[#2E5984]">bed</span>
-                <span className="text-[14px] font-medium text-[#1A1A2E]">{currentBed.unit} — {currentBed.bed}</span>
-              </div>
-            ) : patient?.roomBed ? (
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-[#2E5984]">bed</span>
-                <span className="text-[14px] font-medium text-[#1A1A2E]">Unit {patient.wardIen || '—'} — {patient.roomBed}</span>
+                <span className="text-[14px] font-medium text-[#1A1A2E]">{currentWardName} — {patientRecord?.roomBed || 'Pending assignment'}</span>
               </div>
             ) : (
               <p className="text-[#999] text-[13px]">No current inpatient location recorded</p>
+            )}
+            {currentDivision && (
+              <p className="mt-2 text-[12px] text-[#666]">Current division: <strong>{currentDivision}</strong></p>
             )}
           </div>
 
@@ -226,6 +273,9 @@ export default function Transfer() {
                     {units.map(u => <option key={u.ien} value={u.ien}>{u.name}</option>)}
                   </select>
                 )}
+                {selectedDivision && (
+                  <p className="mt-1 text-[11px] text-[#666]">Destination division: <strong>{selectedDivision}</strong></p>
+                )}
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#555]">Room / Bed</label>
@@ -242,6 +292,17 @@ export default function Transfer() {
                 {TRANSFER_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
+            {isCrossDivisionTransfer && (
+              <div className="rounded-md border border-[#F5D7A1] bg-[#FFF9EC] px-4 py-3 text-sm text-[#8A6D1D]">
+                <div className="flex items-center gap-2 font-medium">
+                  <span className="material-symbols-outlined text-[18px]">swap_horiz</span>
+                  Cross-division transfer
+                </div>
+                <p className="mt-1 text-[13px]">
+                  This transfer moves the patient from <strong>{currentDivision}</strong> to <strong>{selectedDivision}</strong>. Review any inter-facility handoff requirements before continuing.
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-[12px] font-medium text-[#555]">New Care Setting</label>
               {loadingSpecialties ? (
@@ -262,7 +323,7 @@ export default function Transfer() {
                   <select value={form.attendingProvider} onChange={e => set('attendingProvider', e.target.value)} className={`${selectCls} w-full`}>
                     <option value="">Select provider...</option>
                     {providers.length > 0
-                      ? providers.slice(0, 50).map(p => <option key={p.duz || p.ien || p.name} value={p.name}>{p.name}</option>)
+                      ? providers.slice(0, 50).map(p => <option key={p.duz || p.ien || p.name} value={p.duz || p.ien || ''}>{p.name}</option>)
                       : <option value="" disabled>No providers loaded</option>
                     }
                   </select>
@@ -293,6 +354,17 @@ export default function Transfer() {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={showCrossDivisionConfirm}
+        title="Confirm Cross-Division Transfer"
+        message={`This transfer moves the patient from ${currentDivision} to ${selectedDivision}. Proceed only if the inter-division handoff is ready.`}
+        confirmLabel="Proceed With Transfer"
+        onCancel={() => setShowCrossDivisionConfirm(false)}
+        onConfirm={async () => {
+          setShowCrossDivisionConfirm(false);
+          await submitTransfer();
+        }}
+      />
     </AppShell>
   );
 }
